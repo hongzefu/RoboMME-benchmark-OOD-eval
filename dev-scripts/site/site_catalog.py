@@ -48,7 +48,7 @@ media=<n> problems=<n>``；V9 复用模式另在行尾追加 ``eval_reused=<n> e
 reuse_sha_mismatch=<n> reuse_identity_mismatch=<n> reuse_missing=<n> new_sha_mismatch=<n>``。
 
     # V9（阶段 4c）：800 + 192 = 992 局，720 复用 V8 评估 + 80 新评
-    uv run --no-sync python scripts/injection-dev/site/site_catalog.py --cells v9 \\
+    uv run --no-sync python dev-scripts/site/site_catalog.py --cells v9 \\
       --specs-root artifacts/newtask-v9/specs-root --delivery artifacts/newtask-v9/delivery/delivery.local.json \\
       --identities artifacts/v9-evaluation/inputs/eval-identities-992.jsonl \\
       --xhard0-gen artifacts/newtask-v7/site-media/xhard0-gen \\
@@ -69,8 +69,12 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]  # dev-scripts/site/<本文件> → 仓根
 ART8 = REPO_ROOT / "artifacts/newtask-v8"
+#: benchmark 子模块的源码根（``robomme``／``robomme_hard`` 两个包）
+BENCHMARK_SRC = REPO_ROOT / "third_party/robomme_benchmark/src"
+#: 旧名别名表（原评估目录的 ``official_defs.py``，现为评估包内模块）
+OFFICIAL_DEFS_PATH = REPO_ROOT / "src/robomme_hard_eval/models/_official_defs.py"
 ART7 = REPO_ROOT / "artifacts/newtask-v7"
 TIERS = ("xhard0", "xhard1", "xhard2", "xhard3", "xhard4", "xhard5")
 NEW_TIERS = TIERS[1:]
@@ -81,11 +85,10 @@ EVAL_POLICY = {"smvla": "simplememvla", "perceptual-framesamp-modul": "mmevla"} 
 
 
 def official_defs():
-    """``scripts/eval-official/official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
+    """``src/robomme_hard_eval/models/_official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
     mod = sys.modules.get("official_defs")
     if mod is None:
-        spec = importlib.util.spec_from_file_location("official_defs",
-                                                      REPO_ROOT / "scripts" / "eval-official" / "official_defs.py")
+        spec = importlib.util.spec_from_file_location("official_defs", OFFICIAL_DEFS_PATH)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod
         spec.loader.exec_module(mod)
@@ -297,13 +300,30 @@ def pick_gen_video(h5: Path, row: dict, gen_videos: Path | None, delivery_path: 
     raise ValueError(f"找不到生成视频：{row['task']}/{row['tier']}/seed {seed}（查过 {[str(d) for d in dirs]}）")
 
 
+def robomme_hard_root() -> Path:
+    """``robomme_hard`` 包目录：优先本仓子模块 ``third_party/robomme_benchmark/src``；子模块未检出（如干净 worktree）时
+    按 ``robomme_hard`` 包的查找位置定位（``find_spec`` 只查位置、不执行包的 ``__init__``，不触发 torch／sapien）。"""
+    path = BENCHMARK_SRC / "robomme_hard"
+    if (path / "__init__.py").is_file():
+        return path
+    found = importlib.util.find_spec("robomme_hard")
+    for loc in (found.submodule_search_locations or []) if found else []:
+        if (Path(loc) / "__init__.py").is_file():
+            return Path(loc)
+    raise FileNotFoundError(f"找不到 robomme_hard 包：{path} 不存在，sys.path 上也定位不到")
+
+
+def hard_specs_path() -> Path:
+    """``hard_specs.py`` 的位置（``robomme_hard/env_record_wrapper/hard_specs.py``）。"""
+    return robomme_hard_root() / "env_record_wrapper/hard_specs.py"
+
+
 def load_hard_specs():
     """按文件路径加载 ``hard_specs``（只依赖标准库），不触发 ``robomme_hard`` 包导入（torch／sapien）。"""
     name = "_v8_site_hard_specs"
     if name in sys.modules:
         return sys.modules[name]
-    path = REPO_ROOT / "src/robomme_hard/env_record_wrapper/hard_specs.py"
-    spec = importlib.util.spec_from_file_location(name, path)
+    spec = importlib.util.spec_from_file_location(name, hard_specs_path())
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)

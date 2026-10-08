@@ -11,7 +11,7 @@ import re
 import sys
 
 HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parents[2]
+REPO_ROOT = HERE.parents[1]  # dev-scripts/site → 仓根
 TASKS = ("BinFill", "PickXtimes", "SwingXtimes", "PickHighlight", "VideoUnmask", "ButtonUnmask",
          "VideoUnmaskSwap", "ButtonUnmaskSwap", "VideoRepick", "PatternLock", "RouteStick",
          "VideoPlaceButton", "VideoPlaceOrder", "MoveCube", "InsertPeg", "StopCube")

@@ -21,7 +21,7 @@
 ``example``（xhard0 第 1 局与该档一局——优先含新增 subgoal 的局——的 task goal 与整条 subgoal 序列，新句式／新类型标出）。
 末行打印 ``V8_SEMANTIC=PASS|FAIL tasks=<n> cells=<n> changed=<n> param_only=<n> note_missing=<n>``。
 
-    uv run --no-sync python scripts/injection-dev/site/semantic_diff.py --site-dir artifacts/newtask-v8/site-eval
+    uv run --no-sync python dev-scripts/site/semantic_diff.py --site-dir artifacts/newtask-v8/site-eval
 """
 from __future__ import annotations
 

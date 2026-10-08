@@ -32,7 +32,7 @@ config_mismatch=0``（另附 cells、played、page_errors）。接续脚本只�
 实点筛选、xhard5 页签、同步播放、移动端几段的锚点按目录里实际存在的格选取（首选格缺了换同类格），
 一类都没有则跳过并计入 problems，所以子表目录不含 xhard5 时会判 FAIL 并写明原因。
 
-    uv run --no-project --with playwright python scripts/injection-dev/site/site_browser_check.py \\
+    uv run --no-project --with playwright python dev-scripts/site/site_browser_check.py \\
       --base http://127.0.0.1:8081 --shots artifacts/newtask-v8/site-checks
 """
 from __future__ import annotations

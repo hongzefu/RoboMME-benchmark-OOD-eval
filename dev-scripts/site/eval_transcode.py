@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v8 站点：把 V8 双模型评估录像（FFV1 无损 mkv）转成浏览器可播的 H.264 mp4（只读录像目录，不跑仿真）。
 
-评估录像器（``scripts/eval-official/recorder.py``）每局两路 ``front.mkv``／``wrist.mkv``，同一流里 sha256 相同的帧只编码
+评估录像器（``src/robomme_hard_eval/record/recorder.py``）每局两路 ``front.mkv``／``wrist.mkv``，同一流里 sha256 相同的帧只编码
 一份，``frames-<stream>.jsonl`` 逐帧记 ``idx``（原始帧序号）、``enc``（该帧在 mkv 里的编码序号）、``tag``（``reset``
 ＝初始观测与演示段，``step<k>``＝执行第 k 步）。直接转码 mkv 会丢掉重复帧、时间轴错位，所以逐局：
 
@@ -15,7 +15,7 @@
 展开帧数的 mp4 直接跳过（可续跑）。逐局写 ``<run-dir>/site-media/manifest.jsonl``，结束打印
 ``V8_EVAL_TRANSCODE=PASS|FAIL episodes=<n> frame_mismatch=<n> stream_len_mismatch=<n> failed=<n>`` 与 ``EXIT_CODE=``。
 
-    uv run --no-sync python scripts/injection-dev/site/eval_transcode.py \\
+    uv run --no-sync python dev-scripts/site/eval_transcode.py \\
         --run-dir artifacts/v8-evaluation/v8-two-policy-gl10-20261002-01 --workers 24
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]  # dev-scripts/site/<本文件> → 仓根
 FPS = 30
 SIDE = 256
 

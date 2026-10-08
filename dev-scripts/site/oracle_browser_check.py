@@ -24,12 +24,12 @@
 ``V8_ORACLE_BROWSER`` 行之后）。PASS 要求总表检查通过、``eval_empty == 0``、复用 + 新评 = 新值局总数、计数与目录
 ``eval.reuse.counts`` 一致，给了 ``--expect-reused``／``--expect-new`` 时还要相等。V8 目录（无 ``eval.mode``）只打印原判定行。
 
-    uv run --no-project --with playwright python scripts/injection-dev/site/oracle_browser_check.py \\
+    uv run --no-project --with playwright python dev-scripts/site/oracle_browser_check.py \\
       --base http://127.0.0.1:8081 --shots artifacts/newtask-v8/site-checks/oracle \\
       --delivery artifacts/newtask-v8/gen1/delivery.json
 
     # V9（阶段 4c）
-    uv run --no-project --with playwright python scripts/injection-dev/site/oracle_browser_check.py \\
+    uv run --no-project --with playwright python dev-scripts/site/oracle_browser_check.py \\
       --port 8082 --shots artifacts/newtask-v9/site-checks/oracle \\
       --delivery artifacts/newtask-v9/delivery/delivery.local.json --expect-reused 720 --expect-new 80
 """

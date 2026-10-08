@@ -10,7 +10,7 @@ import stat
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]  # dev-scripts/site/<本文件> → 仓根
 DEFAULT_SITE_DIR = REPO_ROOT / 'artifacts/newtask-v6/site'
 MEDIA_ID = re.compile(r'[A-Za-z0-9_-]{1,128}\Z')
 
@@ -138,7 +138,7 @@ class MediaHandler(BaseHTTPRequestHandler):
                     self.wfile.write(payload)
                 return
             if path == '/api/gtlen':
-                # 真值步数统计（scripts/injection-dev/site/v6_gt_lengths.py 生成）；缺文件时返回空表，页面照常显示
+                # 真值步数统计（历史 V6 统计脚本 v6_gt_lengths.py 生成，该脚本已不在本仓）；缺文件时返回空表，页面照常显示
                 gt = files.html_path.with_name('v6_gt_lengths.json')
                 payload = gt.read_bytes() if gt.exists() else b'{"cells":{},"media":{}}'
                 self._headers(200, 'application/json; charset=utf-8', len(payload), Cache_Control='no-cache')
@@ -146,7 +146,7 @@ class MediaHandler(BaseHTTPRequestHandler):
                     self.wfile.write(payload)
                 return
             if path == '/api/subgoals':
-                # 逐段 subgoal 帧数（scripts/injection-dev/site/subgoal_lengths.py 生成）；缺文件时返回空表，页面照常显示
+                # 逐段 subgoal 帧数（dev-scripts/site/subgoal_lengths.py 生成）；缺文件时返回空表，页面照常显示
                 sg = files.site_dir / 'subgoals.json'
                 payload = sg.read_bytes() if sg.exists() else b'{}'
                 self._headers(200, 'application/json; charset=utf-8', len(payload), Cache_Control='no-cache')
@@ -154,7 +154,7 @@ class MediaHandler(BaseHTTPRequestHandler):
                     self.wfile.write(payload)
                 return
             if path == '/api/semantic':
-                # xhard1～5 相对 xhard0 的 goal／subgoal 语义调整（scripts/injection-dev/site/semantic_diff.py 生成）；缺文件时返回空表
+                # xhard1～5 相对 xhard0 的 goal／subgoal 语义调整（dev-scripts/site/semantic_diff.py 生成）；缺文件时返回空表
                 sem = files.site_dir / 'semantic.json'
                 payload = sem.read_bytes() if sem.exists() else b'{}'
                 self._headers(200, 'application/json; charset=utf-8', len(payload), Cache_Control='no-cache')
