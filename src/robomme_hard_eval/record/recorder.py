@@ -1,18 +1,26 @@
-"""v7.5eval 逐局视频存储器（EpisodeRecorder）：原始数组永不降级，双相机图像 FFV1 无损异步编码。
+"""逐局视频存储器（EpisodeRecorder）：原始数组永不降级，双相机图像 AV1 4:4:4 有损异步编码。
+
+2026-10-08 拆分方案（§四「换 AV1 要改的地方」、红线 R8）起原始帧改存 AV1：编码参数固定为模块常量
+``AV1_ENCODE_ARGS``（``libaom-av1 -cpu-used 4 -crf 24 -b:v 0 -pix_fmt yuv444p -g 300 -r 30 -row-mt 1 -threads 2``，
+RGB→YUV 用 bt709 全范围），封装 MKV，``meta.json`` 记 ``raw_codec="av1-yuv444p"``（旧产物没有该字段，视为
+``ffv1``）。有损编码不再要求「解码字节等于编码前 sha256」：收尾核验改为帧数、时间戳（逐帧 pts 恰为 i/fps）与可完整
+解码三项，核验通过后才删原始块；不通过时从原始块同步重编码一次。动作与状态按原字节存 ``arrays.npz``，可精确恢复；
+图像只能近似恢复。
 
 设计要点（方案 §2.6、共享契约 recorder.py 一节）：
 
-- 每帧在调用线程里算 sha256，逐流记 ``frames-<stream>.jsonl``（idx、sha256、tag、enc）；同一局同一流里
-  sha256 相同的帧只编码一份（``enc`` 指向已编码的那一帧），解码后按 ``enc`` 还原即得逐帧原图。
+- 每帧在调用线程里算 sha256（编码前字节），逐流记 ``frames-<stream>.jsonl``（idx、sha256、tag、enc）；同一局
+  同一流里 sha256 相同的帧只编码一份（``enc`` 指向已编码的那一帧），解码后按 ``enc`` 展开即得逐帧画面。
 - 帧字节经有界队列交给写线程：队列满时 ``add_frames`` 阻塞（反压），从不丢帧；写线程先把原始字节追加到
   ``out_dir/.spool/<stream>.raw``，再经管道喂给 ffmpeg 子进程编码（编码在独立进程里，CPU 亲和由
   ``V75_ENCODE_CPUS`` 指定）。
 - ``set_phase("reset")`` 期间只入队、落盘，不喂 ffmpeg（异步编码抢 CPU 会改变按墙钟计时的 RRT 规划）；
   切回 ``"run"`` 后写线程从原始块里补喂。
-- ``close()``：收尾编码 → 解码 → 逐帧 sha256 与记录比对；不符就从原始块重编码一次；通过后才删原始块。
+- ``close()``：哨兵入队带截止时间（``close_deadline_s``，缺省取环境变量 ``V75_RECORDER_JOIN_S``，再缺省 900 s）；
+  队列满且 ffmpeg 卡在 stdin 时到点先杀编码子进程解开阻塞，不会无限等待。随后收尾编码 → 帧数／时间戳／可解码核验。
 - 降级只看 ``V75_DATA_ROOT`` 所在盘的可用空间（600／150 GiB 两档），每次档位变化打印一行
-  ``STORAGE_DEGRADE level= free_gib=``；``meta["baseline"]`` 或 ``meta["never_degrade"]`` 为真时始终无损。
-  1 档改 libx264 ``-crf 18 -preset medium``；2 档只留首尾各 50 帧图像（sha256 列表仍完整）。
+  ``STORAGE_DEGRADE level= free_gib=``；``meta["baseline"]`` 或 ``meta["never_degrade"]`` 为真时始终 0 档。
+  AV1 下 0 档与 1 档编码相同；2 档只留首尾各 50 帧图像（sha256 列表仍完整）。
 
 本文件只依赖 numpy 与标准库，须能在 Python 3.10（SimpleMemVLA venv）与 3.11（benchmark、旧 FrameSamp+Modulation 客户端 venv）下导入。
 """
@@ -38,6 +46,21 @@ _SENTINEL = object()
 _LAST_LEVEL_LOCK = threading.Lock()
 _LAST_LEVEL = 0  # 本进程上一次判定的降级档位（用于只在档位变化时打印一行）
 _FFMPEG_CACHE: dict[str, Any] = {}
+#: 原始帧编码（R8，不得改动）：libaom-av1、4:4:4、crf 24、速度档 4、GOP 300、30 fps、行多线程、2 线程
+RAW_CODEC = "av1-yuv444p"
+#: 旧产物（没有 raw_codec 字段）的编码
+LEGACY_RAW_CODEC = "ffv1"
+FPS = 30
+AV1_ENCODER = "libaom-av1"
+AV1_ENCODE_ARGS = ("-c:v", "libaom-av1", "-cpu-used", "4", "-crf", "24", "-b:v", "0", "-pix_fmt", "yuv444p",
+                   "-g", "300", "-r", str(FPS), "-row-mt", "1", "-threads", "2")
+#: RGB→YUV 用 bt709 全范围（编码侧），并在码流里打同样的标记，解码侧按标记还原
+AV1_COLOR_FILTER = "scale=out_color_matrix=bt709:out_range=full"
+AV1_COLOR_TAGS = ("-color_range", "pc", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709")
+#: 解码 AV1 原始流回 rgb24 时的色彩还原（与编码侧对称）
+AV1_DECODE_FILTER = "scale=in_color_matrix=bt709:in_range=full,format=rgb24"
+#: close() 收尾等待写线程的缺省截止时间（秒）
+DEFAULT_CLOSE_DEADLINE_S = 900.0
 
 
 def _trace_writer():
@@ -94,7 +117,7 @@ def array_sha256(arr: np.ndarray) -> str:
 # ---------------------------------------------------------------- ffmpeg 与降级判定
 
 def find_ffmpeg() -> str:
-    """找支持 ffv1 的 ffmpeg：V75_FFMPEG > /usr/bin/ffmpeg > PATH > imageio_ffmpeg 自带。找不到即报错。"""
+    """找支持 libaom-av1 编码的 ffmpeg：V75_FFMPEG > /usr/bin/ffmpeg > PATH > imageio_ffmpeg 自带。找不到即报错。"""
     if "exe" in _FFMPEG_CACHE:
         return _FFMPEG_CACHE["exe"]
     cands: list[str] = []
@@ -117,11 +140,12 @@ def find_ffmpeg() -> str:
             out = subprocess.run([c, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=60).stdout
         except Exception:
             continue
-        if " ffv1 " in out:
+        if f" {AV1_ENCODER} " in out:
             _FFMPEG_CACHE["exe"] = c
             _FFMPEG_CACHE["libx264"] = " libx264 " in out
+            _FFMPEG_CACHE["ffv1"] = " ffv1 " in out
             return c
-    raise RuntimeError(f"找不到支持 ffv1 的 ffmpeg，候选：{cands}")
+    raise RuntimeError(f"找不到支持 {AV1_ENCODER} 的 ffmpeg，候选：{cands}")
 
 
 class RecorderError(RuntimeError):
@@ -262,7 +286,7 @@ class EpisodeRecorder:
     def __init__(self, out_dir: str | Path, meta: dict, *, lossless: bool = True, encode_async: bool = True,
                  queue_frames: int = 64, fps: int = 30,
                  free_gib_fn: Callable[[str], float] | None = None,
-                 encode_delay_s: float = 0.0, overwrite: bool = False):
+                 encode_delay_s: float = 0.0, overwrite: bool = False, close_deadline_s: float | None = None):
         self.out_dir = Path(out_dir)
         if self.out_dir.exists() and any(self.out_dir.iterdir()):
             if not overwrite:
@@ -288,8 +312,9 @@ class EpisodeRecorder:
         self.level = level
         self.free_gib = free
         self.ffmpeg = find_ffmpeg()
-        if self.level >= 1 and not _FFMPEG_CACHE.get("libx264"):
-            raise RuntimeError(f"{self.ffmpeg} 不支持 libx264，无法按 {self.level} 档降级")
+        if close_deadline_s is None:
+            close_deadline_s = float(os.environ.get("V75_RECORDER_JOIN_S", DEFAULT_CLOSE_DEADLINE_S))
+        self.close_deadline_s = float(close_deadline_s)
         self._lock = threading.RLock()
         self._streams: dict[str, _Stream] = {}
         self._arrays: list[tuple[str, int, int | None, np.ndarray]] = []
@@ -305,7 +330,8 @@ class EpisodeRecorder:
         self._discarded = 0  # 写线程失败后丢弃的入队帧数（计入 dropped）
         self._t0 = time.time()
         self.meta.update(level=self.level, free_gib=round(free, 1), watch_path=watch,
-                         codec="ffv1" if self.level == 0 else "libx264-crf18", ffmpeg=self.ffmpeg,
+                         codec=RAW_CODEC, raw_codec=RAW_CODEC, encode_args=list(AV1_ENCODE_ARGS),
+                         color=AV1_COLOR_FILTER, ffmpeg=self.ffmpeg,
                          fps=self.fps, encode_cpus=self.encode_cpus or None, created=time.strftime("%Y-%m-%dT%H:%M:%S%z"), pid=os.getpid())
         (self.out_dir / "meta.json").write_text(dumps(self.meta) + "\n", encoding="utf-8")
         self._writer = None
@@ -392,17 +418,22 @@ class EpisodeRecorder:
             self._closed = True
         self.set_phase_run_for_close()
         if self._writer is not None:
-            while self._writer.is_alive() and not self._q.put(_SENTINEL, timeout=1.0):
-                pass
-            self._writer.join(timeout=float(os.environ.get("V75_RECORDER_JOIN_S", "900")))
+            # 哨兵入队与等待写线程共用一个截止时间：队列满、ffmpeg 卡在 stdin 时写线程永远取不走队列，
+            # 旧写法的「入队成功才 join」会无限循环。到点先杀编码子进程（写线程的 stdin.write 随即报错返回），
+            # 再给 30 s 让写线程把队列取空、收到哨兵退出。
+            deadline = time.monotonic() + self.close_deadline_s
+            sent = False
+            while self._writer.is_alive() and time.monotonic() < deadline:
+                if self._q.put(_SENTINEL, timeout=min(1.0, max(0.01, deadline - time.monotonic()))):
+                    sent = True
+                    break
+            if sent:
+                self._writer.join(timeout=max(0.0, deadline - time.monotonic()))
             if self._writer.is_alive():  # 写线程卡死（如 ffmpeg 不读管道）：杀编码子进程，记 FAIL，不阻塞
                 self._writer_error = self._writer_error or "写线程收尾超时"
-                for st in self._streams.values():
-                    if st.proc is not None:
-                        try:
-                            st.proc.kill()
-                        except Exception:
-                            pass
+                self._kill_encoders()
+                if not sent:
+                    sent = self._q.put(_SENTINEL, timeout=30.0)
                 self._writer.join(timeout=30)
         else:
             try:
@@ -416,7 +447,8 @@ class EpisodeRecorder:
         reencoded = 0
         for st in self._streams.values():
             v = self._verify_stream(st)
-            if v["mismatch"] or v["error"]:
+            # 写线程收尾超时（编码子进程已被杀）时不再重编码：重编码同样可能卡住，收尾必须有界
+            if (v["mismatch"] or v["error"]) and not self._writer_error:
                 reencoded += 1
                 try:
                     self._reencode_from_spool(st)
@@ -436,7 +468,7 @@ class EpisodeRecorder:
         reordered = sum(st.reordered for st in self._streams.values())
         mismatch = sum(v["mismatch"] for v in verify.values())
         errors = errors_writer + [f"{k}: {v['error']}" for k, v in verify.items() if v["error"]]
-        ok = mismatch == 0 and dropped == 0 and reordered == 0 and not errors
+        ok = mismatch == 0 and dropped == 0 and reordered == 0 and not errors and self._writer_ok()
         # 逐帧清单、原始数组、摘要落盘
         for st in self._streams.values():
             with open(self.out_dir / f"frames-{st.name}.jsonl", "w", encoding="utf-8") as fh:
@@ -465,7 +497,8 @@ class EpisodeRecorder:
             "reordered": reordered,
             "bytes": nbytes,
             "level": self.level,
-            "lossless": self.level == 0,
+            "lossless": False,
+            "raw_codec": RAW_CODEC,
             "encode_cpu_s": round(encode_cpu, 3),
             "queue_wait_s": round(self._queue_wait_s, 3),
             "verify_s": round(verify_s, 3),
@@ -481,6 +514,18 @@ class EpisodeRecorder:
         return res
 
     # ------------------------------------------------------------ 内部：入队、写线程、编码
+
+    def _writer_ok(self) -> bool:
+        return self._writer is None or not self._writer.is_alive()
+
+    def _kill_encoders(self) -> None:
+        for st in self._streams.values():
+            proc = st.proc
+            if proc is not None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
     def set_phase_run_for_close(self) -> None:
         """收尾时强制允许编码（不写 phase 事件，事件文件稍后关闭）。"""
@@ -557,12 +602,7 @@ class EpisodeRecorder:
         h, w, c = st.shape
         if c != 3:
             raise ValueError(f"只支持 3 通道图像：{st.shape}")
-        base = _cpu_prefix() + [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
-                                "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r", str(self.fps),
-                                "-i", "pipe:0", "-an", "-threads", "1"]
-        if self.level == 0:
-            return base + ["-c:v", "ffv1", "-level", "3", "-g", "1", "-slicecrc", "1", "-pix_fmt", "gbrp", str(out)]
-        return base + ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p", str(out)]
+        return av1_encode_cmd(self.ffmpeg, w, h, out, fps=self.fps, prefix=_cpu_prefix())
 
     def _err_path(self, st: _Stream) -> Path:
         return self.out_dir / f".ffmpeg-{st.name}.log"
@@ -648,8 +688,8 @@ class EpisodeRecorder:
         st.encode_error = None if rc == 0 else f"重编码 ffmpeg rc={rc}: {err}"
 
     def _verify_stream(self, st: _Stream) -> dict:
-        """解码整路流，逐帧 sha256 与编码序号清单比对。有损档只核帧数。"""
-        res = {"mismatch": 0, "decoded": 0, "error": st.encode_error}
+        """AV1 有损：完整解码一遍（framemd5），核帧数等于编码序号数、逐帧时间戳恰为 i/fps；不再比字节。"""
+        res = {"mismatch": 0, "decoded": 0, "error": st.encode_error, "timestamps_ok": False}
         if st.n_enqueued == 0:
             return res
         out = self.out_dir / f"{st.name}.mkv"
@@ -658,18 +698,19 @@ class EpisodeRecorder:
             res["mismatch"] = st.n_enqueued
             return res
         try:
-            decoded = decode_raw_frames(self.ffmpeg, out, st.shape)
+            frames = probe_decoded_frames(self.ffmpeg, out)
         except Exception as e:
             res["error"] = f"解码失败 {type(e).__name__}: {e}"
             res["mismatch"] = st.n_enqueued
             return res
-        res["decoded"] = len(decoded)
-        if self.level == 0:
-            n = min(len(decoded), st.n_enqueued)
-            res["mismatch"] = sum(sha256_bytes(decoded[i]) != st.enc_sha[i] for i in range(n))
-        res["mismatch"] += abs(len(decoded) - st.n_enqueued)
-        if res["mismatch"] == 0:
-            res["error"] = None  # 解码核对通过即以此为准
+        res["decoded"] = len(frames)
+        res["mismatch"] = abs(len(frames) - st.n_enqueued)
+        bad_ts = [i for i, t in enumerate(frames) if abs(t - i / self.fps) > 0.5 / self.fps]
+        res["timestamps_ok"] = not bad_ts
+        if bad_ts:
+            res["error"] = f"时间戳不符 {len(bad_ts)} 帧（首个 idx={bad_ts[0]} t={frames[bad_ts[0]]:.4f}）"
+        elif res["mismatch"] == 0:
+            res["error"] = None  # 帧数、时间戳、可完整解码三项通过即以此为准
         return res
 
     def _write_arrays(self) -> None:
@@ -689,10 +730,52 @@ class EpisodeRecorder:
 
 # ---------------------------------------------------------------- 读回工具（对拍用）
 
-def decode_raw_frames(ffmpeg: str, path: str | Path, shape: tuple) -> list[bytes]:
-    """把 mkv 解码成 rgb24 原始帧字节列表。"""
-    h, w, c = shape
+def av1_encode_cmd(ffmpeg: str, w: int, h: int, out: str | Path, *, fps: int = FPS,
+                   prefix: list[str] | None = None) -> list[str]:
+    """rgb24 原始帧（管道输入）→ AV1 4:4:4 MKV 的完整命令（R8 参数）。"""
+    return list(prefix or []) + [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                                 "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r", str(fps),
+                                 "-i", "pipe:0", "-an", "-vf", AV1_COLOR_FILTER, *AV1_ENCODE_ARGS,
+                                 *AV1_COLOR_TAGS, str(out)]
+
+
+def probe_decoded_frames(ffmpeg: str, path: str | Path) -> list[float]:
+    """完整解码一遍（``-f framemd5``，只用 ffmpeg），返回逐帧显示时间（秒）；解码失败抛 RuntimeError。"""
     cmd = _cpu_prefix() + [ffmpeg, "-hide_banner", "-loglevel", "error", "-threads", "1", "-i", str(path),
+                           "-map", "0:v:0", "-f", "framemd5", "pipe:1"]
+    p = subprocess.run(cmd, capture_output=True, check=False)
+    if p.returncode != 0:
+        raise RuntimeError(f"ffmpeg 解码失败 rc={p.returncode}: {p.stderr.decode(errors='replace')[-1000:]}")
+    tb = None
+    out: list[float] = []
+    for line in p.stdout.decode(errors="replace").splitlines():
+        if line.startswith("#tb 0:"):
+            num, den = line.split(":", 1)[1].strip().split("/")
+            tb = int(num) / int(den)
+        elif line and not line.startswith("#"):
+            parts = [x.strip() for x in line.split(",")]
+            if parts[0] != "0":
+                continue
+            if tb is None:
+                raise RuntimeError("framemd5 输出缺 #tb 行")
+            out.append(int(parts[2]) * tb)
+    return out
+
+
+def raw_codec_of(out_dir: str | Path) -> str:
+    """读局目录 ``meta.json`` 的 ``raw_codec``；没有该字段（旧产物）视为 ``ffv1``。"""
+    try:
+        meta = json.loads((Path(out_dir) / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return LEGACY_RAW_CODEC
+    return str(meta.get("raw_codec") or LEGACY_RAW_CODEC)
+
+
+def decode_raw_frames(ffmpeg: str, path: str | Path, shape: tuple, *, raw_codec: str = RAW_CODEC) -> list[bytes]:
+    """把 mkv 解码成 rgb24 原始帧字节列表；AV1 流按 bt709 全范围还原色彩，旧 FFV1（gbrp）直接转。"""
+    h, w, c = shape
+    conv = ["-vf", AV1_DECODE_FILTER] if raw_codec != LEGACY_RAW_CODEC else []
+    cmd = _cpu_prefix() + [ffmpeg, "-hide_banner", "-loglevel", "error", "-threads", "1", "-i", str(path), *conv,
                            "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
     p = subprocess.run(cmd, capture_output=True, check=False)
     if p.returncode != 0:
@@ -705,7 +788,7 @@ def decode_raw_frames(ffmpeg: str, path: str | Path, shape: tuple) -> list[bytes
 
 
 def load_frames(out_dir: str | Path, stream: str) -> tuple[list[dict], list[np.ndarray | None]]:
-    """读回一路流：返回 (逐帧记录, 逐帧图像)；2 档里没存的帧为 None。"""
+    """读回一路流：返回 (逐帧记录, 逐帧图像)；2 档里没存的帧为 None。按 ``meta.json`` 的 ``raw_codec`` 选解码方式。"""
     out_dir = Path(out_dir)
     recs = [json.loads(l) for l in (out_dir / f"frames-{stream}.jsonl").read_text(encoding="utf-8").splitlines() if l]
     mkv = out_dir / f"{stream}.mkv"
@@ -719,7 +802,7 @@ def load_frames(out_dir: str | Path, stream: str) -> tuple[list[dict], list[np.n
     if not m:
         raise RuntimeError(f"读不出 {mkv} 的分辨率")
     w, h = int(m.group(1)), int(m.group(2))
-    dec = decode_raw_frames(find_ffmpeg(), mkv, (h, w, 3))
+    dec = decode_raw_frames(find_ffmpeg(), mkv, (h, w, 3), raw_codec=raw_codec_of(out_dir))
     imgs = [np.frombuffer(dec[r["enc"]], np.uint8).reshape(h, w, 3) if r["enc"] is not None else None for r in recs]
     return recs, imgs
 
@@ -730,10 +813,13 @@ def verdict_line(res: dict) -> str:
 
 
 def _main(argv: list[str]) -> int:
-    """命令行：``recorder.py load <out_dir> <stream>`` 读回并核对逐帧 sha256（调试用）。"""
+    """命令行：``recorder.py load <out_dir> <stream>`` 读回并核对（调试用）。旧 FFV1 产物核逐帧 sha256；AV1 有损，
+    只核每条记录都能取到图像。"""
     if len(argv) == 3 and argv[0] == "load":
         recs, imgs = load_frames(argv[1], argv[2])
-        bad = sum(1 for r, im in zip(recs, imgs) if im is not None and frame_sha256(im) != r["sha256"])
+        lossy = raw_codec_of(argv[1]) != LEGACY_RAW_CODEC
+        bad = sum(1 for r, im in zip(recs, imgs)
+                  if im is not None and not lossy and frame_sha256(im) != r["sha256"])
         kept = sum(im is not None for im in imgs)
         print(f"RECORDER_LOAD={'PASS' if bad == 0 else 'FAIL'} frames={len(recs)} kept={kept} mismatch={bad}")
         return 0 if bad == 0 else 1
