@@ -236,7 +236,7 @@ def test_身份清单四种格式_重复与空文件拒收(ng, tmp_path):
     assert ng.load_identities(rows)[0]["id"] == "A|xhard2|5"
     jl = F.write_jsonl(tmp_path / "x.jsonl", [{"task": "A", "tier": "xhard3", "seed": 6}])
     assert ng.load_identities(jl)[0]["id"] == "A|xhard3|6"
-    gate = ng.load_identities(F.REPO / "scripts" / "configs" / "gate-set-xhard0-48.json")
+    gate = ng.load_identities(F.CONFIGS / "gate-set-xhard0-48.json")
     assert gate and all(g["tier"] == "xhard0" and "builder_episode" in g for g in gate)
     dup = F.write_jsonl(tmp_path / "dup.jsonl", [{"task": "A", "seed": 5}, {"task": "A", "seed": 5}])
     with pytest.raises(ng.GateError, match="重复"):

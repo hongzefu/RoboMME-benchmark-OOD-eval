@@ -56,10 +56,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
-REPO = Path(__file__).resolve().parents[2]
-for _extra in (REPO / "src", REPO):
-    if str(_extra) not in sys.path:
-        sys.path.insert(0, str(_extra))
+import _common  # noqa: E402  同目录：评估仓根与配置目录（本目录随之进 sys.path）
+
+REPO = _common.REPO_ROOT
 
 GEN_SCHEMA = "noise-gen-compare/1"
 
@@ -145,9 +144,7 @@ def load_identities(path: str | Path) -> list[dict[str, Any]]:
     else:
         obj = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(obj, dict) and str(obj.get("schema", "")).startswith("gate-set"):
-            from scripts.parity import gate_set
-
-            raw = gate_set.load_gate_set(path)
+            raw = _common.sibling("gate_set").load_gate_set(path)
         elif isinstance(obj, dict) and isinstance(obj.get("rows"), list):
             raw = obj["rows"]
         elif isinstance(obj, list):
@@ -1599,8 +1596,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = grs.add_parser("build-ref", help="从噪声基线四遍重算 sha、交叉核对比对记录、写参照文件（NOISE_REF）")
     p.add_argument("--runs", action="append", required=True, metavar="集合=a 遍根,b 遍根",
                    help="可重复；集合为 v9 或 xhard0")
-    p.add_argument("--identities-v9", default=None, help="V9 身份清单（如 scripts/configs/gate-set-v9-129.json）")
-    p.add_argument("--identities-xhard0", default=None, help="xhard0 身份清单（如 scripts/configs/gate-set-xhard0-48.json）")
+    p.add_argument("--identities-v9", default=None, help="V9 身份清单（如 dev-scripts/parity/configs/gate-set-v9-129.json）")
+    p.add_argument("--identities-xhard0", default=None, help="xhard0 身份清单（如 dev-scripts/parity/configs/gate-set-xhard0-48.json）")
     p.add_argument("--records", required=True, help="gen-compare 比对记录目录（docs/validation/.../records/compare）")
     p.add_argument("--out", required=True, help="参照文件（已存在即拒，不覆盖）")
     p.add_argument("--limit", type=int, default=None, help="冒烟：每个集合只取前 N 个身份，产物标 partial、不得用于判定")

@@ -6,38 +6,39 @@
 
 一、V9 检查集（G9，确定、可重算，只读包内规格，不读 ``artifacts/``）：
 
-1. 数据源：包内 V9 规格 ``src/robomme_hard/env_metadata/ood/xhard{1..5}/specs.jsonl``；交付行＝
+1. 数据源：benchmark 子模块包内 V9 规格 ``src/robomme_hard/env_metadata/ood/xhard{1..5}/specs.jsonl``；交付行＝
    ``hard_specs.delivered(row)`` 为真的行（``selected`` 且 ``rollout.status == "ok"``）。交付行与 builder episode 号
    直接复用 ``hard_regression.delivery_index``（与 ``hard_builder._ood_entries`` 同一排序：档序主序、档内
-   ``candidate`` 升序、xhard0 前置局数在前），本模块不另造一套。
+   ``candidate`` 升序；ood 不含 xhard0），本模块不另造一套。
 2. 每个交付格（任务, 档）取交付行里 ``candidate`` 升序最小的 ``PER_CELL = 3`` 个；格数按数据算（V9 为 43 格）。
-3. ``builder_episode`` 是开关 ``ROBOMME_HARD_XHARD0_IN_TEST_HARD`` 为 0（默认，V9 每任务 50 局）时该身份在
-   ``BenchmarkEnvBuilder(env_id=task, dataset="ood")`` 里的 episode 号（0～49）。开关为 1 时直接报错拒绝。
+3. ``builder_episode`` 是该身份在 ``BenchmarkEnvBuilder(env_id=task, dataset="ood")`` 里的局号（0～49；按数据集名取局，
+   ood 只有新值五档）。
 
-行内排序：(16 任务规范序, tier, candidate)。规范序取 ``hard_specs.ALL_TASKS``——它与
-``scripts/injection-dev/seed_layout.py::ALL_TASKS`` 逐字相同（hard_specs 注释约定、测试另行断言）；后者所在目录名
-带连字符、不能按包导入，所以这里不直接导入它。
+行内排序：(16 任务规范序, tier, candidate)。规范序取 ``hard_specs.ALL_TASKS``（原 ``seed_layout.ALL_TASKS`` 与之逐字
+相同，随拆仓不再搬入，一律以 ``hard_specs.ALL_TASKS`` 为准）。
 
-冻结文件 ``scripts/configs/gate-set-v9-129.json``：``{"schema", "source", "rule", "rows", "sha256"}``，
+冻结文件 ``dev-scripts/parity/configs/gate-set-v9-129.json``：``{"schema", "source", "rule", "rows", "sha256"}``，
 ``sha256`` 是剔掉该键后 canonical JSON（``sort_keys=True, ensure_ascii=False, separators=(",", ":")``）的 sha256。
 
 二、xhard0 检查集（直接采用 v7.5 评估已用过的小样本 ``artifacts/v7.5eval/identities-small48.json``，每任务 3 局）：
 
 ``build_xhard0_set`` 把源文件规范化为行 ``{task, tier:"xhard0", seed, source_episode, builder_episode}``（丢弃
 ``e0_*`` 排序字段——``env_client`` 旧路线只读 task／source_episode／seed／builder_episode），按 (任务规范序,
-source_episode) 排序。``builder_episode`` 沿用源文件，是开关为 1 时 xhard0 前置条目的编号（＝(source_episode-3)//4）。
-冻结为 ``scripts/configs/gate-set-xhard0-48.json``（``schema: gate-set-xhard0/1``，``source`` 记源文件名与 sha256，
+source_episode) 排序。``builder_episode`` 沿用源文件，＝(source_episode-3)//4，恰是该身份在
+``BenchmarkEnvBuilder(env_id=task, dataset="hard-verify")`` 里的局号（0～11）。
+冻结为 ``dev-scripts/parity/configs/gate-set-xhard0-48.json``（``schema: gate-set-xhard0/1``，``source`` 记源文件名与 sha256，
 ``rows``、顶层 ``sha256`` 同上 canonical JSON 规则）。冻结后不再依赖 ``artifacts/``。
 
 用法（仓库根）::
 
-    uv run --no-sync python scripts/parity/gate_set.py build --out scripts/configs/gate-set-v9-129.json
-    uv run --no-sync python scripts/parity/gate_set.py check --path scripts/configs/gate-set-v9-129.json
-    uv run --no-sync python scripts/parity/gate_set.py build-xhard0 --source artifacts/v7.5eval/identities-small48.json \\
-        --out scripts/configs/gate-set-xhard0-48.json
-    uv run --no-sync python scripts/parity/gate_set.py check-xhard0 --path scripts/configs/gate-set-xhard0-48.json
-    uv run --no-sync python scripts/parity/gate_set.py export --set v9 --kind generate --out <dir>/g9.identities.jsonl
-    uv run --no-sync python scripts/parity/gate_set.py export --set xhard0 --kind legacy --out <dir>/x0.identities.json
+    C=dev-scripts/parity/configs
+    uv run --no-sync python dev-scripts/parity/gate_set.py build --out $C/gate-set-v9-129.json
+    uv run --no-sync python dev-scripts/parity/gate_set.py check --path $C/gate-set-v9-129.json
+    uv run --no-sync python dev-scripts/parity/gate_set.py build-xhard0 --source artifacts/v7.5eval/identities-small48.json \\
+        --out $C/gate-set-xhard0-48.json
+    uv run --no-sync python dev-scripts/parity/gate_set.py check-xhard0 --path $C/gate-set-xhard0-48.json
+    uv run --no-sync python dev-scripts/parity/gate_set.py export --set v9 --kind generate --out <dir>/g9.identities.jsonl
+    uv run --no-sync python dev-scripts/parity/gate_set.py export --set xhard0 --kind legacy --out <dir>/x0.identities.json
 
 ``check`` 末行判定 ``GATE_SET=PASS cells=43 per_cell=3 total=129 in_delivery=129 sha=<前12位>``；``check-xhard0`` 末行
 ``GATE_SET_XHARD0=PASS tasks=16 per_task=3 total=48 sha=<前12位>``（不符为 FAIL）。
@@ -48,31 +49,30 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-REPO = Path(__file__).resolve().parents[2]
-for _extra in (REPO / "src", REPO):
-    if str(_extra) not in sys.path:
-        sys.path.insert(0, str(_extra))
+import _common  # noqa: E402  同目录：评估仓根、配置目录、hard_specs 轻量加载
+
+REPO = _common.REPO_ROOT
 
 SCHEMA = "gate-set-v9/2"
 #: 每个交付格取 3 局——用户 2026-10-03 原话「全面减少现在的规模把V9xhard0每个任务每个难度都只有3集」
 PER_CELL = 3
 N_TASKS = 16
-DEFAULT_PATH = REPO / "scripts" / "configs" / "gate-set-v9-129.json"
+DEFAULT_PATH = _common.CONFIGS / "gate-set-v9-129.json"
 ROW_KEYS = ("task", "tier", "candidate", "seed", "spec_sha256", "builder_episode")
-XHARD0_ENV = "ROBOMME_HARD_XHARD0_IN_TEST_HARD"
+#: 与冻结配置 gate-set-v9-129.json 的 rule 字段逐字节相同。拆仓时随 xhard0 前置开关删除改写（编号本身不变：
+#: 原「开关为 0 时的 test-hard 编号」就是现在 dataset="ood" 的局号），并按 canonical JSON 重签该文件与噪声参照
 RULE = ("V9 包内规格交付行（hard_specs.delivered），每个交付格（任务, 档）取 candidate 升序最小的 3 个；"
-        "builder_episode 按 XHARD0_IN_TEST_HARD=0 的 test-hard 编号")  # 历史数据键：与冻结配置 gate-set-v9-129.json 的 rule 字段逐字节相同
+        "builder_episode 按 dataset=ood（不含 xhard0）的局号")
 
 XHARD0_SCHEMA = "gate-set-xhard0/1"
 XHARD0_TIER = "xhard0"
 #: xhard0 每任务 3 局（同上用户原话）
 XHARD0_PER_TASK = 3
-XHARD0_DEFAULT_PATH = REPO / "scripts" / "configs" / "gate-set-xhard0-48.json"
+XHARD0_DEFAULT_PATH = _common.CONFIGS / "gate-set-xhard0-48.json"
 XHARD0_ROW_KEYS = ("task", "tier", "seed", "source_episode", "builder_episode")
 XHARD0_RULE = ("直接采用 v7.5 评估小样本 identities-small48.json（每任务 3 局）；行规范化为 task／tier=xhard0／seed／"
                "source_episode／builder_episode（开关为 1 时的 xhard0 前置编号），按 (任务规范序, source_episode) 排序")
@@ -86,23 +86,11 @@ class GateSetError(RuntimeError):
 
 
 def _hs():
-    from scripts.parity import hard_parity
-
-    return hard_parity.hard_specs_light()
+    return _common.hard_specs_light()
 
 
 def _delivery_index(specs_root: str) -> dict[tuple[str, str, int], dict[str, Any]]:
-    from scripts.parity import hard_regression
-
-    return hard_regression.delivery_index(specs_root)
-
-
-def _require_xhard0_off(hs) -> None:
-    """builder_episode 只对开关为 0 的编号定义；开关为 1（环境变量或已加载模块）一律拒绝。"""
-    if os.environ.get(XHARD0_ENV, "0") == "1" or bool(getattr(hs, "XHARD0_IN_TEST_HARD", False)):
-        raise GateSetError(f"{XHARD0_ENV}=1：G9 的 builder_episode 只按开关为 0（xhard0 不前置）定义，拒绝构建")
-    if hs.xhard0_prefix() != 0:
-        raise GateSetError(f"xhard0 前置局数应为 0，实为 {hs.xhard0_prefix()}")
+    return _common.sibling("hard_regression").delivery_index(specs_root)
 
 
 def canonical_json(value: Any) -> str:
@@ -119,7 +107,7 @@ def payload_sha256(obj: dict[str, Any]) -> str:
 
 
 def _specs_root(hs, specs_root: str | Path | None) -> str:
-    """缺省固定为包内规格根（不读 ``ROBOMME_HARD_SPECS_ROOT``，冻结清单只认包内 V9 规格）。"""
+    """缺省固定为子模块包内规格根（冻结清单只认包内 V9 规格）。"""
     return str(Path(specs_root).resolve() if specs_root is not None else hs.PACKAGED_SPECS_ROOT)
 
 
@@ -127,7 +115,6 @@ def build_gate_set(specs_root: str | Path | None = None) -> list[dict[str, Any]]
     """按模块文档的规则算出每格 3 局的行 ``{task, tier, candidate, seed, spec_sha256, builder_episode}``，
     按 (任务规范序, tier, candidate) 排序。某格交付局数不足 3 即报错。"""
     hs = _hs()
-    _require_xhard0_off(hs)
     index = _delivery_index(_specs_root(hs, specs_root))
     cells: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for (task, tier, seed), hit in index.items():

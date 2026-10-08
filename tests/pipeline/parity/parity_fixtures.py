@@ -18,6 +18,8 @@ import numpy as np
 from tests._support.loaders import load_script
 
 REPO = Path(__file__).resolve().parents[3]
+#: 对拍配置（评估仓 dev-scripts/parity/configs，原 scripts/configs 的五份）
+CONFIGS = REPO / "dev-scripts" / "parity" / "configs"
 LAUNCH_SCHEMA = "hard-parity-launch/1"  # hard_parity generate 写的启动记录 schema（读者与写者两侧同名契约）
 
 
@@ -37,12 +39,13 @@ def hard_pull():
     return load_script("parity/hard_pull.py")
 
 
-def train_split():
-    return load_script("parity/train_split_parity.py")
-
-
 def hard_regression():
     return load_script("parity/hard_regression.py")
+
+
+def bench_root() -> Path:
+    """benchmark 子模块源码树根（子模块未检出时退回当前解释器能找到的 robomme_hard 所在树，只查找不导入）。"""
+    return hard_parity()._common.bench_root()
 
 
 # ── 微型 h5（与录像器同形：episode_<n>/setup + timestep_<i>/{action,obs,info}）─────────────

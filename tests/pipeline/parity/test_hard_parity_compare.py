@@ -18,7 +18,7 @@ import pytest
 import parity_fixtures as F
 
 TIER = "xhard5"
-SRC_SPECS = F.REPO / "src" / "robomme_hard" / "env_metadata" / "ood" / TIER / "specs.jsonl"
+SRC_SPECS = F.bench_root() / "src" / "robomme_hard" / "env_metadata" / "ood" / TIER / "specs.jsonl"
 OUTSIDE = ("StopCube", TIER, 99_999_999)
 
 

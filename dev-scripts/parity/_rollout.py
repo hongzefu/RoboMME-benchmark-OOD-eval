@@ -1,6 +1,6 @@
 """第二阶段：只读 jsonl → 生成 h5 → 按状态机回写（0927 计划第一部分 §5.2）。
 
-由 ``scripts/parity/v4_rollout.py`` 下沉：真正起环境、录 h5、跑规划的仍是 ``train_split_runner.py``
+由原 ``scripts/parity/v4_rollout.py`` 下沉：真正起环境、录 h5、跑规划的仍是 ``train_split_runner.py``
 （``--identity-source formula --no-recovery``）→ ``train_split_worker.run_one``（``gym.make(..., sampling_config=,
 native_episode_spec=)``），环境包由 ``ROBOMME_ENV_PACKAGE`` 决定（默认 robomme_hard）。
 
@@ -54,7 +54,7 @@ import _common  # noqa: F401  路径设置
 
 from robomme_hard.env_record_wrapper import hard_specs  # noqa: E402
 
-RUNNER = _common.REPO_ROOT / "scripts" / "parity" / "train_split_runner.py"
+RUNNER = _common.HERE / "train_split_runner.py"
 INFRA_TYPES = {"BrokenProcessPool", "TerminatedWorkerError", "TimeoutError", "RunnerCrash"}
 INFRA_PATTERN = re.compile(r"svulkan2|vulkan|ErrorIncompatibleDriver|EXCLUSIVE|CUDA error|out of memory|"
                            r"Resource temporarily unavailable|Too many open files", re.I)
@@ -365,8 +365,8 @@ def apply_results(rows: list[dict[str, Any]], results: list[dict[str, Any]], pkg
 
 
 def row_way(row: dict[str, Any]) -> int | None:
-    """规格行的 MoveCube 运动方式（``_freeze._movecube_way``：最后一次 _initialize_episode 的 way_idx）；读不到为 None。"""
-    from _freeze import _movecube_way  # noqa: PLC0415
+    """规格行的 MoveCube 运动方式（``_freeze_min._movecube_way``：最后一次 _initialize_episode 的 way_idx）；读不到为 None。"""
+    _movecube_way = _common.sibling("_freeze_min")._movecube_way
 
     return _movecube_way(row.get("spec"))
 
@@ -908,7 +908,7 @@ def split_v8(frozen_root: Path, cells: dict[tuple[str, str], int], shard_out: Pa
     """分片：从冻结根取格表涉及的格，逐档写 ``<shard_out>/specs/<tier>/specs.jsonl``（只含本片任务，按 /4 重签）
     与 ``<shard_out>/shard.json``（格表、来源各档 identity 与文件 sha）。冻结根必须未跑过；行与 sampling 逐字
     取自冻结根，合并时据此核对。"""
-    from _freeze import write_jsonl_exclusive  # noqa: PLC0415
+    write_jsonl_exclusive = _common.sibling("_freeze_min").write_jsonl_exclusive
 
     cells = check_cells(cells)
     table = cell_table(cells)

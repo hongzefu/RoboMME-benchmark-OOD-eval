@@ -1,4 +1,4 @@
-"""C15／C16 噪声基线单遍运行包装的 Python 逻辑 ``scripts/parity/noise_run.py``：``preflight``（RUN_FRESH、资产、
+"""C15／C16 噪声基线单遍运行包装的 Python 逻辑 ``dev-scripts/parity/noise_run.py``：``preflight``（RUN_FRESH、资产、
 BUDGET、来源报告）与 ``finish``。``ship`` 的贯通在 ``test_mover_ship_pull.py``；壳脚本在 ``test_noise_run_shell.py``（slow）。
 
 全部在临时目录：nvidia-smi 用 ``NOISE_RUN_NVIDIA_SMI`` 指向假脚本（不碰真实 GPU）；预算上限是本用例自定的小数，

@@ -4,7 +4,7 @@
   交叉核对规则的每条反例、partial 拒收、输出已存在拒写。
 - ``check``：首跑逐局期望 match／jitter_info／flip；INVALID 前提；原因不明与结构不同直接 FAIL；
   NEED_RERUN 的陪跑局挑选；四格定性（噪声／回归／环境变了／每次都不同）与噪声上限；翻转上限；逐局报告。
-- 真实参照 ``scripts/configs/noise-ref-20261003.json`` 只读核对：canonical sha 自洽、三类计数自洽、
+- 真实参照 ``dev-scripts/parity/configs/noise-ref-20261003.json`` 只读核对：canonical sha 自洽、三类计数自洽、
   身份集合与 gate-set 冻结清单相同（计数不写字面值，红线 R8）。
 
 期望全部由用例里的布局表手写得出；首跑／重跑的「新跑」只写 identities 行（check 不重读 h5），
@@ -605,7 +605,7 @@ def test_cli_check_退出码与产物(ng, base, tmp_path, capsys):
 
 
 def test_真实参照文件_自洽且身份集合等于冻结检查集(ng):
-    path = F.REPO / "scripts" / "configs" / "noise-ref-20261003.json"
+    path = F.CONFIGS / "noise-ref-20261003.json"
     raw = path.read_bytes()
     ref = ng.load_ref(path)  # schema、canonical sha、类别合法、身份唯一、非 partial
     assert ref["sha256"] == canonical_sha(json.loads(raw))

@@ -1033,9 +1033,9 @@
    "tier": "xhard3"
   }
  ],
- "rule": "V9 包内规格交付行（hard_specs.delivered），每个交付格（任务, 档）取 candidate 升序最小的 3 个；builder_episode 按 XHARD0_IN_TEST_HARD=0 的 test-hard 编号",
+ "rule": "V9 包内规格交付行（hard_specs.delivered），每个交付格（任务, 档）取 candidate 升序最小的 3 个；builder_episode 按 dataset=ood（不含 xhard0）的局号",
  "schema": "gate-set-v9/2",
- "sha256": "5a869f0a69be7d539d7df9b25ac81cfb2795bc20948bebe2c7b1fc06e5e9d9b8",
+ "sha256": "2c8d5ecfa36eae087e513eb2678a37d8081bb1d771bdd239003fa63773ca3630",
  "source": {
   "xhard1": {
    "delivery_sha256": "b4c0ec4fd1d6185a5d1bd2962f33f064e6d7e0f253c8340bbcc71505ca298424",

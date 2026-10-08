@@ -26,10 +26,11 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OFFICIAL_ROOT = REPO_ROOT / "scripts" / "parity" / "official"
-DEFAULT_METADATA_ROOT = REPO_ROOT / "scripts" / "configs" / "newtask-v3" / "official_train"
-SUBSET_MANIFEST = REPO_ROOT / "scripts" / "configs" / "newtask-v3" / "subset_manifest.json"
+HERE = Path(__file__).resolve().parent
+#: vendor 的官方编排四文件（与本文件同目录的 official/，字节不动）
+DEFAULT_OFFICIAL_ROOT = HERE / "official"
+#: hard_specs 按文件加载（只取 ALL_TASKS；本进程不得导入 robomme／robomme_hard 包，见模块说明）
+HARD_SPECS_REL = Path("src") / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
 
 
 def _check_vendor(official_root: Path) -> str:
@@ -46,13 +47,22 @@ def _check_vendor(official_root: Path) -> str:
     return str(payload["tree"])
 
 
-def _metadata_records_sha256(metadata_root: Path) -> str:
-    """十六份 train 元数据 records 按任务规范序串接的 sha256（与 subset_manifest.json::records_sha256 同口径）。"""
-    sys.path.insert(0, str(REPO_ROOT / "scripts" / "injection-dev"))
-    from seed_layout import ALL_TASKS  # noqa: PLC0415
+def _all_tasks(src_root: Path) -> tuple[str, ...]:
+    """16 任务规范序：按文件加载 ``<src_root>/src/robomme_hard/env_record_wrapper/hard_specs.py`` 取 ``ALL_TASKS``
+    （不经包 ``__init__``，不导入仿真，也不让本进程导入 robomme_hard 包）。"""
+    import importlib.util  # noqa: PLC0415
 
+    spec = importlib.util.spec_from_file_location("_runner_hard_specs", src_root / HARD_SPECS_REL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.ALL_TASKS)
+
+
+def _metadata_records_sha256(metadata_root: Path, src_root: Path) -> str:
+    """十六份 train 元数据 records 按任务规范序（``hard_specs.ALL_TASKS``）串接的 sha256（原 subset_manifest.json::
+    records_sha256 同口径；该清单随原三档对拍退役未搬入，本函数供调用方显式比对）。"""
     joined: list = []
-    for task in ALL_TASKS:
+    for task in _all_tasks(src_root):
         payload = json.loads((metadata_root / f"record_dataset_{task}_metadata.json").read_text(encoding="utf-8"))
         joined.extend(payload["records"])
     return hashlib.sha256(json.dumps(joined, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -109,7 +119,7 @@ def _probe_robomme(src_root: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="A 路隔离运行器（官方 _worker）")
     parser.add_argument("--official-root", default=str(DEFAULT_OFFICIAL_ROOT),
-                        help="官方编排代码根目录（提供 _worker）；默认 vendor 的 scripts/parity/official（d53f21a7）")
+                        help="官方编排代码根目录（提供 _worker）；默认同目录 vendor 的 official/（d53f21a7）")
     parser.add_argument(
         "--src-root", default=None,
         help="环境源码树根目录，默认与 --official-root 相同（A 路）；"
@@ -139,18 +149,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--xhard0-manifest", default=None, help="identity_source=test_metadata 时的 xhard0 清单（16×1×12）")
     parser.add_argument(
-        "--builder-route", choices=("ood",), default=None,
-        help="xhard0 H 侧：镜像 worker 的 gym.make 实参取自 robomme_hard 的 ood builder 的 xhard0 条目（v7 §1.5）",
+        "--builder-route", choices=("hard-verify",), default=None,
+        help="xhard0 H 侧：镜像 worker 的 gym.make 实参取自 robomme_hard 构建器 dataset=\"hard-verify\" 的条目"
+             "（按数据集名取局，局 0～11 即 xhard0；v7 §1.5）",
     )
     parser.add_argument(
         "--no-recovery", action="store_true",
         help="V4：一律不开 fail recover（官方按 episode 号分档的规则不生效）；只对镜像 worker 有效",
     )
     parser.add_argument(
-        "--metadata-root", default=str(DEFAULT_METADATA_ROOT),
+        "--metadata-root", default=None,
         help="identity_source=train_metadata 时官方 train 元数据目录（显式传给官方 read_train_metadata，"
-             "不用它按 __file__ 推出的默认根）；默认目录会核对 subset_manifest.json::records_sha256",
+             "不用它按 __file__ 推出的默认根）；缺省 <src-root>/src/robomme/env_metadata/train",
     )
+    parser.add_argument("--metadata-records-sha256", default=None,
+                        help="可选：train 元数据 records 按任务规范序串接的期望 sha256，不符即停")
     parser.add_argument("--resume", action="store_true",
                         help="跳过 results.partial.jsonl 里已完成的身份（按 task/episode）")
     args = parser.parse_args(argv)
@@ -200,12 +213,12 @@ def main(argv: list[str] | None = None) -> int:
     jobs = []
     if args.identity_source == "train_metadata":
         # 用官方自己的 metadata 读取器复核每条身份，seed 与难度必须逐字相同。
-        metadata_root = Path(args.metadata_root).resolve()
-        if metadata_root == DEFAULT_METADATA_ROOT.resolve():
-            expected = json.loads(SUBSET_MANIFEST.read_text(encoding="utf-8"))["records_sha256"]
-            actual = _metadata_records_sha256(metadata_root)
-            if actual != expected:
-                raise SystemExit(f"官方 train 元数据 records_sha256 不符：{actual} != {expected}")
+        metadata_root = (Path(args.metadata_root) if args.metadata_root
+                         else src_root / "src" / "robomme" / "env_metadata" / "train").resolve()
+        if args.metadata_records_sha256:
+            actual = _metadata_records_sha256(metadata_root, src_root)
+            if actual != args.metadata_records_sha256:
+                raise SystemExit(f"官方 train 元数据 records_sha256 不符：{actual} != {args.metadata_records_sha256}")
         records_by_task = official.read_train_metadata(metadata_root)
     elif args.identity_source == "test_metadata":
         # xhard0：官方 test 元数据只读 JSON（不导入任何 robomme 包）；hard 子集按 (task, 原 episode) 建索引
@@ -224,9 +237,6 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"官方 test hard 子集与 xhard0 清单不符：缺 {len(manifest_ids - metadata_ids)} 多 {len(metadata_ids - manifest_ids)}")
     else:
         # V4：xhard 身份不在官方 metadata 里；改按 V4 seed 公式复核，仍是硬校验。
-        repo_root = Path(__file__).resolve().parents[2]
-        if str(repo_root) not in sys.path:
-            sys.path.insert(0, str(repo_root))
         # xhard 分支才延迟导入 robomme_hard 的 seed 规则；O／P 侧（train_metadata）进程不触发（红线 R5）
         sys.path.insert(0, str(src_root / "src"))
         from robomme_hard.env_record_wrapper.hard_specs import (  # noqa: PLC0415
@@ -345,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         "official_root": str(official_root),
         "official_tree": official_tree,
         "env_package": env_package,
-        "metadata_root": str(Path(args.metadata_root).resolve()) if args.identity_source == "train_metadata" else None,
+        "metadata_root": str(metadata_root) if args.identity_source == "train_metadata" else None,
         "src_root": str(src_root),
         "official_module": str(Path(official.__file__).resolve()),
         "robomme_module": probe,

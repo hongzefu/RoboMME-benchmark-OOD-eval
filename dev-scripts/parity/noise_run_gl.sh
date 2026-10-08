@@ -11,7 +11,7 @@
 #   5. 最后一行写 EXIT_CODE=<n>（真实命令非零取其值，否则取 finish 的返回码），作为 Monitor 统一完成信号。
 #
 # 用法：
-#   bash scripts/parity/noise_run_gl.sh --pass <名> --kind gen --out-root <dir> --log <日志> \
+#   bash dev-scripts/parity/noise_run_gl.sh --pass <名> --kind gen --out-root <dir> --log <日志> \
 #     --provenance-out <json> --budget-ledger <jsonl> --budget-caps <json> --attempts N --resets N --retries N \
 #     [--assets-lock J --asset-dir 名=路径 ...] [--tokenizer P --tokenizer-sha256 H] [--policy-repo 名=路径 ...] \
 #     [--max-steps N] [--server-args S] [--actual-attempts N|unknown] [--actual-resets N|unknown] \
@@ -25,9 +25,10 @@
 set -euo pipefail
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONUNBUFFERED=1
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
 PY="${PY:-$REPO/.venv/bin/python}"
-NOISE_PY="$REPO/scripts/parity/noise_run.py"
+NOISE_PY="$HERE/noise_run.py"
 
 PASS_NAME="" ; KIND="" ; OUT_ROOT="" ; LOG="" ; PROV=""
 ACT_ATTEMPTS="unknown" ; ACT_RESETS="unknown" ; ACT_RETRIES="unknown"

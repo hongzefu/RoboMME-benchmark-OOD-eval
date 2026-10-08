@@ -1,40 +1,18 @@
 [
   {
-    "id": "C12.01",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/_draw.py"
-    ],
-    "symbol": "_draw.draw_task/merge_task_rows/draw_stats；freeze_specs.draw_rows_by_task",
-    "oracle": "手写替身剧本：哪个 (episode, attempt) 被拒；替身逐次记录收到的 seed",
-    "positive": "抽签推进 (0,0)(1,0)(1,1)(2,0)(3,0)；多 worker（注入线程池）与单 worker 行序逐行相同；draw_stats 逐类计数",
-    "negative": "合并时行序与推进规则不符、缺环境即拒绝；reset 预算用尽停止并记 shortfall",
-    "boundaries": "预算恰好用尽；某局一直被拒",
-    "nodeids": [
-      "tests/pipeline/gen/test_freeze.py::test_draw_then_freeze_signs_v4_file",
-      "tests/pipeline/gen/test_freeze.py::test_draw_stops_at_reset_budget_and_records_shortfall",
-      "tests/pipeline/gen/test_freeze.py::test_multi_worker_draw_equals_single_worker",
-      "tests/pipeline/gen/test_freeze.py::test_merge_rejects_rows_out_of_draw_order"
-    ],
-    "resource": "cpu",
-    "mutants": [],
-    "status": "verified"
-  },
-  {
     "id": "C12.02",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_freeze.py"
+      "dev-scripts/parity/_freeze_min.py"
     ],
-    "symbol": "_freeze.freeze/write_jsonl_exclusive（hard-specs/4）",
-    "oracle": "封存后经 hard_specs.load_specs 读回与内存相同；选中集合、per_env、draw_stats.freeze_per_env 手写",
-    "positive": "/4 header（layout_rule independent、exec_cap、delivery_per_cell）与行（candidate==episode、layout_parent=null）逐项",
-    "negative": "schema≠/4、调用方给 layout_rule、未知档、规格散列被改、草稿档位不符、seed 不符、候选编号不连续、选不满配额，八个拒绝分支各有正例对照；已存在文件拒绝覆盖且不留临时文件",
-    "boundaries": "配额 = 成功候选数",
+    "symbol": "_freeze_min.write_jsonl_exclusive（排他落盘；规格抽签封存 _freeze.freeze 随拆仓退役）",
+    "oracle": "手写记录的 canonical JSON 文本；测试侧签名器写出的 /4 文件经 hard_specs.load_specs 读回逐行相等",
+    "positive": "每行为 canonical JSON；签名规格读回与内存相同",
+    "negative": "已存在文件拒绝覆盖且不留临时文件",
+    "boundaries": "父目录不存在时自动建",
     "nodeids": [
-      "tests/pipeline/gen/test_freeze.py::test_freeze_rejects",
-      "tests/pipeline/gen/test_freeze.py::test_freeze_accepts_untampered_counterpart",
-      "tests/pipeline/gen/test_freeze.py::test_write_exclusive_refuses_existing"
+      "tests/pipeline/gen/test_freeze.py::test_write_exclusive_canonical_lines_and_refuses_existing",
+      "tests/pipeline/gen/test_freeze.py::test_signed_specs_roundtrip_through_load_specs"
     ],
     "resource": "cpu",
     "mutants": [],
@@ -44,68 +22,15 @@
     "id": "C12.03",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_freeze.py"
+      "dev-scripts/parity/_freeze_min.py"
     ],
-    "symbol": "_freeze.stratified_select/_select_by_way_quota/_movecube_way",
+    "symbol": "_freeze_min._movecube_way（_rollout 同方式递补的运动方式口径）",
     "oracle": "手写运动方式表（编号→way）；V9 逐方式配额取生产常量，期望用 [x for x in range(80) if x%3==w][:q] 独立算出",
     "positive": "旧规则一方式取一个再按 select 补齐；V9 MoveCube 17／17／16 逐方式取编号最小者；candidates_by_way 27/27/26",
     "negative": "某方式候选不足报出逐方式缺口；quota_by_way 用于非 MoveCube、键不全、负数、合计≠配额均拒绝",
     "boundaries": "way 取最大序号的 initialization（10 > 1 按整数比）；读不到 way 归 None",
     "nodeids": [
-      "tests/pipeline/gen/test_freeze.py::test_movecube_stratified_one_per_way",
-      "tests/pipeline/gen/test_freeze.py::test_v9_movecube_per_way_quota_through_freeze",
-      "tests/pipeline/gen/test_freeze.py::test_v9_movecube_way_short_is_rejected_with_counts",
-      "tests/pipeline/gen/test_freeze.py::test_quota_by_way_argument_checks",
-      "tests/pipeline/gen/test_freeze.py::test_movecube_way_reads_last_initialization",
-      "tests/pipeline/gen/test_freeze.py::test_stratified_is_plain_select_for_other_tasks"
-    ],
-    "resource": "cpu",
-    "mutants": [
-      "T7-F1"
-    ],
-    "status": "verified"
-  },
-  {
-    "id": "C12.04",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/freeze_specs.py",
-      "scripts/injection-dev/_rollout.py"
-    ],
-    "symbol": "freeze_specs.plan_v8/main --dry-run；_rollout.resolve_cells/check_cells",
-    "oracle": "W4 后候选数缺省等于局数；reset 上限手算 ⌈80÷0.97×1.5⌉=124；--max-reset-attempts／TASK@TIER 覆盖手写",
-    "positive": "FREEZE_CELL 逐格 quota=candidates、spare=0；FREEZE_PLAN reset_budget 合计；dry-run 不建目录不写盘",
-    "negative": "--tasks 越格、--select 长度≠配额、候选不足、reset 覆盖含本档外任务、逐任务条目非法；--cells full／smoke 已删除；格表 JSON 越界／0／布尔／表外格；--out 已存在（含 dry-run）",
-    "boundaries": "@TIER 条目只对该档生效",
-    "nodeids": [
-      "tests/pipeline/gen/test_freeze.py::test_dry_run_candidates_default_to_quota",
-      "tests/pipeline/gen/test_freeze.py::test_dry_run_default_reset_cap_and_way_quota",
-      "tests/pipeline/gen/test_freeze.py::test_existing_out_refused_even_for_dry_run",
-      "tests/pipeline/gen/test_freeze.py::test_plan_v8_rejects",
-      "tests/pipeline/gen/test_freeze.py::test_cells_names_reject_removed_v8_tables",
-      "tests/pipeline/gen/test_freeze.py::test_cells_json_roundtrip_and_bounds",
-      "tests/pipeline/gen/test_freeze.py::test_plan_v8_positive_counterpart",
-      "tests/pipeline/gen/test_freeze.py::test_parse_by_task_helpers"
-    ],
-    "resource": "cpu",
-    "mutants": [
-      "T7-F2"
-    ],
-    "status": "verified"
-  },
-  {
-    "id": "C12.05",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/_extract.py"
-    ],
-    "symbol": "_extract.build_sampling",
-    "oracle": "只读 native_blocks，不建环境；两次结果 digest 相同",
-    "positive": "16 任务里任取两个返回 decision／native",
-    "negative": "未知任务模块报错",
-    "boundaries": "—",
-    "nodeids": [
-      "tests/pipeline/gen/test_freeze.py::test_extract_builds_sampling_from_native_blocks_without_env"
+      "tests/pipeline/gen/test_freeze.py::test_movecube_way_reads_last_initialization"
     ],
     "resource": "cpu",
     "mutants": [],
@@ -115,7 +40,7 @@
     "id": "C12.06",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_rollout.py"
+      "dev-scripts/parity/_rollout.py"
     ],
     "symbol": "_rollout.run_batch",
     "oracle": "FakeRunner 冒充 train_split_runner 命令行契约（真 h5／mp4／spec_replay.json 落盘）",
@@ -141,7 +66,7 @@
     "id": "C12.07",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_rollout.py"
+      "dev-scripts/parity/_rollout.py"
     ],
     "symbol": "_rollout.run_continue/apply_results/plan_pending/write_back/SpecsLock（/4 状态机）",
     "oracle": "手写事件序列：每局每轮结局 → 期望的递补对象、每行 selected/tried/status、账本行",
@@ -171,7 +96,7 @@
     "id": "C12.08",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_rollout.py"
+      "dev-scripts/parity/_rollout.py"
     ],
     "symbol": "_rollout.h5_facts/enforce_exec_cap/purge_episode_media",
     "oracle": "真实 h5：执行步 = 帧数 − is_video_demo 帧；上限取 hard_specs.EXEC_CAP",
@@ -194,7 +119,7 @@
     "id": "C12.09",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_rollout.py"
+      "dev-scripts/parity/_rollout.py"
     ],
     "symbol": "_rollout.run_continue（--resume 账本重放）/unknown_identities",
     "oracle": "替身在第 n 次调用中途抛 Crash；续跑换新替身（对已记账身份会给出不同结局）",
@@ -218,7 +143,7 @@
     "id": "C12.10",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/_rollout.py"
+      "dev-scripts/parity/_rollout.py"
     ],
     "symbol": "_rollout.apply_results(same_way_tasks)/same_way_tasks_for/_same_way_spares",
     "oracle": "候选运动方式 = 编号 % 3（手写）",
@@ -227,8 +152,7 @@
     "boundaries": "—",
     "nodeids": [
       "tests/pipeline/gen/test_rollout_state_machine.py::test_movecube_backfills_only_within_same_way",
-      "tests/pipeline/gen/test_rollout_state_machine.py::test_same_way_rule_only_for_v4_new_tiers",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_movecube_same_way_exhausted_even_with_spares"
+      "tests/pipeline/gen/test_rollout_state_machine.py::test_same_way_rule_only_for_v4_new_tiers"
     ],
     "resource": "cpu",
     "mutants": [
@@ -237,116 +161,10 @@
     "status": "verified"
   },
   {
-    "id": "C12.11",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/_rollout.py"
-    ],
-    "symbol": "_rollout.split_v8",
-    "oracle": "冻结根行集合（task, tier, candidate, seed, spec_sha256）",
-    "positive": "两片不重不漏、并集等于冻结根；shard.json 记来源 identity 与文件 sha；片头部只含本片任务并重签",
-    "negative": "片目录已存在禁止覆盖；冻结配额≠格表；冻结根已跑过",
-    "boundaries": "—",
-    "nodeids": [
-      "tests/pipeline/gen/test_shard_aggregate.py::test_split_is_disjoint_and_complete",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_split_rejections"
-    ],
-    "resource": "cpu",
-    "mutants": [],
-    "status": "verified"
-  },
-  {
-    "id": "C12.12",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/_rollout.py",
-      "scripts/injection-dev/generate_h5.py"
-    ],
-    "symbol": "_rollout.aggregate_v8/run_continue_v8；generate_h5 --mode aggregate",
-    "oracle": "手算逐格与全局计数（StopCube 2 + SwingXtimes 1 = 3）；落盘后读回 JSON 再断言",
-    "positive": "PASS：计数键全部显式写出且为 int、零值不省略；行带 h5／path（相对 delivery.json）／video／role",
-    "negative": "pending（未跑）、exhausted（同方式）、shortfall（有备用未递补）三种 FAIL；缺账本、目标已存在、账本含表外格拒绝；CLI 退出码 1／0",
-    "boundaries": "分母取格表局数而不是结果行数",
-    "nodeids": [
-      "tests/pipeline/gen/test_shard_aggregate.py::test_shard_run_delivers_and_serializes_zero_counts",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_pending_cells_when_nothing_ran",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_shortfall_when_failure_not_backfilled",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_aggregate_requires_ledger_and_refuses_overwrite",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_aggregate_rejects_infra_from_foreign_cells",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_cli_aggregate_exit_codes"
-    ],
-    "resource": "cpu",
-    "mutants": [
-      "M17a",
-      "M17b"
-    ],
-    "status": "verified"
-  },
-  {
-    "id": "C12.13",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/_rollout.py"
-    ],
-    "symbol": "_rollout.parse_rebase/rebase_path/aggregate_v8(rebase)",
-    "oracle": "整树 shutil.move 后的真实文件；sha 直接对文件重算",
-    "positive": "按旧前缀换到新位置并逐个核 sha，h5／video 指向新位置",
-    "negative": "不 rebase → h5_missing；前缀不匹配 → h5_unmapped；删一个、改一个 → h5_missing + h5_sha_mismatch；--rebase 格式错误拒绝",
-    "boundaries": "最长前缀优先；只认整段目录前缀（/ab 不匹配 /a）",
-    "nodeids": [
-      "tests/pipeline/gen/test_shard_aggregate.py::test_rebase_rewrites_paths_and_rechecks_sha",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_rebase_errors",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_rebase_prefers_longest_prefix_and_whole_segments"
-    ],
-    "resource": "cpu",
-    "mutants": [],
-    "status": "verified"
-  },
-  {
-    "id": "C12.14",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/generate_h5.py"
-    ],
-    "symbol": "generate_h5._launch_facts/main 的 A40 闸门",
-    "oracle": "替身 nvidia-smi 输出（两张卡，CUDA_VISIBLE_DEVICES 选行）",
-    "positive": "A40 过闸并写 launch 记录（gpu_model、src_commit）；--dev-smoke 放行 Ada",
-    "negative": "非 A40 拒绝且不建输出目录",
-    "boundaries": "多卡时按可见设备号取行",
-    "nodeids": [
-      "tests/pipeline/gen/test_shard_aggregate.py::test_generation_refuses_non_a40",
-      "tests/pipeline/gen/test_shard_aggregate.py::test_a40_and_dev_smoke_pass_the_gate"
-    ],
-    "resource": "cpu",
-    "mutants": [],
-    "status": "verified"
-  },
-  {
-    "id": "C12.15",
-    "domain": "C12",
-    "source": [
-      "scripts/injection-dev/append_candidates.py"
-    ],
-    "symbol": "append_candidates.main/plan_append/draw_extra/apply_append",
-    "oracle": "exhausted 格补抽后续跑只执行新递补的一局；新行 seed 等于替身实际收到的 seed",
-    "positive": "冻结根旧行逐字保留、末尾追加；片里缺额个新候选标 selected；shard.json 来源 identity 跟上；写前备份；续跑 PASS",
-    "negative": "片里仍有 selected 未跑或未试备用、规格加锁、非交付格、reset 预算非正 → FAIL 且不抽签不写盘；dry-run 不写盘",
-    "boundaries": "新候选第一次 reset 被拒",
-    "nodeids": [
-      "tests/pipeline/gen/test_append_candidates.py::test_append_then_resume_delivers",
-      "tests/pipeline/gen/test_append_candidates.py::test_dry_run_writes_nothing",
-      "tests/pipeline/gen/test_append_candidates.py::test_refuses_when_spares_or_pending_remain",
-      "tests/pipeline/gen/test_append_candidates.py::test_append_preconditions"
-    ],
-    "resource": "cpu",
-    "mutants": [],
-    "status": "verified"
-  },
-  {
     "id": "C12.16",
     "domain": "C12",
     "source": [
-      "scripts/injection-dev/export_eval_identities.py"
+      "dev-scripts/gl/export_eval_identities.py"
     ],
     "symbol": "export_eval_identities.main/check_rows/balance",
     "oracle": "新值身份集合直接读包内五份规格的交付行（不经 builder）；贪心均衡用三局两片手算",
@@ -372,7 +190,7 @@
     "id": "C16.01",
     "domain": "C16",
     "source": [
-      "scripts/injection-dev/site_build.py"
+      "dev-scripts/site/site_build.py"
     ],
     "symbol": "site_build.main/Runner.run/run_child/serve/stop_serve（--site-only --cells v9）",
     "oracle": "各步换成真子进程假命令，执行记入计数文件（不看脚本自报 PASS）",
@@ -380,13 +198,13 @@
     "negative": "判定行 FAIL、退出码非零、判定行缺失各自停在该步且后续不跑；站点目录非空且无可复用记录 FAIL 不覆盖；端口占用 FAIL；V9 复用模式缺 V9_SITE 行 FAIL、参数不全预检退出 2；V8 格表名已删除",
     "boundaries": "V9 复用模式透传 --expect-reused／--expect-new",
     "nodeids": [
-      "tests/pipeline/gen/test_site_build.py::test_site_only_pipeline_runs_steps_in_order",
-      "tests/pipeline/gen/test_site_build.py::test_failed_step_stops_pipeline",
-      "tests/pipeline/gen/test_site_build.py::test_nonempty_site_dir_without_record_fails",
-      "tests/pipeline/gen/test_site_build.py::test_port_busy_fails_serve",
-      "tests/pipeline/gen/test_site_build.py::test_v9_eval_mode_requires_v9_site_line",
-      "tests/pipeline/gen/test_site_build.py::test_v9_eval_mode_preflight",
-      "tests/pipeline/gen/test_site_build.py::test_removed_v8_cells_rejected"
+      "tests/pipeline/site/test_site_build.py::test_site_only_pipeline_runs_steps_in_order",
+      "tests/pipeline/site/test_site_build.py::test_failed_step_stops_pipeline",
+      "tests/pipeline/site/test_site_build.py::test_nonempty_site_dir_without_record_fails",
+      "tests/pipeline/site/test_site_build.py::test_port_busy_fails_serve",
+      "tests/pipeline/site/test_site_build.py::test_v9_eval_mode_requires_v9_site_line",
+      "tests/pipeline/site/test_site_build.py::test_v9_eval_mode_preflight",
+      "tests/pipeline/site/test_site_build.py::test_removed_v8_cells_rejected"
     ],
     "resource": "cpu",
     "mutants": [],
@@ -396,7 +214,7 @@
     "id": "C16.02",
     "domain": "C16",
     "source": [
-      "scripts/injection-dev/site_build.py"
+      "dev-scripts/site/site_build.py"
     ],
     "symbol": "site_build 的锁、报告复用、进度续行与 SIGTERM",
     "oracle": "计数文件证明哪些步骤真的重跑",
@@ -404,11 +222,11 @@
     "negative": "输入指纹不符拒绝（退出 2）；同 work-dir 第二个实例被 flock 拒绝；已 PASS 步骤的产物被改过则不复用且不覆盖",
     "boundaries": "—",
     "nodeids": [
-      "tests/pipeline/gen/test_site_build.py::test_repeated_call_reuses_report_without_rerun",
-      "tests/pipeline/gen/test_site_build.py::test_changed_inputs_refuse_reuse",
-      "tests/pipeline/gen/test_site_build.py::test_second_instance_on_same_work_dir_is_refused",
-      "tests/pipeline/gen/test_site_build.py::test_sigterm_mid_check_resumes_only_unfinished_steps",
-      "tests/pipeline/gen/test_site_build.py::test_tampered_catalog_is_refused_on_resume"
+      "tests/pipeline/site/test_site_build.py::test_repeated_call_reuses_report_without_rerun",
+      "tests/pipeline/site/test_site_build.py::test_changed_inputs_refuse_reuse",
+      "tests/pipeline/site/test_site_build.py::test_second_instance_on_same_work_dir_is_refused",
+      "tests/pipeline/site/test_site_build.py::test_sigterm_mid_check_resumes_only_unfinished_steps",
+      "tests/pipeline/site/test_site_build.py::test_tampered_catalog_is_refused_on_resume"
     ],
     "resource": "cpu",
     "mutants": [
