@@ -11,7 +11,8 @@ CPU 替身）；Astra 不经过 ``EnvSession``，走 ``astra_hard_runner.run_cas
 
 每条路线、每个种子核三处（期望值由本文件手写，不调用被测函数生成）：
 
-1. **服务命令**：``run_seat.sh::build_server_cmd`` 的 argv 里种子取值等于 ``--policy-seed``（MME-VLA 外壳
+1. **服务命令**：各模型 Policy 的服务端命令（``models/*::*_server_spec``，即旧 ``run_seat.sh::build_server_cmd`` 的
+   Python 版；``run_seat.sh`` 不迁）的 argv 里种子取值等于 ``policy_seed``（MME-VLA 外壳
    ``--seed=<s>``、smvla ``--policy-seed <s>``、pp ``--args.seed <s>``；Astra 由 ``run_astra.sh`` 起的 VLA 服务 ``--seed=<s>``），
    且没有残留旧常量（7／0／42）；
 2. **该路线真正用的随机状态**：MME-VLA 外壳把 argv 的 ``--seed`` 交给三方 ``create_policy``（假 ``serve_policy`` 记下实参）
@@ -80,26 +81,34 @@ def _clean_env(monkeypatch):
     return monkeypatch
 
 
-# ───────────────────────────── 服务命令（run_seat.sh::build_server_cmd） ─────────────────────────────
+# ───────────────────────────── 服务命令（各模型 ``*_server_spec``） ─────────────────────────────
 
-LIB_SRV = r'''
-set -u
-source "$EO/run_seat.sh"
-OUT=/o; GPU=0; MME_VLA_PY=/py/mme-vla; PP_PY=/py/pp; SMVLA_PY=/py/smvla; OPENPI_HOME=/openpi; PP_CKPT=/ck/pp
-FRAMESAMP_MODUL_CKPT=/ck/fsm; GROUNDSG_CKPT=/ck/sg; SMVLA_CKPT=/ck/smvla; GROUNDSG_VARIANT="$W_VARIANT"
-MEMER_ADAPTER="${W_MEMER:-}"; QWENVL_ADAPTER="${W_QWENVL:-}"; POLICY_SEED="$W_SEED"; SGEVAL_PP_SERVER_WRAP=1
-build_server_cmd "$W_POL" 18123; echo "BUILD_RC=$?"
-for a in "${SRV_ARGV[@]}"; do printf 'SRV %s\n' "$a"; done
-'''
+#: 旧 LIB_SRV 的固定参数（解释器与 ckpt 都是只记不跑的假路径）
+SRV_CFG = {"perceptual-framesamp-modul": {"mme_vla_py": "/py/mme-vla", "ckpt": "/ck/fsm"},
+           "groundsg": {"mme_vla_py": "/py/mme-vla", "ckpt": "/ck/sg"},
+           "smvla": {"smvla_py": "/py/smvla", "ckpt": "/ck/smvla"},
+           "pp": {"pp_py": "/py/pp", "ckpt": "/ck/pp", "pp_server_wrap": True}}
 
 
 def server_argv(route: str, seed: int) -> list[str]:
+    """该路线 Policy 的服务端 argv（端口 18123，不起服务）。"""
+    from robomme_hard_eval.models import framesamp_modul as fm
+    from robomme_hard_eval.models import pp as ppm
+    from robomme_hard_eval.models import resolve
+    from robomme_hard_eval.models import smvla as smm
+
     pol, variant = ROUTES[route]
-    env = dict(os.environ, EO=str(EO), W_POL=pol, W_SEED=str(seed), W_VARIANT=variant or "",
-               W_MEMER=G.MEMER_ADAPTER if variant == G.MEMER else "", W_QWENVL=G.ADAPTER if variant == G.QWENVL else "")
-    p = subprocess.run(["bash", "-c", LIB_SRV], capture_output=True, text=True, env=env, timeout=60)
-    assert "BUILD_RC=0" in p.stdout, (route, seed, p.stdout, p.stderr[-400:])
-    return [x[4:] for x in p.stdout.splitlines() if x.startswith("SRV ")]
+    cfg = dict(SRV_CFG[pol], port=18123, openpi_data_home="/openpi", preflight=False, ckpt_fingerprint=False,
+               server_dir="/o")
+    if pol == "groundsg":
+        cfg.update(groundsg_variant=variant, memer_adapter_path=G.MEMER_ADAPTER if variant == G.MEMER else None,
+                   qwenvl_groundSG_adapter_path=G.ADAPTER if variant == G.QWENVL else None)
+    p = resolve(pol)(policy_seed=seed, **cfg)
+    p._pick_port()
+    build = {"perceptual-framesamp-modul": fm.mme_vla_server_spec, "groundsg": fm.mme_vla_server_spec,
+             "smvla": smm.smvla_server_spec, "pp": ppm.pp_server_spec}[pol]
+    argv, _env, _cwd = build(p, SRV_CFG[pol]["ckpt"])
+    return argv
 
 
 def _opt(argv: list[str], name: str) -> str | None:
@@ -128,7 +137,7 @@ def wrap_create_policy_seed(argv: list[str], meta_path: Path) -> int:
     返回假 ``create_policy`` 实收的种子，并写服务元数据（供结果行 ``server_seed`` 反查）。"""
     wrap = load_script("eval-official/policy_server_wrap.py")
     meta, rest = wrap.split_wrapper_args(argv[2:])
-    assert meta is not None and meta.endswith("server-metadata-18123.json")
+    assert meta is not None and meta.endswith("server-wrap-metadata-18123.json")
     seen: dict = {}
 
     def create_policy(a):

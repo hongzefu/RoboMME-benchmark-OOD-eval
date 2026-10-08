@@ -21,9 +21,9 @@ from pathlib import Path
 import pytest
 
 import groundsg_fakes as F
-from tests._support.loaders import REPO
+from tests._support.loaders import REPO, script_path
 
-EO = REPO / "scripts" / "eval-official"
+EO = script_path("eval-official/run_official_hard.sh").parent
 NOTE = "Your previous reply was not valid JSON. Reply with the JSON object only."
 BAD = "not json at all"
 

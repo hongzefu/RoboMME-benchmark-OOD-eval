@@ -63,26 +63,21 @@ QwenVL 取 ``QwenVLSubgoalPredictor`` 与 ``Qwen3VLModel``（不取 Gemini／Mem
 """
 from __future__ import annotations
 
+import hashlib
+import importlib
+import inspect
+import json
+import os
+import re
+import shutil
+import subprocess
 import sys
-from pathlib import Path as _Path
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Callable
 
-_HERE = str(_Path(__file__).resolve().parent)
-# 不改 sys.path：同目录模块一律按文件路径加载（原侧 official_hard_runner 要求 sys.path 只加两项）
-
-import hashlib  # noqa: E402
-import importlib.util  # noqa: E402
-import json  # noqa: E402
-import os  # noqa: E402
-import re  # noqa: E402
-import shutil  # noqa: E402
-import subprocess  # noqa: E402
-import tempfile  # noqa: E402
-import inspect  # noqa: E402
-import time  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any, Callable  # noqa: E402
-
-import numpy as np  # noqa: E402
+import numpy as np
 
 NORMAL = ("success", "fail", "timeout")
 #: 不当作环境错误吞掉的异常（按类名判，避免导入 env_client）
@@ -91,15 +86,19 @@ INFRA_MARKERS = ("RecorderError", "svulkan2", "EXCLUSIVE", "Vulkan", "vk::", "ou
                  "CUDA_ERROR", "ConnectionClosed", "ConnectionRefused", "InvalidStatus", "Connection reset")
 
 
+#: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
+SIBLINGS = {"smvla_client": "robomme_hard_eval.models.smvla",
+            "groundsg_client": "robomme_hard_eval.models.groundsg",
+            "framesamp_modul_client": "robomme_hard_eval.models.framesamp_modul",
+            "official_defs": "robomme_hard_eval.models._official_defs",
+            "trace_writer": "robomme_hard_eval.record.trace_writer"}
+
+
 def load_sibling(name: str):
-    """按文件路径加载本目录下的模块（别名与 env_client.load_sibling 相同，已加载则复用）。"""
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, _Path(_HERE) / f"{name}.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """取旧仓同目录模块在评估包里的对应模块（包内 import，已导入则复用）。"""
+    if name not in SIBLINGS:
+        raise ModuleNotFoundError(f"未登记的同伴模块 {name!r}，可选：{', '.join(SIBLINGS)}")
+    return importlib.import_module(SIBLINGS[name])
 
 
 official_defs = load_sibling("official_defs")
@@ -1146,3 +1145,111 @@ def attempt_of(episode_tag: str) -> int:
     """局目录名 ``<key>.a<N>`` 的尝试号 N；不含 ``.a<N>`` 时为 1（与 ``official_episode_id`` 同口径）。"""
     m = re.search(r"\.a(\d+)$", str(episode_tag))
     return int(m.group(1)) if m else 1
+
+
+# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+
+from robomme_hard_eval import servers as _servers  # noqa: E402
+from robomme_hard_eval.episode import DATASET_MAX_STEPS  # noqa: E402
+
+#: 预热交给动作服务的合成子目标（只为让带子目标的输入形状先编译一次）
+WARMUP_SUBGOAL = "pick up the cube at <128, 128>"
+
+
+class GroundSGPolicy(_servers.ServedPolicy):
+    """GroundSG（``groundsg``；本轮 ``groundsg_variant=ground-sg-oracle``）。
+
+    * ``load``：变体配对 → tokenizer 闸门 → MME-VLA 预检 → 起（或 attach）与 FrameSamp+Modulation 同形的服务端（ckpt 与
+      ``history_config='symbolic-grounded-subgoal.yaml'`` 不同）→ 新增预热 → ``make_policy_context`` 建一次官方定义与子目标
+      预测器（``_official_defs.load_groundsg`` + ``build_predictor``）。官方 ``Args`` 写死 ``max_steps``，所以按两个
+      数据集的上限（1300、1800）各建一个 ``EpisodeEvaluator``、**共用同一个预测器**（``subgoal_predictor.py`` 不读
+      ``max_steps``）；
+    * ``reset(spec)``：不发消息、不碰环境——探活，核本局步数上限有对应的评估器，记下本局身份；
+    * ``play``：把上下文切到 ``spec.max_steps`` 对应的 ``(Args, EpisodeEvaluator)`` 后原样调本模块 ``run_episode``
+      （官方 ``eval_each_episode``：服务端 ``reset`` 在 ``session.reset()`` 之前；Oracle 每步读
+      ``session.info["grounded_subgoal_online"]``，经 ``SessionRunner`` 同步）；本局临时区建在 ``cfg["work_dir"]``（缺省系统
+      临时目录）下、局末整删；轨迹、语言账本、官方叠字视频（``official/``）与子目标模型日志都落本局 raw 目录；
+    * ``close``：停服务端进程组，释放预测器与评估器。
+
+    ``label`` 为 ``groundsg-<变体>``（产物树里的模型目录名，与旧席位的 ``pol_label`` 相同）。必填 cfg：
+    ``groundsg_variant``、``openpi_data_home``、``tokenizer_sha256``（预检打开时）；QwenVL／MemER 另需
+    ``qwenvl_groundSG_adapter_path``／``memer_adapter_path``。可选 ``ckpt``、``mme_vla_py``、``compile_cache``、``det``、
+    ``warmup``、``work_dir``；``client_factory``、``qwen_extra`` 只供单测注入替身。"""
+
+    model = "groundsg"
+
+    def __init__(self, policy_seed: int, **cfg: Any):
+        super().__init__(policy_seed, **cfg)
+        self.variant = self.cfg.get("groundsg_variant")
+        self.label = f"groundsg-{self.variant}" if self.variant else "groundsg"
+        self.qwenvl_adapter = self.cfg.get("qwenvl_groundSG_adapter_path") or self.cfg.get("qwenvl_groundsg_adapter")
+        self.memer_adapter = self.cfg.get("memer_adapter_path") or self.cfg.get("memer_adapter")
+        self.ckpt: Path | None = None
+        self.ctx: dict | None = None
+        self.evaluators: dict[int, tuple[Any, Any]] = {}
+        self.current_spec = None
+
+    def load(self) -> None:
+        S = _servers
+        if self.preflight or self.variant not in S.GROUNDSG_VARIANTS:
+            S.variant_pairing(self.variant, self.qwenvl_adapter, self.memer_adapter)
+        for k, v in {"USE_HF": "1", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}.items():
+            os.environ.setdefault(k, v)  # 旧席位客户端环境（QwenVL 预测器一律 HF 离线）
+        fm = load_sibling("framesamp_modul_client")
+        self.ckpt = fm.load_mme_vla_server(self, self.model)
+        if S.flag_on(self.cfg.get("warmup", True)):
+            self.load_info["warmup"] = fm.warmup_server(self.host, int(self.port), subgoal=WARMUP_SUBGOAL,
+                                                        frames=int(self.cfg.get("warmup_frames", fm.WARMUP_FRAMES)))
+        work = self.cfg.get("work_dir")
+        self.save_dir = Path(work) / "groundsg-qwen-tmp" if work else Path(tempfile.gettempdir()) / "qwen-tmp"
+        steps = sorted(set(DATASET_MAX_STEPS.values()))
+        seat = {"groundsg_variant": self.variant, "policy_seed": self.policy_seed, "host": self.host,
+                "port": int(self.port), "max_steps": steps[0], "qwenvl_groundSG_adapter_path": self.qwenvl_adapter,
+                "memer_adapter_path": self.memer_adapter}
+        t0 = time.perf_counter()
+        ctx = make_policy_context(seat, client_factory=self.cfg.get("client_factory"),
+                                  qwen_extra=self.cfg.get("qwen_extra"), save_dir=self.save_dir)
+        self.evaluators[int(ctx["args"].max_steps)] = (ctx["args"], ctx["evaluator"])
+        for ms in steps[1:]:  # 第二个评估器：同一组官方定义与预测器，只换 Args.max_steps
+            args = official_defs.make_args(ctx["defs"], variant=self.variant, host=self.host, port=int(self.port),
+                                           max_steps=int(ms), model_seed=ctx["policy_seed"],
+                                           adapter_path=self.qwenvl_adapter, memer_adapter_path=self.memer_adapter,
+                                           save_dir=str(self.save_dir))
+            self.evaluators[int(ms)] = (args, ctx["defs"]["EpisodeEvaluator"](args, self.save_dir))
+        self.ctx = ctx
+        self.load_info.update(context_s=round(time.perf_counter() - t0, 3), variant=self.variant,
+                              evaluators=sorted(self.evaluators))
+        print(f"GROUNDSG_EVALUATORS variant={self.variant} max_steps={sorted(self.evaluators)} "
+              f"predictor={type(ctx['predictor']).__name__} shared_predictor=1", flush=True)
+
+    def reset(self, spec) -> None:
+        super().reset(spec)
+        if int(spec.max_steps) not in self.evaluators:
+            raise ValueError(f"GroundSG 没有 max_steps={spec.max_steps} 的评估器（已建 {sorted(self.evaluators)}）")
+        self.current_spec = spec
+
+    def play(self, session, spec, recorder) -> dict:
+        ctx = self.ctx
+        ctx["args"], ctx["evaluator"] = self.evaluators[int(spec.max_steps)]
+        work = self.cfg.get("work_dir")
+        if work:
+            Path(work).mkdir(parents=True, exist_ok=True)
+        scratch = Path(tempfile.mkdtemp(prefix="groundsg-", dir=work or None))
+        conn = self._conn_info(spec)
+        conn.update(groundsg_variant=self.variant, policy_context=ctx, trace_dir=str(scratch),
+                    qwenvl_groundSG_adapter_path=self.qwenvl_adapter, memer_adapter_path=self.memer_adapter)
+        try:
+            res = run_episode(session, spec.identity(), conn, recorder)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+        res.pop("trace_dir", None)
+        return self._finish_play(res)
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            if self.ctx is not None:
+                close_policy_context(self.ctx)
+                self.ctx = None
+            self.evaluators.clear()

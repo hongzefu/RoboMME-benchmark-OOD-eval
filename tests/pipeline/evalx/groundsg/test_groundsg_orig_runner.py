@@ -15,9 +15,9 @@ from pathlib import Path
 import numpy as np
 
 import groundsg_fakes as F
-from tests._support.loaders import REPO
+from tests._support.loaders import REPO, script_path
 
-RUNNER = REPO / "scripts" / "eval-official" / "official_hard_runner.py"
+RUNNER = script_path("eval-official/official_hard_runner.py")
 #: 第三阶段必填项（接口冻结说明 2.2、2.4；本轮取值 870／50／50／821）
 BUDGET_ARGV = ["--budget-ledger", "/nonexistent/ledger.jsonl", "--trajectory-cap", "870", "--shared-infra-cap", "50",
                "--expired-cap", "50", "--planned-first-tries", "821"]

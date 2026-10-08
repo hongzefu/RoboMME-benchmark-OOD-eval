@@ -22,22 +22,17 @@
 """
 from __future__ import annotations
 
+import argparse
+import collections
+import hashlib
+import importlib
+import json
 import sys
-from pathlib import Path as _Path
+import time
+from pathlib import Path
+from typing import Any, Callable, Tuple
 
-_HERE = str(_Path(__file__).resolve().parent)
-# 本目录只挂在 sys.path 末尾，防止同目录模块遮蔽标准库
-sys.path[:] = [p for p in sys.path if p and str(_Path(p).resolve()) != _HERE] + [_HERE]
-
-import argparse  # noqa: E402
-import collections  # noqa: E402
-import hashlib  # noqa: E402
-import json  # noqa: E402
-import time  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any, Callable, Tuple  # noqa: E402
-
-import numpy as np  # noqa: E402
+import numpy as np
 
 MAX_STEPS = 1300
 OBS_HORIZON = 16
@@ -411,17 +406,19 @@ def summarize_timing(timing: dict) -> dict:
     return out
 
 
-def _load_sibling(name: str):
-    """按文件路径加载本目录下的模块（与 env_client／groundsg_client 的 load_sibling 同名注册，已加载则复用）。"""
-    if name in sys.modules:
-        return sys.modules[name]
-    import importlib.util
+#: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
+SIBLINGS = {"smvla_client": "robomme_hard_eval.models.smvla",
+            "groundsg_client": "robomme_hard_eval.models.groundsg",
+            "framesamp_modul_client": "robomme_hard_eval.models.framesamp_modul",
+            "official_defs": "robomme_hard_eval.models._official_defs",
+            "trace_writer": "robomme_hard_eval.record.trace_writer"}
 
-    spec = importlib.util.spec_from_file_location(name, Path(_HERE) / f"{name}.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+
+def _load_sibling(name: str):
+    """取旧仓同目录模块在评估包里的对应模块（包内 import，已导入则复用）。"""
+    if name not in SIBLINGS:
+        raise ModuleNotFoundError(f"未登记的同伴模块 {name!r}，可选：{', '.join(SIBLINGS)}")
+    return importlib.import_module(SIBLINGS[name])
 
 
 class TracedClient:
@@ -741,6 +738,133 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_transport_check)
     args = ap.parse_args(argv)
     return args.func(args)
+
+
+# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+
+from robomme_hard_eval import servers as _servers  # noqa: E402
+from robomme_hard_eval.policy import Ready  # noqa: E402
+
+#: 预热用的合成画面尺寸（RoboMME 两路相机都是 256×256）与帧数（稳态每次 add_buffer 交 16 帧）
+WARMUP_HW = (256, 256)
+WARMUP_FRAMES = OBS_HORIZON
+
+
+def warmup_server(host: str, port: int, *, frames: int = WARMUP_FRAMES, hw: tuple[int, int] = WARMUP_HW,
+                  subgoal: str | None = None, prompt: str = "warm up", client_factory: Callable | None = None) -> dict:
+    """进程级预热（FrameSamp+Modulation 与 GroundSG 新增）：合成观测走一遍 ``reset → add_buffer → infer``，让服务端
+    在正式局之前把首个输入形状编译好。正式局开头的 ``reset`` 消息会让服务端重建记忆缓冲并重设随机数（官方
+    ``Policy.reset`` 执行 ``self._rng = jax.random.key(self._seed)``），预热不带进正式局。返回逐消息计时汇总与总耗时；
+    预热只证明首个形状已编译，不宣称之后零编译。``client_factory`` 只供单测注入替身。"""
+    timing: dict[str, Any] = {}
+    t0 = time.perf_counter()
+    factory = client_factory or (lambda: make_recording_client(host, int(port), None, timing))
+    client = factory()
+    try:
+        h, w = hw
+        n = max(1, int(frames))
+        imgs = [np.full((h, w, 3), (37 * i) % 256, np.uint8) for i in range(n)]
+        states = [np.zeros(8, np.float32) for _ in range(n)]
+        resp = client.reset()
+        while not resp.get("reset_finished", False):
+            time.sleep(0.1)
+        resp = client.add_buffer(pack_buffer(imgs, states, n - 1))
+        while not resp.get("add_buffer_finished", False):
+            time.sleep(0.1)
+        element = {"observation/image": imgs[-1], "observation/wrist_image": imgs[-1],
+                   "observation/state": states[-1], "prompt": prompt}
+        if subgoal is not None:  # 与官方 get_action_chunk 同：两个子目标键同值
+            element["simple_subgoal"] = subgoal
+            element["grounded_subgoal"] = subgoal
+        actions = np.asarray(client.infer(element)["actions"])
+    finally:
+        try:
+            client._ws.close()
+        except Exception:  # noqa: BLE001
+            pass
+    out = summarize_timing(timing)
+    out.update(warmup_s=round(time.perf_counter() - t0, 3), frames=n, actions_shape=list(actions.shape))
+    print(f"WARMUP=PASS port={port} frames={n} warmup_s={out['warmup_s']:.1f} actions={list(actions.shape)}",
+          flush=True)
+    return out
+
+
+def mme_vla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
+    """MME-VLA 动作服务（FrameSamp+Modulation 与 GroundSG 共用）的命令、环境与 cwd，照抄旧
+    ``run_seat.sh::build_server_cmd`` 的 ``perceptual-framesamp-modul|groundsg`` 分支（外壳改为本包
+    ``servers/policy_server_wrap.py``；外壳元数据另写 ``server-wrap-metadata-<port>.json``，不与 ``ServerProcess`` 自己的
+    ``server-metadata-<port>.json`` 互相覆盖）。cfg：``mme_vla_py``（缺省 ``third_party/mme-vla/.venv/bin/python``，
+    环境变量 ``MME_VLA_PY`` 可覆盖）、``openpi_data_home``、``xla_mem_fraction``（缺省 0.75）、``compile_cache``、
+    ``jax_cache_root``（缺省 ``<仓根>/artifacts/jax-cache``，其下按 GPU 型号分目录）、``det``。"""
+    S = _servers
+    cfg = policy.cfg
+    sub = policy.root / "third_party" / "mme-vla"
+    py = S.interpreter(cfg, "mme_vla_py", "MME_VLA_PY", sub / ".venv" / "bin" / "python")
+    env = {"XLA_PYTHON_CLIENT_MEM_FRACTION": str(cfg.get("xla_mem_fraction", S.DEFAULT_XLA_MEM_FRACTION)),
+           "GLIBC_TUNABLES": "glibc.rtld.optional_static_tls=16384", "UV_LINK_MODE": "copy",
+           "VIRTUAL_ENV": str(sub / ".venv")}
+    if S.flag_on(cfg.get("compile_cache", False)):
+        cache_root = Path(cfg.get("jax_cache_root") or policy.root / "artifacts" / "jax-cache")
+        env["JAX_COMPILATION_CACHE_DIR"] = str(cache_root / S.gpu_slug(S.gpu_of(cfg)))
+    if S.flag_on(cfg.get("det", False)):
+        env["XLA_FLAGS"] = "--xla_gpu_deterministic_ops=true --xla_gpu_autotune_level=0"
+    env.update(OPENPI_DATA_HOME=str(cfg.get("openpi_data_home") or ""), PYTHONUNBUFFERED="1")
+    argv = [str(py), str(S.SERVERS_DIR / "policy_server_wrap.py"), f"--sgeval-metadata-out={policy.wrap_meta}",
+            f"--seed={int(policy.policy_seed)}", f"--port={int(policy.port)}", "policy:checkpoint",
+            "--policy.config=mme_vla_suite", f"--policy.dir={ckpt}"]
+    return argv, env, sub
+
+
+def load_mme_vla_server(policy, model: str) -> Path:
+    """FrameSamp+Modulation／GroundSG 的 ``load()`` 公共段：tokenizer 闸门 → MME-VLA 预检 → 起（或 attach）服务端
+    （就绪 = 端口在听 + 服务日志含 ``history_config='<yaml>'``）→ 后台 ckpt 指纹。返回所用 ckpt。"""
+    S = _servers
+    cfg = policy.cfg
+    ckpt = Path(cfg.get("ckpt") or S.DEFAULT_CKPTS[model])
+    policy._pick_port()
+    argv, env, cwd = mme_vla_server_spec(policy, ckpt)
+    if policy.preflight:
+        S.tokenizer_gate(cfg.get("openpi_data_home"), cfg.get("tokenizer_sha256"))
+        S.preflight_mme_vla(policy.root, model, ckpt, Path(argv[0]))
+    srv = policy._launch(argv, env, cwd, [Ready.port()], ckpt)
+    policy.load_info["server_config"] = S.check_server_log(srv, S.YAML_EXPECT[model],
+                                                           grace_s=float(cfg.get("server_config_grace_s", 30.0)))
+    policy._fingerprint(ckpt)
+    return ckpt
+
+
+class FrameSampModulPolicy(_servers.ServedPolicy):
+    """FrameSamp+Modulation（``perceptual-framesamp-modul``）。
+
+    * ``load``：``load_mme_vla_server``（cwd ``third_party/mme-vla``、``XLA_PYTHON_CLIENT_MEM_FRACTION=0.75``）+ 新增预热
+      ``warmup_server``（``cfg["warmup"]`` 缺省开）；
+    * ``reset(spec)``：不发消息、不碰环境——只探活并记下本局身份（客户端缓冲与动作计划在 ``run_episode`` 里每局新建）；
+    * ``play``：原样调本模块 ``run_episode``：每局新 websocket，先发服务端 ``reset`` 再 ``session.reset()``（旧次序）；
+    * ``close``：停服务端进程组（基类）。
+
+    必填 cfg：``openpi_data_home``、``tokenizer_sha256``（预检打开时）；可选 ``ckpt``（缺省旧 run_seat.sh 路径）、
+    ``mme_vla_py``、``compile_cache``、``det``、``xla_mem_fraction``、``warmup``、``warmup_frames``。"""
+
+    model = "perceptual-framesamp-modul"
+
+    def __init__(self, policy_seed: int, **cfg: Any):
+        super().__init__(policy_seed, **cfg)
+        self.ckpt: Path | None = None
+        self.current_spec = None
+
+    def load(self) -> None:
+        self.ckpt = load_mme_vla_server(self, self.model)
+        if _servers.flag_on(self.cfg.get("warmup", True)):
+            self.load_info["warmup"] = warmup_server(self.host, int(self.port),
+                                                     frames=int(self.cfg.get("warmup_frames", WARMUP_FRAMES)))
+
+    def reset(self, spec) -> None:
+        super().reset(spec)
+        self.current_spec = spec
+
+    def play(self, session, spec, recorder) -> dict:
+        res = run_episode(session, spec.identity(), self._conn_info(spec), recorder)
+        return self._finish_play(res)
 
 
 if __name__ == "__main__":
