@@ -9,7 +9,7 @@
 
 用法::
 
-    python scripts/eval-official/publish_videos.py --run-root <运行根> [--run-root …] --model-id groundsg \\
+    python dev-scripts/gl/publish_videos.py --run-root <运行根> [--run-root …] --model-id groundsg \\
         --variant ground-sg-qwenvl --policy-seed 7 --dataset ood --side new [--out-root <run 根>] \\
         [--manifest <清单>] [--expect-total 86] [--mode link|copy] [--verify] [--out-json <报告>]
 

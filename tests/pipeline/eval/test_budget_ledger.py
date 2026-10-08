@@ -1,6 +1,6 @@
 """S8 预算与额度（1005-eval-video-phase2-all-models-rerun-plan.md 第二部分一节「S8 预算与额度」、六节、R2、R6、R11）。
 
-被测：``scripts/eval-official/budget_ledger.py``（共享账本与 CLI）与 ``env_client.py`` 的共享模式门控。期望值一律由本文件
+被测：``dev-scripts/gl/budget_ledger.py``（共享账本与 CLI）与 ``dev-scripts/gl/seat.py`` 的共享模式。期望值一律由本文件
 手写的事件序列推出：
 
 * 并发争抢最后一个额度仅一方成功（线程与 CLI 子进程两种）；
@@ -9,26 +9,20 @@
 * 到期（有 Slurm 证据）与故障分账，两者都占每身份 2 次名额；重启换节点不刷新；
 * Astra 第 3 局拒绝；
 * 正常 fail／timeout／非 infra error 不重评；
-* 默认不传新参数时 ``AttemptLedger`` 与 ``SeatRunner`` 的账本与 BASE 逐字节相同。
+* 拆仓验收（R5）：reset 计量是硬上限，预约与实领超额一律拒绝、不写行；``reset_cap`` 进 config 行。
 """
 from __future__ import annotations
 
-import importlib.util
-import itertools
 import os
-import re
 import subprocess
 import sys
 import threading
-import uuid
 from pathlib import Path
 
 import pytest
 
 import eval_fakes as F
-from tests._support.loaders import REPO, load_script, script_path
-
-BASE = "b869a3df9e7406b8f5458697f22656165b9c50b3"
+from tests._support.loaders import load_script, script_path
 
 
 def bl_mod():
@@ -114,17 +108,36 @@ def test_concurrent_cli_reserve_only_one_wins(tmp_path):
     assert any(o.strip().splitlines()[-1].startswith("BUDGET_RESERVE ") for _, o in outs)
 
 
-def test_reset_soft_cap_only_warns(tmp_path, capsys):
+def test_reset_cap_is_hard(tmp_path, capsys):
+    """R5：计量额度硬上限。预约后计量超额 → BudgetExhausted(reason=reset_cap)、不写行；预约数之内的实领不增加总数、
+    照常记；超出预约数的实领使总数超额 → 同样拒绝、不写行。旧名 reset_soft_cap 仍可用、同为硬上限。"""
     bm = bl_mod()
-    led = bm.BudgetLedger(tmp_path / "b.jsonl", reset_soft_cap=5)
-    led.reserve(resets=4)
-    rid = led.reserve(resets=4)  # 8 > 5：只告警
-    led.claim_reset(rid, "reset")
-    err = capsys.readouterr().err
-    assert "BUDGET_WARN resets=8 soft=5" in err
-    ok, lines = led.report_lines()
-    assert ok and lines[-1] == ("BUDGET_ENFORCEMENT=PASS trajectories=2/6366 resets=8/5 astra=0/2 "
-                                "shared_infra=0/50")
+    path = tmp_path / "b.jsonl"
+    led = bm.BudgetLedger(path, reset_cap=5)
+    rid = led.reserve(resets=4)
+    with pytest.raises(bm.BudgetExhausted) as ei:
+        led.reserve(resets=2)  # 4 + 2 > 5
+    assert ei.value.reason == "reset_cap" and "BUDGET_REJECT resets=6 cap=5" in capsys.readouterr().err
+    for what in ("build", "reset", "build", "reset"):
+        led.claim_reset(rid, what)  # 预约数之内
+    led.claim_reset(rid, "build")  # 第 5 次：总数 5，等于上限照记
+    with pytest.raises(bm.BudgetExhausted):
+        led.claim_reset(rid, "reset")  # 第 6 次：超额
+    rows = F.read_jsonl(path)
+    assert [r["kind"] for r in rows].count("reserve") == 1 and [r["kind"] for r in rows].count("reset_claim") == 5
+    config = next(r for r in rows if r["kind"] == "config")
+    assert config["reset_cap"] == 5 and config["schema"] == "sgeval-budget/3"
+    with pytest.raises(bm.BudgetConfigMismatch):
+        bm.BudgetLedger(path, reset_cap=60).check()  # 入口口径不一致即拒
+    ok, lines = bm.BudgetLedger(path, reset_soft_cap=5).report_lines()
+    assert ok and lines[-1] == "BUDGET_ENFORCEMENT=PASS trajectories=1/6366 resets=5/5 astra=0/2 shared_infra=0/50"
+
+
+def test_cli_reserve_rejects_over_reset_cap(tmp_path):
+    path = tmp_path / "b.jsonl"
+    assert _cli(path, "--reset-cap", "3", "reserve", "--resets", "2").returncode == 0
+    r = _cli(path, "--reset-cap", "3", "reserve", "--resets", "2")
+    assert r.returncode == 5 and "RUN_BLOCKED reason=budget" in r.stdout and "budget_reason=reset_cap" in r.stdout
 
 
 def test_astra_third_episode_rejected(tmp_path):
@@ -226,13 +239,15 @@ class _Builder:
 
 def test_two_failed_resets_then_success_counts_six(tmp_path):
     """前两次尝试 reset 失败、第三次成功：每次尝试 build 与 reset 各领 1 次 → 共享账本记满 6（= 原侧每局预约数）。"""
-    ec, bm = F.env_client(), bl_mod()
+    from robomme_hard_eval.session import EnvSession
+
+    bm = bl_mod()
     led = bm.BudgetLedger(tmp_path / "b.jsonl")
     rid = led.reserve(resets=6, route="smvla/orig", key="k")
     builder = _Builder(fails=2)
     outcomes = []
     for _ in range(3):
-        s = ec.EnvSession("PickXtimes", 0, builder=builder, budget_claim=lambda what: led.claim_reset(rid, what))
+        s = EnvSession("PickXtimes", 0, builder=builder, budget_claim=lambda what: led.claim_reset(rid, what))
         try:
             s.reset()
             outcomes.append("ok")
@@ -249,8 +264,9 @@ def test_two_failed_resets_then_success_counts_six(tmp_path):
 
 
 def test_envsession_default_does_not_touch_budget(tmp_path):
-    ec = F.env_client()
-    s = ec.EnvSession("PickXtimes", 0, builder=_Builder(fails=0))
+    from robomme_hard_eval.session import EnvSession
+
+    s = EnvSession("PickXtimes", 0, builder=_Builder(fails=0))
     assert s.budget_claim is None
     s.reset()
     assert s.reset_calls == 2
@@ -259,56 +275,79 @@ def test_envsession_default_does_not_touch_budget(tmp_path):
 
 # ───────────────────────────── SeatRunner 共享模式 ─────────────────────────────
 
+LABEL = "perceptual-framesamp-modul"
+ROUTE = f"{LABEL}/seed7/new"
+
 
 def _ident(i=0):
     task, tier = F.v9_cells_sorted()[i]
     return F.packaged_identity(task, tier, 0)
 
 
-def test_insufficient_budget_rejected_before_attempt(tmp_path, monkeypatch, capsys):
+def _runner(tmp_path, world, budget_ledger, **kw):
+    return F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), world, budget_ledger=budget_ledger, **kw)
+
+
+def test_insufficient_budget_rejected_before_claim(tmp_path, capsys):
+    """领取前先预约：名额已满即 RUN_BLOCKED reason=budget、退出 5；不写 attempt_start、不建领取文件、不建环境。"""
     bm = bl_mod()
     shared = bm.BudgetLedger(tmp_path / "budget.jsonl", trajectory_cap=1)
     shared.reserve(resets=6, route="smvla/orig", key="other")  # 名额已满
     world = F.World()
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                           budget_ledger=shared)
-    assert F.run_rows(runner, [_ident()]) == 5
-    rows = F.read_jsonl(tmp_path / "s00" / "perceptual-framesamp-modul" / "perceptual-framesamp-modul.ledger.jsonl")
+    assert F.run_rows(_runner(tmp_path, world, shared), [_ident()]) == 5
+    rows = F.seat_ledger(tmp_path / "stage", LABEL)
     assert not [r for r in rows if r["kind"] in ("attempt_start", "reset_claim", "attempt_end")]
     assert world.envs == []
-    assert not (tmp_path / "s00" / "perceptual-framesamp-modul" / "results.jsonl").exists()
+    assert not list((F.queue_dir(tmp_path / "stage", LABEL) / "claims").glob("*.json"))
     assert "RUN_BLOCKED reason=budget policy=perceptual-framesamp-modul" in capsys.readouterr().out
 
 
-def test_shared_mode_infra_then_success(tmp_path, monkeypatch):
-    """共享模式：首试 infra 错误 → 向共享账本原子领 infra 名额 → 重试成功；两次尝试各预约一条轨迹、build+reset
-    各记一次；report 末行 PASS。"""
+def test_shared_mode_infra_then_success(tmp_path):
+    """共享模式：首试 infra 错误 → 向共享账本原子领 infra 名额 → 重试成功；两次尝试各预约一条轨迹（首试 first、重试
+    recovery，token 为 <路线>|<key>|a<N>）、build+reset 各记一次；两次都 commit；report 末行 PASS。"""
     bm = bl_mod()
     path = tmp_path / "budget.jsonl"
     a = _ident()
     world = F.World({(a["task"], a["builder_episode"]): [F.Plan(raise_at=1, raise_exc=lambda: RuntimeError("svulkan2")),
                                                          F.Plan(success_at=3)]})
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                           budget_ledger=str(path))
-    assert F.run_rows(runner, [a]) == 0
+    assert F.run_rows(_runner(tmp_path, world, str(path)), [a]) == 0
     st = bm.BudgetLedger(path).state()
     assert st.trajectories == 2 and len(st.commits) == 2 and st.resets == 4
-    assert [(r["route"], r["key"], r["interrupt"]) for r in st.retries] == [("perceptual-framesamp-modul/new", a["key"], "infra")]
-    local = F.read_jsonl(tmp_path / "s00" / "perceptual-framesamp-modul" / "perceptual-framesamp-modul.ledger.jsonl")
+    assert [(r["route"], r["key"], r["interrupt"]) for r in st.retries] == [(ROUTE, a["key"], "infra")]
+    res = [st.reserves[r] for r in st.reserves]
+    assert [(r["kind_of_try"], r["token"]) for r in res] == [("first", f"{ROUTE}|{a['key']}|a1"),
+                                                             ("recovery", f"{ROUTE}|{a['key']}|a2")]
+    local = F.seat_ledger(tmp_path / "stage", LABEL)
     starts = [r for r in local if r["kind"] == "attempt_start"]
     assert [r.get("interrupt") for r in starts] == [None, "infra"]
-    assert all(r["route"] == "perceptual-framesamp-modul/new" and r["budget_rid"] in st.reserves for r in starts)
+    assert all(r["route"] == ROUTE and r["budget_rid"] in st.reserves for r in starts)
     ok, lines = bm.BudgetLedger(path).report_lines()
     assert ok and lines[-1] == "BUDGET_ENFORCEMENT=PASS trajectories=2/6366 resets=4/141430 astra=0/2 shared_infra=1/50"
 
 
+def test_reset_cap_rejects_before_claim(tmp_path, capsys):
+    """计量额度硬上限（R5）：共享账本已用 2、上限 3，本局预约 2 次 reset 计量会超额 → 领取前拒绝、退出 5，不建环境。"""
+    bm = bl_mod()
+    path = tmp_path / "budget.jsonl"
+    shared = bm.BudgetLedger(path, reset_cap=3)
+    shared.reserve(resets=2, route="smvla/orig", key="other")
+    world = F.World()
+    assert F.run_rows(_runner(tmp_path, world, shared), [_ident()]) == 5
+    assert world.envs == [] and bm.BudgetLedger(path, reset_cap=3).state().trajectories == 1
+    out = capsys.readouterr().out
+    assert "RUN_BLOCKED reason=budget" in out and "budget_reason=reset_cap" in out
+
+
 def test_env_var_gate_opens_shared_mode(tmp_path, monkeypatch):
+    from tests._support.loaders import load_script as _ls
+
     path = tmp_path / "budget.jsonl"
     monkeypatch.setenv("SGEVAL_BUDGET_LEDGER", str(path))
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), F.World())
-    assert runner.ledger.shared is not None
-    assert F.run_rows(runner, [_ident()]) == 0
-    assert bl_mod().BudgetLedger(path).state().trajectories == 1
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World())
+    # make_runner 缺省显式关闭共享（budget_ledger=None）；不给 shared 时由环境变量门控打开
+    ec = _ls("eval-official/env_client.py")
+    gated = ec.AttemptLedger(tmp_path / "x.jsonl", seat="s", policy=LABEL)
+    assert runner.ledger.shared is None and gated.shared is not None
 
 
 def test_expired_and_infra_counted_separately(tmp_path, monkeypatch):
@@ -317,22 +356,25 @@ def test_expired_and_infra_counted_separately(tmp_path, monkeypatch):
     ec, bm = F.env_client(), bl_mod()
     path = tmp_path / "budget.jsonl"
     a, b = _ident(0), _ident(1)
-    out = tmp_path / "s00" / "perceptual-framesamp-modul"
-    pre = ec.AttemptLedger(out / "perceptual-framesamp-modul.ledger.jsonl", seat="s00", policy="perceptual-framesamp-modul", shared=str(path), route="perceptual-framesamp-modul/new")
+    stage = tmp_path / "stage"
+    pre = ec.AttemptLedger(F.seat_dir(stage, LABEL) / f"{LABEL}.ledger.jsonl", seat="s00", policy=LABEL,
+                           shared=str(path), route=ROUTE)
     pre.start(100, 10)
+    q = ec.DynamicQueue(F.queue_dir(stage, LABEL), seat="s00", wall_s=60)
     monkeypatch.setenv("SLURM_JOB_ID", "111")
-    pre.attempt_start(key=a["key"], attempt_id="xa", attempt_no=1, retry=False)
+    pre.attempt_start(key=a["key"], attempt_id="xa", attempt_no=1, retry=False, identity=a,
+                      claim=str(q.create_claim(a, 1)))
     monkeypatch.setenv("SLURM_JOB_ID", "222")
-    pre.attempt_start(key=b["key"], attempt_id="xb", attempt_no=1, retry=False)
+    pre.attempt_start(key=b["key"], attempt_id="xb", attempt_no=1, retry=False, identity=b,
+                      claim=str(q.create_claim(b, 1)))
     monkeypatch.setenv("SLURM_JOB_ID", "333")
     jobs = tmp_path / "expired-jobs.txt"
     jobs.write_text("111.batch\n999\n", encoding="utf-8")
     monkeypatch.setenv("SGEVAL_EXPIRED_JOBS", str(jobs))
     world = F.World()
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                           budget_ledger=str(path))
+    runner = _runner(tmp_path, world, str(path))
     assert runner.recover_dangling() == 2
-    ends = {r["attempt_id"]: r for r in F.read_jsonl(out / "perceptual-framesamp-modul.ledger.jsonl") if r["kind"] == "attempt_end"}
+    ends = {r["attempt_id"]: r for r in F.seat_ledger(stage, LABEL) if r["kind"] == "attempt_end"}
     assert ends["xa"]["interrupt"] == "expired" and "sacct_timeout job=111" in ends["xa"]["interrupt_evidence"]
     assert ends["xb"]["interrupt"] == "infra" and ends["xb"]["interrupt_evidence"] == "no_expiry_evidence"
     assert runner.ledger.interrupt_counts() == {"infra": 1, "expired": 1}
@@ -346,7 +388,7 @@ def test_expired_and_infra_counted_separately(tmp_path, monkeypatch):
 
 def test_classify_by_slurm_end_time(tmp_path):
     ec = F.env_client()
-    led = ec.AttemptLedger(tmp_path / "x.jsonl", seat="s", policy="perceptual-framesamp-modul", shared=None, expired_jobs=[])
+    led = ec.AttemptLedger(tmp_path / "x.jsonl", seat="s", policy=LABEL, shared=None, expired_jobs=[])
     start = {"attempt_id": "a", "t": 1000.0, "slurm_job_id": "5", "slurm_end_time": 2000}
     led.last_t["a"] = 1950.0
     assert led.classify_interrupt(start, now=2100.0)[0] == "expired"
@@ -355,137 +397,38 @@ def test_classify_by_slurm_end_time(tmp_path):
     assert led.classify_interrupt(start, now=2100.0)[0] == "infra"  # 早在到期前就停了：不是到期
 
 
-def test_second_interrupt_exhausts_identity(tmp_path, monkeypatch):
-    """首试到期中断、重试又 infra 失败：该身份 2 次名额用满，不再领第三次（missing，退出码 6）。"""
+def test_second_interrupt_exhausts_identity(tmp_path):
+    """首试 infra、重试又 infra：该身份 2 次名额用满，不再领第三次（missing，退出码 6）。"""
     bm = bl_mod()
     path = tmp_path / "budget.jsonl"
     a = _ident()
     world = F.World({(a["task"], a["builder_episode"]): [F.Plan(raise_at=1, raise_exc=lambda: RuntimeError("svulkan2"))]})
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                           budget_ledger=str(path))
-    assert F.run_rows(runner, [a]) == 6
+    assert F.run_rows(_runner(tmp_path, world, str(path)), [a]) == 6
     assert len(world.envs) == 2
     assert len(bm.BudgetLedger(path).state().retries) == 1
 
 
-@pytest.mark.parametrize("status,infra", [("fail", False), ("timeout", False), ("error", False)])
-def test_normal_outcomes_not_rerun_in_shared_mode(tmp_path, monkeypatch, status, infra):
+def test_zero_retries_never_claims_retry(tmp_path):
+    """本轮口径（--infra-retries 0）：infra 失败不领重试名额、不预约第二条轨迹。"""
+    bm = bl_mod()
+    path = tmp_path / "budget.jsonl"
+    a = _ident()
+    world = F.World({(a["task"], a["builder_episode"]): [F.Plan(raise_at=1, raise_exc=lambda: RuntimeError("svulkan2"))]})
+    assert F.run_rows(_runner(tmp_path, world, str(path), infra_retries=0), [a]) == 6
+    st = bm.BudgetLedger(path).state()
+    assert st.retries == [] and st.trajectories == 1 and len(world.envs) == 1
+
+
+@pytest.mark.parametrize("status", ["success", "fail", "timeout"])
+def test_normal_outcomes_not_rerun_in_shared_mode(tmp_path, status):
+    """队列里已 accepted（任一席位）的身份：不领取、不预约、不建环境。"""
     ec, bm = F.env_client(), bl_mod()
     path = tmp_path / "budget.jsonl"
     a = _ident()
-    out = tmp_path / "s00" / "perceptual-framesamp-modul"
-    led = ec.AttemptLedger(out / "perceptual-framesamp-modul.ledger.jsonl", seat="s00", policy="perceptual-framesamp-modul", shared=str(path))
-    led.start(100, 10)
-    led.attempt_start(key=a["key"], attempt_id="x1", attempt_no=1, retry=False)
-    led.attempt_end({"key": a["key"], "attempt_id": "x1", "attempt_no": 1, "status": status, "infra": infra})
+    q = ec.DynamicQueue(F.queue_dir(tmp_path / "stage", LABEL), seat="other-seat", wall_s=60)
+    assert q.accept(a, attempt=1, status=status, result=None)
     world = F.World()
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                           budget_ledger=str(path))
-    assert F.run_rows(runner, [a]) == 0
+    assert F.run_rows(_runner(tmp_path, world, str(path)), [a]) == 0
     assert world.envs == []
     st = bm.BudgetLedger(path).state()
     assert st.retries == [] and st.trajectories == 0
-
-
-# ───────────────────────────── 默认行为与 BASE 逐字节相同（R2） ─────────────────────────────
-
-
-def _base_env_client(tmp_path: Path):
-    try:
-        src = subprocess.run(["git", "show", f"{BASE}:scripts/eval-official/env_client.py"], cwd=REPO,
-                             capture_output=True, text=True, check=True, timeout=60).stdout
-    except (subprocess.SubprocessError, OSError) as e:
-        pytest.skip(f"取不到 BASE 版本：{e}")
-    d = tmp_path / "base-src" / "scripts" / "eval-official"
-    d.mkdir(parents=True)
-    p = d / "env_client.py"
-    p.write_text(src, encoding="utf-8")
-    name = f"_base_env_client_{uuid.uuid4().hex}"
-    spec = importlib.util.spec_from_file_location(name, p)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _det(monkeypatch):
-    """固定时间与 uuid：两边账本里的 t 与 attempt_id 可逐字节比较。"""
-    clock = itertools.count(1_700_000_000)
-    ids = itertools.count(1)
-    monkeypatch.setattr("time.time", lambda: float(next(clock)))
-    monkeypatch.setattr("uuid.uuid4", lambda: uuid.UUID(int=next(ids)))
-
-
-def _ledger_script(mod, path: Path):
-    led = mod.AttemptLedger(path, seat="s00", policy="perceptual-framesamp-modul")
-    led.start(5, 1)
-    led.attempt_start(key="k", attempt_id="a1", attempt_no=1, retry=False, task="T")
-    led.claim_reset(key="k", attempt_id="a1", attempt_no=1, what="build")
-    led.claim_reset(key="k", attempt_id="a1", attempt_no=1, what="reset")
-    led.attempt_end({"key": "k", "attempt_id": "a1", "attempt_no": 1, "status": "error", "infra": True})
-    led.attempt_start(key="k", attempt_id="a2", attempt_no=2, retry=True)
-    led.attempt_end({"key": "k", "attempt_id": "a2", "attempt_no": 2, "status": "fail", "infra": False,
-                     "recovered": True})
-    led.attempt_start(key="j", attempt_id="b1", attempt_no=1, retry=False)
-    mod.AttemptLedger(path, seat="s00", policy="perceptual-framesamp-modul").start(9, 1, reason="raise")
-    again = mod.AttemptLedger(path, seat="s00", policy="perceptual-framesamp-modul")
-    return (again.reset_left(), again.infra_retries_left(), again.attempts_used("k"), again.accepted,
-            [r["attempt_id"] for r in again.dangling()])
-
-
-def test_default_attempt_ledger_bytes_equal_base(tmp_path, monkeypatch):
-    base = _base_env_client(tmp_path)
-    cur = F.env_client()
-    _det(monkeypatch)
-    r_base = _ledger_script(base, tmp_path / "base.jsonl")
-    _det(monkeypatch)
-    r_cur = _ledger_script(cur, tmp_path / "cur.jsonl")
-    assert r_base == r_cur
-    assert (tmp_path / "base.jsonl").read_bytes() == (tmp_path / "cur.jsonl").read_bytes()
-
-
-def _legacy_dataset(name: str) -> str:
-    """改名前（BASE）接口里的数据集名：取自 official_defs 别名表（BASE 的 env_client 只认旧名）。"""
-    defs = load_script("eval-official/official_defs.py")
-    return next(o for o, n in defs.LEGACY_DATASET_ALIASES.items() if n == name)
-
-
-def _runner_of(mod, stage: Path, policy_mod, world, *, dataset: str = "ood"):
-    canon_ds = load_script("eval-official/official_defs.py").canonical_dataset  # builder 只认官方名
-    out = stage / "s00" / "perceptual-framesamp-modul"
-    args = F.seat_args(out, "perceptual-framesamp-modul", ledger=out / "perceptual-framesamp-modul.ledger.jsonl",
-                       infra_retry_budget=1, dataset=dataset)
-    return mod.SeatRunner(args, policy_mod=policy_mod, recorder_factory=lambda d, m: F.FakeRecorder(d, m, world),
-                          builder_factory=lambda task, dataset, ms: F.HybridBuilder(task, ms, world, canon_ds(dataset)),
-                          proc_info={"gpu_name": "fake", "gpu_uuid": "fake", "git_commit": "0" * 40,
-                                     "git_dirty": False, "init_timing": {}})
-
-
-def test_default_seat_runner_ledger_bytes_equal_base(tmp_path, monkeypatch):
-    """不给 --budget-ledger、环境变量为空：同一身份清单（含 infra 重试与额度用尽）跑出的账本与 BASE 逐字节相同。"""
-    base = _base_env_client(tmp_path)
-    cur = F.env_client()
-    a, b, c = _ident(0), _ident(1), _ident(2)
-    boom = [F.Plan(raise_at=1, raise_exc=lambda: RuntimeError("svulkan2"))]
-
-    old_ds = _legacy_dataset("ood")
-
-    def run(mod, stage, dataset):
-        _det(monkeypatch)
-        world = F.World({(b["task"], b["builder_episode"]): list(boom), (c["task"], c["builder_episode"]): list(boom)})
-        runner = _runner_of(mod, stage, F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                            dataset=dataset)
-        return F.run_rows(runner, [a, b, c]), len(world.envs)
-
-    # BASE 只认改名前的数据集名：以旧名驱动（R1 只改名，账本行不含数据集名，仍须逐字节相同）
-    assert run(base, tmp_path / "base", old_ds) == run(cur, tmp_path / "cur", "ood")
-    lb = (tmp_path / "base" / "s00" / "perceptual-framesamp-modul" / "perceptual-framesamp-modul.ledger.jsonl").read_bytes()
-    lc = (tmp_path / "cur" / "s00" / "perceptual-framesamp-modul" / "perceptual-framesamp-modul.ledger.jsonl").read_bytes()
-    # 账本行带数据集名：BASE 侧的旧名换成官方名（只换这一个 JSON 字符串值）
-    lb = lb.replace(f'"{old_ds}"'.encode(), b'"ood"')
-    assert b"budget_rid" not in lc and b"interrupt" not in lc and b"token" not in lc
-    # 第三阶段 progress.json 多了具名阶段写入（各取一次 time.time()），固定时钟下行内 t 的数值会错开：
-    # 去掉 t 后逐字节相同（行的顺序、键、其余值全部不变）
-    def _no_t(raw: bytes) -> list[bytes]:
-        return [re.sub(rb'"t": [0-9.]+(, )?', b"", line) for line in raw.splitlines()]
-    assert _no_t(lb) == _no_t(lc)

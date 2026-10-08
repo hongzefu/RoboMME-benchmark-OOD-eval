@@ -142,8 +142,8 @@ def _load(name: str):
 
 
 official_defs = _load("official_defs")
+trace_writer = _load("trace_writer")  # 先于客户端登记：客户端按旧名 load_sibling 取同一份
 groundsg = _load("groundsg_client")
-trace_writer = _load("trace_writer")
 
 
 class ServerUnreachable(ConnectionError):

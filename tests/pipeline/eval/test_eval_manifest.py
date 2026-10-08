@@ -1,9 +1,9 @@
-"""C13 执行清单 ``eval_manifest.build_v9``：真实导出产物直接喂清单（xhard0 开关开／关两种），以及各步拒绝分支。
+"""C13 执行清单 ``eval_manifest.build_v9``：真实导出产物（拆仓后的新格式身份行）直接喂清单，以及各步拒绝分支。
 
 - 交付清单由包内真实规格的正式局（``hard_specs.delivered``）现场组装；身份清单由真实 ``export_eval_identities.main``
   （真实 builder 列出 ood 全部局）导出——不手写 800 行。
 - 已评集合（V8 manifest）= 交付行里不属于新评规则 ``V9_NEW_RULE`` 的那部分；于是新评行恰为规则行，复用行恰为其余。
-- F-2：xhard0 期望随开关；导出时与建清单时开关不一致必须在第 1 步被拒。
+- 拆仓后 xhard0 只出现在 hard-verify：ood 源集的 xhard0 期望为 0（按数据集名）；混进 hard-verify 行必须在第 1 步被拒。
 """
 from __future__ import annotations
 
@@ -52,26 +52,18 @@ def inputs(tmp_path):
     return {"rows": rows, "delivery": delivery, "v8_manifest": v8_manifest, "v8": v8}
 
 
-def _switch(monkeypatch, *, export_on: bool, manifest_on: bool):
-    monkeypatch.setattr(F.hard_specs(), "XHARD0_IN_TEST_HARD", export_on)
-    monkeypatch.setattr(F.eval_manifest().load_hard_specs(), "XHARD0_IN_TEST_HARD", manifest_on)
-
-
-def _export(tmp_path, delivery: Path, tag: str) -> tuple[Path, list[dict]]:
+def _export(tmp_path, delivery: Path, tag: str, dataset: str = "ood") -> tuple[Path, list[dict]]:
     exp = load_script("injection-dev/export_eval_identities.py")
     out = tmp_path / f"identities-{tag}.jsonl"
-    rc = exp.main(["--out", str(out), "--official-out", str(tmp_path / f"official-{tag}.jsonl"),
-                   "--delivery", str(delivery)])
+    rc = exp.main(["--dataset", dataset, "--out", str(out), "--delivery", str(delivery)])
     assert rc == 0
     return out, F.read_jsonl(out)
 
 
-@pytest.mark.parametrize("on", [False, True], ids=["xhard0_off", "xhard0_on"])
-def test_export_feeds_manifest(tmp_path, monkeypatch, inputs, on):
+def test_export_feeds_manifest(tmp_path, inputs):
     em, hs = F.eval_manifest(), F.hard_specs()
-    _switch(monkeypatch, export_on=on, manifest_on=on)
     ident_path, src = _export(tmp_path, inputs["delivery"], "x")
-    n_x0 = len(hs.ALL_TASKS) * hs.XHARD0_PER_TASK if on else 0
+    n_x0 = 0  # ood 不含 xhard0
     assert sum(r["tier"] == hs.XHARD0 for r in src) == n_x0
     assert len(src) == n_x0 + len(inputs["rows"])
 
@@ -97,13 +89,13 @@ def test_export_feeds_manifest(tmp_path, monkeypatch, inputs, on):
                (r["tier"], r["seed"], r["candidate"], r["spec_sha256"])
 
 
-@pytest.mark.parametrize("export_on,manifest_on", [(True, False), (False, True)])
-def test_switch_mismatch_rejected_at_source_step(tmp_path, monkeypatch, inputs, export_on, manifest_on):
-    """F-2：导出与建清单的 xhard0 开关不一致，第 1 步按开关期望的 xhard0 行数判不符。"""
+def test_hard_verify_rows_rejected_at_source_step(tmp_path, inputs):
+    """导出时带上 hard-verify（192 行 xhard0）再喂 V9 清单：xhard0 期望按数据集名为 0，第 1 步判不符。"""
     em = F.eval_manifest()
-    monkeypatch.setattr(F.hard_specs(), "XHARD0_IN_TEST_HARD", export_on)
-    ident_path, _ = _export(tmp_path, inputs["delivery"], "y")
-    monkeypatch.setattr(em.load_hard_specs(), "XHARD0_IN_TEST_HARD", manifest_on)
+    ident_path, src = _export(tmp_path, inputs["delivery"], "y", dataset="hard-verify,ood")
+    assert sum(r["dataset"] == "hard-verify" for r in src) == 192
+    assert em.xhard0_expected_for("ood", em.load_hard_specs()) == 0
+    assert em.xhard0_expected_for("hard-verify", em.load_hard_specs()) == 192
     with pytest.raises(em.ManifestError) as ei:
         em.build_v9(ident_path, inputs["delivery"], em.DEFAULT_SHARDS, inputs["v8_manifest"])
     assert ei.value.stage == "source"
@@ -207,7 +199,6 @@ def test_delivery_cells_must_match_registered_table(inputs):
 
 def test_main_writes_and_reads_back(tmp_path, monkeypatch, capsys, inputs):
     em = F.eval_manifest()
-    _switch(monkeypatch, export_on=False, manifest_on=False)
     ident_path, _ = _export(tmp_path, inputs["delivery"], "m")
     out = tmp_path / "manifest"
     capsys.readouterr()
@@ -246,7 +237,6 @@ def test_main_fail_line_and_no_outputs(tmp_path, capsys, inputs):
 def test_main_v9_full_mode(tmp_path, monkeypatch, capsys, inputs):
     """--mode v9-full：不剔除已评身份，800 局全量切片；不写 reused.json；判定行 EVAL_SHARDS（期望值按 V9 交付手写）。"""
     em = F.eval_manifest()
-    _switch(monkeypatch, export_on=False, manifest_on=False)
     ident_path, _ = _export(tmp_path, inputs["delivery"], "full")
     out = tmp_path / "full"
     capsys.readouterr()
@@ -267,13 +257,13 @@ def test_main_v9_full_mode(tmp_path, monkeypatch, capsys, inputs):
 
 
 def test_main_v9_full_rejects_shifted_builder_episodes(tmp_path, monkeypatch, capsys, inputs):
-    """身份清单局号整体 +12（导出时 XHARD0_IN_TEST_HARD 开、评估时关）：写分片前即 FAIL stage=builder，不留产物。"""
+    """身份清单局号整体 +12（如旧开关时代每任务前置 12 局 xhard0）：写分片前即 FAIL stage=builder，不留产物。"""
     em = F.eval_manifest()
-    _switch(monkeypatch, export_on=False, manifest_on=False)
     ident_path, _ = _export(tmp_path, inputs["delivery"], "shift")
     rows = [json.loads(x) for x in ident_path.read_text(encoding="utf-8").splitlines() if x.strip()]
     shifted = tmp_path / "shifted.jsonl"
-    shifted.write_text("".join(json.dumps({**r, "episode": r["episode"] + 12}) + "\n" for r in rows), encoding="utf-8")
+    shifted.write_text("".join(json.dumps({**r, "episode": r["episode"] + 12, "builder_episode": r["builder_episode"] + 12})
+                               + "\n" for r in rows), encoding="utf-8")
     out = tmp_path / "shift-out"
     capsys.readouterr()
     rc = em.main(["--mode", "v9-full", "--identities", str(shifted), "--delivery", str(inputs["delivery"]),

@@ -1,4 +1,6 @@
-"""C13 两个评估入口（``scripts/evaluation.py`` 与 ``scripts/evaluation_hard.py``）的 error 分支，以测试子进程实际执行。
+"""C13 两个官方评估入口（benchmark 子模块的 ``scripts/evaluation.py`` 与 ``scripts/evaluation_ood.py``）的 error 分支，
+以测试子进程实际执行。拆仓后两个入口都在子模块里（评估仓 ``scripts/`` 只留 ``evaluate.py``）；子模块未检出（git
+worktree）时按已安装 ``robomme`` 包的位置找同一份文件。
 
 入口脚本一字不改地以 ``__main__`` 运行（``entry_bootstrap.py`` 只在子进程内存里把 builder 换成 CPU 替身环境）。
 
@@ -18,15 +20,25 @@ import pytest
 
 import eval_fakes as F
 
-ENTRIES = ("evaluation.py", "evaluation_hard.py")
+ENTRIES = ("evaluation.py", "evaluation_ood.py")
 BOOT = Path(__file__).resolve().parent / "entry_bootstrap.py"
+
+
+def _entry_path(entry: str) -> Path:
+    import importlib.util
+
+    own = F.REPO / "third_party" / "robomme_benchmark" / "scripts" / entry
+    if own.is_file():
+        return own
+    spec = importlib.util.find_spec("robomme")
+    return Path(list(spec.submodule_search_locations)[0]).parents[1] / "scripts" / entry
 
 
 def _run(tmp_path, entry, scen):
     sp = tmp_path / "scen.json"
     sp.write_text(json.dumps(scen), encoding="utf-8")
     log = tmp_path / "events.jsonl"
-    p = subprocess.run([sys.executable, str(BOOT), str(F.REPO / "scripts" / entry), str(sp), str(log)],
+    p = subprocess.run([sys.executable, str(BOOT), str(_entry_path(entry)), str(sp), str(log)],
                        cwd=tmp_path, capture_output=True, text=True, timeout=120)
     return p, F.read_jsonl(log)
 

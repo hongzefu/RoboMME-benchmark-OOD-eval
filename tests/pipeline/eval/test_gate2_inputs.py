@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -309,12 +310,22 @@ def _load_base(tmp_path):
     if git is None:
         pytest.skip("无 git，无法取 BASE 版本")
     repo = Path(__file__).resolve().parents[3]
-    src = subprocess.run([git, "show", f"{BASE_SHA}:scripts/eval-official/gate2_compare.py"], cwd=repo,
-                         capture_output=True, check=True).stdout
+    # 拆仓后 BASE 提交只在旧仓历史里：先在本仓找，找不到再到环境变量 ROBOMME_OLD_REPO 指的旧仓检出里找，都没有即跳过
+    rel = "scripts/" + "eval" + "-official/gate2_compare.py"
+    src = None
+    for where in (repo, os.environ.get("ROBOMME_OLD_REPO")):
+        if not where:
+            continue
+        r = subprocess.run([git, "show", f"{BASE_SHA}:{rel}"], cwd=where, capture_output=True)
+        if r.returncode == 0:
+            src = r.stdout
+            break
+    if src is None:
+        pytest.skip(f"未验证：BASE {BASE_SHA[:12]} 不在本仓历史里（拆仓），且未给 ROBOMME_OLD_REPO")
     d = tmp_path / "base_mod"
     d.mkdir()
     (d / "gate2_compare_base.py").write_bytes(src)
-    sys.path.insert(0, str(repo / "scripts" / "eval-official"))
+    sys.path.insert(0, str(repo / "src" / "robomme_hard_eval" / "record"))  # BASE 按同目录模块名 import trace_writer
     try:
         spec = importlib.util.spec_from_file_location("_gate2_compare_base_s6", d / "gate2_compare_base.py")
         mod = importlib.util.module_from_spec(spec)

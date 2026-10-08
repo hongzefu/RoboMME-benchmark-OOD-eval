@@ -35,7 +35,7 @@ header 的 ``identity`` 三元组找，同一身份多份时按 ``identity.attem
 
 用法::
 
-    python scripts/eval-official/gate2_compare.py --policy groundsg-oracle \
+    python dev-scripts/checks/gate2_compare.py --policy groundsg-oracle \
         --orig-results <原侧结果 jsonl>... --new-results <新侧结果 jsonl>... \
         --orig-traces <原侧轨迹根> --new-traces <新侧轨迹根> [--groundsg] [--mode astra] \
         [--expect-total 192] [--site local] [--out-json gate2.json] [--out-md gate2.md]

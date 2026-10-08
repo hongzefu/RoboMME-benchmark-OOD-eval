@@ -29,9 +29,8 @@ import numpy as np
 from tests._support.loaders import REPO, load_script
 
 HW = 4  # 假帧边长（像素）；形状不参与被测逻辑
-#: 启动约定的步数上限（1003 评估计划 1.2），按约定手写，不读被测代码：ood 为 1600 且带 --strict-cap，
-#: hard-verify 为 1300、不带 --strict-cap
-V9_MAX_STEPS = 1600
+#: 步数上限（拆分方案已定口径第 3 条），按约定手写，不读被测代码：ood 为 1800 且严格截断，hard-verify 为 1300、不截断
+V9_MAX_STEPS = 1800
 HARD0_MAX_STEPS = 1300
 N_RESET_FRAMES = 3  # 假环境 reset 返回的帧数（2 帧演示 + 1 帧初始）
 CHUNK_ROWS = 20  # 假 server 每次推理回的动作行数（多于执行段，用来核「只执行前若干行」）
@@ -372,17 +371,17 @@ def tier_cap(tier: str) -> int:
 
 
 @functools.lru_cache(maxsize=None)
-def _resolved(task: str, xhard0_in_test_hard: bool) -> tuple[tuple[int, dict], ...]:
-    """缓存键含 xhard0 开关：开关改变 builder 的编号（前置 xhard0 局），不能沿用另一档开关下的解析结果。"""
+def _resolved(task: str) -> tuple[tuple[int, dict], ...]:
+    """ood 的真实 builder 逐局解析（拆仓后 ood 不含 xhard0，局号 0～49）。"""
     b = real_builder(task)
     return tuple((ep, b.resolve_identity(ep)) for ep in range(b.get_episode_num()))
 
 
 def packaged_identity(task: str, tier: str, k: int = 0) -> dict:
-    """包内真实身份（真实 builder 在 ood 里第 k 个该档局）→ 执行身份行（字段契约 C1，key 按契约手写）。"""
-    hits = [(ep, ident) for ep, ident in _resolved(task, bool(hard_specs().XHARD0_IN_TEST_HARD)) if ident["tier"] == tier]
+    """包内真实身份（真实 builder 在 ood 里第 k 个该档局）→ 执行身份行（字段契约 C1 + dataset，key 按契约手写）。"""
+    hits = [(ep, ident) for ep, ident in _resolved(task) if ident["tier"] == tier]
     ep, ident = hits[k]
-    return {"task": task, "tier": tier, "seed": int(ident["seed"]), "candidate": ident["candidate"],
+    return {"dataset": "ood", "task": task, "tier": tier, "seed": int(ident["seed"]), "candidate": ident["candidate"],
             "builder_episode": ep, "source_episode": None, "spec_sha256": ident["spec_sha256"],
             "key": f"{task}_{tier}_{int(ident['seed'])}"}
 
@@ -396,8 +395,8 @@ def _resolved_hard0(task: str) -> tuple[tuple[int, dict], ...]:
 def hard0_identity(task: str, k: int = 0) -> dict:
     """hard-verify 里第 k 局的执行身份行（字段契约同 C1；candidate／spec_sha256 为 null，key 按契约手写）。"""
     ep, ident = _resolved_hard0(task)[k]
-    return {"task": task, "tier": "xhard0", "seed": int(ident["seed"]), "candidate": None, "builder_episode": ep,
-            "source_episode": int(ident["source_episode"]), "spec_sha256": None,
+    return {"dataset": "hard-verify", "task": task, "tier": "xhard0", "seed": int(ident["seed"]), "candidate": None,
+            "builder_episode": ep, "source_episode": int(ident["source_episode"]), "spec_sha256": None,
             "key": f"{task}_xhard0_{int(ident['seed'])}"}
 
 
@@ -405,44 +404,186 @@ def v9_cells_sorted() -> list[tuple[str, str]]:
     return sorted(hard_specs().V9_CELLS)
 
 
-# ---------------------------------------------------------------- 席位客户端
+# ---------------------------------------------------------------- 席位客户端（拆仓后：常驻 Policy + 动态队列）
+#
+# 新 ``seat.py`` 的 ``SeatRunner`` 不再接收策略模块，而是经 ``policy_factory`` 拿一个常驻 ``Policy``，逐局调评估包的
+# ``episode.run_episode``。这里给两种替身：
+# - ``FakeSeatPolicy``：新接口的假模型，动作由 ``FakePolicyServer`` 按「本局 reset 后收到的帧 + 状态 + 指令」确定性生成；
+#   环境 step 抛含 ``svulkan2`` 的异常、或推理连接断开，记基础设施错误（infra=True）；其余异常记普通错误；
+# - ``ModulePolicy``：把旧的模块级客户端（``run_episode(session, identity, conn_info, recorder)``）包成 Policy，
+#   旧用例的 ``framesamp_modul_policy``／``smvla_policy`` 照旧能喂给 ``make_runner``。
+# builder 经 ``episode.BUILDER_FACTORY`` 换成 ``HybridBuilder``（真实身份解析 + CPU 假环境），``run_rows`` 收尾复原。
+
+#: 假模型每次推理执行的动作行数
+EXEC_ROWS = 5
 
 
-def seat_args(out: Path, policy: str, *, ledger: Path, reset_budget: int = 100, infra_retry_budget: int = 10,
-              seat: str = "s00", rec_root: str | None = None, dataset: str = "ood", **kw) -> argparse.Namespace:
-    """默认按 ood 的启动约定（--max-steps 1600 --strict-cap）；dataset="hard-verify" 时默认 1300、不带 strict-cap。"""
-    hard0 = dataset == "hard-verify"
-    d = dict(policy=policy, identities=None, cond="T", seat=seat, host="127.0.0.1", port=1, out=str(out),
-             order="forward", shuffle_seed=0, only=None, limit=0, dataset=dataset,
-             max_steps=HARD0_MAX_STEPS if hard0 else V9_MAX_STEPS, strict_cap=not hard0, groundsg_variant=None,
-             qwenvl_groundsg_adapter=None, trace_root=None,
-             episode_wall_s=0.0, first_extra_s=0.0, no_record=False, never_degrade=True,
-             baseline=False, ledger=str(ledger), reset_budget=reset_budget,
-             infra_retry_budget=infra_retry_budget, rec_root=rec_root, budget_raise_reason=None)
-    d.update(kw)
-    return argparse.Namespace(**d)
+def _policy_base():
+    from robomme_hard_eval.policy import Policy
+
+    return Policy
 
 
-def make_runner(stage: Path, policy: str, policy_mod, world: World, *, seat_dir: str = "s00",
-                policy_dir: str | None = None, **kw):
-    """运行根布局与生产一致：``<stage>/sNN/<policy>[-<variant>]/results.jsonl``、账本 ``<policy>.ledger.jsonl``、
-    录像 ``rec/``。builder 工厂取三参形式 ``(task, dataset, max_steps)``。"""
+def _make_policy_classes():
+    Policy = _policy_base()
+
+    class FakeSeatPolicy(Policy):
+        model = "fake-seat"
+
+        def __init__(self, policy_seed: int = 7, server: "FakePolicyServer | None" = None, **cfg):
+            super().__init__(policy_seed, **cfg)
+            self.server = None  # 无真实服务端进程（ServerProcess）
+            self.fake = server or FakePolicyServer()
+            self.specs: list = []
+
+        def reset(self, spec) -> None:
+            super().reset(spec)
+            self.specs.append(spec)
+            self.fake.reset(spec.key)
+
+        def play(self, session, spec, recorder) -> dict:
+            obs, info = session.reset()
+            goal = info.get("task_goal") if isinstance(info, dict) else None
+            prompt = str(goal[0] if isinstance(goal, list) else goal)
+            self.fake.observe([sha_bytes(f) for f in obs["front_rgb_list"]])
+            steps = 0
+            try:
+                while True:
+                    state = np.concatenate([obs["joint_state_list"][-1], obs["gripper_state_list"][-1][:1]])
+                    chunk = self.fake.actions(state, prompt)
+                    for row in chunk[:EXEC_ROWS]:
+                        if not spec.strict_cap and steps > spec.max_steps:  # 官方循环 count > max_steps 才停
+                            return {"status": "timeout", "task_success": 0, "steps": steps, "error": None,
+                                    "infra": False, "infra_reason": None, "decisions": steps}
+                        obs, _r, terminated, truncated, info = session.step(row)
+                        steps += 1
+                        self.fake.observe([sha_bytes(obs["front_rgb_list"][-1])])
+                        if terminated or truncated:
+                            st = info.get("status")
+                            status = st if st in ("success", "fail") else "timeout"
+                            return {"status": status, "task_success": int(status == "success"), "steps": steps,
+                                    "error": None, "infra": False, "infra_reason": None, "decisions": steps}
+            except Exception as e:  # noqa: BLE001
+                from websockets.exceptions import ConnectionClosed
+
+                from robomme_hard_eval.session import StepCapReached
+
+                if isinstance(e, StepCapReached):
+                    raise
+                infra = isinstance(e, ConnectionClosed) or "svulkan2" in str(e)
+                return {"status": "error", "task_success": 0, "steps": steps, "error": f"{type(e).__name__}: {e}",
+                        "infra": infra, "infra_reason": "env_exception" if infra else None}
+
+    class ModulePolicy(Policy):
+        model = "module"
+
+        def __init__(self, policy_seed: int = 7, mod=None, policy_name: str = "module", **cfg):
+            super().__init__(policy_seed, **cfg)
+            self.mod, self.policy_name = mod, policy_name
+            self.ctx = None
+
+        def play(self, session, spec, recorder) -> dict:
+            make = getattr(self.mod, "make_policy_context", None)
+            if self.ctx is None:
+                self.ctx = make({"policy": self.policy_name, "max_steps": spec.max_steps,
+                                 "policy_seed": self.policy_seed, "dataset": spec.dataset}) if callable(make) else {}
+            ident = dict(spec.identity())
+            conn_info = {"host": "127.0.0.1", "port": 1, "max_steps": spec.max_steps, "policy": self.policy_name,
+                         "dataset": spec.dataset, "strict_cap": spec.strict_cap, "policy_seed": self.policy_seed,
+                         "trace_dir": spec.out_dir, "episode_tag": Path(spec.out_dir).name, "rec_dir": spec.out_dir,
+                         "policy_context": self.ctx}
+            res = dict(self.mod.run_episode(session, ident, conn_info, recorder))
+            res.setdefault("error", None)
+            res.setdefault("infra", False)
+            res.setdefault("infra_reason", None)
+            res["task_success"] = int(bool(res.get("task_success")))
+            res.setdefault("steps", 0)
+            return res
+
+    return FakeSeatPolicy, ModulePolicy
+
+
+def fake_seat_policy(server: "FakePolicyServer | None" = None, seed: int = 7):
+    return _make_policy_classes()[0](seed, server=server)
+
+
+def as_policy(policy_obj, policy_name: str, seed: int = 7):
+    """``make_runner`` 的策略参数：Policy 实例原样返回；旧模块（或带 ``run_episode`` 的命名空间）包成 ``ModulePolicy``。"""
+    if isinstance(policy_obj, _policy_base()):
+        return policy_obj
+    return _make_policy_classes()[1](seed, mod=policy_obj, policy_name=policy_name)
+
+
+def episode_mod():
+    from robomme_hard_eval import episode as E
+
+    return E
+
+
+def seat_args(out: Path, policy: str, *, seat: str = "s00", reset_budget: int | None = 100, infra_retries: int = 1,
+              policy_seed: int = 7, dataset: str | None = None, budget_ledger=None, **kw) -> argparse.Namespace:
+    """新 ``seat.py run`` 的参数（按其 parser 的缺省值补齐）；``out`` 为产物根。测试缺省给 1 次基础设施重试（每身份至多 2
+    次尝试），以便覆盖重试路径；生产缺省为 0。"""
     ec = env_client()
-    out = Path(stage) / seat_dir / (policy_dir or policy)
-    args = seat_args(out, policy, ledger=out / f"{policy}.ledger.jsonl", **kw)
-    return ec.SeatRunner(args, policy_mod=policy_mod,
-                         recorder_factory=lambda d, m: FakeRecorder(d, m, world),
-                         builder_factory=lambda task, dataset, ms: HybridBuilder(task, ms, world, dataset),
-                         proc_info={"gpu_name": "fake", "gpu_uuid": "fake", "git_commit": "0" * 40,
-                                    "git_dirty": False, "init_timing": {}})
+    argv = ["run", "--policy", "dummy", "--identities", "x", "--out", str(out)]
+    args, _ = ec.build_parser().parse_known_args(argv)
+    args.policy = policy
+    args.extra_cfg = {}
+    args.seat = seat
+    args.reset_budget = reset_budget
+    args.infra_retries = infra_retries
+    args.policy_seed = policy_seed
+    args.dataset = dataset
+    args.budget_ledger = budget_ledger if isinstance(budget_ledger, (str, Path)) else None
+    for k, v in kw.items():
+        setattr(args, k, v)
+    return args
+
+
+def make_runner(stage: Path, policy: str, policy_obj, world: World, *, seat_dir: str = "s00",
+                budget_ledger=None, recorder_factory=None, **kw):
+    """新席位：产物根 ``<stage>``（其下 rollouts/、queue/、seats/）；builder 换成 ``HybridBuilder``，录制器换成
+    ``FakeRecorder``，不出网站视频。``budget_ledger``：路径或已打开的账本对象（共享模式），None 即关闭。"""
+    ec, E = env_client(), episode_mod()
+    prev = E.BUILDER_FACTORY
+    E.clear_builders()
+    E.BUILDER_FACTORY = lambda task, ds, ms: HybridBuilder(task, ms, world, ds)
+    args = seat_args(Path(stage), policy, seat=seat_dir, budget_ledger=budget_ledger, **kw)
+    pol = as_policy(policy_obj, policy, seed=args.policy_seed)
+    shared = budget_ledger if budget_ledger is not None else None
+    runner = ec.SeatRunner(args, policy_factory=lambda model, seed, **cfg: pol,
+                           episode_kwargs={"recorder_factory": recorder_factory
+                                           or (lambda raw, meta: FakeRecorder(raw, meta, world)), "render": False},
+                           hard_exit=lambda code: None, shared=shared)
+    runner._fake_restore = prev
+    runner.fake_policy = pol
+    return runner
 
 
 def run_rows(runner, rows: list[dict]) -> int:
-    """返回生产退出码：run_identities 的返回值（0／6），或 SystemExit 的码（3 阻塞、5 额度耗尽）。"""
+    """返回生产退出码：``SeatRunner.run`` 的返回值（0／3／5／6）；收尾复原 ``BUILDER_FACTORY``。"""
+    E = episode_mod()
     try:
-        return int(runner.run_identities(rows))
-    except SystemExit as e:
-        return int(e.code)
+        return int(runner.run(rows))
+    finally:
+        E.BUILDER_FACTORY = getattr(runner, "_fake_restore", None)
+        E.clear_builders()
+
+
+def seat_dir(stage: Path, label: str, seat: str = "s00", seed: int = 7) -> Path:
+    return Path(stage) / "seats" / label / f"seed{seed}" / seat
+
+
+def seat_ledger(stage: Path, label: str, seat: str = "s00", seed: int = 7) -> list[dict]:
+    return read_jsonl(seat_dir(stage, label, seat, seed) / f"{label}.ledger.jsonl")
+
+
+def seat_results(stage: Path, label: str, seat: str = "s00", seed: int = 7) -> list[dict]:
+    return read_jsonl(seat_dir(stage, label, seat, seed) / "seat-results.jsonl")
+
+
+def queue_dir(stage: Path, label: str, seed: int = 7) -> Path:
+    return Path(stage) / "queue" / label / f"seed{seed}"
 
 
 def read_jsonl(path: Path) -> list[dict]:

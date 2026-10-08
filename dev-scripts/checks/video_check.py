@@ -34,7 +34,7 @@
 
 用法::
 
-    python scripts/eval-official/video_check.py --route groundsg-oracle-new --root <结果根> --results <结果 jsonl>... \
+    python dev-scripts/checks/video_check.py --route groundsg-oracle-new --root <结果根> --results <结果 jsonl>... \
         --side new [--policy-label groundsg-ground-sg-oracle] [--dataset hard-verify] \
         --frames-rule demo+exec --frame-offset 1 [--raw-root <节点临时目录>] [--out-json v.json]
 

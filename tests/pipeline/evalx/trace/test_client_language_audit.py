@@ -100,7 +100,9 @@ class _B:
 
 def _session(plan):
     b = _B(plan)
-    return F.env_client().EnvSession("T", 2, recorder=None, builder=b), b
+    from robomme_hard_eval.session import EnvSession
+
+    return EnvSession("T", 2, recorder=None, builder=b), b
 
 
 def _conn_info(tmp_path, name, **kw):

@@ -1,4 +1,4 @@
-"""测试子进程的引导脚本：以 ``__main__`` 原样执行 ``scripts/evaluation.py`` 或 ``scripts/evaluation_hard.py``。
+"""测试子进程的引导脚本：以 ``__main__`` 原样执行官方 ``scripts/evaluation.py`` 或 ``scripts/evaluation_ood.py``（benchmark 子模块）。
 
 只在本子进程内存里把入口用到的 ``BenchmarkEnvBuilder`` 四个方法换成 CPU 替身环境、把 ``imageio.mimsave`` 换成记事件，
 不改任何源文件、不落盘（P2 对测试进程内临时替身的豁免）；入口脚本本身一字不改地执行。
@@ -52,7 +52,8 @@ class FakeEnv:
         emit(kind="close", task=self.task, ep=self.ep)
 
 
-wrapper = "robomme_hard.env_record_wrapper" if entry.endswith("evaluation_hard.py") else "robomme.env_record_wrapper"
+wrapper = ("robomme_hard.env_record_wrapper" if entry.endswith(("evaluation_ood.py", "evaluation_hard.py"))
+           else "robomme.env_record_wrapper")
 Builder = importlib.import_module(wrapper).BenchmarkEnvBuilder
 
 

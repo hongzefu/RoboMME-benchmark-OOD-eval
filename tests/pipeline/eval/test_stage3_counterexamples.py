@@ -23,7 +23,8 @@ R4 当初钉住的两条缺陷均已在 1006 MERGE-2 修复，本文件改为断
 
 * D1 ``lang_io_check`` 把执行段首帧（reset 初始画面，记在 demo 行末帧）的 ``phase=exec, frame_idx=0`` 图引用判为悬空
   ——由 FIX-1（按 ``(phase, cam, frame_idx)`` 精确比对、exec 帧 0 映射 demo 末帧）修复；
-* D2 ``env_client`` 尝试账本被另一种子复用时把别组 accepted 当作已完成跳过——由 ``SeatRunner._check_route`` 修复。
+* D2 ``env_client`` 尝试账本被另一种子复用时把别组 accepted 当作已完成跳过——由 ``SeatRunner._check_route`` 修复；
+  拆仓后席位按 ``seed<n>`` 分目录，复用只可能来自手工混入，路线核对照旧拦。
 """
 from __future__ import annotations
 
@@ -203,82 +204,84 @@ def _one_step_policy(calls: list):
 
 
 def _seed_runner(stage: Path, seed: int, calls: list, ledger: Path, world, **kw):
-    return F.make_runner(stage, "pp", _one_step_policy(calls), world, dataset="hard-verify", policy_seed=seed,
-                         budget_ledger=str(ledger), **R.CAPS, **kw)
+    """拆仓后的席位：同一 stage 下按 ``(模型, policy_seed)`` 分目录（``queue/pp/seed<n>/``、``seats/pp/seed<n>/<席位>/``），
+    共享预算账本路线 ``pp/seed<n>/new``。"""
+    return F.make_runner(stage, "pp", _one_step_policy(calls), world, policy_seed=seed, budget_ledger=str(ledger),
+                         **R.CAPS, reset_cap=141430, **kw)
 
 
-def test_seed_switch_with_own_stage_reruns_and_routes_stay_separate(tmp_path):
-    """种子 7 先跑完（accepted）；种子 42 用独立目录、同一共享预算账本：身份照常重跑，账本 route／token 各带自己的种子，
-    两组结果行的 policy_seed 各是各的。"""
+def test_seed_switch_same_stage_reruns_and_routes_stay_separate(tmp_path):
+    """种子 7 先跑完（accepted）；种子 42 用同一 stage、同一共享预算账本：按种子分目录，身份照常重跑（不误用种子 7 的
+    accepted），账本 route／token 各带自己的种子，两组结果的 policy_seed 各是各的。"""
     ledger = tmp_path / "budget.jsonl"
     world = F.World()
     ident = F.hard0_identity("PickXtimes", 0)
+    stage = tmp_path / "stage"
     calls: list = []
-    r7 = _seed_runner(tmp_path / "seed7", 7, calls, ledger, world)
-    assert F.run_rows(r7, [ident]) == 0
-    r7.close()
-    r42 = _seed_runner(tmp_path / "seed42", 42, calls, ledger, world)
-    assert F.run_rows(r42, [ident]) == 0
-    r42.close()
+    assert F.run_rows(_seed_runner(stage, 7, calls, ledger, world), [ident]) == 0
+    assert F.run_rows(_seed_runner(stage, 42, calls, ledger, world), [ident]) == 0
     assert calls == [7, 42] and len(world.envs) == 2
-    (row7,), (row42,) = F.read_jsonl(r7.results_path), F.read_jsonl(r42.results_path)
+    (row7,) = F.seat_results(stage, "pp", seed=7)
+    (row42,) = F.seat_results(stage, "pp", seed=42)
     assert (row7["policy_seed"], row42["policy_seed"]) == (7, 42)
     assert row7["budget_token"] == f"pp/seed7/new|{ident['key']}|a1"
     assert row42["budget_token"] == f"pp/seed42/new|{ident['key']}|a1"
     reserves = [(r["route"], r["kind_of_try"]) for r in F.read_jsonl(ledger) if r["kind"] == "reserve"]
     assert reserves == [("pp/seed7/new", "first"), ("pp/seed42/new", "first")]
+    for seed in (7, 42):
+        assert (F.queue_dir(stage, "pp", seed=seed) / "accepted" / f"hard-verify__{ident['key']}.json").is_file()
 
 
-def test_seed_switch_reusing_other_seed_ledger_is_blocked(tmp_path, capsys):
-    """R4-D2 已修（1006 MERGE-2）：同一尝试账本被另一个 ``--policy-seed`` 复用（route 含 ``seed<n>`` 不同）时，
-    ``SeatRunner`` 在取得 lease 后、读取待跑身份之前核对账本 ``attempt_start`` 行的 ``route``，打印
-    ``RUN_BLOCKED reason=route_mismatch … found=pp/seed7/new want=pp/seed42/new`` 并以 3 退出，不跑、不写任何新行。"""
+def _seat_ledger_path(stage: Path, seed: int) -> Path:
+    return F.seat_dir(stage, "pp", seed=seed) / "pp.ledger.jsonl"
+
+
+def test_seat_ledger_with_other_seed_route_is_blocked(tmp_path, capsys):
+    """路线核对仍在：本席位尝试账本里混进别的种子的 ``attempt_start``（route 含 ``seed7``）时，种子 42 的席位在取得
+    lease 后、领局之前打印 ``RUN_BLOCKED reason=route_mismatch … found=pp/seed7/new want=pp/seed42/new``、退出 3，不跑、
+    不写任何结果行与预算行。"""
     ledger = tmp_path / "budget.jsonl"
     world = F.World()
     ident = F.hard0_identity("PickXtimes", 0)
+    stage = tmp_path / "stage"
+    lp = _seat_ledger_path(stage, 42)
+    lp.parent.mkdir(parents=True, exist_ok=True)
+    lp.write_text(json.dumps({"t": 1.0, "seat": "s00", "policy": "pp", "kind": "attempt_start", "key": ident["key"],
+                              "attempt_id": "x", "attempt_no": 1, "retry": False, "route": "pp/seed7/new"}) + "\n",
+                  encoding="utf-8")
     calls: list = []
-    r7 = _seed_runner(tmp_path / "stage", 7, calls, ledger, world)
-    assert F.run_rows(r7, [ident]) == 0
-    r7.close()
-    res_before = F.read_jsonl(r7.results_path)
-    led_before = F.read_jsonl(r7.ledger.path)
+    r42 = _seed_runner(stage, 42, calls, ledger, world)
     budget_before = F.read_jsonl(ledger)
     capsys.readouterr()
-    r42 = _seed_runner(tmp_path / "stage", 42, calls, ledger, world)  # 同一 stage → 同一尝试账本与结果文件
     rc = F.run_rows(r42, [ident])
-    r42.close()
     out = capsys.readouterr().out
-    assert rc == 3 and calls == [7], (rc, calls, out)
+    assert rc == 3 and calls == [], (rc, calls, out)
     line = next(x for x in out.splitlines() if x.startswith("RUN_BLOCKED"))
-    assert "reason=route_mismatch" in line and f"ledger={r7.ledger.path}" in line, line
+    assert "reason=route_mismatch" in line and f"ledger={lp}" in line, line
     assert "found=pp/seed7/new" in line and "want=pp/seed42/new" in line, line
     assert "RUN_PLAN" not in out, out
-    assert F.read_jsonl(r42.results_path) == res_before
-    # 构造 SeatRunner 时照旧写一条 budget 进程行（既有行为）；除此之外尝试账本不追加任何行
-    assert [x for x in F.read_jsonl(r42.ledger.path) if x["kind"] not in ("budget", "budget_raise")] == \
-        [x for x in led_before if x["kind"] not in ("budget", "budget_raise")]
-    assert F.read_jsonl(ledger) == budget_before
+    assert F.seat_results(stage, "pp", seed=42) == []
+    assert [x["kind"] for x in F.read_jsonl(lp) if x["kind"] not in ("budget", "budget_raise")] == ["attempt_start"]
+    assert [r for r in F.read_jsonl(ledger) if r["kind"] != "config"] == \
+        [r for r in budget_before if r["kind"] != "config"]
     print("SEED_SWITCH_ROUTE_GUARD=PASS rc=3 reason=route_mismatch new_result_rows=0 new_attempt_rows=0")
 
 
 def test_route_guard_allows_fresh_stage_and_same_route_resume(tmp_path, capsys):
-    """路线核对不误拒：全新 stage（空账本）首跑照常；同一路线续跑（同种子、同账本）照常读 pending、已 accepted 的跳过；
-    第二个身份在续跑中照常开跑。"""
+    """路线核对不误拒：全新 stage（空账本）首跑照常；同一路线续跑（同种子、同账本）照常，已 accepted 的跳过；第二个身份
+    在续跑中照常开跑。"""
     ledger = tmp_path / "budget.jsonl"
     world = F.World()
     a, b = F.hard0_identity("PickXtimes", 0), F.hard0_identity("PickXtimes", 1)
+    stage = tmp_path / "stage"
     calls: list = []
-    r1 = _seed_runner(tmp_path / "stage", 7, calls, ledger, world)
-    assert F.run_rows(r1, [a]) == 0
-    r1.close()
+    assert F.run_rows(_seed_runner(stage, 7, calls, ledger, world), [a]) == 0
     capsys.readouterr()
-    r2 = _seed_runner(tmp_path / "stage", 7, calls, ledger, world)
-    assert F.run_rows(r2, [a, b]) == 0
-    r2.close()
+    assert F.run_rows(_seed_runner(stage, 7, calls, ledger, world), [a, b]) == 0
     out = capsys.readouterr().out
-    assert "RUN_BLOCKED" not in out and "accepted=1 attempts_full=0 todo=1" in out, out
+    assert "RUN_BLOCKED" not in out and "total=2 claimable=1" in out, out
     assert calls == [7, 7]
-    routes = {r.get("route") for r in F.read_jsonl(r2.ledger.path) if r.get("kind") == "attempt_start"}
+    routes = {r.get("route") for r in F.read_jsonl(_seat_ledger_path(stage, 7)) if r.get("kind") == "attempt_start"}
     assert routes == {"pp/seed7/new"}
     print("ROUTE_GUARD_NO_FALSE_BLOCK=PASS fresh_stage=run same_route_resume=run")
 
@@ -288,21 +291,19 @@ def test_route_guard_rejects_legacy_ledger_rows(tmp_path, capsys):
     ledger = tmp_path / "budget.jsonl"
     world = F.World()
     ident = F.hard0_identity("PickXtimes", 0)
-    calls: list = []
-    r = _seed_runner(tmp_path / "stage", 7, calls, ledger, world)
-    lp = Path(r.ledger.path)
+    stage = tmp_path / "stage"
+    lp = _seat_ledger_path(stage, 7)
     lp.parent.mkdir(parents=True, exist_ok=True)
     lp.write_text(json.dumps({"t": 1.0, "seat": "s00", "policy": "pp", "kind": "attempt_start", "key": "old",
                               "attempt_id": "old-a1", "attempt_no": 1, "retry": False}) + "\n", encoding="utf-8")
-    r = _seed_runner(tmp_path / "stage", 7, calls, ledger, world)  # 重新构造以读回旧行
+    calls: list = []
     capsys.readouterr()
-    rc = F.run_rows(r, [ident])
-    r.close()
+    rc = F.run_rows(_seed_runner(stage, 7, calls, ledger, world), [ident])
     out = capsys.readouterr().out
     assert rc == 3 and calls == [] and "reason=route_mismatch" in out and "found=legacy" in out, out
     assert "want=pp/seed7/new" in out, out
-    assert F.read_jsonl(r.results_path) == []
-    assert [x["kind"] for x in F.read_jsonl(lp) if x["kind"] != "budget"] == ["attempt_start"]  # 未追加尝试行
+    assert F.seat_results(stage, "pp") == []
+    assert [x["kind"] for x in F.read_jsonl(lp) if x["kind"] != "budget"] == ["attempt_start"]
     print("ROUTE_GUARD_LEGACY=PASS rc=3 found=legacy")
 
 

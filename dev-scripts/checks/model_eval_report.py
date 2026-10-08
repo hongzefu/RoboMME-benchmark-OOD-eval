@@ -37,7 +37,7 @@
 
 用法::
 
-    python scripts/eval-official/model_eval_report.py --sets sets.json [--gate2 g.json ...] \
+    python dev-scripts/checks/model_eval_report.py --sets sets.json [--gate2 g.json ...] \
         [--ledger '<glob>' ...] [--max-attempts N --max-resets M] --out-json report.json --out-md report.md
 """
 from __future__ import annotations

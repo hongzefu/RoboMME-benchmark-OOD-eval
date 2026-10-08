@@ -10,7 +10,7 @@
     <Task>_ep<N>_<task_goal>_<tier>_annotation.mp4   官方 RolloutRecorder 版式（帧号、任务目标、动作、状态文字区）
 
 文件名经 ``official_render.safe_filename``（超 255 字节截断加哈希）。读 h5 的口径（字段名与旧仓
-``scripts/dataset_replay.py``、``injection-dev/site/render_xhard0.py`` 交叉核对过）：
+``scripts/dataset_replay.py``、旧站点工具 ``render_xhard0.py``（现 ``dev-scripts/site/``）交叉核对过）：
 
 * 每个 h5 只读一个 ``episode_<N>`` 组（有多个时取与交付行 ``episode`` 同号者），其下 ``timestep_<K>``（以及录制器
   去重用的 ``timestep_<K>_dup<M>``）**按 K、M 的数值排序**，不按字符串排；

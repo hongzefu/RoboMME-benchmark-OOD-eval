@@ -1,6 +1,6 @@
 """V8 双模型评估汇总（1001-v8-post-evaluation-gl-plan.md 第一部分 §1 第 5、7 条、§4；契约 C4 第一段）。纯 CPU、只用标准库。
 
-    python scripts/eval-official/eval_report.py --manifest <manifest.json> --stage <运行根> \
+    python dev-scripts/gl/eval_report.py --manifest <manifest.json> --stage <运行根> \
         --policies smvla,perceptual-framesamp-modul --out <dir> [--videos <本机视频根>] [--partial] [--expect-total 1070] [--cap 1600]
 
 输入（契约 C1～C3）：
@@ -30,7 +30,7 @@
 
 V9 合并复用（1002-newtask-v9-movecube-region-800-plan.md 第二部分 §2.1、§2.2 第 7 条、§2.4.2 第 7 步）：
 
-    python scripts/eval-official/eval_report.py --manifest <V9 run>/manifest/manifest.json --stage <V9 运行根> \
+    python dev-scripts/gl/eval_report.py --manifest <V9 run>/manifest/manifest.json --stage <V9 运行根> \
         --videos <V9 本机视频根> --out <dir> \
         --reuse <V8 结果目录> --reuse-manifest <V8 manifest.json>
 
@@ -60,7 +60,7 @@ report.json 键的分工（站点 S1-E 依赖）：``per_policy.<p>.cells／task
 
 带 ``--dataset {ood,hard-verify}``（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.2）：
 
-    python scripts/eval-official/eval_report.py --manifest <manifest.json> --stage <运行根> --dataset hard-verify \
+    python dev-scripts/gl/eval_report.py --manifest <manifest.json> --stage <运行根> --dataset hard-verify \
         --policies perceptual-framesamp-modul,groundsg:ground-sg-oracle,pp --expect-total 192 --out <dir> [--videos <本机视频根>] [--side new]
 
 - ``--policies`` 接受任意 ``<policy>[:<variant>]``，运行根目录 ``sNN/<policy>[-<variant>]/``，结果行按 ``policy`` 与

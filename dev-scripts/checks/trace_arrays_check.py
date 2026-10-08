@@ -3,7 +3,7 @@
 
 用法::
 
-    python scripts/eval-official/trace_arrays_check.py <局目录或其上级目录> [...] [--json <摘要输出>]
+    python dev-scripts/checks/trace_arrays_check.py <局目录或其上级目录> [...] [--json <摘要输出>]
 
 每个找到的 ``trace.jsonl`` 算一局；数组文件取 ``end.arrays.path``（相对轨迹目录），缺省同目录 ``arrays.npz``。逐局核：
 

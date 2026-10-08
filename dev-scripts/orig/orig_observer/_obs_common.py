@@ -30,7 +30,7 @@ OBS_DIR = Path(__file__).resolve().parent
 REPO = OBS_DIR.parents[2]
 #: 评估包源码根（``src/robomme_hard_eval/``）
 EVAL_PKG = REPO / "src" / "robomme_hard_eval"
-#: 旧仓 ``scripts/eval-official/<名>.py`` 的模块名 → 拆仓后的文件（别名照旧，同一模块只加载一份）
+#: 旧仓评估目录下 ``<名>.py`` 的模块名 → 拆仓后的文件（别名照旧，同一模块只加载一份）
 EVAL_MODULE_FILES = {
     "official_defs": EVAL_PKG / "models" / "_official_defs.py",
     "groundsg_client": EVAL_PKG / "models" / "groundsg.py",
@@ -71,6 +71,9 @@ def load_eval_module(name: str):
     src = str(REPO / "src")
     if src not in sys.path:
         sys.path.append(src)
+    if name.endswith("_client"):  # 客户端按旧名 load_sibling 取同用模块：先按新位置登记，免得它到 models/ 下找旧文件名
+        for dep in ("official_defs", "trace_writer"):
+            load_eval_module(dep)
     spec = importlib.util.spec_from_file_location(name, EVAL_MODULE_FILES[name])
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
