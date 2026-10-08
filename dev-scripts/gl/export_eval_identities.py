@@ -1,196 +1,204 @@
 #!/usr/bin/env python3
-"""V9 逐身份清单导出（v9 见 1002 方案 §2.4.2 第 7 步；格式沿用 v8 方案第二部分 §2.2 第 9 条，原 v7 版见 0928 方案第一部分 §5 第 3 条）。
+"""评估身份清单导出：经子模块 ``robomme_hard`` 的 ``BenchmarkEnvBuilder(task, dataset)`` 逐局列出执行身份行（JSONL）。
 
-- 经 ``robomme_hard`` 的 ``BenchmarkEnvBuilder(task, "ood")`` 逐任务列出全部局：总数与逐格局数由格表推出并核对
-  （包内 ``EXPECTED_CELLS``＝V9_CELLS，43 格 800；开关打开时另加 xhard0 16 任务 × 1 档 × 12 局 = 192）。
-  builder 读包内规格；``--specs-root`` 经 ``ROBOMME_HARD_SPECS_ROOT`` 覆盖。V8 的 1070 局格表与对应的 1262 局清单
-  已于维护计划阶段 1b 删除（git 历史可取回）。
-- ``round``／``shard`` 字段保留、一律置空（null）。
-- 官方路线对照：xhard0 的 192 局（官方 test 的原 episode 号）仍按 ``TASK_SECONDS`` 贪心均衡切 10 片（3′ xhard0 评估用）。
-- 行格式：``{task, episode, tier, seed, candidate, source_episode, round, shard}``；官方行 ``{task, source_episode, seed, shard}``。
+拆仓（1008 拆分方案第二部分 §二 ``dev-scripts/gl/`` 行、runbook S5）后 benchmark 只认两个评估数据集：
 
-**v9**（1002 方案）：总数与逐格局数改由格表推出——格表取 ``--specs-root`` 各档 header 的逐任务配额
-（``hard_parity.root_cell_table``：完整 V9 根恰为 V9_CELLS），不给 ``--specs-root`` 时取包内 ``EXPECTED_CELLS``
-（v9 阶段 3b 切换后即 V9）。V9：992 = 192 + 800，默认文件名 ``eval-identities-992.jsonl``，默认目录
-``artifacts/newtask-v9/``。V9 运行时：
+* ``hard-verify``：只含 xhard0，即官方 test 元数据里每任务 ``difficulty=="hard"`` 的 12 局（官方原 episode 3, 7, …,
+  47）；builder 局号 0～11，``source_episode`` 为官方原号，``candidate``／``spec_sha256`` 为 null；
+* ``ood``：五个新值档（V9 43 格 800 局），builder 局号每任务 0～49，``candidate`` 为整数、``spec_sha256`` 为 64 位串，
+  ``source_episode`` 为 null。
 
-* ``--delivery`` 必给（v9 assemble 的 800 行 ``delivery.local.json``）：builder 列出的 800 个新值身份
-  (task, tier, seed) 须与清单逐一相同（``delivery_mismatch``）；
-* ``--official-out`` **必须显式给 V9 路径**（审计 10）：其默认值仍指向 V8 根
-  ``artifacts/newtask-v8/eval-official-xhard0-192.jsonl``，V9 运行时用默认值即报错退出，避免覆写 V8 产物::
+xhard0 不再前置到 ood（旧的 xhard0 前置开关、规格根覆盖与官方路线清单参数已随拆仓删除），xhard0 期望行数一律按数据集名定。
 
-    uv run --no-sync python scripts/injection-dev/export_eval_identities.py \\
-        --specs-root artifacts/newtask-v9/specs-root --delivery artifacts/newtask-v9/delivery/delivery.local.json \\
-        --out artifacts/v9-evaluation/inputs/eval-identities-992.jsonl \\
-        --official-out artifacts/v9-evaluation/inputs/eval-official-xhard0-192.jsonl
+行格式（GL 席位 ``seat.py`` 的动态队列与 ``eval_manifest.py`` 都直接读）::
 
-**xhard0 退出 OOD 数据集**（1002 号 xhard0 退出方案）：builder 前置的 xhard0 局数随开关
-``hard_specs.XHARD0_IN_TEST_HARD``（环境变量 ``ROBOMME_HARD_XHARD0_IN_TEST_HARD=1`` 开）——开为每任务 12（共 192），
-关（默认）为 0。关档时总数只剩新值格局数（V9 800 = 0 + 800，默认文件名 ``eval-identities-800.jsonl``），
-xhard0 行须为 0；官方路线清单无行可写，``--official-out`` 跳过写文件并在判定行打 ``official=skipped``（仍可 PASS），
-V9 也不再强制显式给 ``--official-out``。
+    {"dataset", "task", "episode", "builder_episode", "tier", "seed", "candidate", "source_episode", "spec_sha256", "key"}
+
+``episode`` 与 ``builder_episode`` 同值（builder 局号）；``key = <task>_<tier>_<seed>``。
+
+用法::
+
+    # S5 拆仓验收的两行身份：VideoUnmask hard-verify 局 0（官方原号 3）与 ood 局 0
+    python dev-scripts/gl/export_eval_identities.py --dataset hard-verify,ood --tasks VideoUnmask --episodes 0:1 \\
+        --out configs/split-accept-identities.jsonl
+    # 全量：hard-verify 16 × 12 = 192 与 ood 800
+    python dev-scripts/gl/export_eval_identities.py --dataset hard-verify,ood --out <路径>
+
+核对（任一不过即 FAIL、退出 1，文件照写以便排查）：
+
+* 行数等于「各数据集 Σ 任务 min(局号上界, 该任务局数) − 下界」；全量时 hard-verify = 16 × 12、ood 逐格等于包内
+  ``EXPECTED_CELLS``（V9 43 格 800）；
+* hard-verify 行全为 xhard0、candidate／spec_sha256 为 null、source_episode ∈ ``XHARD0_EPISODES``；ood 行无 xhard0、
+  candidate 为整数、spec_sha256 为 64 位串；
+* ``(dataset, key)`` 唯一；给 ``--delivery`` 时 ood 全量的新值身份 (task, tier, seed) 须与交付清单逐一相同。
+
+末行 ``EVAL_IDENTITY_EXPORT=PASS|FAIL datasets=<…> episodes=<n> hard_verify=<n> ood=<n> xhard0=<n> tasks=<n>
+cell_mismatch=<n> bad=<n> dup_keys=<n> [delivery_mismatch=<n>] count_mismatch=<n> out=<路径>``。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 
-import _common  # noqa: F401  路径设置
-
-import hard_parity  # noqa: E402  scripts/parity（_common 已加路径；纯标准库）
-from robomme_hard.env_record_wrapper import hard_specs  # noqa: E402
-
-#: 每任务平均单局用时（秒；v6 SimpleMemVLA 实测，docs/eval-doc/testhard-0928/records 1100 局 elapsed_s 均值，
-#: 策略仓库内留档）。原名 V6_SECONDS，随 V6 删除改名（v8 方案第一部分 §2.5）；用于官方路线分片均衡。
+HARD_VERIFY = "hard-verify"
+OOD = "ood"
+DATASETS = (HARD_VERIFY, OOD)
+#: 行字段
+ROW_KEYS = ("dataset", "task", "episode", "builder_episode", "tier", "seed", "candidate", "source_episode",
+            "spec_sha256", "key")
+#: 每任务平均单局用时（秒；v6 SimpleMemVLA 实测，docs/eval-doc/testhard-0928/records 1100 局 elapsed_s 均值）。
+#: ``eval_manifest.py`` 的分片均衡复制同一张表。
 TASK_SECONDS = {
     "BinFill": 224.0, "ButtonUnmask": 116.5, "ButtonUnmaskSwap": 73.4, "InsertPeg": 152.2, "MoveCube": 180.3,
     "PatternLock": 79.8, "PickHighlight": 246.7, "PickXtimes": 114.2, "RouteStick": 74.1, "StopCube": 64.9,
     "SwingXtimes": 90.8, "VideoPlaceButton": 58.0, "VideoPlaceOrder": 61.7, "VideoRepick": 51.9, "VideoUnmask": 97.4,
     "VideoUnmaskSwap": 50.5,
 }
-SHARDS = 10
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
-def _xhard0_prefix() -> int:
-    """builder 每任务前置的 xhard0 局数：开关开 12、关 0（S1 合并前的旧 hard_specs 无开关，按 12）。"""
-    return getattr(hard_specs, "xhard0_prefix", lambda: hard_specs.XHARD0_PER_TASK)()
+def hard_specs():
+    from robomme_hard.env_record_wrapper import hard_specs as hs
+
+    return hs
 
 
-def xhard0_total() -> int:
-    """xhard0 总局数：16 任务 × 前置局数（开关开 192、关 0）；运行时读开关，不在导入时冻结。"""
-    return len(hard_specs.ALL_TASKS) * _xhard0_prefix()
+def make_builder(task: str, dataset: str):
+    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+
+    return BenchmarkEnvBuilder(task, dataset=dataset)
 
 
-#: 导入时刻的 xhard0 总数（兼容旧引用；判据一律走 :func:`xhard0_total`）
-XHARD0_TOTAL = xhard0_total()
-#: 官方路线 xhard0 清单的默认路径（V8 根；V9 必须显式给，审计 10）
-OFFICIAL_OUT_DEFAULT = "artifacts/newtask-v8/eval-official-xhard0-192.jsonl"
+def parse_episodes(text: str | None) -> tuple[int, int | None]:
+    """``a:b`` 半开区间（``0:1`` 即局 0）；缺省全部。"""
+    if not text:
+        return 0, None
+    a, sep, b = text.partition(":")
+    if not sep:
+        raise argparse.ArgumentTypeError(f"--episodes 须为 a:b 半开区间：{text!r}")
+    lo, hi = int(a or 0), (int(b) if b else None)
+    if lo < 0 or (hi is not None and hi <= lo):
+        raise argparse.ArgumentTypeError(f"--episodes 区间为空或非法：{text!r}")
+    return lo, hi
 
 
-def expected_total(cells: dict[tuple[str, str], int]) -> int:
-    """格表推出的总局数：xhard0 16 × 前置局数 + 新值格局数之和（开关开：V9 992 = 192 + 800；
-    开关关：V9 800）。"""
-    return xhard0_total() + sum(cells.values())
+def identity_row(dataset: str, task: str, ep: int, ident: dict) -> dict:
+    """builder 解析结果 → 执行身份行。"""
+    src = ident.get("source_episode")
+    return {"dataset": dataset, "task": task, "episode": int(ep), "builder_episode": int(ep), "tier": ident["tier"],
+            "seed": int(ident["seed"]), "candidate": ident.get("candidate"),
+            "source_episode": None if src is None else int(src), "spec_sha256": ident.get("spec_sha256"),
+            "key": f"{task}_{ident['tier']}_{int(ident['seed'])}"}
 
 
-def identities_name(cells: dict[tuple[str, str], int]) -> str:
-    return f"eval-identities-{expected_total(cells)}.jsonl"
+def export_rows(datasets: list[str], tasks: list[str], lo: int, hi: int | None,
+                builder_factory=make_builder) -> tuple[list[dict], dict]:
+    """逐数据集、逐任务列身份行；返回 (行, 每数据集期望行数)。"""
+    rows: list[dict] = []
+    expected: dict[str, int] = {}
+    for ds in datasets:
+        n_ds = 0
+        for task in tasks:
+            b = builder_factory(task, ds)
+            n = int(b.get_episode_num())
+            top = n if hi is None else min(hi, n)
+            for ep in range(lo, top):
+                rows.append(identity_row(ds, task, ep, b.resolve_identity(ep)))
+            n_ds += max(0, top - lo)
+        expected[ds] = n_ds
+    return rows, expected
 
 
-#: 包内当前格表（EXPECTED_CELLS）与导入时开关推出的总局数与默认文件名（V9：开关开 992、关 800）
-EXPECTED_TOTAL = expected_total(hard_specs.EXPECTED_CELLS)
-IDENTITIES_NAME = identities_name(hard_specs.EXPECTED_CELLS)
-
-
-def balance(rows: list[dict], shards: int) -> None:
-    """最长处理时间优先的贪心：按估计用时降序，逐局分给当前总用时最小的片（同用时取片号小者），就地写 ``shard``。"""
-    load = [0.0] * shards
-    for row in sorted(rows, key=lambda r: (-TASK_SECONDS[r["task"]], r["task"], r.get("episode", r.get("source_episode")))):
-        k = min(range(shards), key=lambda i: (load[i], i))
-        row["shard"] = k
-        load[k] += TASK_SECONDS[row["task"]]
-
-
-def check_rows(rows: list[dict], official: list[dict], cells: dict[tuple[str, str], int] | None = None,
+def check_rows(rows: list[dict], expected: dict[str, int], hs, *, full: bool,
                delivery_ids: set[tuple[str, str, int]] | None = None) -> tuple[bool, dict]:
-    """总数 = :func:`expected_total`（开关开 V9 992，关 800）、xhard0 = :func:`xhard0_total`（192／0）、逐格局数等于格表（缺省 EXPECTED_CELLS）、
-    round／shard 全空、官方行数 = xhard0 总数；给 ``delivery_ids`` 时新值身份 (task, tier, seed) 须与之逐一相同。"""
-    cells = hard_specs.EXPECTED_CELLS if cells is None else cells
+    """逐行与总数核对；``full``（全部任务、全部局号）时另按数据集名核 xhard0 总数与 ood 逐格局数。"""
+    bad: list[str] = []
+    per_ds: dict[str, int] = defaultdict(int)
     per_cell: dict[tuple[str, str], int] = defaultdict(int)
-    for r in rows:
-        if r["tier"] != hard_specs.XHARD0:
+    xhard0 = 0
+    for i, r in enumerate(rows):
+        per_ds[r.get("dataset")] += 1
+        if set(r) != set(ROW_KEYS):
+            bad.append(f"row{i} keys")
+            continue
+        if r["key"] != f"{r['task']}_{r['tier']}_{r['seed']}" or r["episode"] != r["builder_episode"]:
+            bad.append(f"row{i} key/episode")
+        if r["tier"] == hs.XHARD0:
+            xhard0 += 1
+        if r["dataset"] == HARD_VERIFY:
+            if (r["tier"] != hs.XHARD0 or r["candidate"] is not None or r["spec_sha256"] is not None
+                    or r["source_episode"] not in tuple(hs.XHARD0_EPISODES)):
+                bad.append(f"row{i} hard-verify 行须 xhard0、candidate／spec_sha256 为 null、source_episode 为官方 hard 局号")
+        else:
+            if (r["tier"] == hs.XHARD0 or not isinstance(r["candidate"], int) or r["source_episode"] is not None
+                    or not isinstance(r["spec_sha256"], str) or not _SHA_RE.match(r["spec_sha256"])):
+                bad.append(f"row{i} ood 行须为新值档、candidate 为整数、spec_sha256 为 64 位串、source_episode 为 null")
             per_cell[(r["task"], r["tier"])] += 1
-    tiers: dict[str, int] = defaultdict(int)
-    for r in rows:
-        tiers[r["tier"]] += 1
-    facts = {"episodes": len(rows), "xhard0": tiers.get(hard_specs.XHARD0, 0), "cells": len(per_cell),
-             "cell_mismatch": sum(per_cell.get(k, 0) != n for k, n in cells.items())
-             + sum(k not in cells for k in per_cell),
-             "round_or_shard_set": sum(r.get("round") is not None or r.get("shard") is not None for r in rows),
-             "official": len(official), "tiers": dict(sorted(tiers.items())), "expected": expected_total(cells)}
-    if delivery_ids is not None:
-        new_ids = {(r["task"], r["tier"], int(r["seed"])) for r in rows if r["tier"] != hard_specs.XHARD0}
-        facts["delivery_mismatch"] = len(new_ids ^ delivery_ids)
-    x0_total = xhard0_total()
-    ok = (facts["episodes"] == facts["expected"] and facts["xhard0"] == x0_total and facts["cell_mismatch"] == 0
-          and facts["round_or_shard_set"] == 0 and facts["official"] == x0_total
+    keys = [(r.get("dataset"), r.get("key")) for r in rows]
+    facts = {"episodes": len(rows), "hard_verify": per_ds.get(HARD_VERIFY, 0), "ood": per_ds.get(OOD, 0),
+             "xhard0": xhard0, "bad": len(bad), "dup_keys": len(keys) - len(set(keys)), "cell_mismatch": 0,
+             "count_mismatch": sum(per_ds.get(ds, 0) != n for ds, n in expected.items()), "first_bad": bad[:3]}
+    if full:
+        if HARD_VERIFY in expected and per_ds.get(HARD_VERIFY, 0) != len(hs.ALL_TASKS) * int(hs.XHARD0_PER_TASK):
+            facts["count_mismatch"] += 1
+        if OOD in expected:
+            cells = hs.EXPECTED_CELLS
+            facts["cell_mismatch"] = (sum(per_cell.get(k, 0) != n for k, n in cells.items())
+                                      + sum(k not in cells for k in per_cell))
+            if delivery_ids is not None:
+                new_ids = {(r["task"], r["tier"], int(r["seed"])) for r in rows if r.get("dataset") == OOD}
+                facts["delivery_mismatch"] = len(new_ids ^ delivery_ids)
+    ok = (not bad and facts["dup_keys"] == 0 and facts["count_mismatch"] == 0 and facts["cell_mismatch"] == 0
           and facts.get("delivery_mismatch", 0) == 0)
     return ok, facts
 
 
-def resolve_table(specs_root: str | None) -> tuple[str, dict[tuple[str, str], int]]:
-    """格表：``--specs-root`` 的 header 逐任务配额推出（V9 根 → V9_CELLS），否则包内 EXPECTED_CELLS。"""
-    if specs_root:
-        found = hard_parity.root_cell_table(specs_root, hard_specs)
-        if found is not None:
-            return found
-    return hard_parity.table_version(hard_specs.EXPECTED_CELLS, hard_specs), hard_specs.EXPECTED_CELLS
-
-
 def read_delivery_ids(path: str) -> set[tuple[str, str, int]]:
-    """交付清单（v8-delivery/1 或 v9 的 800 行清单）的新值身份集合 (task, tier, seed)。"""
-    return {hard_parity.ident(r) for r in hard_parity.read_delivery(Path(path))["rows"]}
+    """交付清单（``{"rows": [...]}``，每行含 task／tier／seed）的新值身份集合 (task, tier, seed)。"""
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {(r["task"], r["tier"], int(r["seed"])) for r in doc["rows"]}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--dataset", default=",".join(DATASETS), help="逗号分隔：hard-verify、ood（缺省两者，按此顺序写出）")
+    p.add_argument("--tasks", default=None, help="逗号分隔任务名；缺省官方 16 任务（规范序）")
+    p.add_argument("--episodes", type=parse_episodes, default=(0, None), help="builder 局号半开区间 a:b；缺省全部")
+    p.add_argument("--out", required=True, help="身份清单 JSONL 输出路径")
+    p.add_argument("--delivery", default=None, help="可选：交付清单 json；ood 全量时新值身份须与之逐一相同")
+    return p
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", default=None,
-                        help="逐身份清单输出；缺省 artifacts/newtask-<版本>/eval-identities-<总数>.jsonl"
-                             "（V9 → newtask-v9/eval-identities-992.jsonl，开关关时 eval-identities-800.jsonl）")
-    parser.add_argument("--official-out", default=OFFICIAL_OUT_DEFAULT,
-                        help=f"官方路线 xhard0 192 局清单输出；默认 {OFFICIAL_OUT_DEFAULT} 是 V8 根——"
-                             "V9 必须显式给（如 artifacts/v9-evaluation/inputs/eval-official-xhard0-192.jsonl），"
-                             "V9 运行时用默认值即报错退出（审计 10）")
-    parser.add_argument("--specs-root", default=None,
-                        help="覆盖规格根（经 ROBOMME_HARD_SPECS_ROOT）；格表按其各档 header 的逐任务配额推出（V9 根 → 992）")
-    parser.add_argument("--delivery", default=None,
-                        help="交付清单 json（V9 必给：v9 assemble 的 800 行 delivery.local.json）；新值身份须与之逐一相同")
+    parser = build_parser()
     args = parser.parse_args(argv)
-    version, cells = resolve_table(args.specs_root)
-    if version == "v9":
-        if args.delivery is None:
-            parser.error("V9 格表须给 --delivery（v9 assemble 的 800 行交付清单）")
-        if args.official_out == OFFICIAL_OUT_DEFAULT and xhard0_total() > 0:
-            parser.error(f"V9 格表须显式给 --official-out（默认值 {OFFICIAL_OUT_DEFAULT} 是 V8 根，不得覆写）")
-    out = args.out or f"artifacts/newtask-{version}/{identities_name(cells)}"
+    datasets = [d.strip() for d in args.dataset.split(",") if d.strip()]
+    if not datasets or any(d not in DATASETS for d in datasets) or len(set(datasets)) != len(datasets):
+        parser.error(f"--dataset 只能是 {'、'.join(DATASETS)}（可逗号分隔两者），得到 {args.dataset!r}")
+    hs = hard_specs()
+    tasks = [t.strip() for t in args.tasks.split(",")] if args.tasks else list(hs.ALL_TASKS)
+    unknown = [t for t in tasks if t not in hs.ALL_TASKS]
+    if unknown or len(set(tasks)) != len(tasks):
+        parser.error(f"--tasks 含未知或重复任务：{unknown or tasks}")
+    lo, hi = args.episodes
+    full = args.tasks is None and lo == 0 and hi is None
+    rows, expected = export_rows(datasets, tasks, lo, hi)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
     delivery_ids = read_delivery_ids(args.delivery) if args.delivery else None
-    if args.specs_root:
-        os.environ[hard_specs.SPECS_ROOT_ENV] = str(Path(args.specs_root).resolve())
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
-
-    rows = []
-    for task in hard_specs.ALL_TASKS:
-        builder = BenchmarkEnvBuilder(task, dataset="ood")
-        items = []
-        for ep in range(builder.get_episode_num()):
-            ident = builder.resolve_identity(ep)
-            items.append({"task": task, "episode": ep, "tier": ident["tier"], "seed": ident["seed"],
-                          "candidate": ident.get("candidate"), "source_episode": ident.get("source_episode"),
-                          "round": None, "shard": None})
-        rows.extend(items)
-    rows.sort(key=lambda r: (hard_specs.ALL_TASKS.index(r["task"]), r["episode"]))
-    official = [{"task": r["task"], "source_episode": r["source_episode"], "seed": r["seed"]}
-                for r in rows if r["tier"] == hard_specs.XHARD0]
-    balance(official, SHARDS)
-    official.sort(key=lambda r: (r["shard"], hard_specs.ALL_TASKS.index(r["task"]), r["source_episode"]))
-    # 开关关闭（xhard0 不在 ood）时官方路线清单无行：跳过写文件，判定行打 official=skipped
-    skip_official = xhard0_total() == 0
-    writes = [(out, rows)] + ([] if skip_official else [(args.official_out, official)])
-    for path, data in writes:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in data))
-    ok, facts = check_rows(rows, official, cells, delivery_ids)
-    print(f"EVAL_IDENTITY_EXPORT={'PASS' if ok else 'FAIL'} version={version} episodes={facts['episodes']} "
-          f"expected={facts['expected']} "
-          f"xhard0={facts['xhard0']} cells={facts['cells']} cell_mismatch={facts['cell_mismatch']} "
-          + (f"delivery_mismatch={facts['delivery_mismatch']} " if "delivery_mismatch" in facts else "") +
-          f"round_or_shard_set={facts['round_or_shard_set']} official={'skipped' if skip_official else facts['official']} shards={SHARDS} "
-          f"tiers={facts['tiers']}")
+    ok, facts = check_rows(rows, expected, hs, full=full, delivery_ids=delivery_ids)
+    print(f"EVAL_IDENTITY_EXPORT={'PASS' if ok else 'FAIL'} datasets={','.join(datasets)} episodes={facts['episodes']} "
+          f"hard_verify={facts['hard_verify']} ood={facts['ood']} xhard0={facts['xhard0']} tasks={len(tasks)} "
+          f"cell_mismatch={facts['cell_mismatch']} bad={facts['bad']} dup_keys={facts['dup_keys']} "
+          + (f"delivery_mismatch={facts['delivery_mismatch']} " if "delivery_mismatch" in facts else "")
+          + f"count_mismatch={facts['count_mismatch']} out={out}"
+          + (f" first_bad={facts['first_bad']}" if facts["first_bad"] else ""), flush=True)
     return 0 if ok else 1
 
 

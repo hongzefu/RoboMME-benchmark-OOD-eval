@@ -119,7 +119,26 @@ from typing import Any
 
 import numpy as np
 
-import trace_writer as tw  # 同目录模块（脚本目录在 sys.path 头部；测试经 load_script 加载时同样）
+def _load_trace_writer():
+    """评估包的 ``trace_writer``：模块名 ``trace_writer``（与原侧观测器、模型客户端同一别名，已加载则复用同一份）。"""
+    import importlib.util
+
+    mod = sys.modules.get("trace_writer")
+    if mod is not None and hasattr(mod, "TraceWriter"):
+        return mod
+    path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "record" / "trace_writer.py"
+    spec = importlib.util.spec_from_file_location("trace_writer", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["trace_writer"] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop("trace_writer", None)
+        raise
+    return mod
+
+
+tw = _load_trace_writer()  # 评估包 robomme_hard_eval/record/trace_writer.py（按路径加载，模块名 trace_writer）
 
 DIVERGE_KINDS = ("obs", "state", "text", "action", "stop", "request")
 EPOCH_FIELD = "server_epoch"
@@ -141,15 +160,21 @@ def is_final(row: dict) -> bool:
 
 
 def official_defs():
-    """同目录 ``official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
+    """评估包里的别名表 ``robomme_hard_eval.models._official_defs``（旧名别名表的唯一来源；模块名 ``official_defs``，
+    已加载则复用同一模块）。"""
     import importlib.util
 
     mod = sys.modules.get("official_defs")
-    if mod is None:
-        spec = importlib.util.spec_from_file_location("official_defs", Path(__file__).resolve().parent / "official_defs.py")
+    if mod is None or not hasattr(mod, "canonical_row"):
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod
-        spec.loader.exec_module(mod)
+        try:
+            spec.loader.exec_module(mod)
+        except BaseException:
+            sys.modules.pop("official_defs", None)
+            raise
     return mod
 
 

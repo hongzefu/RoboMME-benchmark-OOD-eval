@@ -79,10 +79,10 @@ _REPORT_MOD = None
 
 
 def eval_report_mod():
-    """复用 scripts/eval-official/eval_report.py 的读入与权威终态口径（accepted_attempt_id），两处不各写一套。"""
+    """复用同目录 ``eval_report.py`` 的读入与权威终态口径（accepted_attempt_id），两处不各写一套。"""
     global _REPORT_MOD
     if _REPORT_MOD is None:
-        path = Path(__file__).resolve().parents[1] / "eval-official" / "eval_report.py"
+        path = Path(__file__).resolve().parent / "eval_report.py"
         spec = importlib.util.spec_from_file_location("eval_report_for_mover", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

@@ -8,7 +8,7 @@
   任一 ``reserve`` 失败即打印 ``RUN_BLOCKED reason=budget`` 并以 5 退出（已预约的保留在状态文件里，下次照样先 release）。
 - ``settle``（每遍评估结束后）：已有终态行且 rid 未结的身份 ``commit --id <rid>``。
 
-账本 CLI：``BUDGET_LEDGER_CMD``（空格切分）或缺省 ``<python> <eval-official>/budget_ledger.py``；顶层参数
+账本 CLI：``BUDGET_LEDGER_CMD``（空格切分）或缺省 ``<python> dev-scripts/gl/budget_ledger.py``；顶层参数
 ``BUDGET_LEDGER_ARGS``（如 ``--ledger L``）放在子命令**之前**；不给 ``--ledger`` 时由账本脚本自己读环境变量
 ``SGEVAL_BUDGET_LEDGER``。rid 取 ``reserve`` 标准输出末行的 ``rid=<rid>``。
 
@@ -25,7 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-EVAL_DIR = Path(__file__).resolve().parent.parent
+#: 共享账本 CLI 所在目录（拆仓后在 ``dev-scripts/gl/``）
+EVAL_DIR = Path(__file__).resolve().parents[2] / "gl"
 FINAL = ("success", "fail", "timeout")
 EXIT_BUDGET = 5
 

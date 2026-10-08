@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """PonderPounce 原侧驱动（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.4、1.7；子任务 S4）。
 
-独立进程，只导入官方 ``robomme``（本仓库 ``src/robomme``）与 vla-eval 0.7.0（客户端扩展环境 client-env），
-不导入 ``robomme_hard``：启动时断言 ``robomme.__file__`` 在仓库 ``src/robomme/`` 下、``"robomme_hard" not in
+独立进程，只导入官方 ``robomme``（benchmark 子模块 ``third_party/robomme_benchmark/src/robomme``）与 vla-eval 0.7.0
+（客户端扩展环境 client-env），不导入 ``robomme_hard``：启动时断言 ``robomme.__file__`` 在子模块 ``src/robomme/`` 下、``"robomme_hard" not in
 sys.modules``，每局结束再查一次。
 
 流程（照 vla-eval ``orchestrator.py`` 的单分片循环，只在外围加记录）：
@@ -20,7 +20,7 @@ sys.modules``，每局结束再查一次。
 ``pp_client.fixed_sid`` 的结果、``eval_id``／``db_path`` 为空串；画面与逐步记录全部为空操作（不开录制库、
 不出官方视频）。于是 EPISODE_START 载荷与新侧 ``pp_client`` 完全相同。
 
-外围记录（不碰 ``src/robomme`` 的任何方法、不 monkeypatch）：``RoboMMEBenchmark`` 的子类只覆写 ``reset``——调用父类
+外围记录（不碰官方 ``robomme`` 的任何方法、不 monkeypatch）：``RoboMMEBenchmark`` 的子类只覆写 ``reset``——调用父类
 ``reset`` 后，把 ``self._env`` 换成一个委托代理，代理的 ``step`` 原样转发给官方环境并把返回的五元组交给记录器；
 ``close`` 等其余属性透传。记录内容：
 
@@ -76,11 +76,34 @@ from typing import Any, Callable  # noqa: E402
 import numpy as np  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-if str(REPO / "src") not in sys.path:
-    sys.path.insert(0, str(REPO / "src"))
+#: benchmark 子模块源码根（官方 ``robomme``）；评估包源码根（``pp_client``／``trace_writer`` 拆仓后所在）
+BENCH_SRC = REPO / "third_party" / "robomme_benchmark" / "src"
+EVAL_SRC = REPO / "src"
+for _p in (EVAL_SRC, BENCH_SRC):  # 子模块 src 在最前
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
-import pp_client  # noqa: E402
-from trace_writer import TraceWriter  # noqa: E402
+
+def _load_eval(name: str, path: Path):
+    """按文件路径加载评估包模块，模块名用旧名（与模型客户端的 ``load_sibling`` 同一别名，已加载则复用）。"""
+    import importlib.util
+
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
+    return mod
+
+
+trace_writer = _load_eval("trace_writer", EVAL_SRC / "robomme_hard_eval" / "record" / "trace_writer.py")
+TraceWriter = trace_writer.TraceWriter
+pp_client = _load_eval("pp_client", EVAL_SRC / "robomme_hard_eval" / "models" / "pp.py")
 
 MAX_STEPS = 1300
 DATASET = "hard-verify"
@@ -92,13 +115,13 @@ EXIT_BAD_INPUT = 3
 
 
 def assert_official_only() -> str:
-    """``robomme`` 必须来自本仓库 ``src/robomme/``，且进程内从未导入 ``robomme_hard``。返回 ``robomme.__file__``。"""
+    """``robomme`` 必须来自 benchmark 子模块 ``src/robomme/``，且进程内从未导入 ``robomme_hard``。返回 ``robomme.__file__``。"""
     import robomme
 
     path = Path(robomme.__file__).resolve()
-    want = (REPO / "src" / "robomme").resolve()
+    want = (BENCH_SRC / "robomme").resolve()
     if want not in path.parents:
-        raise AssertionError(f"robomme 不在仓库 src/robomme 下：{path}")
+        raise AssertionError(f"robomme 不在 benchmark 子模块 src/robomme 下：{path}")
     if "robomme_hard" in sys.modules:
         raise AssertionError("原侧进程导入了 robomme_hard")
     return str(path)

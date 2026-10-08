@@ -2,7 +2,7 @@
 """V9 双模型评估执行清单（1002-newtask-v9-movecube-region-800-plan.md 第二部分 §2.1、§2.2 第 7 条；字段契约沿用
 1001-v8-post-evaluation-gl-plan.md 的 C1）。
 
-    python scripts/eval-official/eval_manifest.py --identities <eval-identities-992.jsonl> \
+    python dev-scripts/gl/eval_manifest.py --identities <eval-identities-800.jsonl> \
         --delivery <newtask-v9/delivery/delivery.local.json> \
         --exclude-evaluated <V8 manifest.json> --shards 10 --out-dir <dir>
 
@@ -62,7 +62,23 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
-HARD_SPECS_PATH = REPO / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+def hard_specs_path() -> Path:
+    """子模块里 ``hard_specs.py`` 的位置：优先评估仓 ``third_party/robomme_benchmark/src/``；子模块未检出（如 git
+    worktree）时按已安装 ``robomme_hard`` 包的位置找（``find_spec`` 只定位、不执行包的 ``__init__``）。"""
+    p = REPO / "third_party" / "robomme_benchmark" / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+    if p.is_file():
+        return p
+    import importlib.util
+
+    spec = importlib.util.find_spec("robomme_hard")
+    if spec is not None and spec.submodule_search_locations:
+        cand = Path(list(spec.submodule_search_locations)[0]) / "env_record_wrapper" / "hard_specs.py"
+        if cand.is_file():
+            return cand
+    return p
+
+
+HARD_SPECS_PATH = hard_specs_path()
 
 SCHEMA = "v8-eval-manifest/1"
 REUSED_SCHEMA = "v9-eval-reused/1"
@@ -72,13 +88,18 @@ REUSED_FILE = "reused.json"
 V9_NEW_RULE = {("MoveCube", "xhard4"): 0, ("InsertPeg", "xhard4"): 29}
 DELIVERY_SCHEMA = "v8-delivery/1"
 SOURCE_KEYS = ("task", "episode", "tier", "seed", "candidate", "source_episode", "round", "shard")
+#: 拆仓后 ``export_eval_identities.py`` 的执行身份行（带数据集名；``episode`` 与 ``builder_episode`` 同值）
+SOURCE_KEYS_V2 = ("dataset", "task", "episode", "builder_episode", "tier", "seed", "candidate", "source_episode",
+                  "spec_sha256", "key")
+#: V9 清单只收 ood 的行（hard-verify 只含 xhard0，不进 V9 新值清单）
+SOURCE_DATASET = "ood"
 #: 执行身份行字段；与 env_client.V8_IDENTITY_KEYS 同步（步数上限不进身份行，由入口按数据集给 --max-steps）
 SHARD_ROW_KEYS = ("task", "tier", "seed", "candidate", "builder_episode", "source_episode", "spec_sha256", "key")
 DEFAULT_SHARDS = 10
 #: hard0 模式每任务默认取前 12 局（hard-verify 每任务恰 12 局）
 DEFAULT_PER_TASK = 12
 
-#: 每任务平均单局用时（秒），复制自 ``scripts/injection-dev/export_eval_identities.py::TASK_SECONDS``
+#: 每任务平均单局用时（秒），复制自同目录 ``export_eval_identities.py::TASK_SECONDS``
 #: （该脚本 import ``_common`` 改 sys.path，不便跨目录 import；数值逐字相同，测试核对两者一致）。
 TASK_SECONDS = {
     "BinFill": 224.0, "ButtonUnmask": 116.5, "ButtonUnmaskSwap": 73.4, "InsertPeg": 152.2, "MoveCube": 180.3,
@@ -145,11 +166,29 @@ def read_jsonl(path: Path) -> list[dict]:
 # ── 第 1 步：核源集 ──────────────────────────────────────────────────────────
 
 
-def check_source(rows: list[dict], hs, cells: dict | None = None) -> dict:
+def normalize_source_row(r: dict) -> dict:
+    """新格式身份行（``SOURCE_KEYS_V2``）转成旧源集行（``SOURCE_KEYS``）；旧格式原样返回。数据集名不是 ood、
+    ``episode`` 与 ``builder_episode`` 不同的行原样保留多出的键，由 ``check_source`` 以「键不符」拒绝。"""
+    if set(r) != set(SOURCE_KEYS_V2) or r.get("dataset") != SOURCE_DATASET or r.get("episode") != r.get("builder_episode"):
+        return r
+    return {"task": r["task"], "episode": r["episode"], "tier": r["tier"], "seed": r["seed"],
+            "candidate": r["candidate"], "source_episode": r["source_episode"], "round": None, "shard": None}
+
+
+def xhard0_expected_for(dataset: str, hs) -> int:
+    """源集里 xhard0 行数的期望按数据集名定（拆仓后 benchmark 只认 ood／hard-verify 两个数据集）：ood 不含 xhard0（0），
+    hard-verify 全是 xhard0（16 任务 × ``XHARD0_PER_TASK``）。取代旧的 xhard0 前置开关。"""
+    if dataset == SOURCE_DATASET:
+        return 0
+    if dataset == "hard-verify":
+        return len(hs.ALL_TASKS) * int(hs.XHARD0_PER_TASK)
+    raise ValueError(f"未知数据集 {dataset!r}")
+
+
+def check_source(rows: list[dict], hs, cells: dict | None = None, *, dataset: str = SOURCE_DATASET) -> dict:
     cells = hs.EXPECTED_CELLS if cells is None else cells
-    # xhard0 行数随开关 XHARD0_IN_TEST_HARD：开为 16 × 12、关为 0（与 export_eval_identities.xhard0_total 同口径）；
-    # 旧写法写死 16 × XHARD0_PER_TASK，开关关（V9 默认）时会把导出器的 800 行源集误判为缺 192 行
-    xhard0_expected = len(hs.ALL_TASKS) * hs.xhard0_prefix()
+    # xhard0 行数按数据集名：V9 清单的源集是 ood，xhard0 期望为 0（xhard0 只在 hard-verify 里）
+    xhard0_expected = xhard0_expected_for(dataset, hs)
     total_expected = xhard0_expected + sum(cells.values())
     bad = []
     seen = set()
@@ -350,7 +389,7 @@ def v9_exec_rows(identities: Path, delivery_path: Path) -> tuple[Any, dict, list
     hs = load_hard_specs()
     delivery = json.loads(Path(delivery_path).read_text(encoding="utf-8"))
     cells_table = delivery_cells(delivery, hs)
-    src = read_jsonl(identities)
+    src = [normalize_source_row(r) for r in read_jsonl(identities)]
     check_source(src, hs, cells_table)                     # 第 1 步
     new_all, dropped = filter_new(src, hs)                 # 第 2 步
     rows = join_delivery(new_all, delivery, hs)            # 第 3 步
@@ -404,7 +443,7 @@ def split_shards(rows: list[dict], shards: int) -> list[list[dict]]:
 
 
 def v9_builder(task: str):
-    """ood 的真实 builder（开关 XHARD0_IN_TEST_HARD 按当前进程取值；评估客户端默认关）。"""
+    """ood 的真实 builder（ood 不含 xhard0，局号 0～49）。"""
     from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
 
     return BenchmarkEnvBuilder(task, dataset="ood")
@@ -413,9 +452,9 @@ def v9_builder(task: str):
 def verify_builder_episodes(rows: list[dict], builder_factory=None) -> None:
     """逐行用 builder 解析 ``builder_episode``，核对 tier／seed／candidate／spec_sha256 与身份行一致。
 
-    身份清单的 ``episode`` 字段依导出时的 ``XHARD0_IN_TEST_HARD`` 开关而定（开时每任务前 12 局是 xhard0，V9 局号整体 +12）；
-    与评估客户端所用 builder 的开关不一致时，局号会整体错位，客户端只能在开跑后以 IDENTITY_MISMATCH 拦下（2026-10-05 GL 实测）。
-    这里在写分片前就拦住：任一行不符即 ManifestError(stage=builder)。"""
+    身份清单的 ``episode`` 是导出时 builder 的局号；与评估客户端所用 builder 的编号不一致（如旧开关时代每任务前置 12 局
+    xhard0，局号整体 +12）时，客户端只能在开跑后以 IDENTITY_MISMATCH 拦下（2026-10-05 GL 实测）。这里在写分片前就拦住：
+    任一行不符即 ManifestError(stage=builder)。"""
     make = builder_factory or v9_builder
     builders: dict = {}
     bad: list[str] = []
@@ -432,7 +471,7 @@ def verify_builder_episodes(rows: list[dict], builder_factory=None) -> None:
             bad.append(f"{r['key']}@{r['builder_episode']}")
     if bad:
         raise ManifestError("builder", f"builder 解析与身份行不符 {len(bad)} 行，例 {bad[:3]}（身份清单导出时的 "
-                            f"XHARD0_IN_TEST_HARD 开关与当前不一致？）", total=len(rows), mismatch=len(bad))
+                            f"builder 局号与当前不一致？）", total=len(rows), mismatch=len(bad))
 
 
 def build_v9_full(identities: Path, delivery_path: Path, shards: int,

@@ -31,7 +31,7 @@
 #   MANIFEST=<清单 jsonl> SHARD=<i> PORT=<端口> RUN_TAG=<标签> ORIG_STAGE_ROOT=<本轮 stage 根> SAVE_ROOT=<新目录> \
 #   REC_ROOT=<新目录> [NODE_TMP=<节点本地目录>] [VIDEO_DIR=<目录>] [ONLY_TASKS=a,b] [ORIG_FRAMESAMP_MODUL_CLIENT_PY=<python>] \
 #   [MME_VLA_PY=<python>] [SERVER_REPO=<目录>] [FRAMESAMP_MODUL_ORIG_REPO=<原版工作树>] [ORIG_RESUME=1] [BUDGET_LEDGER_ARGS=...] \
-#   [V75_ENCODE_CPUS=<代理记账编码核，默认 CPU 亲和集合最后一核>] bash scripts/eval-official/orig_observer/run_orig_framesamp_modul.sh
+#   [V75_ENCODE_CPUS=<代理记账编码核，默认 CPU 亲和集合最后一核>] bash dev-scripts/orig/orig_observer/run_orig_framesamp_modul.sh
 set -uo pipefail
 OBS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCH_REPO="$(cd "$OBS_DIR/../../.." && pwd)"

@@ -114,17 +114,38 @@ MEDIA_FILES = ("front.mkv", "wrist.mkv")
 
 # ---------------------------------------------------------------- 读入
 
-def official_defs():
-    """同目录 ``official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
+def hard_specs_path() -> Path:
+    """子模块里 ``hard_specs.py`` 的位置：优先评估仓 ``third_party/robomme_benchmark/src/``；子模块未检出（如 git
+    worktree）时按已安装 ``robomme_hard`` 包的位置找（``find_spec`` 只定位、不执行包的 ``__init__``）。"""
+    p = Path(__file__).resolve().parents[2] / "third_party" / "robomme_benchmark" / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+    if p.is_file():
+        return p
     import importlib.util
-    import sys
+
+    spec = importlib.util.find_spec("robomme_hard")
+    if spec is not None and spec.submodule_search_locations:
+        cand = Path(list(spec.submodule_search_locations)[0]) / "env_record_wrapper" / "hard_specs.py"
+        if cand.is_file():
+            return cand
+    return p
+
+
+def official_defs():
+    """评估包里的别名表 ``robomme_hard_eval.models._official_defs``（旧名别名表的唯一来源；模块名 ``official_defs``，
+    已加载则复用同一模块）。"""
+    import importlib.util
 
     mod = sys.modules.get("official_defs")
-    if mod is None:
-        spec = importlib.util.spec_from_file_location("official_defs", Path(__file__).resolve().parent / "official_defs.py")
+    if mod is None or not hasattr(mod, "canonical_row"):
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod
-        spec.loader.exec_module(mod)
+        try:
+            spec.loader.exec_module(mod)
+        except BaseException:
+            sys.modules.pop("official_defs", None)
+            raise
     return mod
 
 
@@ -1116,7 +1137,7 @@ def build_reuse(rep: dict, manifest_path: Path, reuse_dir: Path, reuse_manifest:
     """读 reused.json（唯一复用依据）→ 对齐 V8 manifest → 取 V8 账本 accepted 终态 → 800 局总表。只读 V8。
 
     800 局总表另与交付格表 ``hard_specs.V9_CELLS`` 逐格比分母（每个模型各比一次）：缺格、多格或某格局数不等都记
-    count_mismatch。``hs`` 缺省时按文件路径加载 ``src/robomme_hard/env_record_wrapper/hard_specs.py``（只依赖标准库，
+    count_mismatch。``hs`` 缺省时按文件路径加载子模块 ``third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py``（只依赖标准库，
     不 import robomme_hard 包、不触发 sapien）。"""
     mismatch: list[str] = []
     if hs is None:
@@ -1125,8 +1146,7 @@ def build_reuse(rep: dict, manifest_path: Path, reuse_dir: Path, reuse_manifest:
         name = "_v8_report_hard_specs"
         hs = sys.modules.get(name)
         if hs is None:
-            hs_path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
-            spec = importlib.util.spec_from_file_location(name, hs_path)
+            spec = importlib.util.spec_from_file_location(name, hard_specs_path())
             hs = importlib.util.module_from_spec(spec)
             sys.modules[name] = hs
             spec.loader.exec_module(hs)
@@ -1226,12 +1246,12 @@ _DECODE: dict[str, Any] = {}
 
 
 def video_mover_mod():
-    """只读复用 scripts/injection-dev/eval_video_mover.py 的解码器选择与帧数缓存（V8 视频核对逻辑）。"""
+    """只读复用同目录 ``eval_video_mover.py`` 的解码器选择与帧数缓存（V8 视频核对逻辑）。"""
     global _MOVER
     if _MOVER is None:
         import importlib.util
 
-        path = Path(__file__).resolve().parents[1] / "injection-dev" / "eval_video_mover.py"
+        path = Path(__file__).resolve().parent / "eval_video_mover.py"
         spec = importlib.util.spec_from_file_location("eval_video_mover_for_v9_report", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

@@ -169,7 +169,7 @@ runner_script_of() { if [[ "$1" == "groundsg" ]]; then echo official_hard_runner
 build_runner_cmd() {  # $1 = 尝试号；$2 = 逗号分隔 key；$3 = 端口 → 设 RUN_ENV、RUN_ARGV（不启动）
   RUN_ENV=(PYTHONUNBUFFERED=1)
   [[ "$POLICY" == "groundsg" ]] && RUN_ENV+=(USE_HF=1 HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}")
-  RUN_ARGV=("$SGEVAL_CLIENT_PY" "scripts/eval-official/$(runner_script_of "$POLICY")" --shard "$SHARD" --out "$RUN_OUT"
+  RUN_ARGV=("$SGEVAL_CLIENT_PY" "dev-scripts/orig/$(runner_script_of "$POLICY")" --shard "$SHARD" --out "$RUN_OUT"
             --host 127.0.0.1 --port "$3" --max-steps "$MAX_STEPS" --attempt "$1" --only "$2")
   if [[ "$POLICY" == "groundsg" ]]; then
     RUN_ARGV+=(--variant "$GROUNDSG_VARIANT")
@@ -450,10 +450,10 @@ pp_py=$PP_PY no_proxy=127.0.0.1,localhost hf_home=${HF_HOME:-unset} host=$(hostn
   esac
   [[ -x "$SGEVAL_CLIENT_PY" ]] || { echo "RUN_BLOCKED reason=client_py_missing py=$SGEVAL_CLIENT_PY"; official_finalize fail 3; }
   [[ -f "$SHARD" ]] || { echo "RUN_BLOCKED reason=shard_missing $SHARD"; official_finalize fail 3; }
-  [[ -f "$REPO/scripts/eval-official/$(runner_script_of "$POLICY")" ]] \
+  [[ -f "$REPO/dev-scripts/orig/$(runner_script_of "$POLICY")" ]] \
     || { echo "RUN_BLOCKED reason=runner_missing $(runner_script_of "$POLICY")"; official_finalize fail 3; }
   local imp
-  imp="$( cd "$REPO" && env "${NOPROXY_ENV[@]}" "$SGEVAL_CLIENT_PY" "scripts/eval-official/$(runner_script_of "$POLICY")" --check-imports 2>&1 )" \
+  imp="$( cd "$REPO" && env "${NOPROXY_ENV[@]}" "$SGEVAL_CLIENT_PY" "dev-scripts/orig/$(runner_script_of "$POLICY")" --check-imports 2>&1 )" \
     || { echo "$imp" | tail -n 5; echo "RUN_BLOCKED reason=official_imports"; official_finalize fail 3; }
   echo "$imp" | tail -n 1
   # 续跑：节点上没有结果文件时从 NFS 副本恢复（含 server-epochs.tsv）

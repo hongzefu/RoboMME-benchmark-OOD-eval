@@ -82,24 +82,38 @@ PROBLEM_KEYS = ("missing", "ambiguous", "accept_without_row", "conflict", "name_
                 "missing_published", "index_mismatch", "extra_files")
 
 
-def _load(name: str, filename: str):
+def _load(name: str, filename):
+    """按路径加载模块（``filename`` 为相对本目录的文件名或绝对路径）；已加载则复用。"""
     mod = sys.modules.get(name)
     if mod is None:
         spec = importlib.util.spec_from_file_location(name, HERE / filename)
         mod = importlib.util.module_from_spec(spec)
         sys.modules[name] = mod
-        spec.loader.exec_module(mod)
+        try:
+            spec.loader.exec_module(mod)
+        except BaseException:
+            sys.modules.pop(name, None)
+            raise
     return mod
 
 
 def official_defs():
-    """同目录 ``official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
-    return _load("official_defs", "official_defs.py")
+    """评估包 ``robomme_hard_eval/models/_official_defs.py``（旧名别名表的唯一来源；模块名 ``official_defs``，已加载则复用）。"""
+    mod = sys.modules.get("official_defs")
+    if mod is not None and hasattr(mod, "canonical_row"):
+        return mod
+    sys.modules.pop("official_defs", None)
+    return _load("official_defs", HERE.parents[1] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py")
 
 
 def safe_filename(full_name: str) -> str:
     """与重绘器同一实现（超 255 字节截断加 ``__<sha16>.mp4``）。"""
-    return _load("publish_render_official_video", "render_official_video.py").safe_filename(full_name)
+    src = str(HERE.parents[1] / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from robomme_hard_eval.record.official_render import safe_filename as _safe
+
+    return _safe(full_name)
 
 
 def sha256_file(path: Path) -> str:
