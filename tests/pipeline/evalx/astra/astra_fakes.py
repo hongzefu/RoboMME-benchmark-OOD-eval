@@ -1,7 +1,11 @@
-"""S5 Astra 测试的公共替身：规划、监视、VLA、环境全部替身，零外联。
+"""Astra 测试的公共替身：规划、监视、VLA、环境、两个服务端全部替身，零外联、零费用、零 GPU。
 
-Astra 上游源码只读引用 ``$SGEVAL_THIRD_PARTY/Astra-on-RoboMME``，未设时取当前检出的 ``third_party``（worktree 里子模块为空，
-须显式指向主检出）；源码不在时直接失败（不 skip）。所读上游文件逐个打印 sha256。
+被测对象是评估仓的 ``robomme_hard_eval.models.astra.AstraPolicy``（模型侧 4 方法），外层用真实的
+``robomme_hard_eval.episode.run_episode``（builder 是真实 ``BenchmarkEnvBuilder`` 的子类，只把
+``make_env_for_episode`` 打桩成 ``FakeEnv``；录制器是 ``FakeRecorder``，不出网站视频）。
+
+Astra 上游源码只读引用 ``$SGEVAL_THIRD_PARTY/Astra-on-RoboMME``；未设时取当前检出的 ``third_party``，worktree 里
+子模块为空时退回主检出（``git rev-parse --git-common-dir`` 的上一层）；都不在时直接失败（不 skip）。
 """
 from __future__ import annotations
 
@@ -9,30 +13,50 @@ import contextlib
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 
-from tests._support.loaders import REPO, load_script
+from tests._support.loaders import REPO
 
 ASTRA_MODULES = ("runner", "core", "api_client", "release_utils", "input_contract", "train_entry")
 #: 上游 runner.episode 默认的单局规划次数上限
 MAX_PLANNER_CALLS = 24
+FAKE_KEY = "sk-test-placeholder-not-a-real-key"
+PRICES = {"unit": "usd_per_1m_tokens", "input": 2.0, "cached_input": 0.5, "output": 8.0}
+
+
+def _main_checkout() -> Path | None:
+    try:
+        common = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                                capture_output=True, text=True, timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return Path(common).parent if common else None
+
+
+def third_party_dir() -> Path:
+    """第三方子模块目录：``SGEVAL_THIRD_PARTY`` > 当前检出 ``third_party``（子模块已初始化时）> 主检出 ``third_party``。"""
+    value = os.environ.get("SGEVAL_THIRD_PARTY")
+    if value:
+        return Path(value)
+    here = REPO / "third_party"
+    if (here / "Astra-on-RoboMME" / "examples" / "champ" / "runner.py").is_file():
+        return here
+    main = _main_checkout()
+    return (main / "third_party") if main is not None else here
 
 
 def third_party() -> Path:
-    # 未设 SGEVAL_THIRD_PARTY 时取当前检出的 third_party（主检出日常门禁即走此路）；worktree 里子模块为空，
-    # 须显式设为主检出路径，否则下面的断言直接失败（不 skip）。
-    value = os.environ.get("SGEVAL_THIRD_PARTY") or str(REPO / "third_party")
-    root = Path(value) / "Astra-on-RoboMME"
+    root = third_party_dir() / "Astra-on-RoboMME"
     assert (root / "examples" / "champ" / "runner.py").is_file(), f"Astra 上游源码不在 {root}"
     return root
 
 
-def print_upstream_digests(runner_mod) -> dict:
+def print_upstream_digests() -> dict:
     champ = third_party() / "examples" / "champ"
     files = ("run.sh", "runner.py", "api_client.py", "core.py", "input_contract.py", "release_utils.py",
              "prepare_cases.py", "weights.json")
@@ -44,18 +68,25 @@ def print_upstream_digests(runner_mod) -> dict:
 
 
 def load_runner():
-    return load_script("eval-official/astra_hard_runner.py")
+    from robomme_hard_eval.models import astra
+
+    return astra
 
 
 def load_guard():
-    return load_script("eval-official/astra_cost_guard.py")
+    from robomme_hard_eval.servers import astra_cost_guard
+
+    return astra_cost_guard
 
 
 @contextlib.contextmanager
 def astra_session():
-    """导入 Astra 上游模块并在退出时恢复 ``sys.path`` 与 ``sys.modules``，避免污染同一 pytest 会话的其他测试。"""
+    """导入 Astra 上游模块并在退出时恢复 ``sys.path`` 与 ``sys.modules``，避免污染同一 pytest 会话的其他测试。
+    ``SGEVAL_THIRD_PARTY`` 在会话内指向 ``third_party_dir()``（被测模块按它找子模块与环境源）。"""
     saved_path = list(sys.path)
-    saved_mods = {name: sys.modules.get(name) for name in (*ASTRA_MODULES, "trace_writer")}
+    saved_mods = {name: sys.modules.get(name) for name in (*ASTRA_MODULES, "openpi_client")}
+    saved_env = os.environ.get("SGEVAL_THIRD_PARTY")
+    os.environ["SGEVAL_THIRD_PARTY"] = str(third_party_dir())
     mod = load_runner()
     try:
         astra = mod.bootstrap(third_party())
@@ -67,6 +98,10 @@ def astra_session():
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = old
+        if saved_env is None:
+            os.environ.pop("SGEVAL_THIRD_PARTY", None)
+        else:
+            os.environ["SGEVAL_THIRD_PARTY"] = saved_env
 
 
 class NetCounter:
@@ -102,6 +137,7 @@ class FakeEnv:
         self.demo_frames = demo_frames
         self.step_error_at = step_error_at
         self.closed = False
+        self.close_calls = 0
         self.steps_taken = 0
 
     def _obs(self, n: int) -> dict:
@@ -125,10 +161,11 @@ class FakeEnv:
 
     def close(self):
         self.closed = True
+        self.close_calls += 1
 
 
 def recording_builder_cls(env_plan=None):
-    """真实 S1 ``BenchmarkEnvBuilder`` 的子类：构造参数照常走真实校验并被记录；``make_env_for_episode`` 打桩。
+    """真实 ``BenchmarkEnvBuilder`` 的子类：构造参数照常走真实校验并被记录；``make_env_for_episode`` 打桩。
 
     ``env_plan``：可调用 ``(builder, episode) -> FakeEnv``，或抛异常模拟基础设施故障。
     """
@@ -155,6 +192,47 @@ def recording_builder_cls(env_plan=None):
     return RecordingBuilder
 
 
+class FakeRecorder:
+    """外层录制器替身（接口同 ``record.recorder.EpisodeRecorder``）：只计数。"""
+
+    instances: list = []
+
+    def __init__(self, raw, meta):
+        self.raw, self.meta = Path(raw), meta
+        self.frames = {"front": 0, "wrist": 0}
+        self.arrays: list = []
+        self.events: list = []
+        self.summary = None
+        FakeRecorder.instances.append(self)
+
+    def set_phase(self, phase):
+        pass
+
+    def add_frames(self, stream, frames, *, tag=""):
+        self.frames[stream] += len(frames) if getattr(frames, "ndim", 4) == 4 else 1
+        return []
+
+    def add_array(self, name, arr, *, step=None):
+        self.arrays.append((name, step))
+
+    def add_event(self, event):
+        self.events.append(event)
+
+    def close(self, summary):
+        self.summary = summary
+        return {"RECORDER_VERIFY": "PASS"}
+
+
+class NullWriter:
+    """``imageio.get_writer`` 替身（Astra 自写的 rollout.mp4 不真编码）。"""
+
+    def append_data(self, frame):
+        pass
+
+    def close(self):
+        pass
+
+
 # ── 监视器、VLA、规划应答替身 ───────────────────────────────────────────
 
 class FakeMonitor:
@@ -178,9 +256,10 @@ class FakeMonitor:
 
 
 class FakeVLA:
-    def __init__(self) -> None:
+    def __init__(self, fail_at: int | None = None) -> None:
         self.infers = 0
         self.resets = 0
+        self.fail_at = fail_at
 
     def reset(self):
         self.resets += 1
@@ -188,6 +267,8 @@ class FakeVLA:
     def infer(self, element):
         self.infers += 1
         assert element["observation/image"].shape == (256, 256, 3)
+        if self.fail_at is not None and self.infers == self.fail_at:
+            raise ConnectionError("fake VLA websocket dropped")
         return {"actions": np.zeros((16, 8), dtype=np.float32)}
 
 
@@ -238,90 +319,194 @@ class FakeResponder:
             self.after_write(out)
 
 
-def make_args(tmp: Path, cases_path: Path, *, max_steps: int, group: str = "group_0", run: str = "run",
-              max_planner_calls: int = MAX_PLANNER_CALLS, policy_seed=7) -> SimpleNamespace:
-    run_dir = tmp / group / run
-    vla = tmp / "ckpt" / "symbolic-grounded-subgoal" / "79999"
-    return SimpleNamespace(cases=str(cases_path), output=str(run_dir / "results"), spool=str(run_dir / "planner_calls"),
-                           max_steps=max_steps, max_planner_calls=max_planner_calls, vla_checkpoint=str(vla),
-                           monitor_adapter=str(tmp / "ckpt" / "monitor"), monitor_base="fake-base", port=0,
-                           trace_root=None, policy_seed=policy_seed)
+# ── 两个服务端替身 ─────────────────────────────────────────────────────────
+
+class FakeServer:
+    """``ServerProcess`` 替身：只记构造参数与 start／check／stop 次数，不起进程。``LOG`` 记全局先后次序。"""
+
+    instances: list = []
+    LOG: list = []
+
+    def __init__(self, argv, env=None, cwd=None, gpu=None, ready=None, *, port, metadata_dir, policy_seed=None,
+                 ckpt=None, log_path=None, name="server", ready_timeout_s=0.0, ready_poll_s=0.5, state_path=None):
+        self.argv, self.env, self.cwd, self.gpu, self.ready = list(argv), dict(env or {}), cwd, gpu, ready
+        self.port, self.metadata_dir, self.policy_seed, self.ckpt = port, Path(metadata_dir), policy_seed, ckpt
+        self.log_path, self.name, self.ready_timeout_s, self.state_path = log_path, name, ready_timeout_s, state_path
+        self.starts = self.stops = self.checks = 0
+        self.dead = False
+        self.pid = None
+        self.metadata = None
+        FakeServer.instances.append(self)
+
+    def start(self):
+        self.starts += 1
+        self.pid = 40000 + len(FakeServer.instances)
+        self.metadata = {"pid": self.pid, "policy_seed": self.policy_seed, "argv": self.argv, "port": self.port}
+        FakeServer.LOG.append(("start", self.name))
+        return self
+
+    def alive(self) -> bool:
+        return not self.dead
+
+    def check(self):
+        self.checks += 1
+        if self.dead:
+            from robomme_hard_eval.policy import ServerDead
+            raise ServerDead(f"{self.name} 服务端已退出（替身）")
+
+    def stop(self, **k):
+        self.stops += 1
+        FakeServer.LOG.append(("stop", self.name))
+        return "term"
+
+    def left_line(self) -> str:
+        return f"SERVER_LEFT pid={self.pid} port={self.port} metadata=x stop=\"x\""
 
 
-def make_deps(astra, builder_cls, *, monitor=None, vla=None, responder=None, check_calls=None):
-    """测试依赖：``validate_checkpoints`` 换成记录调用的替身（真实校验另有用例证明会被调用并拒绝假目录）。"""
-    if check_calls is not None:
-        astra.release_utils.validate_checkpoints = lambda v, m: check_calls.append((v, m))
-    return SimpleNamespace(astra=astra, builder_cls=builder_cls,
-                           make_client=lambda: vla, make_monitor=lambda base, adapter: monitor,
-                           make_responder=lambda: responder)
+def _argv_value(argv: list, flag: str) -> str:
+    return argv[argv.index(flag) + 1]
 
 
-def write_cases(path: Path, document: dict) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(document))
-    return path
+class FakeGuardServer(FakeServer):
+    """费用守卫替身：不起进程，``start``／``check`` 在进程内跑一轮真实 ``guard_round``（扫 spool、写心跳状态与
+    STOP），等同于一个刚好在这一刻扫过一轮的守卫。参数从守卫 argv 里取（``--root``／``--prices``／``--ledger``／
+    ``--state``／``--cap``），因此同时核对了 argv 的形状。"""
+
+    def start(self):
+        super().start()
+        guard = load_guard()
+        self.root = Path(_argv_value(self.argv, "--root"))
+        self.prices = guard.load_prices(Path(_argv_value(self.argv, "--prices")))
+        self.ledger_path = Path(_argv_value(self.argv, "--ledger"))
+        self.state = Path(_argv_value(self.argv, "--state"))
+        self.cap = float(_argv_value(self.argv, "--cap"))
+        self.ledger = guard.load_ledger(self.ledger_path)
+        self.round()
+        return self
+
+    def round(self) -> dict:
+        guard = load_guard()
+        summary = guard.guard_round([self.root], self.ledger, self.prices, self.cap, 2048, self.state)
+        guard.save_ledger(self.ledger_path, self.ledger)
+        return summary
+
+    def check(self):
+        super().check()
+        self.round()
 
 
-# ── 语言账本（冻结说明五）：R6 的 trace_writer.LanguageLog 在时用真实实现，不在时用按冻结签名写的测试替身 ─────
+# ── AstraPolicy 夹具 ────────────────────────────────────────────────────────
 
-class SpecLanguageLog:
-    """按 ``docs/plans/1006-stage3-interface-freeze.md`` 第五节签名写的测试替身（只在 R6 未合入时顶替）。"""
+class Harness:
+    """搭一个全替身的 ``AstraPolicy``（经 ``load_policy("astra", …)``）与外层 ``run_episode``。
 
-    def __init__(self, path) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._fh = self.path.open("a", encoding="utf-8")
-        self._n = 0
-        self._open: dict = {}
+    替身：两个服务端（``FakeServer``／``FakeGuardServer``）、``validate_checkpoints``、监视器、VLA 客户端、规划应答
+    （``responder=None`` 时不替换，用真实 ``GuardedResponsesClient``，须配 ``NetCounter``）、外层 builder 与录制器。"""
 
-    def _write(self, row: dict) -> None:
-        import time
-        row["ts"] = time.time()
-        self._fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        self._fh.flush()
+    def __init__(self, tmp_path: Path, monkeypatch, mod, astra, *, env_plan=None, monitor=None, vla=None,
+                 responder="fake", prices=None, max_episodes: int | None = None, **cfg) -> None:
+        from robomme_hard_eval import episode as E
 
-    def open_call(self, model, step, *, params=None, transport_attempt=0, retry=0):
-        self._n += 1
-        call_id = f"c{self._n:05d}"
-        self._open[call_id] = 0
-        self._write({"kind": "call_open", "call_id": call_id, "model": model, "step": step, "params": params,
-                     "transport_attempt": transport_attempt, "retry": retry})
-        return call_id
+        self.tmp, self.mod, self.astra, self.E = Path(tmp_path), mod, astra, E
+        monkeypatch.setattr(astra.runner.imageio, "get_writer", lambda *a, **k: NullWriter())
+        self.check_calls: list = []
+        monkeypatch.setattr(astra.release_utils, "validate_checkpoints",
+                            lambda v, m: self.check_calls.append((v, m)))
+        monkeypatch.setenv("OPENAI_API_KEY", FAKE_KEY)
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "set-by-test")
+        monkeypatch.setattr(FakeServer, "instances", [])
+        monkeypatch.setattr(FakeServer, "LOG", [])
+        monkeypatch.setattr(mod.AstraPolicy, "guard_server_cls", FakeGuardServer)
+        monkeypatch.setattr(mod.AstraPolicy, "vla_server_cls", FakeServer)
+        self.monitor = monitor if monitor is not None else FakeMonitor()
+        self.vla = vla if vla is not None else FakeVLA()
+        self.monitor_calls: list = []
 
-    def message(self, call_id, *, dir, role, text, images=None, channel=None, token_ids=None, mask=None,
-                tokenizer=None, truncated=None, demo_video=None):
-        idx = self._open[call_id]
-        self._open[call_id] += 1
-        self._write({"kind": "message", "call_id": call_id, "message_index": idx, "dir": dir, "role": role,
-                     "text": text, "images": images, "channel": channel, "token_ids": token_ids, "mask": mask,
-                     "tokenizer": tokenizer, "truncated": truncated, "demo_video": demo_video})
-        return idx
+        def make_monitor(policy, base, adapter):
+            self.monitor_calls.append((base, adapter, os.environ.get("CUDA_VISIBLE_DEVICES")))
+            return self.monitor
 
-    def close_call(self, call_id, *, status, parsed=None, fallback=None, server_final_text=None,
-                   server_truncated=None):
-        self._open.pop(call_id, None)
-        self._write({"kind": "call_close", "call_id": call_id, "status": status, "parsed": parsed,
-                     "fallback": fallback, "server_final_text": server_final_text,
-                     "server_truncated": server_truncated})
+        monkeypatch.setattr(mod.AstraPolicy, "make_monitor", make_monitor)
+        monkeypatch.setattr(mod.AstraPolicy, "make_client", lambda policy, port: self.vla)
+        if responder == "fake":
+            responder = FakeResponder(astra.champ)
+        self.responder = responder
+        if responder is not None:
+            monkeypatch.setattr(mod.AstraPolicy, "make_responder", lambda policy, key, gate: self.responder)
+        if max_episodes is not None:
+            monkeypatch.setattr(mod.guard_module(), "ASTRA_MAX_EPISODES", int(max_episodes))
+        self.cls = recording_builder_cls(env_plan)
+        monkeypatch.setattr(E, "BUILDER_FACTORY",
+                            lambda task, dataset, ms: self.cls(task, dataset=dataset, action_space="joint_angle",
+                                                               gui_render=False, max_steps=ms))
+        monkeypatch.setattr(E, "_BUILDERS", {})
+        monkeypatch.setattr(FakeRecorder, "instances", [])
+        work = self.tmp / "astra-cost"
+        work.mkdir(parents=True, exist_ok=True)
+        self.prices_path = work / "prices.json"
+        self.prices_path.write_text(json.dumps(prices or PRICES))
+        self.ledger = work / "ledger.json"
+        self.out = self.tmp / "out"
+        self.cfg = {"gpus": [0, 1], "astra_ledger": str(self.ledger), "astra_prices": str(self.prices_path),
+                    "ckpt": str(self.tmp / "ckpt" / "symbolic-grounded-subgoal" / "79999"),
+                    "astra_monitor_adapter": str(self.tmp / "ckpt" / "monitor"), "astra_monitor_base": "fake-base",
+                    "astra_vla_python": str(self.tmp / "vla-venv" / "bin" / "python"), **cfg}
+        self.policy = None
 
-    def reuse(self, step, reused_call_id):
-        self._write({"kind": "reuse", "step": step, "reused_call_id": reused_call_id, "reused_previous": True})
+    @property
+    def group(self) -> Path:
+        return self.ledger.parent / "group_0"
 
-    def close(self):
-        for call_id in list(self._open):
-            self.close_call(call_id, status="cancelled")
-        self._fh.close()
+    def load(self, seed: int = 7):
+        from robomme_hard_eval.policy import load_policy
 
+        self.policy = load_policy("astra", seed, **self.cfg)
+        return self.policy
+
+    def servers(self) -> dict:
+        return {s.name: s for s in FakeServer.instances}
+
+    def run(self, dataset: str, task: str, episode: int = 0, *, attempt: int = 1):
+        return self.E.run_episode(self.policy, dataset, task, episode, self.out, attempt=attempt,
+                                  recorder_factory=FakeRecorder, render=False)
+
+    def batch(self, dataset: str, tasks: list, episode: int = 0):
+        """仿 ``scripts/evaluate.py`` 主循环：逐局 ``run_episode``，``AstraStop`` 即整批停。返回 (结果列表, 停机异常)。"""
+        from robomme_hard_eval.policy import AstraStop
+
+        results = []
+        try:
+            for task in tasks:
+                results.append(self.run(dataset, task, episode))
+        except AstraStop as exc:
+            return results, exc
+        return results, None
+
+    def raw(self, result) -> Path:
+        return self.out / "rollouts" / "astra" / result.dataset / f"seed{result.policy_seed}" / result.raw_dir
+
+    def astra_ep_dir(self, result) -> Path:
+        return self.raw(result) / "astra" / result.task / f"ep{result.episode:03d}"
+
+    def attempt_dir(self, result) -> Path:
+        return self.astra_ep_dir(result) / f"{result.key}.a{result.attempt}"
+
+    def ran(self) -> list:
+        return [c["env_id"] for c in self.cls.make_calls]
+
+
+def read_trace(path) -> list[dict]:
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+
+# ── 语言账本 ────────────────────────────────────────────────────────────
 
 def ensure_language_log(monkeypatch) -> str:
-    """``trace_writer.LanguageLog`` 存在（R6 已合入）时用真实实现，否则临时装上 ``SpecLanguageLog``；返回 real|spec。
-    须在 ``astra_session()`` 之内调用（``trace_writer`` 由 bootstrap 放上 ``sys.path``）。"""
-    import trace_writer as tw
-    if getattr(tw, "LanguageLog", None) is not None and tw.LanguageLog is not SpecLanguageLog:
-        return "real"
-    monkeypatch.setattr(tw, "LanguageLog", SpecLanguageLog, raising=False)
-    return "spec"
+    """评估仓的 ``trace_writer.LanguageLog`` 恒存在：返回 ``real``（保留旧接口以免改动调用点）。"""
+    from robomme_hard_eval.record import trace_writer as tw
+
+    assert getattr(tw, "LanguageLog", None) is not None
+    return "real"
 
 
 def read_language(path) -> list[dict]:
