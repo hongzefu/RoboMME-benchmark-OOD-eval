@@ -46,7 +46,8 @@ IO 层（WSPolicyConn）分开，单测用假 session / 假连接直接驱动。
 from __future__ import annotations
 
 import hashlib
-import importlib.util
+import importlib
+import os
 import re
 import sys
 import time
@@ -315,15 +316,19 @@ AUDIT_KEY = "_sgeval_audit"
 _TAG_ATTEMPT = re.compile(r"\.a(\d+)$")
 
 
+#: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
+SIBLINGS = {"smvla_client": "robomme_hard_eval.models.smvla",
+            "groundsg_client": "robomme_hard_eval.models.groundsg",
+            "framesamp_modul_client": "robomme_hard_eval.models.framesamp_modul",
+            "official_defs": "robomme_hard_eval.models._official_defs",
+            "trace_writer": "robomme_hard_eval.record.trace_writer"}
+
+
 def load_sibling(name: str):
-    """按文件路径加载本目录下的模块（别名与 env_client／groundsg_client 的 load_sibling 相同，已加载则复用）。"""
-    if name in sys.modules:
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parent / f"{name}.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """取旧仓同目录模块在评估包里的对应模块（包内 import，已导入则复用）。"""
+    if name not in SIBLINGS:
+        raise ModuleNotFoundError(f"未登记的同伴模块 {name!r}，可选：{', '.join(SIBLINGS)}")
+    return importlib.import_module(SIBLINGS[name])
 
 
 def episode_attempt(tag: str | None) -> int:
@@ -854,3 +859,75 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                     session_steps=getattr(session, "steps", None))
         out["trace_path"] = str(trace.path)
     return out
+
+
+# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+
+from robomme_hard_eval import servers as _servers  # noqa: E402
+from robomme_hard_eval.policy import Ready  # noqa: E402
+
+
+def smvla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
+    """SimpleMemVLA 服务端的命令、环境与 cwd，照抄旧 ``run_seat.sh::build_server_cmd`` 的 smvla 分支：
+    ``<smvla-env 解释器> servers/smvla_server.py serve --port --ckpt --warmup [--det] --policy-seed --metadata_out``，
+    cwd 为评估仓根，``OMP_NUM_THREADS=1`` 等固定变量。解释器取 ``cfg["smvla_py"]`` → 环境变量 ``SMVLA_PY`` →
+    ``envs/smvla-env/.venv/bin/python``。"""
+    S = _servers
+    cfg = policy.cfg
+    py = S.interpreter(cfg, "smvla_py", "SMVLA_PY", policy.root / "envs" / "smvla-env" / ".venv" / "bin" / "python")
+    det = S.flag_on(cfg.get("det", False))
+    env = {"CUBLAS_WORKSPACE_CONFIG": ":4096:8"} if det else {}
+    env.update(PYTHONUNBUFFERED="1", OMP_NUM_THREADS="1", TOKENIZERS_PARALLELISM="false", PYTHONUTF8="1",
+               PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True", MPLBACKEND="Agg")
+    argv = [str(py), str(S.SERVERS_DIR / "smvla_server.py"), "serve", "--port", str(int(policy.port)), "--ckpt",
+            str(ckpt), "--warmup", *(["--det"] if det else []), "--policy-seed", str(int(policy.policy_seed)),
+            "--metadata_out", str(policy.wrap_meta)]
+    return argv, env, policy.root
+
+
+class SmvlaPolicy(_servers.ServedPolicy):
+    """SimpleMemVLA（``smvla``）。
+
+    * ``load``：用 ``envs/smvla-env`` 的解释器起 ``servers/smvla_server.py``（服务端自带 ``--warmup``，就绪 = 端口在听），
+      核服务外壳元数据的 ``policy_seed``，后台 ckpt 指纹；
+    * ``reset(spec)``：不发消息、不碰环境——只探活并记下本局身份；
+    * ``play``：原样调本模块 ``run_episode``（``max_steps=spec.max_steps``、``reset_retries=0``，与旧席位相同）：先
+      ``session.reset()``，再连服务端发带 ``episode_key`` 的 ``reset``（触发 ``reseed``），沿用旧次序；会话经
+      ``SessionNoClose`` 交出，reset 失败时旧代码的 ``env.close()`` 不关外层环境；
+    * ``close``：停服务端进程组（基类）。
+
+    可选 cfg：``ckpt``（缺省旧 run_seat.sh 的 NFS 路径）、``smvla_py``、``det``。客户端进程宜以 ``OMP_NUM_THREADS=1``
+    启动（旧席位如此；进程内已加载 numpy 后再设无效，这里只核对并告警）。"""
+
+    model = "smvla"
+
+    def __init__(self, policy_seed: int, **cfg: Any):
+        super().__init__(policy_seed, **cfg)
+        self.ckpt: Path | None = None
+        self.current_spec = None
+
+    def load(self) -> None:
+        S = _servers
+        self.ckpt = Path(self.cfg.get("ckpt") or S.DEFAULT_CKPTS[self.model])
+        self._pick_port()
+        argv, env, cwd = smvla_server_spec(self, self.ckpt)
+        if self.preflight:
+            py = Path(argv[0])
+            if not (py.is_file() and os.access(py, os.X_OK)):
+                raise S.PreflightError(f"RUN_BLOCKED reason=smvla_venv_missing {py}")
+            if not self.ckpt.is_dir():
+                raise S.PreflightError(f"RUN_BLOCKED reason=smvla_ckpt_missing ckpt={self.ckpt}")
+        omp = os.environ.get("OMP_NUM_THREADS")
+        if omp != "1":
+            print(f"SMVLA_CLIENT_OMP=WARN OMP_NUM_THREADS={omp!r}（旧席位客户端为 1）", flush=True)
+        self._launch(argv, env, cwd, [Ready.port()], self.ckpt)
+        self._fingerprint(self.ckpt)
+
+    def reset(self, spec) -> None:
+        super().reset(spec)
+        self.current_spec = spec
+
+    def play(self, session, spec, recorder) -> dict:
+        res = run_episode(_servers.SessionNoClose(session), spec.identity(), self._conn_info(spec), recorder,
+                          max_steps=int(spec.max_steps), reset_retries=0)
+        return self._finish_play(res)

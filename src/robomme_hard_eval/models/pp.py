@@ -74,21 +74,15 @@ PonderPounce 的噪声种子是 ``crc32(f"{seed}:{sid}:{n}")``，两侧各起自
 """
 from __future__ import annotations
 
+import math
+import os
+import re
 import sys
-from pathlib import Path as _Path
+import time
+from pathlib import Path
+from typing import Any, Callable
 
-_HERE = str(_Path(__file__).resolve().parent)
-# 本目录只挂在 sys.path 末尾，防止同目录模块遮蔽标准库
-sys.path[:] = [p for p in sys.path if p and str(_Path(p).resolve()) != _HERE] + [_HERE]
-
-import math  # noqa: E402
-import os  # noqa: E402
-import re  # noqa: E402
-import time  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any, Callable  # noqa: E402
-
-import numpy as np  # noqa: E402
+import numpy as np
 
 #: HELLO 握手里带的 benchmark 名，与 PonderPounce 官方 configs/robomme.yaml 的 ``benchmark`` 相同
 PP_BENCHMARK = "vla_eval.benchmarks.robomme.benchmark:RoboMMEBenchmark"
@@ -119,17 +113,10 @@ HELLO, OBSERVATION, ACTION, EPISODE_START, EPISODE_END, ERROR = (
 
 
 def load_trace_writer():
-    """同目录 ``trace_writer`` 模块：已导入则复用，否则按文件路径加载（不依赖调用时的 sys.path）。"""
-    mod = sys.modules.get("trace_writer")
-    if mod is not None:
-        return mod
-    import importlib.util
+    """评估包的 ``record.trace_writer`` 模块（包内 import，已导入则复用；单测可整体替换本函数）。"""
+    from robomme_hard_eval.record import trace_writer
 
-    spec = importlib.util.spec_from_file_location("trace_writer", Path(_HERE) / "trace_writer.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["trace_writer"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    return trace_writer
 
 
 #: 「未提供」哨兵（R2／C7）：即 ``trace_writer.UNSET``，与 ``None``（模型等待中）区分
@@ -891,3 +878,107 @@ def _rec_event(recorder, event: dict) -> None:
 def _rec_array(recorder, name: str, arr: np.ndarray, step: int) -> None:
     if recorder is not None and hasattr(recorder, "add_array"):
         recorder.add_array(name, arr, step=step)
+
+
+# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+
+from robomme_hard_eval import servers as _servers  # noqa: E402
+from robomme_hard_eval.policy import Ready  # noqa: E402
+
+
+def pp_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
+    """PonderPounce 服务端的命令、环境与 cwd，照抄旧 ``run_seat.sh::build_server_cmd`` 的 pp 分支：cwd 为
+    ``third_party/PonderPounce``，HF 离线（``HF_HOME`` 沿用调用方环境）；外壳打开（缺省，旧 GL 启动器
+    ``SGEVAL_PP_SERVER_WRAP=1``）时以绝对路径起本包 ``servers/pp_server_wrap.py``，否则 ``-m
+    ponderpounce.eval.robomme_server``；其后 ``--args.checkpoint_path --args.seed --args.device cuda:0 --port``。
+    解释器取 ``cfg["pp_py"]`` → 环境变量 ``PP_PY`` → ``third_party/PonderPounce/.venv/bin/python``。"""
+    S = _servers
+    cfg = policy.cfg
+    sub = policy.root / "third_party" / "PonderPounce"
+    py = S.interpreter(cfg, "pp_py", "PP_PY", sub / ".venv" / "bin" / "python")
+    env = {"PYTHONUNBUFFERED": "1",
+           "HF_HUB_OFFLINE": str(cfg.get("hf_hub_offline", os.environ.get("HF_HUB_OFFLINE", "1"))),
+           "TRANSFORMERS_OFFLINE": str(cfg.get("transformers_offline", os.environ.get("TRANSFORMERS_OFFLINE", "1"))),
+           PHASE2_ENV: "1" if policy.server_wrap else "0"}
+    if policy.server_wrap:
+        argv = [str(py), str(S.SERVERS_DIR / "pp_server_wrap.py"), f"--sgeval-metadata-out={policy.wrap_meta}"]
+    else:
+        argv = [str(py), "-m", "ponderpounce.eval.robomme_server"]
+    argv += ["--args.checkpoint_path", str(ckpt), "--args.seed", str(int(policy.policy_seed)), "--args.device",
+             "cuda:0", "--port", str(int(policy.port))]
+    return argv, env, sub
+
+
+class PPPolicy(_servers.ServedPolicy):
+    """PonderPounce（``pp``）。
+
+    * ``load``：预检（子模块、解释器、ckpt 与 ``norm_stats.json``、外壳）→ 起（或 attach）服务端，就绪 =
+      ``GET /health`` 返回 200；不加预热；核本进程能导入 ``vla_eval``（客户端须在 ``envs/client-env`` 里跑）；
+    * ``reset(spec)``：不发消息、不碰环境——探活后算本局 sid ``<task>|<source_episode 或 tier>|<seed>``；本服务进程
+      已用过它（只会在同一身份重跑、``spec.attempt > 1`` 时出现）才重起服务端（S3），保证服务端按
+      ``crc32(f"{seed}:{sid}:{n}")`` 取噪声时 ``n`` 从 0 开始；
+    * ``play``：原样调本模块 ``run_episode``（每局照旧发 ``EPISODE_START``，断线只在本局内重连一次），结果另记
+      ``pp_sid`` 与 ``pp_sid_use_index``（该 sid 在本服务进程里的使用序号）；
+    * ``close``：停服务端进程组（基类）。
+
+    必填 cfg：``ckpt``（PonderPounce 没有缺省 ckpt）。可选 ``pp_py``、``pp_server_wrap``（缺省开）、
+    ``pp_max_reconnects``（缺省 1）、``hf_hub_offline``、``transformers_offline``；``connection_factory`` 只供单测注入。"""
+
+    model = "pp"
+
+    def __init__(self, policy_seed: int, **cfg: Any):
+        super().__init__(policy_seed, **cfg)
+        self.server_wrap = _servers.flag_on(self.cfg.get("pp_server_wrap", True))
+        self.ckpt = self.cfg.get("ckpt") or _servers.DEFAULT_CKPTS[self.model]
+        self.sid_uses: dict[str, int] = {}   # 本服务进程里每个 sid 已发过 EPISODE_START 的次数
+        self.server_restarts = 0
+        self.current_sid: str | None = None
+        self._spec_argv: tuple | None = None
+
+    def load(self) -> None:
+        S = _servers
+        if not self.ckpt:
+            raise S.PreflightError("RUN_BLOCKED reason=pp_ckpt_missing ckpt=unset（PonderPounce 须显式给 ckpt）")
+        self._pick_port()
+        argv, env, cwd = pp_server_spec(self, self.ckpt)
+        if self.preflight:
+            S.preflight_pp(self.root, self.ckpt, Path(argv[0]), server_wrap=self.server_wrap, seed=self.policy_seed)
+            import importlib.util
+
+            if self.cfg.get("connection_factory") is None and importlib.util.find_spec("vla_eval") is None:
+                raise S.PreflightError("RUN_BLOCKED reason=client_env detail=本进程导入不了 vla_eval（PonderPounce 客户端须用 "
+                                       "envs/client-env/.venv 的解释器跑）")
+        self._spec_argv = (argv, env, cwd)
+        self._launch(argv, env, cwd, [Ready.health()], self.ckpt)
+        self._fingerprint(self.ckpt)
+
+    def _restart_server(self, why: str) -> None:
+        """重起服务端（同端口、同命令）：停旧进程组、新起并等 ``/health``，清空本进程 sid 使用表。"""
+        argv, env, cwd = self._spec_argv
+        print(f"PP_SERVER_RESTART reason={why} port={self.port}", flush=True)
+        if self.server is not None:
+            self.server.stop()
+        self._launch(argv, env, cwd, [Ready.health()], self.ckpt)
+        self.sid_uses.clear()
+        self.server_restarts += 1
+
+    def reset(self, spec) -> None:
+        super().reset(spec)
+        sid = fixed_sid(spec.identity(), spec.dataset)
+        if self.sid_uses.get(sid, 0) > 0:
+            self._restart_server(f"sid_reused sid={sid} attempt={spec.attempt}")
+        self.current_sid = sid
+
+    def play(self, session, spec, recorder) -> dict:
+        sid = fixed_sid(spec.identity(), spec.dataset)
+        use_index = self.sid_uses.get(sid, 0)
+        conn = self._conn_info(spec)
+        conn.update(pp_phase2=self.server_wrap, pp_max_reconnects=int(self.cfg.get("pp_max_reconnects",
+                                                                                   PP_MAX_RECONNECTS)))
+        try:
+            res = run_episode(session, spec.identity(), conn, recorder,
+                              connection_factory=self.cfg.get("connection_factory"))
+        finally:
+            self.sid_uses[sid] = use_index + 1  # 保守计：本局可能已发出 EPISODE_START
+        res.update(pp_sid=sid, pp_sid_use_index=use_index, pp_server_restarts=self.server_restarts)
+        return self._finish_play(res)
