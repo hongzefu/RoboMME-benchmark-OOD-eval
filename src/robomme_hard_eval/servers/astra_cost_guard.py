@@ -16,7 +16,7 @@
   ``response.json``；最坏花费＝已见最大输入 token × input 单价 + ``--max-output-tokens``(2048) × output 单价）。
   到线时在每个 ``group_*`` 目录（``--root`` 的祖先或子孙中名为 ``group_<数字>`` 的目录）写 ``STOP.json``，
   打印 ``ASTRA_COST=STOP usd=… cap=…``。Astra 自带两个停机口都读它：``ResponsesClient._send`` 每次发送前、
-  驱动每局开跑前。
+  ``AstraPolicy.reset`` 每局开跑前（评估仓里守卫由 ``AstraPolicy.load`` 经 ``ServerProcess`` 起停，不再人工先起）。
 - 输出：累计变化时（及首轮）打印 ``ASTRA_COST usd=<累计> calls=<n> …``。
 
 单价配置示例（``--prices``）::
@@ -37,7 +37,7 @@
   计入已是保守口径；同目录有 ``guard_refused.json`` 的（runner 发送前就拒发、从未外联）计 0。
 - 心跳与同步预留：每轮把状态原子写进 ``--state``（默认 ``<账本名>.state.json``）：``heartbeat``（墙钟秒）、
   ``committed_usd``（已计 + error 无 usage 的最坏计入）、``counted``（已计入账本的请求 uuid）、``prices``、
-  ``max_output_tokens``、``cap``、``stop``。``astra_hard_runner.py`` 的 ``GuardedResponsesClient`` 每次真正发送前
+  ``max_output_tokens``、``cap``、``stop``。``models/astra.py`` 的 ``GuardedResponsesClient`` 每次真正发送前
   同步读它，并在 ``<state>.reservations.json``（``fcntl`` 锁 ``<state>.lock``）里原子预留单次最坏费用；守卫把
   尚未计入账本的预留也算进投影。守卫正常退出时写 ``exited=true``；崩溃则心跳停更，runner 10 秒后即拒发。
 - 局数硬上限 ``ASTRA_MAX_EPISODES=2``：runner 每局开跑前在同一预留文件的 ``episodes`` 列表里登记，跨 RUN 累计。
