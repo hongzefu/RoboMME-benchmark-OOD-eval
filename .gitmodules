@@ -11,7 +11,7 @@
 	branch = eval-official-v1
 [submodule "third_party/PonderPounce"]
 	path = third_party/PonderPounce
-	url = https://github.com/hongzefu/ponderpounce.git
+	url = https://github.com/hongzefu/PonderPounce.git
 [submodule "third_party/Astra-on-RoboMME"]
 	path = third_party/Astra-on-RoboMME
 	url = https://github.com/hongzefu/Astra-on-RoboMME.git
