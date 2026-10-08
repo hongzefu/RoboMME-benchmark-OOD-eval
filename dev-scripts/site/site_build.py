@@ -39,7 +39,7 @@
 
 V9 阶段 4c（评估完成后只建站）::
 
-    uv run --no-sync python scripts/injection-dev/site_build.py --site-only --cells v9 \\
+    uv run --no-sync python dev-scripts/site/site_build.py --site-only --cells v9 \\
       --delivery artifacts/newtask-v9/delivery/delivery.local.json --specs-root artifacts/newtask-v9/specs-root \\
       --identities artifacts/v9-evaluation/inputs/eval-identities-992.jsonl \\
       --work-dir artifacts/newtask-v9/continue-site --site-dir artifacts/newtask-v9/site --port 8082 \\
@@ -67,7 +67,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SITE = REPO_ROOT / "scripts/injection-dev/site"
+SITE = Path(__file__).resolve().parent  # 本文件与站点脚本同在 dev-scripts/site
 DEFAULT_XHARD0_GEN = REPO_ROOT / "artifacts/newtask-v7/site-media/xhard0-gen"
 
 REPORT_SCHEMA = "v8-continue-report/1"

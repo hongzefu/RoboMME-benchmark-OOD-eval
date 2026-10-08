@@ -6,7 +6,7 @@
 ``subgoal_lengths.py`` 生成。``--media-root`` 是白名单根（站点目录与全部 mp4 必须在它之下），缺省为仓库
 ``artifacts/``；合成目录检查时传合成根。
 
-    uv run --no-sync python scripts/injection-dev/site/site_app.py --port 8080 --site-dir artifacts/newtask-v8/site
+    uv run --no-sync python dev-scripts/site/site_app.py --port 8080 --site-dir artifacts/newtask-v8/site
 """
 from __future__ import annotations
 

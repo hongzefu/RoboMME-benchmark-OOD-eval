@@ -4,8 +4,8 @@
 只放视频与成功率，不放语言记录。版式沿用 ``official_overlay.html``（8083 Oracle 站）。五模型视频从 GL 运行根
 （NFS）复制进本机媒体根，Oracle（1004 轮本机）与生成真值（V9 交付）本在 ``artifacts/`` 下直接引用。
 
-    uv run --no-sync python scripts/injection-dev/site/stage3_eval_site.py --run-root <R> --site-dir <A>/site-stage3 --copy-root <A>/site-media
-    uv run --no-sync python scripts/injection-dev/site/stage3_eval_site.py --serve --site-dir <A>/site-stage3 --port 8084
+    uv run --no-sync python dev-scripts/site/stage3_eval_site.py --run-root <R> --site-dir <A>/site-stage3 --copy-root <A>/site-media
+    uv run --no-sync python dev-scripts/site/stage3_eval_site.py --serve --site-dir <A>/site-stage3 --port 8084
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import shutil
 import sys
 
 HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parents[2]
+REPO_ROOT = HERE.parents[1]  # dev-scripts/site → 仓根
 ARTIFACTS = REPO_ROOT / "artifacts"
 TASKS = ("BinFill", "PickXtimes", "SwingXtimes", "PickHighlight", "VideoUnmask", "ButtonUnmask",
          "VideoUnmaskSwap", "ButtonUnmaskSwap", "VideoRepick", "PatternLock", "RouteStick",

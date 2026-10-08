@@ -11,14 +11,14 @@
 - **oracle 步数**：执行步 = 帧数 − ``info/is_video_demo`` 帧数；逐格给均值／最小～最大／局数；
   xhard1～5 逐局与 ``delivery.json`` 的 ``exec_steps`` 相等（不等即 FAIL）。
 - **执行步上限**：xhard1～5 取 v8 规格 header ``exec_cap``（``hard-specs/4``），xhard0 取
-  本地常量 ``XHARD0_STEP_CAP``（1300，与官方 scripts/evaluation.py 的默认步数相同）；不读 ``eval.*.max_steps``（v8 评估置空）。
+  本地常量 ``XHARD0_STEP_CAP``（1300，与 benchmark 子模块官方评估入口 evaluation.py 的默认步数相同）；不读 ``eval.*.max_steps``（v8 评估置空）。
 - **逐局 task goal**：``setup/task_goal`` 全部措辞与 ``setup/difficulty``；配置在目录里（规格逐局抽值），本文件不重复。
 
 输出 ``<site-dir>/subgoals.json``（schema ``v8-subgoals/1``，``open("x")`` 写入、拒绝覆盖），由
 ``site_server.py`` 的 ``/api/subgoals`` 提供给页面。末行打印
 ``V8_SUBGOALS=PASS|FAIL h5=<n> cells=<n> missing=<n> exec_mismatch=<n> xhard0_same=<a>/<b> goals=<n>``。
 
-    uv run --no-sync python scripts/injection-dev/site/subgoal_lengths.py --site-dir artifacts/newtask-v8/site \\
+    uv run --no-sync python dev-scripts/site/subgoal_lengths.py --site-dir artifacts/newtask-v8/site \\
       --specs-root artifacts/newtask-v8/specs-root --delivery artifacts/newtask-v8/gen1/delivery.json \\
       --xhard0-gen artifacts/newtask-v7/site-media/xhard0-gen
 """

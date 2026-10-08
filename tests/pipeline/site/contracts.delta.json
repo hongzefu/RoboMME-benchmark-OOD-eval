@@ -3,8 +3,8 @@
     "id": "C17.01",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/site_server.py",
-      "scripts/injection-dev/site/site_app.py"
+      "dev-scripts/site/site_server.py",
+      "dev-scripts/site/site_app.py"
     ],
     "symbol": "MediaHandler._serve/byte_range（固定路由、HEAD、单段 Range）",
     "oracle": "期望字节直接对磁盘文件切片",
@@ -28,7 +28,7 @@
     "id": "C17.02",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/site_server.py"
+      "dev-scripts/site/site_server.py"
     ],
     "symbol": "SiteFiles.__init__/_open_relative/open_poster（白名单与路径）",
     "oracle": "白名单只认启动时登记的 ID；不以 URL 拼路径",
@@ -56,7 +56,7 @@
     "id": "C17.03",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/site_catalog.py"
+      "dev-scripts/site/site_catalog.py"
     ],
     "symbol": "site_catalog.main/build_catalog（V9 小子表）",
     "oracle": "包内真实 V9 规格切出 StopCube／PickXtimes xhard1 与 MoveCube xhard4 整格；身份表独立给出（交付行 + xhard0 每任务 12 个合成 seed）",
@@ -83,7 +83,7 @@
     "id": "C17.04",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/site_catalog.py"
+      "dev-scripts/site/site_catalog.py"
     ],
     "symbol": "site_catalog --cells v9 全量 59 格（43 新值格 + 16 个 xhard0 格）",
     "oracle": "包内五份真实规格全部交付行",
@@ -101,7 +101,7 @@
     "id": "C17.05",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/subgoal_lengths.py"
+      "dev-scripts/site/subgoal_lengths.py"
     ],
     "symbol": "subgoal_lengths.read_episode/label/main",
     "oracle": "手写逐帧 subgoal 序列的微型 h5",
@@ -121,7 +121,7 @@
     "id": "C17.06",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/semantic_diff.py"
+      "dev-scripts/site/semantic_diff.py"
     ],
     "symbol": "semantic_diff.build/main/norm_goal",
     "oracle": "手写 subgoals 文档：只换颜色的一格、goal 加一句且 put down 多重复一次的一格、新增 subgoal 类型但无人工说明的一格",
@@ -141,8 +141,8 @@
     "id": "C17.07",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/site.html",
-      "scripts/injection-dev/site/site_server.py"
+      "dev-scripts/site/site.html",
+      "dev-scripts/site/site_server.py"
     ],
     "symbol": "site.html 引用的路由与字段 ⊆ 服务端实际提供的",
     "oracle": "路由与字段名从页面脚本正则抽出作清单；断言对象是真实服务对真实建站产物（catalog／subgoals／semantic）的响应",
@@ -164,7 +164,7 @@
     "id": "C17.08",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/eval_transcode.py"
+      "dev-scripts/site/eval_transcode.py"
     ],
     "symbol": "eval_transcode.render_one（真实 ffmpeg）",
     "oracle": "合成 FFV1 mkv（前视 2 帧、腕部 1 帧）+ 4 行 frames-*.jsonl（enc 重复）",
@@ -182,9 +182,9 @@
     "id": "C17.09",
     "domain": "C17",
     "source": [
-      "scripts/injection-dev/site/site.html",
-      "scripts/injection-dev/site/site_browser_check.py",
-      "scripts/injection-dev/site/oracle_browser_check.py"
+      "dev-scripts/site/site.html",
+      "dev-scripts/site/site_browser_check.py",
+      "dev-scripts/site/oracle_browser_check.py"
     ],
     "symbol": "真实浏览器筛选、导航、错误态与播放",
     "oracle": "未验证：计划 Q14 裁决不做真实浏览器交互",

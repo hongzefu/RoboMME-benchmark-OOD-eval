@@ -3,7 +3,7 @@
   "mutants": [
     {
       "id": "M20a",
-      "target": "scripts/injection-dev/site/site_server.py::SiteFiles._open_relative",
+      "target": "dev-scripts/site/site_server.py::SiteFiles._open_relative",
       "method": "逐级打开目录时去掉 O_NOFOLLOW（放行符号链接换出的越界路径）",
       "expect_fail": [
         "tests/pipeline/site/test_site_server.py::test_symlink_swapped_in_after_start_is_not_followed"
@@ -11,7 +11,7 @@
     },
     {
       "id": "M20b",
-      "target": "scripts/injection-dev/site/site_server.py::SiteFiles.__init__",
+      "target": "dev-scripts/site/site_server.py::SiteFiles.__init__",
       "method": "白名单路径用 absolute() 代替 resolve(strict=True)（根内链接指向根外被放行）",
       "expect_fail": [
         "tests/pipeline/site/test_site_server.py::test_whitelist_construction_rejects"
@@ -19,7 +19,7 @@
     },
     {
       "id": "M20c",
-      "target": "scripts/injection-dev/site/site_server.py::byte_range",
+      "target": "dev-scripts/site/site_server.py::byte_range",
       "method": "Range 一律返回整个文件（200, 0, size）",
       "expect_fail": [
         "tests/pipeline/site/test_site_server.py::test_single_range_bytes_exact",
@@ -29,7 +29,7 @@
     },
     {
       "id": "T7-C1",
-      "target": "scripts/injection-dev/site/site_catalog.py::build_catalog",
+      "target": "dev-scripts/site/site_catalog.py::build_catalog",
       "method": "关掉表 1 配置核对",
       "expect_fail": [
         "tests/pipeline/site/test_site_catalog.py::test_config_mismatch_on_edited_real_row"
