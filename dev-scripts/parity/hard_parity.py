@@ -1267,11 +1267,16 @@ def cmd_compare(args) -> int:
         for record in pair_rows:
             stream.write(json.dumps(record, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     n = len(keys)
-    produced = counts["both_success"] + counts["both_fail"]
-    judged = n > 0 and manifest_dup == 0 \
+    # 实际比较数：两侧 h5 都可读（pair_metrics 无错）的身份；任一侧 h5 读不出计 unreadable，不计入 compared
+    compared = sum(1 for m in metrics.values() if m.get("error") is None)
+    unreadable = sum(1 for m in metrics.values() if m.get("error") is not None)
+    # 判定：分母非空、实际比较数 > 0 且等于身份数；两侧同失败（both_fail）单列、不计入通过——同失败只会让结论
+    # 落到 FAIL（另打 PARITY_BOTH_FAIL=REVIEW 交人工看），不能 PASS
+    judged = n > 0 and compared > 0 and compared == n and unreadable == 0 and counts["both_fail"] == 0 \
+        and manifest_dup == 0 \
         and all(counts[k] == n for k in ("identity_equal", "success_equal", "binding_ok")) \
-        and counts["setup_equal"] == counts["both_success"] and counts["schema_equal"] == counts["both_success"] \
-        and produced == n and counts["recovery_mismatch"] == 0 and not left_problems and not right_problems
+        and counts["setup_equal"] == counts["both_success"] == n and counts["schema_equal"] == n \
+        and counts["recovery_mismatch"] == 0 and not left_problems and not right_problems
     if denom is not None:
         if sum(terminal.values()) != n:  # 互斥终态合计必须等于 compared（实现自检，不应发生）
             raise ParityError(f"五终态合计 {sum(terminal.values())} ≠ compared {n}")
@@ -1282,7 +1287,8 @@ def cmd_compare(args) -> int:
         ("action_max", "action_max"), ("state_max", "state_max"), ("image_mad", "image_mad"), ("frames_max", "frames_diff"))}
     divergence = [m["first_divergence"] for m in ok_metrics if m.get("first_divergence") is not None]
     shape = SHAPES[args.tier]
-    base = (f"tier={args.tier} shape={shape} compared={n} identity_equal={counts['identity_equal']} "
+    base = (f"tier={args.tier} shape={shape} keys={n} compared={compared} unreadable={unreadable} "
+            f"identity_equal={counts['identity_equal']} "
             f"setup_equal={counts['setup_equal']} schema_equal={counts['schema_equal']} "
             f"success_equal={counts['success_equal']} both_success={counts['both_success']} both_fail={counts['both_fail']}")
     name = f"PARITY_{left_side}_{right_side}"
@@ -1315,7 +1321,8 @@ def cmd_compare(args) -> int:
               flush=True)
     else:
         # v8：分母与五终态在前（§3 判定行形状）；容差分类里的 noise 改名 tol_noise，免得与终态 noise 同名
-        print(f"{name}={verdict} tier={args.tier} compared={n} cells={denom['frozen_cells']} missing={denom['missing']} "
+        print(f"{name}={verdict} tier={args.tier} keys={n} compared={compared} unreadable={unreadable} "
+              f"cells={denom['frozen_cells']} missing={denom['missing']} "
               f"extra={denom['extra']} duplicate={denom['duplicate']} identity_equal={counts['identity_equal']} "
               + " ".join(f"{state}={terminal[state]}" for state in TERMINAL_STATES)
               + f" expected={denom['expected']} frozen={denom['sizes']['frozen']} delivery={denom['sizes']['delivery']} "
@@ -1332,7 +1339,8 @@ def cmd_compare(args) -> int:
     print(f"PARITY_REFERENCE=INFO pair={args.pair} tier={args.tier} first_divergence_n={len(divergence)} "
           f"first_divergence_median={sorted(divergence)[len(divergence) // 2] if divergence else None} "
           f"first_divergence_min={min(divergence) if divergence else None}", flush=True)
-    summary = {"verdict": verdict, "counts": counts, "worst": worst, "tolerances": tol, "tol_hits": tol_hits,
+    summary = {"verdict": verdict, "keys": n, "compared": compared, "unreadable": unreadable, "counts": counts,
+               "worst": worst, "tolerances": tol, "tol_hits": tol_hits,
                "noise": noise, "tol_over": fail_over, "hard_line_5pct": hard_line, "both_fail": both_fail_rows,
                "left_dir": str(left_dir), "right_dir": str(right_dir), "p_anchor": args.p_anchor,
                "left_problems": left_problems, "right_problems": right_problems,

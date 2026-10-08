@@ -2,6 +2,42 @@
   "note": "T6 对拍块的具名植入。非受保护源码（dev-scripts/parity/*）在隔离副本里按 patch 逐字替换（每个 old 必须恰好命中 1 次）后跑 expect_fail 里的用例，至少一个失败才算抓到；原版在同环境须全过（R9）。",
   "mutants": [
     {
+      "id": "T6-F5",
+      "target": "dev-scripts/parity/noise_gate.py::classify_pair",
+      "method": "去掉 F-5 合法性检查（两个空文件又会判 byte_equal）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "        problem = h5_problem(entry[\"h5\"])",
+          "new": "        problem = None"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_h5_comparators.py::test_F5_空文件或非h5_两份字节相同也不判byte_equal"
+      ],
+      "contracts": [
+        "C15.01"
+      ]
+    },
+    {
+      "id": "M15a",
+      "target": "dev-scripts/parity/noise_gate.py::compare_h5",
+      "method": "逐帧内容比较跳过 obs/joint_state 一个数据集",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "_value_key(lg[ds][()]) == _value_key(rg[ds][()]) for ds in ld)",
+          "new": "_value_key(lg[ds][()]) == _value_key(rg[ds][()]) for ds in ld if ds != \"obs/joint_state\")"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_h5_comparators.py::test_某一数据集从某帧起分叉_两者都抓到且分叉步一致"
+      ],
+      "contracts": [
+        "C15.01"
+      ]
+    },
+    {
       "id": "M10",
       "target": "dev-scripts/parity/noise_gate.py::expect_verdict",
       "method": "稳定局只看成功、不再核 sha 属于基线（交换两个身份的产物、总数不变即可蒙混）",
@@ -382,6 +418,30 @@
       ],
       "contracts": [
         "C15.19"
+      ]
+    },
+    {
+      "id": "E5-CMP1",
+      "target": "dev-scripts/parity/hard_parity.py::cmd_compare",
+      "method": "同失败重新计入通过、不要求实际比较数（回到 both_fail 可判 PASS 的旧口径）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "    judged = n > 0 and compared > 0 and compared == n and unreadable == 0 and counts[\"both_fail\"] == 0 \\\n",
+          "new": "    judged = n > 0 and unreadable == 0 \\\n"
+        },
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "        and counts[\"setup_equal\"] == counts[\"both_success\"] == n and counts[\"schema_equal\"] == n \\\n",
+          "new": "        and counts[\"setup_equal\"] == counts[\"both_success\"] and counts[\"schema_equal\"] == counts[\"both_success\"] \\\n"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_全部两侧同失败_不得PASS",
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_一局两侧同失败_其余一致也FAIL"
+      ],
+      "contracts": [
+        "C15.13"
       ]
     }
   ]

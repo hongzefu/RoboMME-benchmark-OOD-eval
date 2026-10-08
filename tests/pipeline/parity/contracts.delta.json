@@ -1,5 +1,40 @@
 [
   {
+    "id": "C15.01",
+    "domain": "C15",
+    "source": [
+      "dev-scripts/parity/noise_gate.py",
+      "dev-scripts/parity/hard_parity.py"
+    ],
+    "symbol": "noise_gate.classify_pair/compare_h5、hard_parity.pair_metrics/classify_terminal（train_split_parity.compare_h5_pair 随拆仓退役）",
+    "oracle": "同一批微型 h5 变体（每个只改一处）手写期望：谁能看见、谁看不见、分叉步",
+    "positive": "相同字节两者都判相同；某数据集从第 k 帧起分叉两者分叉步都为 k",
+    "negative": "根／组属性、两侧新增同名字段只在该字段不同、中间帧缺字段、dtype、帧号不连续、第 0 帧、setup、空文件与非 h5（F-5）",
+    "boundaries": "hard_parity 对属性、新增字段、单帧缺非读取字段不可见（现状记录）",
+    "nodeids": [
+      "tests/pipeline/parity/test_h5_comparators.py::test_相同字节_两者都判相同",
+      "tests/pipeline/parity/test_h5_comparators.py::test_属性变化_noise看得见_hard看不见",
+      "tests/pipeline/parity/test_h5_comparators.py::test_两侧都新增同一字段且只在该字段不同",
+      "tests/pipeline/parity/test_h5_comparators.py::test_中间帧缺一个字段",
+      "tests/pipeline/parity/test_h5_comparators.py::test_dtype改变",
+      "tests/pipeline/parity/test_h5_comparators.py::test_帧号不连续",
+      "tests/pipeline/parity/test_h5_comparators.py::test_某一数据集从某帧起分叉_两者都抓到且分叉步一致",
+      "tests/pipeline/parity/test_h5_comparators.py::test_第0帧内容不同",
+      "tests/pipeline/parity/test_h5_comparators.py::test_setup取值不同",
+      "tests/pipeline/parity/test_h5_comparators.py::test_只多一帧",
+      "tests/pipeline/parity/test_h5_comparators.py::test_F5_空文件或非h5_两份字节相同也不判byte_equal",
+      "tests/pipeline/parity/test_h5_comparators.py::test_无顶层键的h5不合法",
+      "tests/pipeline/parity/test_h5_comparators.py::test_NaN按位相同不算差异",
+      "tests/pipeline/parity/test_h5_comparators.py::test_五终态_正例与每条结构不同路径"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M15a",
+      "T6-F5"
+    ],
+    "status": "verified"
+  },
+  {
     "id": "C15.02",
     "domain": "C15",
     "source": [
@@ -336,7 +371,7 @@
     "symbol": "hard_parity.cmd_compare（CLI main）/_v8_denominator/classify_terminal：v9（含 --identities 子集）、native、xhard0",
     "oracle": "冻结交付集按「selected 且 rollout.status == ok」从拷贝的 xhard5 规格独立读出；各方计数手算",
     "positive": "v9 四方一致 PASS（分母、五终态、判定行逐字段）；子集口径只比清单内身份；native／xhard0 两侧一致 PASS",
-    "negative": "空子集清单拒跑；空交付清单 missing=全部；交付／左／右各缺一 missing=1；冻结集缺一（子集含清单外身份）missing=1 extra=1；全集口径一侧多出 extra=1；交付或一侧重复 duplicate=1；gen1 sha 与交付不符判结构不同；native 空清单、重复行、一侧缺局 FAIL",
+    "negative": "空子集清单拒跑；空交付清单 missing=全部；交付／左／右各缺一 missing=1；冻结集缺一（子集含清单外身份）missing=1 extra=1；全集口径一侧多出 extra=1；交付或一侧重复 duplicate=1；gen1 sha 与交付不符判结构不同；native 空清单、重复行、一侧缺局 FAIL；两侧同失败（全部或一局）不得 PASS、both_fail 单列；任一侧 h5 不可读不计入 compared 且 FAIL；实际比较数 0 → FAIL",
     "boundaries": "子集口径下清单外行只记 outside_subset（交付清单先按子集筛过记 0）；--identities 只用于 v9",
     "nodeids": [
       "tests/pipeline/parity/test_hard_parity_compare.py::test_v9_四方一致_PASS_分母与五终态",
@@ -350,7 +385,10 @@
       "tests/pipeline/parity/test_hard_parity_compare.py::test_v9_gen1的sha与交付清单不符判结构不同",
       "tests/pipeline/parity/test_hard_parity_compare.py::test_native与xhard0_两侧一致PASS",
       "tests/pipeline/parity/test_hard_parity_compare.py::test_native负例_空清单_重复行_一侧缺局",
-      "tests/pipeline/parity/test_hard_parity_compare.py::test_identities只用于v9"
+      "tests/pipeline/parity/test_hard_parity_compare.py::test_identities只用于v9",
+      "tests/pipeline/parity/test_hard_parity_compare.py::test_全部两侧同失败_不得PASS",
+      "tests/pipeline/parity/test_hard_parity_compare.py::test_一局两侧同失败_其余一致也FAIL",
+      "tests/pipeline/parity/test_hard_parity_compare.py::test_h5不可读_不计入compared且FAIL"
     ],
     "resource": "cpu",
     "mutants": [
