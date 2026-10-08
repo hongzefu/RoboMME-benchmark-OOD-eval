@@ -32,7 +32,7 @@ import numpy as np
 import pytest
 
 from pp_fakes import REPO, FakeConn, FakeEnv, FakeSession, action_for, compare_frames
-from tests._support.loaders import load_script
+from tests._support.loaders import load_script, script_path
 from tests.pipeline.evalx.report import trace_contract as tc
 
 CLIENT_ENV_SITE = "artifacts/sg-evaluation/venvs/client-env/lib/python3.11/site-packages"
@@ -241,6 +241,10 @@ def test_new_and_orig_frames_identical_to_vla_eval_sync_runner(vla, monkeypatch,
 # ── 第二阶段 S5：子目标坐标换算、外壳回包进轨迹、原侧与 BASE 逐字节一致（日常门禁，CPU 替身） ──────────
 
 BASE_SHA = os.environ.get("SGEVAL_PP_BASE", "b869a3df9e7406b8f5458697f22656165b9c50b3")
+#: BASE 版 pp_client 的逐字节副本（拆仓后新仓没有旧仓历史，改从测试夹具读；内容即旧仓
+#: ``git show b869a3df:scripts/eval-official/pp_client.py``，sha256 钉死防误改）
+BASE_PP_FIXTURE = Path(__file__).resolve().parent / "base_pp_client_b869a3df.py.txt"
+BASE_PP_SHA256 = "e04cc60458e388a46feed5718c5a6261391267b3875ec771c12d23d1159589c0"
 PH_TASK, PH_SRC, PH_SEED = "PickXtimes", 7, 123457
 PH = {"task": PH_TASK, "tier": "xhard0", "seed": PH_SEED, "source_episode": PH_SRC, "builder_episode": 1,
       "key": f"{PH_TASK}_xhard0_{PH_SEED}", "candidate": None, "spec_sha256": None}
@@ -478,13 +482,22 @@ def _load_pp_from(path: Path):
 
 
 def _load_base_pp(tmp_path):
-    """``git show <BASE>:scripts/eval-official/pp_client.py`` 写到临时目录后按模块名 ``pp_client`` 载入。"""
-    out = subprocess.run(["git", "show", f"{BASE_SHA}:scripts/eval-official/pp_client.py"], cwd=REPO,
-                         capture_output=True, timeout=60)
-    assert out.returncode == 0, out.stderr.decode(errors="replace")
+    """BASE 版 pp_client（旧仓 ``git show <BASE>:scripts/eval-official/pp_client.py`` 的逐字节副本，见
+    ``BASE_PP_FIXTURE``；设 ``SGEVAL_PP_BASE_REPO`` 时改从该仓 ``git show``）写到临时目录后按模块名 ``pp_client`` 载入。
+    BASE 版按同目录取 ``trace_writer``，这里把**当前** ``record/trace_writer.py`` 放在它旁边（与旧仓里的情形相同）。"""
+    repo = os.environ.get("SGEVAL_PP_BASE_REPO")
+    if repo:
+        out = subprocess.run(["git", "show", f"{BASE_SHA}:scripts/eval-official/pp_client.py"], cwd=repo,
+                             capture_output=True, timeout=60)
+        assert out.returncode == 0, out.stderr.decode(errors="replace")
+        src = out.stdout
+    else:
+        src = BASE_PP_FIXTURE.read_bytes()
+        assert hashlib.sha256(src).hexdigest() == BASE_PP_SHA256, "BASE 夹具被改动"
     d = tmp_path / "base_src"
     d.mkdir()
-    (d / "pp_client.py").write_bytes(out.stdout)
+    (d / "pp_client.py").write_bytes(src)
+    (d / "trace_writer.py").write_bytes(script_path("eval-official/trace_writer.py").read_bytes())
     return _load_pp_from(d / "pp_client.py")
 
 
@@ -566,7 +579,7 @@ def test_orig_side_serialized_output_identical_to_base(tmp_path, monkeypatch, se
     monkeypatch.setattr(sys, "path", list(sys.path))
     monkeypatch.delenv("SGEVAL_PP_SERVER_WRAP", raising=False)
     base = _load_base_pp(tmp_path)
-    cur = _load_pp_from(REPO / "scripts" / "eval-official" / "pp_client.py")
+    cur = _load_pp_from(script_path("eval-official/pp_client.py"))
     assert cur.TRACE_SCHEMA_ROUTE_ORIG == base.TRACE_SCHEMA_ROUTE_ORIG == "pp-orig"
     files = {}
     for name, mod in (("base", base), ("cur", cur)):
@@ -597,7 +610,7 @@ def test_new_side_switch_off_identical_to_base(tmp_path, monkeypatch, env_kwargs
     real_tw = base.load_trace_writer()
     monkeypatch.setattr(base, "load_trace_writer", lambda: types.SimpleNamespace(
         TraceWriter=functools.partial(real_tw.TraceWriter, collect_arrays=False)))
-    cur = _load_pp_from(REPO / "scripts" / "eval-official" / "pp_client.py")
+    cur = _load_pp_from(script_path("eval-official/pp_client.py"))
     out = {}
     for name, mod in (("base", base), ("cur", cur)):
         ep = tmp_path / name / f"{PH['key']}.a1"

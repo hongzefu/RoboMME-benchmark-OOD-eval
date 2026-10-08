@@ -17,7 +17,7 @@ import pytest
 
 from pp_fakes import (PP_BENCHMARK_LITERAL, REPO, TASK_GOAL, FakeConn, FakeEnv, FakeSession, action_for,
                       compare_frames, sha256_file)
-from tests._support.loaders import load_script
+from tests._support.loaders import load_script, script_path
 
 pp = load_script("eval-official/pp_client.py")
 orig = load_script("eval-official/pp_official_runner.py")
@@ -236,8 +236,9 @@ def test_trace_path_resolution(tmp_path):
 
 
 def test_module_import_does_not_require_vla_eval():
-    code = ("import sys; sys.modules['vla_eval'] = None; sys.path.insert(0, %r); import pp_client; "
-            "assert 'robomme_hard' not in sys.modules; print('PP_IMPORT_OK')" % str(REPO / "scripts" / "eval-official"))
+    """拆仓后 pp 客户端是评估包模块 ``robomme_hard_eval.models.pp``：导入不需要 vla_eval，也不拉进仿真包。"""
+    code = ("import sys; sys.modules['vla_eval'] = None; sys.path.insert(0, %r); import robomme_hard_eval.models.pp; "
+            "assert 'robomme_hard' not in sys.modules; print('PP_IMPORT_OK')" % str(REPO / "src"))
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
     assert out.returncode == 0 and "PP_IMPORT_OK" in out.stdout, out.stderr
 
@@ -398,7 +399,7 @@ def test_orig_load_shard_rejects_non_xhard0_and_duplicates(tmp_path):
 
 def test_orig_runner_imports_only_official_robomme():
     env = dict(os.environ, PYTHONPATH=str(REPO / "src"))
-    out = subprocess.run([sys.executable, str(REPO / "scripts" / "eval-official" / "pp_official_runner.py"),
+    out = subprocess.run([sys.executable, str(script_path("eval-official/pp_official_runner.py")),
                           "--check-imports"], capture_output=True, text=True, timeout=300, env=env)
     assert out.returncode == 0, out.stdout + out.stderr
     line = [x for x in out.stdout.splitlines() if x.startswith("OFFICIAL_IMPORTS=")][-1]

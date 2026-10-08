@@ -1,8 +1,9 @@
-"""C13 评估录制器 ``recorder.EpisodeRecorder``（慢，真 ffmpeg）：无损编码读回逐帧相同、同流重复帧只编一次、
-reset 阶段只入队、降级档、拒绝覆盖；以及真实录制器接在真实 ``SeatRunner`` 上、产物直接喂报告。
+"""C13 评估录制器 ``recorder.EpisodeRecorder``（慢，真 ffmpeg）：AV1 4:4:4 有损编码（拆分方案红线 R8）读回帧数、
+逐帧编码前 sha256 与去重映射精确、画面近似（PSNR > 30 dB）、同流重复帧只编一次、reset 阶段只入队、降级档、拒绝覆盖；
+以及真实录制器接在真实 ``SeatRunner`` 上、产物直接喂报告。
 
 文件名带 ``eval_`` 前缀：pytest 默认按文件名导入测试模块，避免与其他目录的同名文件冲突。
-缺支持 ffv1 的 ffmpeg 时整文件记「未验证」。
+缺支持 libaom-av1 的 ffmpeg 时整文件记「未验证」。
 """
 from __future__ import annotations
 
@@ -38,30 +39,43 @@ def _frames(vals, hw=16):
     return np.stack(out)
 
 
-def test_lossless_roundtrip_and_dedup(tmp_path, rec_mod):
+def _psnr(a, b) -> float:
+    mse = float(((np.asarray(a, np.float64) - np.asarray(b, np.float64)) ** 2).mean())
+    return 99.0 if mse == 0 else 10 * np.log10(255 ** 2 / mse)
+
+
+def test_av1_roundtrip_and_dedup(tmp_path, rec_mod):
+    """AV1 有损（R8）：帧数、逐帧编码前 sha256、去重映射与原始数组精确；画面只近似（PSNR > 30 dB），不再要求逐字节。"""
     r = rec_mod.EpisodeRecorder(tmp_path / "ep", {"never_degrade": True}, free_gib_fn=lambda p: 1e6)
     r.set_phase("reset")
-    front = _frames([1, 2, 3, 2])  # 第 4 帧与第 2 帧逐字节相同
+    front = _frames([1, 2, 3, 2], hw=64)  # 第 4 帧与第 2 帧逐字节相同
     idx = r.add_frames("front", front, tag="reset")
     r.set_phase("run")
-    r.add_frames("front", _frames([9]), tag="step0")
-    r.add_frames("wrist", _frames([5, 5]), tag="step0")
+    r.add_frames("front", _frames([9], hw=64), tag="step0")
+    r.add_frames("wrist", _frames([5, 5], hw=64), tag="step0")
     a = np.arange(8, dtype=np.float32)
     r.add_array("exec_action", a, step=0)
     r.add_event({"kind": "note", "v": 1})
     res = r.close({"status": "success", "steps": 1})
     assert idx == [0, 1, 2, 3]
-    assert res["RECORDER_VERIFY"] == "PASS" and res["level"] == 0 and res["lossless"] is True
+    assert res["RECORDER_VERIFY"] == "PASS" and res["level"] == 0
+    assert res["lossless"] is False and res["raw_codec"] == rec_mod.RAW_CODEC == "av1-yuv444p"
     assert res["frames"] == 7 and res["encoded_frames"] == 4 + 1  # front 去重后 4、wrist 1
     assert res["decode_mismatch"] == 0 and res["dropped"] == 0 and res["errors"] == []
+    assert res["streams"]["front"]["timestamps_ok"] is True and res["streams"]["front"]["decoded"] == 4
     out = tmp_path / "ep"
     assert not (out / ".spool").exists()
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["raw_codec"] == "av1-yuv444p" and rec_mod.raw_codec_of(out) == "av1-yuv444p"
     recs, imgs = rec_mod.load_frames(out, "front")
     assert [x["enc"] for x in recs] == [0, 1, 2, 1, 3]
-    for want, got in zip(np.concatenate([front, _frames([9])]), imgs):
-        assert np.array_equal(want, got)
-    _, wimgs = rec_mod.load_frames(out, "wrist")
-    assert all(np.array_equal(x, _frames([5])[0]) for x in wimgs)
+    allf = np.concatenate([front, _frames([9], hw=64)])
+    assert [x["sha256"] for x in recs] == [rec_mod.frame_sha256(f) for f in allf]  # 编码前字节的哈希仍逐帧精确
+    psnr = [_psnr(want, got) for want, got in zip(allf, imgs)]
+    assert len(psnr) == 5 and min(psnr) > 30.0, psnr
+    wrecs, wimgs = rec_mod.load_frames(out, "wrist")
+    assert [x["enc"] for x in wrecs] == [0, 0]
+    assert min(_psnr(x, _frames([5], hw=64)[0]) for x in wimgs) > 30.0
     idx_rows = [json.loads(x) for x in (out / "arrays-index.jsonl").read_text().splitlines()]
     assert idx_rows[0]["name"] == "exec_action" and idx_rows[0]["dtype"] == a.dtype.str
     arrs = np.load(out / "arrays.npz")
