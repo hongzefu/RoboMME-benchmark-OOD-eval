@@ -2,12 +2,12 @@
 # 第二档原侧席位启动器（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.6、1.7；子任务 S6）。
 #
 # 一个席位（一张 GPU）上：起模型服务（与新侧同一条命令：groundsg 走 serve_policy.py --seed=7、pp 走
-# ponderpounce.eval.robomme_server --args.seed 0，就绪判定与 kill -0 存活检查都复用 run_seat.sh 的 start_server）→
+# ponderpounce.eval.robomme_server --args.seed 0，就绪判定与 kill -0 存活检查都复用 orig_seat_lib.sh 的 start_server）→
 # 跑官方原版驱动（groundsg：official_hard_runner.py --variant …；pp：pp_official_runner.py）→ 每局 rgb24 原始帧就地转码
 # 为 episode.mp4（帧数核对一致才删原始帧）并原子发布到 NFS 输出键 <media-root>/<label>/hard-verify/orig/<key>.a<attempt>/
 # → trap 收尾（收驱动与服务进程组、全量同步、判定行）。
 #
-# 守卫一律复用 run_seat.sh（source）：pick_port／port_busy 起前探端口、start_server 等就绪时 kill -0 查服务存活、
+# 守卫一律复用 orig_seat_lib.sh（source）：pick_port／port_busy 起前探端口、start_server 等就绪时 kill -0 查服务存活、
 # noprog_limit／idle_s 做 NO_PROGRESS 无进展检测（结果文件与本轮起点的 mtime；首局含 600 s 放宽）、step_cap_pairing
 # 与 variant_pairing 配对核对、note_epoch／epoch_annotate 记服务启动边界、transcode_episode_dir／publish_dir 转码发布。
 #
@@ -24,7 +24,7 @@
 #   NFS 状态 <stage>/sNN/orig/<label>/（results.jsonl 与 results.epochs.jsonl 副本、server-epochs.tsv、runner.log、
 #   服务日志、本脚本日志 official-sNN.log）；setsid 进程组记在 <stage>/sNN/orig/.v8-pgids（pair_seat.sh 据此核实
 #   服务已退出、显存已释放）。续跑（如 48 小时到期后换节点）时节点上没有 results.jsonl 就先从 NFS 副本恢复。
-# server_epoch：同 run_seat.sh——每次服务就绪在 server-epochs.tsv 记「epoch、此刻 results.jsonl 行数」，收尾与每次周期
+# server_epoch：同 orig_seat_lib.sh——每次服务就绪在 server-epochs.tsv 记「epoch、此刻 results.jsonl 行数」，收尾与每次周期
 #   同步时把结果行补上 server_epoch 写成 <stage>/sNN/orig/<label>/results.epochs.jsonl（gate2_compare.py 读这份）。
 # 视频帧数口径：PonderPounce 原侧 = video_history 帧数 + 1 个初始帧 + 已执行步数 − 缺画面步数（frames.json 的 count）；
 #   GroundSG 原侧 = 外围委托记录的帧数（演示帧 + 已执行步数，以驱动写的 frames.json 为准）。转码前后帧数相等才算 ok。
@@ -35,8 +35,8 @@
 #   RUN_BLOCKED reason=budget_args、退出 3，不回落 budget_ledger.py 常量默认值），groundsg 原样转发给
 #   official_hard_runner.py（驱动经共享账本 reserve／claim_reset／claim_retry／commit／release，route
 #   groundsg/<variant>/seed<n>/orig）；驱动退出 5（轨迹预算不足）即 RUN_BLOCKED reason=budget、本席退出 5。
-#   变体放行 ground-sg-memer（--memer-adapter <dir>，与 --qwenvl-groundsg-adapter 互斥；配对核对由 run_seat.sh 的
-#   variant_pairing 负责）。服务端的模型种子由 run_seat.sh 的 build_server_cmd 读 POLICY_SEED（R3）。
+#   变体放行 ground-sg-memer（--memer-adapter <dir>，与 --qwenvl-groundsg-adapter 互斥；配对核对由 orig_seat_lib.sh 的
+#   variant_pairing 负责）。服务端的模型种子由 orig_seat_lib.sh 的 build_server_cmd 读 POLICY_SEED（R3）。
 #
 # 用法：
 #   bash run_official_hard.sh --run-name R --seat NN --repo <执行副本> --stage <NFS 运行根> --shard <shard-NN.json> \
@@ -51,14 +51,14 @@
 # 退出码：0 全部身份有非 infra 结果行且同步 PASS；2 参数错误；3 RUN_BLOCKED（配对、预检、导入断言、policy_seed、
 #   budget_args）；4 基础设施用尽；5 轨迹预算不足；6 仍有身份无终态（重试额度或 2 次尝试用尽）；7 只有同步 FAIL；
 #   中断 130/143（HUP 129）。
-# 解释器：驱动用 SGEVAL_CLIENT_PY（客户端扩展环境），服务用 MME_VLA_PY／PP_PY（同 run_seat.sh）；本脚本内小工具用 BENCH_PY。
+# 解释器：驱动用 SGEVAL_CLIENT_PY（客户端扩展环境），服务用 MME_VLA_PY／PP_PY（同 orig_seat_lib.sh）；本脚本内小工具用 BENCH_PY。
 set -uo pipefail
 export PYTHONUNBUFFERED=1
 
 _ENV_SGEVAL_CLIENT_PY="${SGEVAL_CLIENT_PY:-}" ; _ENV_PP_PY="${PP_PY:-}" ; _ENV_BENCH_PY="${BENCH_PY:-}" ; _ENV_MME_VLA_PY="${MME_VLA_PY:-}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=run_seat.sh
-source "$HERE/run_seat.sh"
+# shellcheck source=orig_seat_lib.sh
+source "$HERE/orig_seat_lib.sh"
 
 RUN_NAME="" ; SEAT="" ; STAGE="" ; MEDIA_ROOT="" ; SHARD="" ; POLICY="" ; LOCAL_ROOT="" ; SYNC_INTERVAL=120
 GPU=0 ; CPUS="" ; LIMIT=0 ; INFRA_RETRY_BUDGET="" ; DATASET="" ; MAX_STEPS="" ; STRICT_CAP=0

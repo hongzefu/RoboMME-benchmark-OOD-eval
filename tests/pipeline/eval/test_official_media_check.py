@@ -1,4 +1,4 @@
-"""S2b 官方版式视频验收 ``scripts/eval-official/official_media_check.py``（1005 计划第二部分一节「S2b」，审计第 9 条）。
+"""S2b 官方版式视频验收 ``dev-scripts/media/official_media_check.py``（1005 计划第二部分一节「S2b」，审计第 9 条）。
 
 夹具全部现做：局目录按 ``run_eval_gl.sh`` 发布布局 ``<root>/<key>.a<N>/``，``trace.jsonl`` 按共享契约 C6／C8 写
 header 与 end（``frames_recorded``），``official/`` 里放 ffmpeg 现做的微型 mp4 与重绘器 ``render.json``（或 GroundSG
@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[3]
-TOOL = REPO / "scripts" / "eval-official" / "official_media_check.py"
+TOOL = REPO / "dev-scripts" / "media" / "official_media_check.py"
 DATASET = "hard-verify"
 ROUTE = "pp/new"
 
@@ -377,3 +377,103 @@ def test_policy_seed_checked(world):
     side.write_text(json.dumps(s))
     rc, out, v = _check(world, "--policy-seed", "7")
     assert rc == 1 and v["OFFICIAL_MEDIA"]["fail"] == "1", out
+
+
+# ---------------------------------------------------------------- 拆仓后的新产物树（--rollouts）
+# 夹具用真实链路现做：dummy 模型经 ``episode.run_episode``（假 builder／假环境，不跑仿真）→ 真实 AV1 录制器 → 真实官方
+# 版式渲染进 ``videos/``；产物树 ``<out>/rollouts/dummy/<数据集>/seed7/{raw,videos}``。
+
+
+@pytest.fixture(scope="module")
+def new_tree(tmp_path_factory):
+    import os
+
+    from robomme_hard_eval import episode as E
+    from robomme_hard_eval.policy import load_policy
+    from tests.unit_eval import fakes
+
+    out = tmp_path_factory.mktemp("newtree")
+    official = REPO if (REPO / "third_party/mme-vla/examples/robomme/utils.py").is_file() \
+        else Path(os.environ["SGEVAL_THIRD_PARTY"]).parent
+    saved = E.BUILDER_FACTORY
+    E.clear_builders()
+    E.BUILDER_FACTORY = fakes.FakeBuilder
+    try:
+        with load_policy("dummy", 7) as pol:
+            for ds in ("hard-verify", "ood"):
+                r = E.run_episode(pol, ds, "VideoUnmask", 0, out, official_root=official, wall_s=0, first_infer_s=0,
+                                  media_s=0)
+                assert r.video, r.video_error
+    finally:
+        E.BUILDER_FACTORY = saved
+        E.clear_builders()
+    return out
+
+
+def _copy_tree(src: Path, dst: Path) -> Path:
+    shutil.copytree(src, dst)
+    return dst
+
+
+def _runs(root: Path) -> list[Path]:
+    return sorted((root / "rollouts" / "dummy").glob("*/seed7"))
+
+
+def test_new_tree_all_pass(new_tree, tmp_path):
+    root = _copy_tree(new_tree, tmp_path / "t")
+    args = []
+    for r in _runs(root):
+        args += ["--rollouts", r]
+    rc, out = _run(*args, "--policy-seed", 7, "--out", tmp_path / "m.jsonl")
+    v = _verdicts(out)
+    assert rc == 0, out
+    assert v["OFFICIAL_MEDIA_INPUTS"][""] == "PASS"
+    assert v["OFFICIAL_MEDIA"] == {"": "PASS", "total": "2", "skip": "0", "fail": "0", "no_frame_error": "0",
+                                   "videos": "2", "accepted": "2", "policy_seed": "7",
+                                   "report": str(tmp_path / "m.jsonl")}
+    names = sorted(p.name for r in _runs(root) for p in (r / "raw").iterdir())
+    assert names == ["VideoUnmask_ep0_xhard2", "VideoUnmask_ep3_xhard0"]  # hard-verify 用官方原号 3
+
+
+def test_new_tree_with_manifest_and_negatives(new_tree, tmp_path):
+    root = _copy_tree(new_tree, tmp_path / "t")
+    hv, ood = [r for r in _runs(root)]
+    manifest = tmp_path / "ids.jsonl"
+    rows = [{"dataset": "hard-verify", "task": "VideoUnmask", "tier": "xhard0", "builder_episode": 0,
+             "source_episode": 3}, {"dataset": "ood", "task": "VideoUnmask", "tier": "xhard2", "builder_episode": 0,
+                                    "source_episode": None},
+            {"dataset": "ood", "task": "VideoUnmask", "tier": "xhard2", "builder_episode": 1, "source_episode": None}]
+    manifest.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    rc, out = _run("--rollouts", hv, "--rollouts", ood, "--manifest", manifest)
+    v = _verdicts(out)
+    assert rc == 1 and v["OFFICIAL_MEDIA_INPUTS"]["missing"] == "1" and v["OFFICIAL_MEDIA"]["skip"] == "1"
+    # 视频改名成别的终态 → terminal_name 失败；另放一个无主视频 → extra
+    vid = next((ood / "videos").glob("*.mp4"))
+    bad = vid.with_name(vid.name.replace("VideoUnmask_ep0_", "VideoUnmask_ep0_timeout_", 1)
+                        .replace(f"_{json.loads((ood / 'raw/VideoUnmask_ep0_xhard2/result.json').read_text())['status']}_",
+                                 "_", 1))
+    vid.rename(bad)
+    _mp4(ood / "videos" / "Orphan_ep9_fail_goal_xhard1.mp4", 2)
+    rc, out = _run("--rollouts", ood)
+    v = _verdicts(out)
+    assert rc == 1 and v["OFFICIAL_MEDIA_INPUTS"]["extra"] == "1" and v["OFFICIAL_MEDIA"]["fail"] == "1"
+    rep = [json.loads(x) for x in (ood / "official-media.jsonl").read_text().splitlines()]
+    assert any(any(r.startswith("terminal_name:") for r in x["reasons"]) for x in rep)
+
+
+def test_new_tree_frames_and_provenance_tamper(new_tree, tmp_path):
+    root = _copy_tree(new_tree, tmp_path / "t")
+    hv = next(r for r in _runs(root) if r.parent.name == "hard-verify")
+    raw = hv / "raw" / "VideoUnmask_ep3_xhard0"
+    side = json.loads((raw / "render.json").read_text())
+    side["output_fingerprint"]["sha256"] = "0" * 64
+    (raw / "render.json").write_text(json.dumps(side))
+    rc, out = _run("--rollouts", hv)
+    assert rc == 1 and _verdicts(out)["OFFICIAL_MEDIA"]["fail"] == "1"
+    (raw / "render.json").unlink()
+    rc, out = _run("--rollouts", hv)
+    assert rc == 1 and _verdicts(out)["OFFICIAL_MEDIA_INPUTS"]["provenance_missing"] == "1"
+    (raw / "result.json").unlink()
+    rc, out = _run("--rollouts", hv)
+    v = _verdicts(out)
+    assert rc == 1 and v["OFFICIAL_MEDIA_INPUTS"]["missing"] == "1" and v["OFFICIAL_MEDIA"]["skip"] == "1"

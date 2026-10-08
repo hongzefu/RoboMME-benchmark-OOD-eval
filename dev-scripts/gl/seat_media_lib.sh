@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # 席位媒体函数库（1005-eval-video-phase2-all-models-rerun-plan.md 第二部分一节「S2b」）：只含函数，不设变量、不运行。
 #
-# 由 run_seat.sh（随之 run_eval_gl.sh／run_official_hard.sh／pair_seat.sh）与 run_astra.sh `source`；函数内用
-# `${BASH_SOURCE[0]}` 定位本文件所在目录（即执行副本的 scripts/eval-official/），不依赖调用方的 REPO 变量。
+# 拆仓后由原侧对照脚本（dev-scripts/orig/orig_seat_lib.sh，随之 run_official_hard.sh／pair_seat.sh）`source`；新侧席位
+# （dev-scripts/gl/seat.py）的网站视频由 run_episode 直接出到产物树 videos/，不再经本库。函数内用 `${BASH_SOURCE[0]}`
+# 定位本文件所在目录（执行副本的 dev-scripts/gl/），验收工具与重绘器在同级 dev-scripts/media/，不依赖调用方的 REPO 变量。
+#
+# 拆仓（1008 拆分方案 §四「换 AV1 要改的地方」）：录制器原始帧改为永久保存的 AV1（meta.json 记 raw_codec=av1-yuv444p），
+# transcode_episode_dir 见到这种局目录一律不转码、不删原始 MKV（打印 result=permanent_raw）；旧 FFV1 产物与原侧 rgb24
+# 照旧转码、帧数一致后删原始帧。
 #
 #   transcode_episode_dir [--keep-raw] <局目录>
 #       就地转码为 episode.mp4（实现原在 run_seat.sh，原样移入）；--keep-raw 时转码成功也不删原始帧
@@ -19,7 +24,7 @@
 #       ffmpeg 解析顺序与 transcode_episode_dir 内 ffmpeg_exe() 相同：SGEVAL_FFMPEG → V75_FFMPEG → /usr/bin/ffmpeg
 #       → PATH → imageio_ffmpeg；找不到返回 1。
 #
-# 解释器：调用方定义了 tool_py（run_seat.sh）就用它，否则取 TOOL_PY → BENCH_PY → python3。
+# 解释器：调用方定义了 tool_py（orig_seat_lib.sh）就用它，否则取 TOOL_PY → BENCH_PY → python3。
 
 seat_media_py() {  # 本库内 Python 小工具的解释器
   if declare -F tool_py >/dev/null 2>&1; then tool_py; else echo "${TOOL_PY:-${BENCH_PY:-python3}}"; fi
@@ -27,6 +32,10 @@ seat_media_py() {  # 本库内 Python 小工具的解释器
 
 seat_media_dir() {  # 本文件所在目录（绝对路径）
   (cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+}
+
+seat_media_tools() {  # 验收工具与重绘器所在目录（dev-scripts/media，绝对路径）
+  (cd "$(dirname "${BASH_SOURCE[0]}")/../media" && pwd)
 }
 
 seat_media_ffmpeg() {  # 打印 ffmpeg 路径；顺序同 transcode_episode_dir 的 ffmpeg_exe()
@@ -57,7 +66,8 @@ _seat_media_transcode() {  # [--keep-raw] $1 = 每局目录。就地转码为 ep
   "$(seat_media_py)" - "$1" "$keep" <<'PY'
 """两种原始帧：
 - 新侧（recorder.py）：front.mkv／wrist.mkv（FFV1，同一流里重复帧只编码一份）+ frames-<stream>.jsonl（idx→enc）。
-  按 idx 展开回逐帧原图（同 scripts/injection-dev/site/eval_transcode.py），期望帧数 = 记录行数；
+  按 idx 展开回逐帧原图（同 dev-scripts/site/eval_transcode.py），期望帧数 = 记录行数；meta.json 记
+  raw_codec=av1-yuv444p 的局（拆仓后的永久 AV1 原始帧）不转码、不删，result=permanent_raw；
 - 原侧（pp_official_runner.py／official_hard_runner.py）：frames/{front,wrist}.rgb24 + frames/frames.json
   （pix_fmt=rgb24、各流 width/height/count），期望帧数 = count。
 两路左右拼接（高度不同则下方补黑），libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -movflags +faststart，30 fps。
@@ -133,6 +143,14 @@ def main():
     # 只看原始媒体是否还在：转码成功后 frames-*.jsonl／frames.json 保留，但 *.mkv／*.rgb24 已删
     kind = "new" if any((d / f"{s}.mkv").exists() for s in STREAMS) else \
         "orig" if any((d / "frames" / f"{s}.rgb24").exists() for s in STREAMS) else "none"
+    if kind == "new":
+        try:
+            raw_codec = json.loads((d / "meta.json").read_text(encoding="utf-8")).get("raw_codec")
+        except (OSError, ValueError):
+            raw_codec = None
+        if raw_codec == "av1-yuv444p":  # 永久 AV1 原始帧：不进旧的「转码后删原始帧」分支
+            print(f"REC_TRANSCODE dir={d.name} kind=new result=permanent_raw raw_codec={raw_codec}", flush=True)
+            return 0
     if kind == "none":
         if (d / MP4).exists():  # 上一次已转码（如周期同步被收尾打断后重入）：保留原 transcode.json
             print(f"REC_TRANSCODE dir={d.name} kind=none result=already", flush=True)
@@ -265,7 +283,7 @@ render_official_dir() {  # $1 = 局目录；返回 0 = KEPT／重绘通过／无
   if [[ -z "$d" || ! -d "$d" ]]; then
     echo "OFFICIAL_RENDER=FAIL dir=$name stage=input reason=no_dir"; return 2
   fi
-  lib="$(seat_media_dir)"; py="$(seat_media_py)"
+  lib="$(seat_media_tools)"; py="$(seat_media_py)"
   if ! ff="$(seat_media_ffmpeg)"; then
     echo "OFFICIAL_RENDER=FAIL dir=$name stage=input reason=no_ffmpeg"; return 2
   fi

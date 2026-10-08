@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # 第二档一席的串行链（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.6、第五节「第二档」；子任务 S6）：
-# 同一分片、同一张卡，先原侧（run_official_hard.sh）后新侧（run_eval_gl.sh --dataset hard-verify --max-steps 1300）。
+# 同一分片、同一张卡，先原侧（run_official_hard.sh）后新侧（拆仓后为 dev-scripts/gl/run_eval_gl.sh → seat.py，
+# 分片 JSON 直接作身份清单、--dataset hard-verify；产物在 <stage>/new-sNN/ 下的新产物树）。
 # 前一侧的服务完全退出、显存释放后才起后一侧：按该侧记下的 setsid 进程组（<stage>/sNN/orig/.v8-pgids、
 # <stage>/sNN/.v8-pgids）逐个 kill -0 核实已退出且不在 nvidia-smi 计算进程列表里（≤--release-wait 秒，缺省 120），
 # 并用 port_busy 核对本策略端口段已空；超时打印 RUN_BLOCKED reason=gpu_not_released 并停链（CHAIN_STOP）。
-# 守卫复用 run_seat.sh（source）：port_busy、kill -0、step_cap_pairing；两侧各自的 NO_PROGRESS 无进展检测与首局
-# 600 s 放宽在 run_official_hard.sh／run_seat.sh 内（同一套函数）。
+# 守卫复用 orig_seat_lib.sh（source）：port_busy、kill -0、step_cap_pairing；两侧各自的 NO_PROGRESS 无进展检测与首局
+# 600 s 放宽在 run_official_hard.sh／orig_seat_lib.sh 内（同一套函数）。
 #
 # 衔接：原侧 rc 为 0、3（该路线预检不过，只停该路线）、6（身份未齐）、7（同步 FAIL）时照常跑新侧；原侧 rc 为 4／5
 #   （基础设施或额度用尽）或被信号终止（>128）时打印 CHAIN_STOP 并不跑新侧（剩余分片由主会话重分）。第二档差异不停链。
@@ -14,6 +15,7 @@
 #     --policy {groundsg,pp} [--groundsg-variant V] [--qwenvl-groundsg-adapter D] [--memer-adapter D] \
 #     [--groundsg-ckpt D --openpi-data-home D --tokenizer-sha256 H] [--pp-ckpt D] \
 #     --policy-seed N --budget-ledger P --trajectory-cap N --shared-infra-cap N --expired-cap N --planned-first-tries N \
+#     [--reset-cap N（缺省 141430，与原侧 budget_ledger 常量一致，两侧须同一 config）] \
 #     --reset-budget N --infra-retry-budget N --orig-infra-retry-budget N \
 #     [--cond C] [--media-root D] [--local-root D] [--limit N] [--episode-wall S] [--sync-interval S] [--release-wait S] [--gpu N]
 #   数据集与步数在本脚本里固定为 hard-verify／1300（不带 --strict-cap），起跑先过 step_cap_pairing。
@@ -25,13 +27,13 @@ set -uo pipefail
 export PYTHONUNBUFFERED=1
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=run_seat.sh
-source "$HERE/run_seat.sh"
+# shellcheck source=orig_seat_lib.sh
+source "$HERE/orig_seat_lib.sh"
 
 RUN_NAME="" ; SEAT="" ; STAGE="" ; SHARD="" ; POLICY="" ; MEDIA_ROOT="" ; LOCAL_ROOT="" ; COND="SGEVAL"
 NEW_RESET_BUDGET="" ; NEW_INFRA_BUDGET="" ; ORIG_INFRA_BUDGET="" ; P_LIMIT=0 ; P_WALL="" ; P_SYNC="" ; RELEASE_WAIT=120
 CHILD_PID="" ; ORIG_RC="" ; NEW_RC="" ; PAIR_DONE=0
-P_POLICY_SEED="" ; P_MEMER_ADAPTER="" ; P_BUDGET=()  # 第三阶段：只转发（P_ 前缀，不与 run_seat.sh 的同名全局混用）
+P_POLICY_SEED="" ; P_MEMER_ADAPTER="" ; P_BUDGET=() ; P_RESET_CAP=141430  # 第三阶段：只转发（P_ 前缀，不与 orig_seat_lib.sh 的同名全局混用）
 
 pair_die2() {
   echo "$1" >&2
@@ -58,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     --openpi-data-home) OPENPI_HOME="$2"; shift 2;;
     --tokenizer-sha256) TOKENIZER_SHA="$2"; shift 2;;
     --reset-budget) NEW_RESET_BUDGET="$2"; shift 2;;
+    --reset-cap) P_RESET_CAP="$2"; shift 2;;
     --infra-retry-budget) NEW_INFRA_BUDGET="$2"; shift 2;;
     --orig-infra-retry-budget) ORIG_INFRA_BUDGET="$2"; shift 2;;
     --cond) COND="$2"; shift 2;;
@@ -106,8 +109,19 @@ fi
 # MemER adapter 原样转发（pp 误给时由两侧 variant_pairing 拒跑，不在这里吞掉）
 [[ -n "$P_MEMER_ADAPTER" ]] && model+=(--memer-adapter "$P_MEMER_ADAPTER")
 ORIG_CMD=(bash "$HERE/run_official_hard.sh" "${common[@]}" --policy "$POLICY" "${model[@]}" --infra-retry-budget "$ORIG_INFRA_BUDGET")
-NEW_CMD=(bash "$HERE/run_eval_gl.sh" "${common[@]}" --policies "$POLICY" "${model[@]}" --cond "$COND"
-         --reset-budget "$NEW_RESET_BUDGET" --infra-retry-budget "$NEW_INFRA_BUDGET")
+# 新侧：拆仓后的 run_eval_gl.sh（常驻 Policy + 动态队列）；服务端由 Python 起停，模型参数按 seat.py 透传
+NEW_CMD=(bash "$HERE/../gl/run_eval_gl.sh" --policies "$POLICY" --run "$RUN_NAME" --identities "$SHARD"
+         --out "$STAGE/new-s$SEAT" --gpus "${P_GPU:-0}" --dataset "$DATASET" --reset-cap "$P_RESET_CAP"
+         --reset-budget "$NEW_RESET_BUDGET" --infra-retries "$NEW_INFRA_BUDGET" --seat "s$SEAT")
+[[ -n "$P_POLICY_SEED" ]] && NEW_CMD+=(--policy-seed "$P_POLICY_SEED")
+NEW_CMD+=("${P_BUDGET[@]}")
+if [[ "$POLICY" == "groundsg" ]]; then
+  NEW_CMD+=(--groundsg-variant "$GROUNDSG_VARIANT" --ckpt "$GROUNDSG_CKPT")
+  [[ -n "$QWENVL_ADAPTER" ]] && NEW_CMD+=(--qwenvl-groundsg-adapter "$QWENVL_ADAPTER")
+else
+  NEW_CMD+=(--ckpt "$PP_CKPT")
+fi
+[[ -n "$P_MEMER_ADAPTER" ]] && NEW_CMD+=(--memer-adapter "$P_MEMER_ADAPTER")
 
 wait_side_released() {  # $1 = 该侧的 .v8-pgids；进程组全退出且不在计算进程列表、端口段空闲才返回 0
   local f="$1" t0 role pid alive base p busy
