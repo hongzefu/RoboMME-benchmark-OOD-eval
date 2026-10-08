@@ -1,0 +1,34 @@
+#!/bin/bash
+# 第二档原侧补跑（1005 计划批次 1）：上一轮执行副本 robomme_benchmark-sgeval（不同步、不改，HEAD 须等于 inputs/orig-exec-commit.txt），
+# 直接调 run_official_hard.sh 跑一个分片（不经 pair_seat.sh：本批次不跑新侧）。环境变量照抄 sgeval-20261004/scripts/seat_chain_v2.sh。
+# 用法：chain_orig.sh --seat NN --model {qwenvl|pp} --shard <shard.json>
+set -u
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+C=$N/robomme_benchmark-sgeval
+R=$N/sgeval-20261006-02
+FROZEN=$(cat $R/inputs/orig-exec-commit.txt)
+SEAT=""; MODEL=""; SHARD=""; WALLQ=()
+while [ $# -gt 0 ]; do case $1 in
+  --seat) SEAT=$2; shift 2;; --model) MODEL=$2; shift 2;; --shard) SHARD=$2; shift 2;;
+  *) echo "未知参数 $1"; exit 2;; esac; done
+echo "SEAT_CHAIN_START seat=$SEAT model=$MODEL shard=$SHARD host=$(hostname) $(date -Is)"
+head=$(git -C $C rev-parse HEAD); dirty=$(git -C $C status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$FROZEN" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$FROZEN dirty=$dirty"; exit 3; }
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | sed 's/^/GPU_INFO /'
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$N/sg-eval/venvs/client-env/bin/python
+export PYTHONPATH=$C/src:$C/third_party/mme-vla/packages/openpi-client/src
+export UV_CACHE_DIR=/tmp/uvcache-$SEAT
+MMESG="--mmesg-ckpt $N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --openpi-data-home $N/sg-eval/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+case $MODEL in
+  qwenvl) export SEAT_XLA_MEM_FRACTION=0.65; WALLQ=(--episode-wall 3600)
+          QA="--qwenvl-groundsg-adapter $N/sg-eval/ckpt/qwenvl-groundsg/checkpoint-1200"
+          MODEL_ARGS=(--policy mmesg --mme-variant ground-sg-qwenvl $QA $MMESG); STG=$R/gate2-orig-qwenvl;;
+  pp) MODEL_ARGS=(--policy pp --pp-ckpt $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme); STG=$R/gate2-orig-pp;;
+  *) echo "RUN_BLOCKED reason=model"; exit 2;;
+esac
+bash $C/scripts/eval-official/run_official_hard.sh --run-name p2-orig-$MODEL-s$SEAT --seat $SEAT --repo $C --stage $STG --shard $SHARD \
+  --dataset test-hard0 --max-steps 1300 --gpu 0 "${MODEL_ARGS[@]}" "${WALLQ[@]}" --infra-retry-budget ${ORIG_INFRA:-3}
+rc=$?; echo "CHAIN_STEP seat=$SEAT step=orig-$MODEL rc=$rc $(date -Is)"
+echo "SEAT_CHAIN_DONE seat=$SEAT model=$MODEL rc=$rc $(date -Is)"
+exit $rc

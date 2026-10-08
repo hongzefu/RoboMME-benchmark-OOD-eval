@@ -1,0 +1,18 @@
+#!/bin/bash
+# 主会话事件汇总（只读）：logs/*.log 与 logs/tasks/*.log 每份日志各起一个独立 tail -F（行缓冲过滤、带来源前缀），
+# 每 30 秒发现新日志即接上。不用一条 tail 挂多文件（避免 ==> 头部行噪声）。退出时收掉自己起的子进程。
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02
+PAT='WORKER_(START|STOP|END)|TASK_(START|END|SUMMARY)|RUN_BLOCKED|INFRA_EXHAUSTED|NO_PROGRESS|OFFICIAL_RENDER=FAIL|OFFICIAL_MEDIA=|OBSERVER_COMPLETE=|BUDGET_(WARN|ENFORCEMENT)|OFFICIAL_SEAT_DONE|SEAT_REC_SYNC=FAIL|CHAIN_(STOP|STEP)|SEAT_CHAIN_DONE|EXIT_CODE=[1-9]|Traceback|CUDA error|out of memory|svulkan2|EXCLUSIVE|NO RECORD|reset 拒绝|GEN_REGRESS'
+declare -A seen
+first=1
+trap 'kill $(jobs -p) 2>/dev/null' EXIT
+while true; do
+  for f in $R/logs/*.log $R/logs/tasks/*.log; do
+    [ -e "$f" ] || continue
+    [ -n "${seen[$f]:-}" ] && continue
+    seen[$f]=1
+    tag=$(basename "$f" .log)
+    ( tail -n $([ $first = 1 ] && echo 0 || echo +1) -F "$f" 2>/dev/null | stdbuf -oL tr '\r' '\n' | grep --line-buffered -aE "$PAT" | stdbuf -oL sed "s|^|[$tag] |" ) &
+  done
+  first=0; sleep 30
+done

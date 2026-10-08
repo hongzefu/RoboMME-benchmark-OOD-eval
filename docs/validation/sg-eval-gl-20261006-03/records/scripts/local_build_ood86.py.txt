@@ -1,0 +1,34 @@
+"""1006 计划第二部分四节 runbook 第 3 步：OOD 第三档每模型 86 局清单。
+源：1004 轮 V9 全量 800 局执行清单（v9-full，已连交付 spec 校验）；每格按 builder_episode 升序取前 2 局；
+用当前代码 robomme_hard 的 ood builder 逐局反查 (task, tier, seed, spec_sha256) 一致；切 2 片（每片 43 局，按格交替）。"""
+import json, hashlib, collections, sys
+from pathlib import Path
+SRC = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261004/inputs/oracle/gate3/manifest.json')
+OUT = Path(sys.argv[1]); OUT.mkdir(parents=True, exist_ok=True)
+src = json.loads(SRC.read_text()); rows = src['rows']
+by = collections.defaultdict(list)
+for r in rows: by[(r['task'], r['tier'])].append(r)
+sel = []
+for cell in sorted(by):
+    sel += sorted(by[cell], key=lambda r: r['builder_episode'])[:2]
+assert len(by) == 43 and len(sel) == 86, (len(by), len(sel))
+from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+bad = 0
+for task in sorted({r['task'] for r in sel}):
+    b = BenchmarkEnvBuilder(env_id=task, dataset='ood', action_space='joint_angle', max_steps=1800)
+    for r in (x for x in sel if x['task'] == task):
+        ident = b.resolve_identity(r['builder_episode']) if hasattr(b, 'resolve_identity') else None
+        if ident is None:
+            print('NO_RESOLVE_IDENTITY'); sys.exit(2)
+        ok = (ident.get('tier'), int(ident.get('seed')), ident.get('spec_sha256')) == (r['tier'], int(r['seed']), r['spec_sha256'])
+        if not ok: bad += 1; print('MISMATCH', r['key'], ident)
+shards = {'00': sel[0::2], '01': sel[1::2]}
+for k, v in shards.items():
+    v = [{kk: x[kk] for kk in ('task','tier','seed','candidate','builder_episode','source_episode','spec_sha256','key')} for x in v]
+    (OUT / f'shard-{k}.json').write_text(json.dumps(v, ensure_ascii=False, indent=1))
+man = {'schema': 'sgeval3-ood86/1', 'dataset': 'ood', 'source': str(SRC), 'source_sha256': hashlib.sha256(SRC.read_bytes()).hexdigest(),
+       'rule': '每格按 builder_episode 升序取前 2 局', 'cells': 43, 'total': 86,
+       'shards': {k: len(v) for k, v in shards.items()}, 'rows': [dict(x, shard=k) for k, v in shards.items() for x in v]}
+(OUT / 'manifest.json').write_text(json.dumps(man, ensure_ascii=False, indent=1))
+fp = hashlib.sha256(json.dumps(sorted(r['key'] for r in sel)).encode()).hexdigest()
+print(f"OOD86_MANIFEST={'PASS' if bad == 0 else 'FAIL'} cells=43 total=86 shards=2x43 identity_mismatch={bad} keys_sha256={fp}")

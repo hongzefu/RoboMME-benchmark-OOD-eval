@@ -1,0 +1,2637 @@
+{
+ "anchor": "f8f76fba",
+ "hf_bucket": "HongzeFu/robomme-hard-v9-noise-baseline",
+ "jitter_observed": [
+  {
+   "decision": "登记为环境敏感局。（用户 2026-10-04）",
+   "reason": "2026-10-04 维护后对拍：gl1525 上改后代码两次、旧代码 f8f76fba 一次均为 6b85dd3239e0（三次逐字节相同），与基线 aa414cf9f8dc 自第 376 步分叉（Hook the cube to the target with the peg），闸门定性 env_changed；两侧均成功",
+   "seed": 23400200,
+   "set": "v9",
+   "shas_seen": [
+    "6b85dd3239e0159f4f3c5ad8a46696d63eefff57c979882637c3d831ba2a32e8"
+   ],
+   "task": "MoveCube",
+   "tier": "xhard4"
+  }
+ ],
+ "limit": null,
+ "partial": false,
+ "records": {
+  "dir": "docs/validation/noise-baseline-20261003/records/compare",
+  "files": [
+   {
+    "file": "v9-D-v9-a.jsonl",
+    "new": "v9-a",
+    "ref": "delivery.local.json",
+    "rows": 129,
+    "sha256": "8fcfee492539a898411b5f61cc5d8691d79b26f4fa68619d483387fc35a6a15a"
+   },
+   {
+    "file": "v9-D-v9-b.jsonl",
+    "new": "v9-b",
+    "ref": "delivery.local.json",
+    "rows": 129,
+    "sha256": "03bd67f1086432a56a893610ce1bd34b74a4af4e14e99d06f04e33e6a62a1dd8"
+   },
+   {
+    "file": "v9-v9-a-v9-b.jsonl",
+    "new": "v9-b",
+    "ref": "v9-a",
+    "rows": 129,
+    "sha256": "5bb3942cc5ce62af5839e0581a63e25793167045241985b06bcc84611e9a88b7"
+   },
+   {
+    "file": "x0-O-x0-a.jsonl",
+    "new": "x0-a",
+    "ref": "O-xhard0-bucket",
+    "rows": 48,
+    "sha256": "c97c23a46abc6cfec65070aa6fc419da805a831732af5ad6f51823cf0a22cb69"
+   },
+   {
+    "file": "x0-O-x0-b.jsonl",
+    "new": "x0-b",
+    "ref": "O-xhard0-bucket",
+    "rows": 48,
+    "sha256": "ca0d89bb16dc28b05178871a6b353bd7901965a6153550a8c8016c875b75bcf0"
+   },
+   {
+    "file": "x0-x0-a-x0-b.jsonl",
+    "new": "x0-b",
+    "ref": "x0-a",
+    "rows": 48,
+    "sha256": "1ccb2d3bfc0a155d831aa592f8361da7bcd3e1797f9e5ad6ceaeaf80e7f5f831"
+   }
+  ]
+ },
+ "rehash": true,
+ "rule": "stable：两遍都成功且 h5 sha 相同；known_fail：两遍都失败且失败占位 h5 sha 相同；jitter：其余。新跑期望见 noise_gate.expect_verdict",
+ "schema": "noise-ref/1",
+ "sets": {
+  "v9": {
+   "counts": {
+    "jitter": 1,
+    "known_fail": 0,
+    "stable": 128
+   },
+   "episodes": [
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PickXtimes_episode_0/hdf5_files/PickXtimes_ep0_seed16100000.h5",
+     "h5_b": "v9-b/episodes/xhard1/PickXtimes_episode_0/hdf5_files/PickXtimes_ep0_seed16100000.h5",
+     "id": "PickXtimes|xhard1|16100000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16100000,
+     "shas": [
+      "7a260f9758904d9c99a3ec5f5240cca2193de87f85641b8a7b94c83e29752f17"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PickXtimes_episode_1/hdf5_files/PickXtimes_ep1_seed16100100.h5",
+     "h5_b": "v9-b/episodes/xhard1/PickXtimes_episode_1/hdf5_files/PickXtimes_ep1_seed16100100.h5",
+     "id": "PickXtimes|xhard1|16100100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16100100,
+     "shas": [
+      "ef83baca2c825ca232292062f5eb2e60f445322f9289d6c0fff3d810d4423e88"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PickXtimes_episode_2/hdf5_files/PickXtimes_ep2_seed16100200.h5",
+     "h5_b": "v9-b/episodes/xhard1/PickXtimes_episode_2/hdf5_files/PickXtimes_ep2_seed16100200.h5",
+     "id": "PickXtimes|xhard1|16100200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16100200,
+     "shas": [
+      "981d2774c746f2383377b31c7dc1c3c4efe7759ec7b81eb98573c47b0c27ee9a"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PickXtimes_episode_0/hdf5_files/PickXtimes_ep0_seed18100000.h5",
+     "h5_b": "v9-b/episodes/xhard2/PickXtimes_episode_0/hdf5_files/PickXtimes_ep0_seed18100000.h5",
+     "id": "PickXtimes|xhard2|18100000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18100000,
+     "shas": [
+      "b736ad51adddd9142c887832d39581f01355c1e9ee6c0ba2415179dff415c9a4"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PickXtimes_episode_1/hdf5_files/PickXtimes_ep1_seed18100100.h5",
+     "h5_b": "v9-b/episodes/xhard2/PickXtimes_episode_1/hdf5_files/PickXtimes_ep1_seed18100100.h5",
+     "id": "PickXtimes|xhard2|18100100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18100100,
+     "shas": [
+      "8f5306b4acb829f18244e413b88704997de85f607566418c293ef14959992c32"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PickXtimes_episode_2/hdf5_files/PickXtimes_ep2_seed18100200.h5",
+     "h5_b": "v9-b/episodes/xhard2/PickXtimes_episode_2/hdf5_files/PickXtimes_ep2_seed18100200.h5",
+     "id": "PickXtimes|xhard2|18100200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18100200,
+     "shas": [
+      "b9cfb07dc9bdecb4ee84bdfd0d4209f2d64c1abc422278f9270c66fe72936a03"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/PickXtimes_episode_0/hdf5_files/PickXtimes_ep0_seed20100000.h5",
+     "h5_b": "v9-b/episodes/xhard3/PickXtimes_episode_0/hdf5_files/PickXtimes_ep0_seed20100000.h5",
+     "id": "PickXtimes|xhard3|20100000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20100000,
+     "shas": [
+      "29a0dda667b33f0e45d4337956352b7d977072c0f416b9b02ebbef877e795a40"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/PickXtimes_episode_1/hdf5_files/PickXtimes_ep1_seed20100100.h5",
+     "h5_b": "v9-b/episodes/xhard3/PickXtimes_episode_1/hdf5_files/PickXtimes_ep1_seed20100100.h5",
+     "id": "PickXtimes|xhard3|20100100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20100100,
+     "shas": [
+      "a9b0df1156d488400b001a626d19fd3700721fbaa5d408f0694cdc84e01c41e2"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/PickXtimes_episode_2/hdf5_files/PickXtimes_ep2_seed20100200.h5",
+     "h5_b": "v9-b/episodes/xhard3/PickXtimes_episode_2/hdf5_files/PickXtimes_ep2_seed20100200.h5",
+     "id": "PickXtimes|xhard3|20100200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20100200,
+     "shas": [
+      "ee9bf7daeaab2ab97b3e09a74f8e86a6a867736b3458a5392e338dd2bc593cf5"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/StopCube_episode_0/hdf5_files/StopCube_ep0_seed16200000.h5",
+     "h5_b": "v9-b/episodes/xhard1/StopCube_episode_0/hdf5_files/StopCube_ep0_seed16200000.h5",
+     "id": "StopCube|xhard1|16200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16200000,
+     "shas": [
+      "dc34951563e3a113a11b81c062a8c222bf94147394d062fb6b6410666e64b384"
+     ],
+     "task": "StopCube",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/StopCube_episode_1/hdf5_files/StopCube_ep1_seed16200100.h5",
+     "h5_b": "v9-b/episodes/xhard1/StopCube_episode_1/hdf5_files/StopCube_ep1_seed16200100.h5",
+     "id": "StopCube|xhard1|16200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16200100,
+     "shas": [
+      "25e851a19911ddcfc1f7f69197e66272a2b32ca5016f4ad2793d58b348af8aee"
+     ],
+     "task": "StopCube",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/StopCube_episode_2/hdf5_files/StopCube_ep2_seed16200200.h5",
+     "h5_b": "v9-b/episodes/xhard1/StopCube_episode_2/hdf5_files/StopCube_ep2_seed16200200.h5",
+     "id": "StopCube|xhard1|16200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16200200,
+     "shas": [
+      "5f747e324f16f3acbc83a5a2e882e1bb527ec2b53f1aaa4d5e0e9980eb512a5c"
+     ],
+     "task": "StopCube",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/StopCube_episode_0/hdf5_files/StopCube_ep0_seed18200000.h5",
+     "h5_b": "v9-b/episodes/xhard2/StopCube_episode_0/hdf5_files/StopCube_ep0_seed18200000.h5",
+     "id": "StopCube|xhard2|18200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18200000,
+     "shas": [
+      "f9471d9844c66a005d73fe0e672ad0fcf28d9914a8d5b4872cc963282c6dfa8b"
+     ],
+     "task": "StopCube",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/StopCube_episode_1/hdf5_files/StopCube_ep1_seed18200100.h5",
+     "h5_b": "v9-b/episodes/xhard2/StopCube_episode_1/hdf5_files/StopCube_ep1_seed18200100.h5",
+     "id": "StopCube|xhard2|18200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18200100,
+     "shas": [
+      "3a0fe34d04c956e8b0fbb658ad42ea4c682ab2109491f4e2af6b21e0f584ec12"
+     ],
+     "task": "StopCube",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/StopCube_episode_2/hdf5_files/StopCube_ep2_seed18200200.h5",
+     "h5_b": "v9-b/episodes/xhard2/StopCube_episode_2/hdf5_files/StopCube_ep2_seed18200200.h5",
+     "id": "StopCube|xhard2|18200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18200200,
+     "shas": [
+      "f91dd8031675b4d8cc401ca8244c287445122c4be3e7d43958efbb6b97575469"
+     ],
+     "task": "StopCube",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/StopCube_episode_0/hdf5_files/StopCube_ep0_seed20200000.h5",
+     "h5_b": "v9-b/episodes/xhard3/StopCube_episode_0/hdf5_files/StopCube_ep0_seed20200000.h5",
+     "id": "StopCube|xhard3|20200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20200000,
+     "shas": [
+      "759b71101286cae172b9a7eeb0aa9c3d5f2884ab73bc8d70cfe3dc4bd9b4acf3"
+     ],
+     "task": "StopCube",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/StopCube_episode_1/hdf5_files/StopCube_ep1_seed20200100.h5",
+     "h5_b": "v9-b/episodes/xhard3/StopCube_episode_1/hdf5_files/StopCube_ep1_seed20200100.h5",
+     "id": "StopCube|xhard3|20200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20200100,
+     "shas": [
+      "ccbd6c15e07f42be116459bde7b03df384b9d2944e7fb07d575c2a582c38a480"
+     ],
+     "task": "StopCube",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/StopCube_episode_2/hdf5_files/StopCube_ep2_seed20200200.h5",
+     "h5_b": "v9-b/episodes/xhard3/StopCube_episode_2/hdf5_files/StopCube_ep2_seed20200200.h5",
+     "id": "StopCube|xhard3|20200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20200200,
+     "shas": [
+      "6961a7cbed7acd84f903364f076cabe7e1cdfa54b1a67366e203cc00061b3c07"
+     ],
+     "task": "StopCube",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/StopCube_episode_0/hdf5_files/StopCube_ep0_seed22200000.h5",
+     "h5_b": "v9-b/episodes/xhard4/StopCube_episode_0/hdf5_files/StopCube_ep0_seed22200000.h5",
+     "id": "StopCube|xhard4|22200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22200000,
+     "shas": [
+      "d4b7aaab77c25dc4eb428ce05f6931fb4e9675e1e8d9abce025caecbb6088848"
+     ],
+     "task": "StopCube",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/StopCube_episode_1/hdf5_files/StopCube_ep1_seed22200100.h5",
+     "h5_b": "v9-b/episodes/xhard4/StopCube_episode_1/hdf5_files/StopCube_ep1_seed22200100.h5",
+     "id": "StopCube|xhard4|22200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22200100,
+     "shas": [
+      "dd1bae03cd98febd368743e792b778b39426f5863de91318cb2f777f4580dc86"
+     ],
+     "task": "StopCube",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/StopCube_episode_2/hdf5_files/StopCube_ep2_seed22200200.h5",
+     "h5_b": "v9-b/episodes/xhard4/StopCube_episode_2/hdf5_files/StopCube_ep2_seed22200200.h5",
+     "id": "StopCube|xhard4|22200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22200200,
+     "shas": [
+      "732002d8cfe17f399bd6dd39b359e8e95cc0914fd1e5f83740861960e8058df0"
+     ],
+     "task": "StopCube",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard5/StopCube_episode_0/hdf5_files/StopCube_ep0_seed24200000.h5",
+     "h5_b": "v9-b/episodes/xhard5/StopCube_episode_0/hdf5_files/StopCube_ep0_seed24200000.h5",
+     "id": "StopCube|xhard5|24200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 24200000,
+     "shas": [
+      "56426876441f7f730e02f03e6bdb6b4e480bca26a6ea006bdac02ad3fa719ba1"
+     ],
+     "task": "StopCube",
+     "tier": "xhard5"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard5/StopCube_episode_1/hdf5_files/StopCube_ep1_seed24200100.h5",
+     "h5_b": "v9-b/episodes/xhard5/StopCube_episode_1/hdf5_files/StopCube_ep1_seed24200100.h5",
+     "id": "StopCube|xhard5|24200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 24200100,
+     "shas": [
+      "02b4282fb2c2fdc0d463e6e6e023fb195d2657071d3446c92b4b5c4b0a5b1363"
+     ],
+     "task": "StopCube",
+     "tier": "xhard5"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard5/StopCube_episode_2/hdf5_files/StopCube_ep2_seed24200200.h5",
+     "h5_b": "v9-b/episodes/xhard5/StopCube_episode_2/hdf5_files/StopCube_ep2_seed24200200.h5",
+     "id": "StopCube|xhard5|24200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 24200200,
+     "shas": [
+      "1e8eef78564e241857ff688af727a0400470ca26533788100661c036e355c62f"
+     ],
+     "task": "StopCube",
+     "tier": "xhard5"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed16300000.h5",
+     "h5_b": "v9-b/episodes/xhard1/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed16300000.h5",
+     "id": "SwingXtimes|xhard1|16300000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16300000,
+     "shas": [
+      "224c7a67ffccf2eea9f677bb32dc0916117bb39b2e08cf178790ae21bbbad302"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed16300100.h5",
+     "h5_b": "v9-b/episodes/xhard1/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed16300100.h5",
+     "id": "SwingXtimes|xhard1|16300100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16300100,
+     "shas": [
+      "6586a1a8c36bdfd05d4787a260ce67b9d9574f30b240fc074347841ec54a663e"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed16300200.h5",
+     "h5_b": "v9-b/episodes/xhard1/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed16300200.h5",
+     "id": "SwingXtimes|xhard1|16300200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16300200,
+     "shas": [
+      "2005cdd57513af9d9f1a91c89b9f734bfd68eb1e56854a8b55e8cc71cd92d97c"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed18300000.h5",
+     "h5_b": "v9-b/episodes/xhard2/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed18300000.h5",
+     "id": "SwingXtimes|xhard2|18300000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18300000,
+     "shas": [
+      "6843062c8751a2c55d3c7f116e56e1d0e47073735fe79120d21ebd8dfaa3d11a"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed18300100.h5",
+     "h5_b": "v9-b/episodes/xhard2/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed18300100.h5",
+     "id": "SwingXtimes|xhard2|18300100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18300100,
+     "shas": [
+      "ede7b2cb8fb893bd691cc76daa7472a1bb198da849b8bb52cdc6c671fc455f5b"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed18300200.h5",
+     "h5_b": "v9-b/episodes/xhard2/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed18300200.h5",
+     "id": "SwingXtimes|xhard2|18300200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18300200,
+     "shas": [
+      "7e3ee64a499153e3f13b2f7b7f2b1cd7c72904cedb33f9346c3b099626bf36a8"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed20300000.h5",
+     "h5_b": "v9-b/episodes/xhard3/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed20300000.h5",
+     "id": "SwingXtimes|xhard3|20300000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20300000,
+     "shas": [
+      "4b845f452422be2d9720cf0234dd9d37cf169cf9d950cf4ba4de2735f81ef455"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed20300100.h5",
+     "h5_b": "v9-b/episodes/xhard3/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed20300100.h5",
+     "id": "SwingXtimes|xhard3|20300100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20300100,
+     "shas": [
+      "09288db3ea6631fa2c29348a2cb2013850d46d427d1a4f9efef421197e375b62"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed20300200.h5",
+     "h5_b": "v9-b/episodes/xhard3/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed20300200.h5",
+     "id": "SwingXtimes|xhard3|20300200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20300200,
+     "shas": [
+      "3676ad76a7cbdaa63658b7160a3bad1651185dceb22b608cd162c1c0162f807d"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed22300000.h5",
+     "h5_b": "v9-b/episodes/xhard4/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed22300000.h5",
+     "id": "SwingXtimes|xhard4|22300000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22300000,
+     "shas": [
+      "31a4c1cc6319525bd8aa330b0ee02847461ce686756f28e17721920437ce79b7"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed22300100.h5",
+     "h5_b": "v9-b/episodes/xhard4/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed22300100.h5",
+     "id": "SwingXtimes|xhard4|22300100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22300100,
+     "shas": [
+      "3de36bd20f3c1b4f2741acc69ebd7b9bdd5a62d0cf89ae24417cc686200de3ed"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed22300200.h5",
+     "h5_b": "v9-b/episodes/xhard4/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed22300200.h5",
+     "id": "SwingXtimes|xhard4|22300200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22300200,
+     "shas": [
+      "bf46685022e4ce0ad71e5d92c270ad81bdc94b35297c99f2eb37d3de8f8eb42e"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard5/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed24300001.h5",
+     "h5_b": "v9-b/episodes/xhard5/SwingXtimes_episode_0/hdf5_files/SwingXtimes_ep0_seed24300001.h5",
+     "id": "SwingXtimes|xhard5|24300001",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 24300001,
+     "shas": [
+      "0294eef5fe83ea6f469e2c18c60cefe5f68456dc7155287b734905b64184d4c5"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard5"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard5/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed24300100.h5",
+     "h5_b": "v9-b/episodes/xhard5/SwingXtimes_episode_1/hdf5_files/SwingXtimes_ep1_seed24300100.h5",
+     "id": "SwingXtimes|xhard5|24300100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 24300100,
+     "shas": [
+      "7d622b09d043fa16a6727692a280ccb941aba32d090a7487c9d95eaf4e412f53"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard5"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard5/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed24300200.h5",
+     "h5_b": "v9-b/episodes/xhard5/SwingXtimes_episode_2/hdf5_files/SwingXtimes_ep2_seed24300200.h5",
+     "id": "SwingXtimes|xhard5|24300200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 24300200,
+     "shas": [
+      "e512719f968b38a22a64d5a03e39c65677902cbc39716941af3c1334729ee19a"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard5"
+    },
+    {
+     "class": "jitter",
+     "h5_a": "v9-a/episodes/xhard1/BinFill_episode_0/hdf5_files/BinFill_ep0_seed16400000.h5",
+     "h5_b": "v9-b/episodes/xhard1/BinFill_episode_0/hdf5_files/BinFill_ep0_seed16400000.h5",
+     "id": "BinFill|xhard1|16400000",
+     "ok_a": true,
+     "ok_b": false,
+     "seed": 16400000,
+     "shas": [
+      "da0c4ad3e8ed15ec9e03f6a13527080a2e84d1ae415598f761ec1dfddf5be4f9",
+      "26c4d449632ea072317c16e9d4857e419b67e1b7751f81a89a87c8e75fe9484e"
+     ],
+     "task": "BinFill",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/BinFill_episode_1/hdf5_files/BinFill_ep1_seed16400100.h5",
+     "h5_b": "v9-b/episodes/xhard1/BinFill_episode_1/hdf5_files/BinFill_ep1_seed16400100.h5",
+     "id": "BinFill|xhard1|16400100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16400100,
+     "shas": [
+      "0deb88250f70ebd618a5265a7cbb182aeffcfb936e5b1100d20c19f02409d133"
+     ],
+     "task": "BinFill",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/BinFill_episode_2/hdf5_files/BinFill_ep2_seed16400200.h5",
+     "h5_b": "v9-b/episodes/xhard1/BinFill_episode_2/hdf5_files/BinFill_ep2_seed16400200.h5",
+     "id": "BinFill|xhard1|16400200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16400200,
+     "shas": [
+      "fad4bf8aea202b9ee71a79ee4af6b007f31321184d3c80e42712c29434f11fc7"
+     ],
+     "task": "BinFill",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/BinFill_episode_1/hdf5_files/BinFill_ep1_seed18400100.h5",
+     "h5_b": "v9-b/episodes/xhard2/BinFill_episode_1/hdf5_files/BinFill_ep1_seed18400100.h5",
+     "id": "BinFill|xhard2|18400100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18400100,
+     "shas": [
+      "c64e13d64c111092f883fba6b14eb758aff67b0dd856eebb3478f74b029aeff1"
+     ],
+     "task": "BinFill",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/BinFill_episode_2/hdf5_files/BinFill_ep2_seed18400200.h5",
+     "h5_b": "v9-b/episodes/xhard2/BinFill_episode_2/hdf5_files/BinFill_ep2_seed18400200.h5",
+     "id": "BinFill|xhard2|18400200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18400200,
+     "shas": [
+      "089f3f161cc5d817513e0bfc265ef69a32f0426b241e8e91496be88d0dbdeb51"
+     ],
+     "task": "BinFill",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/BinFill_episode_7/hdf5_files/BinFill_ep7_seed18400700.h5",
+     "h5_b": "v9-b/episodes/xhard2/BinFill_episode_7/hdf5_files/BinFill_ep7_seed18400700.h5",
+     "id": "BinFill|xhard2|18400700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18400700,
+     "shas": [
+      "9b439688bb541bae20102d8553298ecb84e28154a58a89b3f1aae40f846252c2"
+     ],
+     "task": "BinFill",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoUnmaskSwap_episode_0/hdf5_files/VideoUnmaskSwap_ep0_seed16500000.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoUnmaskSwap_episode_0/hdf5_files/VideoUnmaskSwap_ep0_seed16500000.h5",
+     "id": "VideoUnmaskSwap|xhard1|16500000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16500000,
+     "shas": [
+      "457c94d22d619950f701074622c4bd50e118c5f6847e4e719069b430aaae0e8a"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoUnmaskSwap_episode_1/hdf5_files/VideoUnmaskSwap_ep1_seed16500100.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoUnmaskSwap_episode_1/hdf5_files/VideoUnmaskSwap_ep1_seed16500100.h5",
+     "id": "VideoUnmaskSwap|xhard1|16500100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16500100,
+     "shas": [
+      "e32cae3ffe075e64f275bb39328d84cd02b645160795b3c4e7ba942113ab9020"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoUnmaskSwap_episode_2/hdf5_files/VideoUnmaskSwap_ep2_seed16500201.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoUnmaskSwap_episode_2/hdf5_files/VideoUnmaskSwap_ep2_seed16500201.h5",
+     "id": "VideoUnmaskSwap|xhard1|16500201",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16500201,
+     "shas": [
+      "d7436e48a1334734a3252c0be093ad2b734c481957e6d9b0a45f88497b3199c4"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoUnmaskSwap_episode_0/hdf5_files/VideoUnmaskSwap_ep0_seed18500000.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoUnmaskSwap_episode_0/hdf5_files/VideoUnmaskSwap_ep0_seed18500000.h5",
+     "id": "VideoUnmaskSwap|xhard2|18500000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18500000,
+     "shas": [
+      "be4cddb33f8243fd2c2a5453f6e1994f844c33736f3f39fd8a11a2f910f873ca"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoUnmaskSwap_episode_1/hdf5_files/VideoUnmaskSwap_ep1_seed18500100.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoUnmaskSwap_episode_1/hdf5_files/VideoUnmaskSwap_ep1_seed18500100.h5",
+     "id": "VideoUnmaskSwap|xhard2|18500100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18500100,
+     "shas": [
+      "f62242b04d72dda98e1707d8d9fcdf1674766a63a95c7ffd367956060878259b"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoUnmaskSwap_episode_2/hdf5_files/VideoUnmaskSwap_ep2_seed18500200.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoUnmaskSwap_episode_2/hdf5_files/VideoUnmaskSwap_ep2_seed18500200.h5",
+     "id": "VideoUnmaskSwap|xhard2|18500200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18500200,
+     "shas": [
+      "9d7d0dae733dee50e21152c3ef2ffc553be3e6de26f0e7cca2777acd13096dcb"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed16600000.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed16600000.h5",
+     "id": "VideoUnmask|xhard1|16600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16600000,
+     "shas": [
+      "1381e89d71d7cd5c54dbdf1aedcb7bc821fff54bdbd3d0941976748359e0192d"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed16600100.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed16600100.h5",
+     "id": "VideoUnmask|xhard1|16600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16600100,
+     "shas": [
+      "4a56f7b5521ce100b7fe4372678a9b2ce8a108581d61ffd30fe7b0a95253ba78"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed16600200.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed16600200.h5",
+     "id": "VideoUnmask|xhard1|16600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16600200,
+     "shas": [
+      "c8edf838877f1569bb57217abb11b7a5d9a1bd89efda1a14de77acc181579d30"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed18600000.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed18600000.h5",
+     "id": "VideoUnmask|xhard2|18600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18600000,
+     "shas": [
+      "1a7acd17688c31cbf6673d52043254013ebf1a77129c0a27adf2692848c4ec44"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed18600100.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed18600100.h5",
+     "id": "VideoUnmask|xhard2|18600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18600100,
+     "shas": [
+      "c72dfd6249f6aabcb9a2c056f4b5b43fbc8d1f6e3a590a272c7b954415529be1"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed18600200.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed18600200.h5",
+     "id": "VideoUnmask|xhard2|18600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18600200,
+     "shas": [
+      "3242f16c10120aa03e4be4c79874c3dfd68c084ce5ec5bf53e88017ab1de59bc"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed20600000.h5",
+     "h5_b": "v9-b/episodes/xhard3/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed20600000.h5",
+     "id": "VideoUnmask|xhard3|20600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20600000,
+     "shas": [
+      "220b030c63b23dd478b2bc937fe0acfe09ccca0e1f55b8ecfdd8028bc4e0cd13"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed20600100.h5",
+     "h5_b": "v9-b/episodes/xhard3/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed20600100.h5",
+     "id": "VideoUnmask|xhard3|20600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20600100,
+     "shas": [
+      "09efe11763473b3d37f696a9221549afaf5d9ec6e6e0f3856511539d0a19f61b"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed20600200.h5",
+     "h5_b": "v9-b/episodes/xhard3/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed20600200.h5",
+     "id": "VideoUnmask|xhard3|20600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20600200,
+     "shas": [
+      "966f910dc4e8c10a18d747de028157e1cf5d4444f300a4e8a9655010a1f11d3b"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed22600000.h5",
+     "h5_b": "v9-b/episodes/xhard4/VideoUnmask_episode_0/hdf5_files/VideoUnmask_ep0_seed22600000.h5",
+     "id": "VideoUnmask|xhard4|22600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22600000,
+     "shas": [
+      "4816de555859f6925b5d1e752335f574506dee9acfe2f082d385603406965cc6"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed22600100.h5",
+     "h5_b": "v9-b/episodes/xhard4/VideoUnmask_episode_1/hdf5_files/VideoUnmask_ep1_seed22600100.h5",
+     "id": "VideoUnmask|xhard4|22600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22600100,
+     "shas": [
+      "18448c8679748f7e2799bcd8b0a54c7277e9801ba8c799e53628116d61621138"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed22600200.h5",
+     "h5_b": "v9-b/episodes/xhard4/VideoUnmask_episode_2/hdf5_files/VideoUnmask_ep2_seed22600200.h5",
+     "id": "VideoUnmask|xhard4|22600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22600200,
+     "shas": [
+      "b24ef558746e4e2c9a40da0d40fe314013321e1e2c5bbdecc9efcd93a0e70f1e"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/ButtonUnmaskSwap_episode_0/hdf5_files/ButtonUnmaskSwap_ep0_seed16700000.h5",
+     "h5_b": "v9-b/episodes/xhard1/ButtonUnmaskSwap_episode_0/hdf5_files/ButtonUnmaskSwap_ep0_seed16700000.h5",
+     "id": "ButtonUnmaskSwap|xhard1|16700000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16700000,
+     "shas": [
+      "068113fd363a6180b53d2b7a45b6744411ee7c1d7137f5b8a72bb9a31f159e6f"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/ButtonUnmaskSwap_episode_1/hdf5_files/ButtonUnmaskSwap_ep1_seed16700100.h5",
+     "h5_b": "v9-b/episodes/xhard1/ButtonUnmaskSwap_episode_1/hdf5_files/ButtonUnmaskSwap_ep1_seed16700100.h5",
+     "id": "ButtonUnmaskSwap|xhard1|16700100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16700100,
+     "shas": [
+      "cf747d50beeb1b4d3976b58b75bf72c5f8cf2b5d8f37e473b13e9ba3f123605d"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/ButtonUnmaskSwap_episode_2/hdf5_files/ButtonUnmaskSwap_ep2_seed16700201.h5",
+     "h5_b": "v9-b/episodes/xhard1/ButtonUnmaskSwap_episode_2/hdf5_files/ButtonUnmaskSwap_ep2_seed16700201.h5",
+     "id": "ButtonUnmaskSwap|xhard1|16700201",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16700201,
+     "shas": [
+      "8ea5329f09a75e2d4e9893ce6901dc8f75f98dbf132f542f0eeee9a30e58465e"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/ButtonUnmaskSwap_episode_0/hdf5_files/ButtonUnmaskSwap_ep0_seed18700000.h5",
+     "h5_b": "v9-b/episodes/xhard2/ButtonUnmaskSwap_episode_0/hdf5_files/ButtonUnmaskSwap_ep0_seed18700000.h5",
+     "id": "ButtonUnmaskSwap|xhard2|18700000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18700000,
+     "shas": [
+      "1794968d7c5524cd0fc7f46c716cef88811572f283f0acc247c2bd5e9888d5eb"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/ButtonUnmaskSwap_episode_1/hdf5_files/ButtonUnmaskSwap_ep1_seed18700100.h5",
+     "h5_b": "v9-b/episodes/xhard2/ButtonUnmaskSwap_episode_1/hdf5_files/ButtonUnmaskSwap_ep1_seed18700100.h5",
+     "id": "ButtonUnmaskSwap|xhard2|18700100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18700100,
+     "shas": [
+      "83b41625edb1633fe64570bdf1c8f3aa1685df03e01b7343414a9f46dc389a65"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/ButtonUnmaskSwap_episode_2/hdf5_files/ButtonUnmaskSwap_ep2_seed18700201.h5",
+     "h5_b": "v9-b/episodes/xhard2/ButtonUnmaskSwap_episode_2/hdf5_files/ButtonUnmaskSwap_ep2_seed18700201.h5",
+     "id": "ButtonUnmaskSwap|xhard2|18700201",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18700201,
+     "shas": [
+      "48673ee27241d221b1807e23f115cdb86b138be901b9a5062f1664f47ccd49be"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed16800000.h5",
+     "h5_b": "v9-b/episodes/xhard1/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed16800000.h5",
+     "id": "ButtonUnmask|xhard1|16800000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16800000,
+     "shas": [
+      "93dc0f0c39490e0625bcdf4572f6204e814671b1270ba2b39fd88d64e7dc1edd"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed16800100.h5",
+     "h5_b": "v9-b/episodes/xhard1/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed16800100.h5",
+     "id": "ButtonUnmask|xhard1|16800100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16800100,
+     "shas": [
+      "11a3bf0f9840e040c40d4dfe5eb710b4432620fd88b13ad92823ffc7dc6314c2"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed16800200.h5",
+     "h5_b": "v9-b/episodes/xhard1/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed16800200.h5",
+     "id": "ButtonUnmask|xhard1|16800200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16800200,
+     "shas": [
+      "f0668a8d72300e73f89e4508bdbda3013cd6ff8f8f0c029cba99aecd0db49c7a"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed18800000.h5",
+     "h5_b": "v9-b/episodes/xhard2/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed18800000.h5",
+     "id": "ButtonUnmask|xhard2|18800000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18800000,
+     "shas": [
+      "bfc9f37123bc784715ef6014e19ef89e16e40205222b038a16873bd9a8fb057d"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed18800100.h5",
+     "h5_b": "v9-b/episodes/xhard2/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed18800100.h5",
+     "id": "ButtonUnmask|xhard2|18800100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18800100,
+     "shas": [
+      "be11990ad4948487bf0de5cd0b8d406058ced2706068460f5da3895a564f8ca6"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed18800200.h5",
+     "h5_b": "v9-b/episodes/xhard2/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed18800200.h5",
+     "id": "ButtonUnmask|xhard2|18800200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18800200,
+     "shas": [
+      "108338041f53e138c11d414b13126f33048b151ac305b4b97b4ab632c2e2e6e2"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed20800000.h5",
+     "h5_b": "v9-b/episodes/xhard3/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed20800000.h5",
+     "id": "ButtonUnmask|xhard3|20800000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20800000,
+     "shas": [
+      "0df8da5827f08904d0ac3fe8fef6a02973ef99c8949984d66a8c2f436db3770b"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed20800100.h5",
+     "h5_b": "v9-b/episodes/xhard3/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed20800100.h5",
+     "id": "ButtonUnmask|xhard3|20800100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20800100,
+     "shas": [
+      "5a1f5a44da1633c7cd12e6cb03318858ba0f2e7d3a8fdebef7d8952336d9a6b9"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed20800200.h5",
+     "h5_b": "v9-b/episodes/xhard3/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed20800200.h5",
+     "id": "ButtonUnmask|xhard3|20800200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 20800200,
+     "shas": [
+      "354bebba8fb905941464e674bdfbda1cc06dfb82ea9f0f04538c36eda65b2fd8"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed22800000.h5",
+     "h5_b": "v9-b/episodes/xhard4/ButtonUnmask_episode_0/hdf5_files/ButtonUnmask_ep0_seed22800000.h5",
+     "id": "ButtonUnmask|xhard4|22800000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22800000,
+     "shas": [
+      "43c0a3263b9a086af9b3c3b2234cf158231c7ee3ac1c3ccc2409bff0e9807ef3"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed22800100.h5",
+     "h5_b": "v9-b/episodes/xhard4/ButtonUnmask_episode_1/hdf5_files/ButtonUnmask_ep1_seed22800100.h5",
+     "id": "ButtonUnmask|xhard4|22800100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22800100,
+     "shas": [
+      "a203d2ffb6afb2bf5c792d480dff7e347b9cc352bc10d49c235a22afc7241a04"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed22800200.h5",
+     "h5_b": "v9-b/episodes/xhard4/ButtonUnmask_episode_2/hdf5_files/ButtonUnmask_ep2_seed22800200.h5",
+     "id": "ButtonUnmask|xhard4|22800200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 22800200,
+     "shas": [
+      "5ae554fadabdef730a6ddea3d881212f9470e99d1309c47d75a1adf5a4af3ef8"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoRepick_episode_0/hdf5_files/VideoRepick_ep0_seed16900001.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoRepick_episode_0/hdf5_files/VideoRepick_ep0_seed16900001.h5",
+     "id": "VideoRepick|xhard1|16900001",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16900001,
+     "shas": [
+      "a1e019bd34726795c5838562d6aa2f918e4eb1436be5a7de95cc0b7957eccc6d"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoRepick_episode_1/hdf5_files/VideoRepick_ep1_seed16900101.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoRepick_episode_1/hdf5_files/VideoRepick_ep1_seed16900101.h5",
+     "id": "VideoRepick|xhard1|16900101",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16900101,
+     "shas": [
+      "56f318bd5b90f0b808a2b4feb7dcb67067718808cf41eb9ed6ece56439f9c942"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoRepick_episode_2/hdf5_files/VideoRepick_ep2_seed16900200.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoRepick_episode_2/hdf5_files/VideoRepick_ep2_seed16900200.h5",
+     "id": "VideoRepick|xhard1|16900200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 16900200,
+     "shas": [
+      "a9bf8ca7f0bb7d6a3de234f622002fcc6a5477088fcb484309d787f061f66b0b"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoRepick_episode_0/hdf5_files/VideoRepick_ep0_seed18900000.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoRepick_episode_0/hdf5_files/VideoRepick_ep0_seed18900000.h5",
+     "id": "VideoRepick|xhard2|18900000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18900000,
+     "shas": [
+      "f0c6e7fdf88d1b6c1b2c43b0d08c843bddcde8a8e31455a89661d9a4796ef7fc"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoRepick_episode_1/hdf5_files/VideoRepick_ep1_seed18900109.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoRepick_episode_1/hdf5_files/VideoRepick_ep1_seed18900109.h5",
+     "id": "VideoRepick|xhard2|18900109",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18900109,
+     "shas": [
+      "d0508ca2f5aa7467f0a0c57ff16b6373ac984f6d5c357eb146a1e0c80eb5c51b"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoRepick_episode_2/hdf5_files/VideoRepick_ep2_seed18900200.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoRepick_episode_2/hdf5_files/VideoRepick_ep2_seed18900200.h5",
+     "id": "VideoRepick|xhard2|18900200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 18900200,
+     "shas": [
+      "0f99207777c79a538e954a007742392d61070ec68ee23b8007471f77938393d8"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoPlaceButton_episode_0/hdf5_files/VideoPlaceButton_ep0_seed17000000.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoPlaceButton_episode_0/hdf5_files/VideoPlaceButton_ep0_seed17000000.h5",
+     "id": "VideoPlaceButton|xhard1|17000000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17000000,
+     "shas": [
+      "f14a1bb2ddfb031d36bb43c104b0d42e063ae61c3be92c68fc68216d2c79fd4f"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoPlaceButton_episode_1/hdf5_files/VideoPlaceButton_ep1_seed17000100.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoPlaceButton_episode_1/hdf5_files/VideoPlaceButton_ep1_seed17000100.h5",
+     "id": "VideoPlaceButton|xhard1|17000100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17000100,
+     "shas": [
+      "3ce53b212076b844a7f08a72fc6d7f17b3dff5569f03e99321da9a6b30e1b20e"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoPlaceButton_episode_2/hdf5_files/VideoPlaceButton_ep2_seed17000200.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoPlaceButton_episode_2/hdf5_files/VideoPlaceButton_ep2_seed17000200.h5",
+     "id": "VideoPlaceButton|xhard1|17000200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17000200,
+     "shas": [
+      "dba188a04401835907961c0b40849ae391cc9b28bc72bb530cb9c1d8c2affeb6"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoPlaceButton_episode_0/hdf5_files/VideoPlaceButton_ep0_seed19000000.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoPlaceButton_episode_0/hdf5_files/VideoPlaceButton_ep0_seed19000000.h5",
+     "id": "VideoPlaceButton|xhard2|19000000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19000000,
+     "shas": [
+      "1e68ddea5b2540b6854125e03d6892aa690f648e568300c3c9b4592944dd1239"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoPlaceButton_episode_1/hdf5_files/VideoPlaceButton_ep1_seed19000102.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoPlaceButton_episode_1/hdf5_files/VideoPlaceButton_ep1_seed19000102.h5",
+     "id": "VideoPlaceButton|xhard2|19000102",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19000102,
+     "shas": [
+      "a9167470039c6afde5140ac3c106aa8fdf491ff3822a6127958402ca652ab915"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoPlaceButton_episode_3/hdf5_files/VideoPlaceButton_ep3_seed19000300.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoPlaceButton_episode_3/hdf5_files/VideoPlaceButton_ep3_seed19000300.h5",
+     "id": "VideoPlaceButton|xhard2|19000300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19000300,
+     "shas": [
+      "c001740edf80f909000cd46c7c36d9556d606dfd008d85ef7675fb392a3fb26e"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoPlaceOrder_episode_0/hdf5_files/VideoPlaceOrder_ep0_seed17100000.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoPlaceOrder_episode_0/hdf5_files/VideoPlaceOrder_ep0_seed17100000.h5",
+     "id": "VideoPlaceOrder|xhard1|17100000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17100000,
+     "shas": [
+      "8b2a65a83b0ee255e1d45182b4ad5397963d5df91634660f9220e2d96886a786"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoPlaceOrder_episode_1/hdf5_files/VideoPlaceOrder_ep1_seed17100101.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoPlaceOrder_episode_1/hdf5_files/VideoPlaceOrder_ep1_seed17100101.h5",
+     "id": "VideoPlaceOrder|xhard1|17100101",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17100101,
+     "shas": [
+      "8cb49d329824a8953608be7d755e9bc77f5d1ca842b7ad74d31c8adce07943a9"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/VideoPlaceOrder_episode_2/hdf5_files/VideoPlaceOrder_ep2_seed17100200.h5",
+     "h5_b": "v9-b/episodes/xhard1/VideoPlaceOrder_episode_2/hdf5_files/VideoPlaceOrder_ep2_seed17100200.h5",
+     "id": "VideoPlaceOrder|xhard1|17100200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17100200,
+     "shas": [
+      "1b60d54788fb79923be5c4d516f6420eb223f8baa706c7766bb221e35888ef26"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoPlaceOrder_episode_0/hdf5_files/VideoPlaceOrder_ep0_seed19100003.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoPlaceOrder_episode_0/hdf5_files/VideoPlaceOrder_ep0_seed19100003.h5",
+     "id": "VideoPlaceOrder|xhard2|19100003",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19100003,
+     "shas": [
+      "7cce2016a6c361d3601b8bdbb239e089a84d436cab360b0a2a85c3a09eb77c56"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoPlaceOrder_episode_1/hdf5_files/VideoPlaceOrder_ep1_seed19100101.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoPlaceOrder_episode_1/hdf5_files/VideoPlaceOrder_ep1_seed19100101.h5",
+     "id": "VideoPlaceOrder|xhard2|19100101",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19100101,
+     "shas": [
+      "1c2aaae887520561e9b7dcacadefe5cec9c396a35c637f531b2f210a8ff6738b"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/VideoPlaceOrder_episode_2/hdf5_files/VideoPlaceOrder_ep2_seed19100200.h5",
+     "h5_b": "v9-b/episodes/xhard2/VideoPlaceOrder_episode_2/hdf5_files/VideoPlaceOrder_ep2_seed19100200.h5",
+     "id": "VideoPlaceOrder|xhard2|19100200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19100200,
+     "shas": [
+      "ca54d79e823faa2575df0cd4c379a3a3b87320965c6d97df5388f2b02d30b9fc"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PickHighlight_episode_0/hdf5_files/PickHighlight_ep0_seed17200000.h5",
+     "h5_b": "v9-b/episodes/xhard1/PickHighlight_episode_0/hdf5_files/PickHighlight_ep0_seed17200000.h5",
+     "id": "PickHighlight|xhard1|17200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17200000,
+     "shas": [
+      "217995beef7c67b8e4f14387444e2e9953213be2a506ba5cd23376383fc91080"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PickHighlight_episode_1/hdf5_files/PickHighlight_ep1_seed17200100.h5",
+     "h5_b": "v9-b/episodes/xhard1/PickHighlight_episode_1/hdf5_files/PickHighlight_ep1_seed17200100.h5",
+     "id": "PickHighlight|xhard1|17200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17200100,
+     "shas": [
+      "70c8c82b259c35d6f4c2a331108cfe2c1e24d9fca35db82b55cd54cfb549794f"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PickHighlight_episode_2/hdf5_files/PickHighlight_ep2_seed17200200.h5",
+     "h5_b": "v9-b/episodes/xhard1/PickHighlight_episode_2/hdf5_files/PickHighlight_ep2_seed17200200.h5",
+     "id": "PickHighlight|xhard1|17200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17200200,
+     "shas": [
+      "93a862a19f9eefbb40ffc28fb6fd4648c87b97bb40f73426db66edfb4497063a"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PickHighlight_episode_0/hdf5_files/PickHighlight_ep0_seed19200000.h5",
+     "h5_b": "v9-b/episodes/xhard2/PickHighlight_episode_0/hdf5_files/PickHighlight_ep0_seed19200000.h5",
+     "id": "PickHighlight|xhard2|19200000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19200000,
+     "shas": [
+      "6b890cd1c4d136c66517ad36e5739cd16d49f8656da0185d441914cf0cc8f2c3"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PickHighlight_episode_1/hdf5_files/PickHighlight_ep1_seed19200100.h5",
+     "h5_b": "v9-b/episodes/xhard2/PickHighlight_episode_1/hdf5_files/PickHighlight_ep1_seed19200100.h5",
+     "id": "PickHighlight|xhard2|19200100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19200100,
+     "shas": [
+      "53452da142ff34bd3bfdcb92ebfbcec0a94b05311fcb8997c17c33c5d38f4239"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PickHighlight_episode_2/hdf5_files/PickHighlight_ep2_seed19200200.h5",
+     "h5_b": "v9-b/episodes/xhard2/PickHighlight_episode_2/hdf5_files/PickHighlight_ep2_seed19200200.h5",
+     "id": "PickHighlight|xhard2|19200200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19200200,
+     "shas": [
+      "64caa4f274b32cafdf76948b4468e703480762b2e75feda5ebc38e347a9f7535"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/InsertPeg_episode_0/hdf5_files/InsertPeg_ep0_seed23300000.h5",
+     "h5_b": "v9-b/episodes/xhard4/InsertPeg_episode_0/hdf5_files/InsertPeg_ep0_seed23300000.h5",
+     "id": "InsertPeg|xhard4|23300000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 23300000,
+     "shas": [
+      "52539069a6d1be2747be856621ff9a6208c97b5a35ee789d072786cdb448b0be"
+     ],
+     "task": "InsertPeg",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/InsertPeg_episode_1/hdf5_files/InsertPeg_ep1_seed23300100.h5",
+     "h5_b": "v9-b/episodes/xhard4/InsertPeg_episode_1/hdf5_files/InsertPeg_ep1_seed23300100.h5",
+     "id": "InsertPeg|xhard4|23300100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 23300100,
+     "shas": [
+      "2e368975398eea85334ec2ac47b3a35f1c86e782ae6dfd1100a8a76b057c8cfa"
+     ],
+     "task": "InsertPeg",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/InsertPeg_episode_4/hdf5_files/InsertPeg_ep4_seed23300400.h5",
+     "h5_b": "v9-b/episodes/xhard4/InsertPeg_episode_4/hdf5_files/InsertPeg_ep4_seed23300400.h5",
+     "id": "InsertPeg|xhard4|23300400",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 23300400,
+     "shas": [
+      "28afd8ec260d8e29b4081d80812093ef36b09228d2572f60ee105b42917b4009"
+     ],
+     "task": "InsertPeg",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/MoveCube_episode_0/hdf5_files/MoveCube_ep0_seed23400000.h5",
+     "h5_b": "v9-b/episodes/xhard4/MoveCube_episode_0/hdf5_files/MoveCube_ep0_seed23400000.h5",
+     "id": "MoveCube|xhard4|23400000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 23400000,
+     "shas": [
+      "c148b4709842ef78bc6b7390378f2b3929df3adacc4d7c57a4c4fdf2a5700488"
+     ],
+     "task": "MoveCube",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/MoveCube_episode_1/hdf5_files/MoveCube_ep1_seed23400100.h5",
+     "h5_b": "v9-b/episodes/xhard4/MoveCube_episode_1/hdf5_files/MoveCube_ep1_seed23400100.h5",
+     "id": "MoveCube|xhard4|23400100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 23400100,
+     "shas": [
+      "03d91068e46299531aafa3057d34395aaa20c348b871fb0db8f2845de26f6899"
+     ],
+     "task": "MoveCube",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard4/MoveCube_episode_2/hdf5_files/MoveCube_ep2_seed23400200.h5",
+     "h5_b": "v9-b/episodes/xhard4/MoveCube_episode_2/hdf5_files/MoveCube_ep2_seed23400200.h5",
+     "id": "MoveCube|xhard4|23400200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 23400200,
+     "shas": [
+      "aa414cf9f8dc01c903dc5440a17fea427cfdf8600d05fcbc4adfd8af910e5335"
+     ],
+     "task": "MoveCube",
+     "tier": "xhard4"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PatternLock_episode_0/hdf5_files/PatternLock_ep0_seed17500000.h5",
+     "h5_b": "v9-b/episodes/xhard1/PatternLock_episode_0/hdf5_files/PatternLock_ep0_seed17500000.h5",
+     "id": "PatternLock|xhard1|17500000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17500000,
+     "shas": [
+      "29c6209ee93872586201246b23a8a71ca3b51a77ebbfd4a0d2b3ccc0ad2c6f97"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PatternLock_episode_1/hdf5_files/PatternLock_ep1_seed17500100.h5",
+     "h5_b": "v9-b/episodes/xhard1/PatternLock_episode_1/hdf5_files/PatternLock_ep1_seed17500100.h5",
+     "id": "PatternLock|xhard1|17500100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17500100,
+     "shas": [
+      "75af65d1b0379be3f44ac9983797091b636b8359299e0af7fc8a5f00c406d50b"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/PatternLock_episode_2/hdf5_files/PatternLock_ep2_seed17500200.h5",
+     "h5_b": "v9-b/episodes/xhard1/PatternLock_episode_2/hdf5_files/PatternLock_ep2_seed17500200.h5",
+     "id": "PatternLock|xhard1|17500200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17500200,
+     "shas": [
+      "47f3b0daa57bb9fce6dd0e8580e8d676013086be8665ddfa0550a1ae0a80fa52"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PatternLock_episode_0/hdf5_files/PatternLock_ep0_seed19500000.h5",
+     "h5_b": "v9-b/episodes/xhard2/PatternLock_episode_0/hdf5_files/PatternLock_ep0_seed19500000.h5",
+     "id": "PatternLock|xhard2|19500000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19500000,
+     "shas": [
+      "c91bae861d830bf5c2b221eb59669da85193f9e0b116b1da0e9a58c3f7337cc5"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PatternLock_episode_1/hdf5_files/PatternLock_ep1_seed19500100.h5",
+     "h5_b": "v9-b/episodes/xhard2/PatternLock_episode_1/hdf5_files/PatternLock_ep1_seed19500100.h5",
+     "id": "PatternLock|xhard2|19500100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19500100,
+     "shas": [
+      "13709c966bd6650122e9eb1e716038d1e8e4cc5d133de6ccc8aa4060f11a345d"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/PatternLock_episode_2/hdf5_files/PatternLock_ep2_seed19500200.h5",
+     "h5_b": "v9-b/episodes/xhard2/PatternLock_episode_2/hdf5_files/PatternLock_ep2_seed19500200.h5",
+     "id": "PatternLock|xhard2|19500200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19500200,
+     "shas": [
+      "3ab30b328dcd4a43dc54442b1ccfc13e7fe7634a63a5c54cc6968a7e9ed3284f"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/PatternLock_episode_0/hdf5_files/PatternLock_ep0_seed21500000.h5",
+     "h5_b": "v9-b/episodes/xhard3/PatternLock_episode_0/hdf5_files/PatternLock_ep0_seed21500000.h5",
+     "id": "PatternLock|xhard3|21500000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 21500000,
+     "shas": [
+      "859023907ee8d27d771cc849c3b5ef286042c59512a3fcd8cf5fdc6a723d9a23"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/PatternLock_episode_1/hdf5_files/PatternLock_ep1_seed21500100.h5",
+     "h5_b": "v9-b/episodes/xhard3/PatternLock_episode_1/hdf5_files/PatternLock_ep1_seed21500100.h5",
+     "id": "PatternLock|xhard3|21500100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 21500100,
+     "shas": [
+      "6a2003598825845a6847f1ffb803de33eea596cec0fb1cc0f200e93bcdb81d69"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/PatternLock_episode_2/hdf5_files/PatternLock_ep2_seed21500200.h5",
+     "h5_b": "v9-b/episodes/xhard3/PatternLock_episode_2/hdf5_files/PatternLock_ep2_seed21500200.h5",
+     "id": "PatternLock|xhard3|21500200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 21500200,
+     "shas": [
+      "de6581913e8db78a6a35e30372e940645573ec56d778fcb7ab5bfbfbb3992869"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/RouteStick_episode_0/hdf5_files/RouteStick_ep0_seed17600000.h5",
+     "h5_b": "v9-b/episodes/xhard1/RouteStick_episode_0/hdf5_files/RouteStick_ep0_seed17600000.h5",
+     "id": "RouteStick|xhard1|17600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17600000,
+     "shas": [
+      "500a2af40d46ab6d01844752711d0fb7c0e2a6701cd234261e1ab237bc1d59a2"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/RouteStick_episode_1/hdf5_files/RouteStick_ep1_seed17600100.h5",
+     "h5_b": "v9-b/episodes/xhard1/RouteStick_episode_1/hdf5_files/RouteStick_ep1_seed17600100.h5",
+     "id": "RouteStick|xhard1|17600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17600100,
+     "shas": [
+      "38b7264bbfa732dcc4cae83f5ee40f5af47d1924035ff09b889abce3d24b1bf9"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard1/RouteStick_episode_2/hdf5_files/RouteStick_ep2_seed17600200.h5",
+     "h5_b": "v9-b/episodes/xhard1/RouteStick_episode_2/hdf5_files/RouteStick_ep2_seed17600200.h5",
+     "id": "RouteStick|xhard1|17600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 17600200,
+     "shas": [
+      "a8e46d13eee51565d152d8c192ed6a6c1c42f44598f90893fad3daf95ec680af"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard1"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/RouteStick_episode_0/hdf5_files/RouteStick_ep0_seed19600000.h5",
+     "h5_b": "v9-b/episodes/xhard2/RouteStick_episode_0/hdf5_files/RouteStick_ep0_seed19600000.h5",
+     "id": "RouteStick|xhard2|19600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19600000,
+     "shas": [
+      "7009db2a7c9c951924d4afddb8386e3da58591ae06e150c327cbc03cc7695717"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/RouteStick_episode_1/hdf5_files/RouteStick_ep1_seed19600100.h5",
+     "h5_b": "v9-b/episodes/xhard2/RouteStick_episode_1/hdf5_files/RouteStick_ep1_seed19600100.h5",
+     "id": "RouteStick|xhard2|19600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19600100,
+     "shas": [
+      "2b0dddd531ce1a385cdf22094795821f554f7f652a9775ef5b3aadc437a7c6e3"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard2/RouteStick_episode_2/hdf5_files/RouteStick_ep2_seed19600200.h5",
+     "h5_b": "v9-b/episodes/xhard2/RouteStick_episode_2/hdf5_files/RouteStick_ep2_seed19600200.h5",
+     "id": "RouteStick|xhard2|19600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 19600200,
+     "shas": [
+      "95a315009d09f936a38d32e87ffd41a72f6980dd579569404d1c1aa84e40749d"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard2"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/RouteStick_episode_0/hdf5_files/RouteStick_ep0_seed21600000.h5",
+     "h5_b": "v9-b/episodes/xhard3/RouteStick_episode_0/hdf5_files/RouteStick_ep0_seed21600000.h5",
+     "id": "RouteStick|xhard3|21600000",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 21600000,
+     "shas": [
+      "822e021d691baf80a0cd0b024b76006c4ca4fcd8611cd13e392632bc7b98f209"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/RouteStick_episode_1/hdf5_files/RouteStick_ep1_seed21600100.h5",
+     "h5_b": "v9-b/episodes/xhard3/RouteStick_episode_1/hdf5_files/RouteStick_ep1_seed21600100.h5",
+     "id": "RouteStick|xhard3|21600100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 21600100,
+     "shas": [
+      "38b9cca6e0efa17f9fa00bf1bd316278389fc2c79a83a0522d70697abee9847b"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard3"
+    },
+    {
+     "class": "stable",
+     "h5_a": "v9-a/episodes/xhard3/RouteStick_episode_2/hdf5_files/RouteStick_ep2_seed21600200.h5",
+     "h5_b": "v9-b/episodes/xhard3/RouteStick_episode_2/hdf5_files/RouteStick_ep2_seed21600200.h5",
+     "id": "RouteStick|xhard3|21600200",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 21600200,
+     "shas": [
+      "7b719e4f3e14657c06aa4722e137a20ac3900409e443788dc6333bf28e6422d5"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard3"
+    }
+   ],
+   "identities": {
+    "file": "scripts/configs/gate-set-v9-129.json",
+    "sha256": "e7f39e9be98c40bbd44b7ceeb432a91295196c862cad234e7c71702f93370ea4"
+   },
+   "n": 129,
+   "records_checked": 516,
+   "runs": [
+    {
+     "driver": "595.71.05",
+     "gpu_model": "NVIDIA A40",
+     "host": "gl1525.arc-ts.umich.edu",
+     "name": "v9-a",
+     "root": "artifacts/noise-baseline/gen/v9-a",
+     "rows": 129,
+     "side": "H2",
+     "slurm_job": "63153922",
+     "src_commit": "f8f76fbabc27d0b95ea9acbd57288e49411c7fb4",
+     "tier": "v9",
+     "workers": 4
+    },
+    {
+     "driver": "595.71.05",
+     "gpu_model": "NVIDIA A40",
+     "host": "gl1527.arc-ts.umich.edu",
+     "name": "v9-b",
+     "root": "artifacts/noise-baseline/gen/v9-b",
+     "rows": 129,
+     "side": "H2",
+     "slurm_job": "63153924",
+     "src_commit": "f8f76fbabc27d0b95ea9acbd57288e49411c7fb4",
+     "tier": "v9",
+     "workers": 4
+    }
+   ]
+  },
+  "xhard0": {
+   "counts": {
+    "jitter": 0,
+    "known_fail": 2,
+    "stable": 46
+   },
+   "episodes": [
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PickXtimes_episode_3/hdf5_files/PickXtimes_ep3_seed510300.h5",
+     "h5_b": "x0-b/episodes/PickXtimes_episode_3/hdf5_files/PickXtimes_ep3_seed510300.h5",
+     "id": "PickXtimes|xhard0|510300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 510300,
+     "shas": [
+      "cd2fb305dabb5a0a1d623083f183fedab485f6bde4ef02af8010e6b6f4eda6c1"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PickXtimes_episode_7/hdf5_files/PickXtimes_ep7_seed510700.h5",
+     "h5_b": "x0-b/episodes/PickXtimes_episode_7/hdf5_files/PickXtimes_ep7_seed510700.h5",
+     "id": "PickXtimes|xhard0|510700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 510700,
+     "shas": [
+      "caf5b55eaeebfc394f8a363cc317ac365b385284001a239a2a268f99e6ff2792"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PickXtimes_episode_11/hdf5_files/PickXtimes_ep11_seed511100.h5",
+     "h5_b": "x0-b/episodes/PickXtimes_episode_11/hdf5_files/PickXtimes_ep11_seed511100.h5",
+     "id": "PickXtimes|xhard0|511100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 511100,
+     "shas": [
+      "9397cd92cfcb58e3bd4a64a71ba9868f3bcd494089f3d435f027bb5b9e7a8a48"
+     ],
+     "task": "PickXtimes",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/StopCube_episode_3/hdf5_files/StopCube_ep3_seed520300.h5",
+     "h5_b": "x0-b/episodes/StopCube_episode_3/hdf5_files/StopCube_ep3_seed520300.h5",
+     "id": "StopCube|xhard0|520300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 520300,
+     "shas": [
+      "d347e78e9ded5ef72eaff9ad19e114536818c6cb747bc47916f0d2f4deebebb1"
+     ],
+     "task": "StopCube",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/StopCube_episode_7/hdf5_files/StopCube_ep7_seed520700.h5",
+     "h5_b": "x0-b/episodes/StopCube_episode_7/hdf5_files/StopCube_ep7_seed520700.h5",
+     "id": "StopCube|xhard0|520700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 520700,
+     "shas": [
+      "0d5a602bd5d1fd9b4ff222010abd3ca7daf720818521c2032f8636a6d83758ae"
+     ],
+     "task": "StopCube",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/StopCube_episode_11/hdf5_files/StopCube_ep11_seed521100.h5",
+     "h5_b": "x0-b/episodes/StopCube_episode_11/hdf5_files/StopCube_ep11_seed521100.h5",
+     "id": "StopCube|xhard0|521100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 521100,
+     "shas": [
+      "d99e4424cd2a066647889e243029be5909d664669766a1a3d553f7a858178cdb"
+     ],
+     "task": "StopCube",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/SwingXtimes_episode_3/hdf5_files/SwingXtimes_ep3_seed530300.h5",
+     "h5_b": "x0-b/episodes/SwingXtimes_episode_3/hdf5_files/SwingXtimes_ep3_seed530300.h5",
+     "id": "SwingXtimes|xhard0|530300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 530300,
+     "shas": [
+      "82918a0e8d3907c0fa3e45aed8ffa0db2a333e342822682ea1fd86a8da395e04"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/SwingXtimes_episode_7/hdf5_files/SwingXtimes_ep7_seed530700.h5",
+     "h5_b": "x0-b/episodes/SwingXtimes_episode_7/hdf5_files/SwingXtimes_ep7_seed530700.h5",
+     "id": "SwingXtimes|xhard0|530700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 530700,
+     "shas": [
+      "6492ef914e31c5f5ec2d8d7fc1777da59482a418ecde8d9f069120c269568e7e"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/SwingXtimes_episode_11/hdf5_files/SwingXtimes_ep11_seed531100.h5",
+     "h5_b": "x0-b/episodes/SwingXtimes_episode_11/hdf5_files/SwingXtimes_ep11_seed531100.h5",
+     "id": "SwingXtimes|xhard0|531100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 531100,
+     "shas": [
+      "f7e693f887953c4729d773961273b30232124e93e356d1f6fdbfe66df8e23d24"
+     ],
+     "task": "SwingXtimes",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/BinFill_episode_3/hdf5_files/BinFill_ep3_seed540302.h5",
+     "h5_b": "x0-b/episodes/BinFill_episode_3/hdf5_files/BinFill_ep3_seed540302.h5",
+     "id": "BinFill|xhard0|540302",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 540302,
+     "shas": [
+      "607ec5b895e442615ed40cec9c1bd9c467f36dcb4990cb18a6e9f62ecf51f61e"
+     ],
+     "task": "BinFill",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/BinFill_episode_7/hdf5_files/BinFill_ep7_seed540701.h5",
+     "h5_b": "x0-b/episodes/BinFill_episode_7/hdf5_files/BinFill_ep7_seed540701.h5",
+     "id": "BinFill|xhard0|540701",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 540701,
+     "shas": [
+      "ec0a0c0b7c6ba8a3e80dd020a03a2ec01e50e9159c2ae6635cf552f35f00b0a2"
+     ],
+     "task": "BinFill",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/BinFill_episode_11/hdf5_files/BinFill_ep11_seed541100.h5",
+     "h5_b": "x0-b/episodes/BinFill_episode_11/hdf5_files/BinFill_ep11_seed541100.h5",
+     "id": "BinFill|xhard0|541100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 541100,
+     "shas": [
+      "ebe434d1117d92a621c17682e35c2e76073ceaabd318c6a9238d9e31616ac07e"
+     ],
+     "task": "BinFill",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoUnmaskSwap_episode_3/hdf5_files/VideoUnmaskSwap_ep3_seed550300.h5",
+     "h5_b": "x0-b/episodes/VideoUnmaskSwap_episode_3/hdf5_files/VideoUnmaskSwap_ep3_seed550300.h5",
+     "id": "VideoUnmaskSwap|xhard0|550300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 550300,
+     "shas": [
+      "fa910c90c95087ae7987d01d7d9a7155c1b48e9dbecf28d190c18b48a3d2d2f7"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoUnmaskSwap_episode_7/hdf5_files/VideoUnmaskSwap_ep7_seed550700.h5",
+     "h5_b": "x0-b/episodes/VideoUnmaskSwap_episode_7/hdf5_files/VideoUnmaskSwap_ep7_seed550700.h5",
+     "id": "VideoUnmaskSwap|xhard0|550700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 550700,
+     "shas": [
+      "8d3e2ffa0ff193cfcc36538c0bd95d4cb572b4acfdbb2bf284f32881d27ff67f"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoUnmaskSwap_episode_11/hdf5_files/VideoUnmaskSwap_ep11_seed551100.h5",
+     "h5_b": "x0-b/episodes/VideoUnmaskSwap_episode_11/hdf5_files/VideoUnmaskSwap_ep11_seed551100.h5",
+     "id": "VideoUnmaskSwap|xhard0|551100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 551100,
+     "shas": [
+      "e8eb708ff239ebe3dc6ea43891264074af4b0f1cff7b171eccc40f44dc5b36d3"
+     ],
+     "task": "VideoUnmaskSwap",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoUnmask_episode_3/hdf5_files/VideoUnmask_ep3_seed560300.h5",
+     "h5_b": "x0-b/episodes/VideoUnmask_episode_3/hdf5_files/VideoUnmask_ep3_seed560300.h5",
+     "id": "VideoUnmask|xhard0|560300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 560300,
+     "shas": [
+      "aaebe94fd277e2a888433ee6b25152cf111535441faa326665a062938370a530"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoUnmask_episode_7/hdf5_files/VideoUnmask_ep7_seed560700.h5",
+     "h5_b": "x0-b/episodes/VideoUnmask_episode_7/hdf5_files/VideoUnmask_ep7_seed560700.h5",
+     "id": "VideoUnmask|xhard0|560700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 560700,
+     "shas": [
+      "675e4e14160425bde6da8ece4aea1aa9ec25f4dc64f9e8cd9b1912affe0b323e"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoUnmask_episode_11/hdf5_files/VideoUnmask_ep11_seed561100.h5",
+     "h5_b": "x0-b/episodes/VideoUnmask_episode_11/hdf5_files/VideoUnmask_ep11_seed561100.h5",
+     "id": "VideoUnmask|xhard0|561100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 561100,
+     "shas": [
+      "6d341c178cfd3972787e20fc67a0a533e0ea68486752197c9bbd240764fc7bff"
+     ],
+     "task": "VideoUnmask",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/ButtonUnmaskSwap_episode_3/hdf5_files/ButtonUnmaskSwap_ep3_seed570300.h5",
+     "h5_b": "x0-b/episodes/ButtonUnmaskSwap_episode_3/hdf5_files/ButtonUnmaskSwap_ep3_seed570300.h5",
+     "id": "ButtonUnmaskSwap|xhard0|570300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 570300,
+     "shas": [
+      "84ea3464feea126a93700a2765314c579c36211aec5b625f1e53179e69bea019"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/ButtonUnmaskSwap_episode_7/hdf5_files/ButtonUnmaskSwap_ep7_seed570700.h5",
+     "h5_b": "x0-b/episodes/ButtonUnmaskSwap_episode_7/hdf5_files/ButtonUnmaskSwap_ep7_seed570700.h5",
+     "id": "ButtonUnmaskSwap|xhard0|570700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 570700,
+     "shas": [
+      "1e67422d942540ce8c72c55a3ba0d5b838fe46459fd4434d6890775b7e9b4b54"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/ButtonUnmaskSwap_episode_11/hdf5_files/ButtonUnmaskSwap_ep11_seed571100.h5",
+     "h5_b": "x0-b/episodes/ButtonUnmaskSwap_episode_11/hdf5_files/ButtonUnmaskSwap_ep11_seed571100.h5",
+     "id": "ButtonUnmaskSwap|xhard0|571100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 571100,
+     "shas": [
+      "475ab0febfbde5ed1b68825ba4bd5527df22f3a45c5270c0980cd39581249234"
+     ],
+     "task": "ButtonUnmaskSwap",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/ButtonUnmask_episode_3/hdf5_files/ButtonUnmask_ep3_seed580300.h5",
+     "h5_b": "x0-b/episodes/ButtonUnmask_episode_3/hdf5_files/ButtonUnmask_ep3_seed580300.h5",
+     "id": "ButtonUnmask|xhard0|580300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 580300,
+     "shas": [
+      "43eb76c37c5938f10be9c95e9728257ee039da4ebf40340eeb41b7b4b1e10f03"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/ButtonUnmask_episode_7/hdf5_files/ButtonUnmask_ep7_seed580700.h5",
+     "h5_b": "x0-b/episodes/ButtonUnmask_episode_7/hdf5_files/ButtonUnmask_ep7_seed580700.h5",
+     "id": "ButtonUnmask|xhard0|580700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 580700,
+     "shas": [
+      "071b5f474b905e564f400c80e9bc85f74428d3e8156f55b94e519f2d590784a9"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/ButtonUnmask_episode_11/hdf5_files/ButtonUnmask_ep11_seed581100.h5",
+     "h5_b": "x0-b/episodes/ButtonUnmask_episode_11/hdf5_files/ButtonUnmask_ep11_seed581100.h5",
+     "id": "ButtonUnmask|xhard0|581100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 581100,
+     "shas": [
+      "974eac6acc2691bb5f175e2cdce0b3e41336d8fd124594f331eb5db04ff781af"
+     ],
+     "task": "ButtonUnmask",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoRepick_episode_3/hdf5_files/VideoRepick_ep3_seed590300.h5",
+     "h5_b": "x0-b/episodes/VideoRepick_episode_3/hdf5_files/VideoRepick_ep3_seed590300.h5",
+     "id": "VideoRepick|xhard0|590300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 590300,
+     "shas": [
+      "9f6814cb2cae4c4c631aa633f0873636aaa4ba4ec52e6fb217b0dacfcbf0c825"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoRepick_episode_7/hdf5_files/VideoRepick_ep7_seed590700.h5",
+     "h5_b": "x0-b/episodes/VideoRepick_episode_7/hdf5_files/VideoRepick_ep7_seed590700.h5",
+     "id": "VideoRepick|xhard0|590700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 590700,
+     "shas": [
+      "6408b31961d7e5b3439457cb9b4be3087ba7f4995ea1e9cd169aa2c41572084c"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoRepick_episode_11/hdf5_files/VideoRepick_ep11_seed591100.h5",
+     "h5_b": "x0-b/episodes/VideoRepick_episode_11/hdf5_files/VideoRepick_ep11_seed591100.h5",
+     "id": "VideoRepick|xhard0|591100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 591100,
+     "shas": [
+      "a59f7adcb270be4ee3c120e365cccecafecc0b9032fd61123ce779ea9ca3e33f"
+     ],
+     "task": "VideoRepick",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoPlaceButton_episode_3/hdf5_files/VideoPlaceButton_ep3_seed600300.h5",
+     "h5_b": "x0-b/episodes/VideoPlaceButton_episode_3/hdf5_files/VideoPlaceButton_ep3_seed600300.h5",
+     "id": "VideoPlaceButton|xhard0|600300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 600300,
+     "shas": [
+      "f7ddcd657f9e09f80c98a020ddee015d17d25819c59036a2dbed4e50c83be24e"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoPlaceButton_episode_7/hdf5_files/VideoPlaceButton_ep7_seed600700.h5",
+     "h5_b": "x0-b/episodes/VideoPlaceButton_episode_7/hdf5_files/VideoPlaceButton_ep7_seed600700.h5",
+     "id": "VideoPlaceButton|xhard0|600700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 600700,
+     "shas": [
+      "cd7a68a76e6f0a44fa23241a0c355bbd573203fb74f2c083de70085eceb91de6"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoPlaceButton_episode_11/hdf5_files/VideoPlaceButton_ep11_seed601100.h5",
+     "h5_b": "x0-b/episodes/VideoPlaceButton_episode_11/hdf5_files/VideoPlaceButton_ep11_seed601100.h5",
+     "id": "VideoPlaceButton|xhard0|601100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 601100,
+     "shas": [
+      "609f67780980fd1a6547950dc2938c83e643a0dca7061d874b58cb1a2a7ccbf2"
+     ],
+     "task": "VideoPlaceButton",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/VideoPlaceOrder_episode_3/hdf5_files/VideoPlaceOrder_ep3_seed610300.h5",
+     "h5_b": "x0-b/episodes/VideoPlaceOrder_episode_3/hdf5_files/VideoPlaceOrder_ep3_seed610300.h5",
+     "id": "VideoPlaceOrder|xhard0|610300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 610300,
+     "shas": [
+      "68662ca9b079dbeac20216655a6ef21f1b00f49bb101514d508449b59d5f940f"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard0"
+    },
+    {
+     "class": "known_fail",
+     "h5_a": "x0-a/episodes/VideoPlaceOrder_episode_7/hdf5_files/VideoPlaceOrder_ep7_seed610701.h5",
+     "h5_b": "x0-b/episodes/VideoPlaceOrder_episode_7/hdf5_files/VideoPlaceOrder_ep7_seed610701.h5",
+     "id": "VideoPlaceOrder|xhard0|610701",
+     "ok_a": false,
+     "ok_b": false,
+     "seed": 610701,
+     "shas": [
+      "26c4d449632ea072317c16e9d4857e419b67e1b7751f81a89a87c8e75fe9484e"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard0"
+    },
+    {
+     "class": "known_fail",
+     "h5_a": "x0-a/episodes/VideoPlaceOrder_episode_11/hdf5_files/VideoPlaceOrder_ep11_seed611101.h5",
+     "h5_b": "x0-b/episodes/VideoPlaceOrder_episode_11/hdf5_files/VideoPlaceOrder_ep11_seed611101.h5",
+     "id": "VideoPlaceOrder|xhard0|611101",
+     "ok_a": false,
+     "ok_b": false,
+     "seed": 611101,
+     "shas": [
+      "26c4d449632ea072317c16e9d4857e419b67e1b7751f81a89a87c8e75fe9484e"
+     ],
+     "task": "VideoPlaceOrder",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PickHighlight_episode_3/hdf5_files/PickHighlight_ep3_seed620301.h5",
+     "h5_b": "x0-b/episodes/PickHighlight_episode_3/hdf5_files/PickHighlight_ep3_seed620301.h5",
+     "id": "PickHighlight|xhard0|620301",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 620301,
+     "shas": [
+      "ad91756c03880a56ad4982d7ae8d1fad11c5112ecd2bc94812acbcb4a406774b"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PickHighlight_episode_7/hdf5_files/PickHighlight_ep7_seed620700.h5",
+     "h5_b": "x0-b/episodes/PickHighlight_episode_7/hdf5_files/PickHighlight_ep7_seed620700.h5",
+     "id": "PickHighlight|xhard0|620700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 620700,
+     "shas": [
+      "7fda93a7434c6a0847c9beb78b268bf87573609dabe04d8bd9c513d0039722c2"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PickHighlight_episode_11/hdf5_files/PickHighlight_ep11_seed621100.h5",
+     "h5_b": "x0-b/episodes/PickHighlight_episode_11/hdf5_files/PickHighlight_ep11_seed621100.h5",
+     "id": "PickHighlight|xhard0|621100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 621100,
+     "shas": [
+      "b4be55149e814640538ce4291ec509e602ffc9a9492db7845c9acc492008de04"
+     ],
+     "task": "PickHighlight",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/InsertPeg_episode_3/hdf5_files/InsertPeg_ep3_seed630300.h5",
+     "h5_b": "x0-b/episodes/InsertPeg_episode_3/hdf5_files/InsertPeg_ep3_seed630300.h5",
+     "id": "InsertPeg|xhard0|630300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 630300,
+     "shas": [
+      "94b9f7ff119a27c1262231abe30b211f4b0f703f0d6ba021dc3f946b1f704c66"
+     ],
+     "task": "InsertPeg",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/InsertPeg_episode_7/hdf5_files/InsertPeg_ep7_seed630700.h5",
+     "h5_b": "x0-b/episodes/InsertPeg_episode_7/hdf5_files/InsertPeg_ep7_seed630700.h5",
+     "id": "InsertPeg|xhard0|630700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 630700,
+     "shas": [
+      "7ed374117dbb9081cb4f054b6bb68a6e7f7279c6b26fbab041c24e182b7c86d9"
+     ],
+     "task": "InsertPeg",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/InsertPeg_episode_11/hdf5_files/InsertPeg_ep11_seed631100.h5",
+     "h5_b": "x0-b/episodes/InsertPeg_episode_11/hdf5_files/InsertPeg_ep11_seed631100.h5",
+     "id": "InsertPeg|xhard0|631100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 631100,
+     "shas": [
+      "4ac97e7c32a84294d70e7e179793c02f16fa80df7f59090c1ebf21c202f44386"
+     ],
+     "task": "InsertPeg",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/MoveCube_episode_3/hdf5_files/MoveCube_ep3_seed640300.h5",
+     "h5_b": "x0-b/episodes/MoveCube_episode_3/hdf5_files/MoveCube_ep3_seed640300.h5",
+     "id": "MoveCube|xhard0|640300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 640300,
+     "shas": [
+      "03a115eadf2c1a23df2d433860602cb07cd147461125eaf8c11d52d53f430220"
+     ],
+     "task": "MoveCube",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/MoveCube_episode_7/hdf5_files/MoveCube_ep7_seed640700.h5",
+     "h5_b": "x0-b/episodes/MoveCube_episode_7/hdf5_files/MoveCube_ep7_seed640700.h5",
+     "id": "MoveCube|xhard0|640700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 640700,
+     "shas": [
+      "03ff2b1e4ad4791e64512679914d5c08c1134880b1495a7b3309d2d4f72e1fd1"
+     ],
+     "task": "MoveCube",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/MoveCube_episode_11/hdf5_files/MoveCube_ep11_seed641100.h5",
+     "h5_b": "x0-b/episodes/MoveCube_episode_11/hdf5_files/MoveCube_ep11_seed641100.h5",
+     "id": "MoveCube|xhard0|641100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 641100,
+     "shas": [
+      "e829032cb71d36ed347075d37a7d12f0eca51cd84ccf7cb8871a762f6cd72c3b"
+     ],
+     "task": "MoveCube",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PatternLock_episode_3/hdf5_files/PatternLock_ep3_seed650300.h5",
+     "h5_b": "x0-b/episodes/PatternLock_episode_3/hdf5_files/PatternLock_ep3_seed650300.h5",
+     "id": "PatternLock|xhard0|650300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 650300,
+     "shas": [
+      "5d48b4dcf915c07135dcf9fcfcbe27f8520d43d7f9f523163582ebdcd4612112"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PatternLock_episode_7/hdf5_files/PatternLock_ep7_seed650700.h5",
+     "h5_b": "x0-b/episodes/PatternLock_episode_7/hdf5_files/PatternLock_ep7_seed650700.h5",
+     "id": "PatternLock|xhard0|650700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 650700,
+     "shas": [
+      "511d28502f9ad3149ff33feb25cc6d2b9ad48e6b712c0ed945e5fb31ba37dadd"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/PatternLock_episode_11/hdf5_files/PatternLock_ep11_seed651100.h5",
+     "h5_b": "x0-b/episodes/PatternLock_episode_11/hdf5_files/PatternLock_ep11_seed651100.h5",
+     "id": "PatternLock|xhard0|651100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 651100,
+     "shas": [
+      "1052c4d7bda0596682acbe44bc7c8ff2a0d6c45d7cc7b5e1716b13edb2385586"
+     ],
+     "task": "PatternLock",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/RouteStick_episode_3/hdf5_files/RouteStick_ep3_seed660300.h5",
+     "h5_b": "x0-b/episodes/RouteStick_episode_3/hdf5_files/RouteStick_ep3_seed660300.h5",
+     "id": "RouteStick|xhard0|660300",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 660300,
+     "shas": [
+      "6c81f2fca4b5d9e26ab23f0872d42dc634418e383eae7c928ab9f28afd72f7ac"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/RouteStick_episode_7/hdf5_files/RouteStick_ep7_seed660700.h5",
+     "h5_b": "x0-b/episodes/RouteStick_episode_7/hdf5_files/RouteStick_ep7_seed660700.h5",
+     "id": "RouteStick|xhard0|660700",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 660700,
+     "shas": [
+      "ba1683fdce878574dd451e84d681902ccde8d03634e87c57d2540adc8fd6f6dd"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard0"
+    },
+    {
+     "class": "stable",
+     "h5_a": "x0-a/episodes/RouteStick_episode_11/hdf5_files/RouteStick_ep11_seed661100.h5",
+     "h5_b": "x0-b/episodes/RouteStick_episode_11/hdf5_files/RouteStick_ep11_seed661100.h5",
+     "id": "RouteStick|xhard0|661100",
+     "ok_a": true,
+     "ok_b": true,
+     "seed": 661100,
+     "shas": [
+      "432f8cca03497a09b3e4934eea266f07bab401ba64c9c2bce9714ed05c7314c2"
+     ],
+     "task": "RouteStick",
+     "tier": "xhard0"
+    }
+   ],
+   "identities": {
+    "file": "scripts/configs/gate-set-xhard0-48.json",
+    "sha256": "c8fcc9628d3837101e7110c26a356281655061465253e24bfb90254f3f5409c5"
+   },
+   "n": 48,
+   "records_checked": 192,
+   "runs": [
+    {
+     "driver": "595.71.05",
+     "gpu_model": "NVIDIA A40",
+     "host": "gl1525.arc-ts.umich.edu",
+     "name": "x0-a",
+     "root": "artifacts/noise-baseline/gen/x0-a",
+     "rows": 48,
+     "side": "H",
+     "slurm_job": "63153923",
+     "src_commit": "f8f76fbabc27d0b95ea9acbd57288e49411c7fb4",
+     "tier": "xhard0",
+     "workers": 4
+    },
+    {
+     "driver": "595.71.05",
+     "gpu_model": "NVIDIA A40",
+     "host": "gl1527.arc-ts.umich.edu",
+     "name": "x0-b",
+     "root": "artifacts/noise-baseline/gen/x0-b",
+     "rows": 48,
+     "side": "H",
+     "slurm_job": "63153925",
+     "src_commit": "f8f76fbabc27d0b95ea9acbd57288e49411c7fb4",
+     "tier": "xhard0",
+     "workers": 4
+    }
+   ]
+  }
+ },
+ "sha256": "90c0ea527dd7a1cc6a01be153298f612cf52140b34d068d0935985656ccd2e41"
+}

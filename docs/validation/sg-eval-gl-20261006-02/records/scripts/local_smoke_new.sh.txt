@@ -1,0 +1,29 @@
+#!/bin/bash
+# 第二阶段批次 3b／4 本机 smoke（新侧）：smoke_new.sh <物理卡> <smvla|mme|pp>，hard0 VideoUnmask 1 局，run_eval_gl.sh 完整收尾链 + official_media_check。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+S=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261006-02/smoke
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+CARD=$1; M=$2
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export PP_PY=$REPO/artifacts/sg-evaluation/pp-local-env/bin/python
+export SGEVAL_BUDGET_LEDGER=$N/sgeval-20261006-02/budget-ledger.jsonl
+case $M in
+  smvla) export SMVLA_PY=$N/robomme_benchmark-sgeval2-b34/artifacts/v8-two/venvs/smvla-env/bin/python
+         P=(--policies smvla --smvla-ckpt $N/SimpleMemVLA/checkpoints/simplememvla_robomme); L=smvla;;
+  mme) P=(--policies mme --mme-ckpt $N/sgeval-20261006-02/ckpt/mme/perceptual-framesamp-modul/79999 --openpi-data-home $REPO/artifacts/v8-evaluation/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6); L=mme;;
+  pp) P=(--policies pp --pp-ckpt $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme); L=pp;;
+esac
+ST=$S/stage-$M; [ ! -e $ST ] || { echo "SMOKE_BLOCKED stage_exists $ST"; exit 4; }
+echo "SMOKE_START model=$M card=$CARD head=$(git -C $REPO rev-parse HEAD) $(date -Is)"
+cd $REPO && bash scripts/eval-official/run_eval_gl.sh --run-name ovl2-smoke-$M --seat $(printf '%02d' $((80+CARD))) --repo $REPO \
+  --stage $ST --shard $S/shard-hard0-1.json --dataset test-hard0 --max-steps 1300 "${P[@]}" \
+  --reset-budget 3 --infra-retry-budget 1 --gpu $CARD --media-root $ST/media
+echo "SMOKE_RUN_END model=$M rc=$? $(date -Is)"
+LD=$(ls -d $ST/s8*/* | head -1); LB=$(basename $LD)
+cd $REPO && uv run --no-sync python scripts/eval-official/official_media_check.py --manifest $S/shard-hard0-1.json --ledger $LD/$LB.ledger.jsonl --root $ST/media/$LB/test-hard0/new --dataset test-hard0 --out $ST/official-media.jsonl 2>&1 | tail -2
+T=$(find $ST/media -name trace.jsonl | head -1); echo "TRACE=$T"; [ -n "$T" ] && uv run --no-sync python -c "
+import json,sys;r=[json.loads(l) for l in open(sys.argv[1])];print('TRACE_ROUTE',r[0]['route'],'END',json.dumps({k:r[-1].get(k) for k in ('status','steps_attempted','steps_observed','frames_recorded','demo_frames','observer_hook_errors')}))" $T
+echo "SMOKE_DONE model=$M $(date -Is)"

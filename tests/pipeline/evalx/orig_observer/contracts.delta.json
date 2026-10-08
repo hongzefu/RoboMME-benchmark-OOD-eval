@@ -1,0 +1,52 @@
+[
+  {
+    "id": "C13-ORIG-OBSERVER",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/orig_observer/_obs_common.py",
+      "scripts/eval-official/orig_observer/framesamp_modul_client_wrap.py",
+      "scripts/eval-official/orig_observer/framesamp_modul_proxy.py",
+      "scripts/eval-official/orig_observer/observer_status.py",
+      "scripts/eval-official/orig_observer/official_rerun_shard.sh",
+      "scripts/eval-official/orig_observer/orig_budget.py",
+      "scripts/eval-official/orig_observer/orig_episode.py",
+      "scripts/eval-official/orig_observer/orig_observer_lib.sh",
+      "scripts/eval-official/orig_observer/orig_results_adapter.py",
+      "scripts/eval-official/orig_observer/run_orig_framesamp_modul.sh",
+      "scripts/eval-official/orig_observer/run_orig_smvla.sh",
+      "scripts/eval-official/orig_observer/smvla_wrap.py",
+      "scripts/eval-official/orig_observer/step_arrays.py",
+      "scripts/eval-official/orig_observer/transparency_check.py"
+    ],
+    "symbol": "orig_observer：smvla_wrap / framesamp_modul_client_wrap 钩子、orig_episode.OrigEpisode、step_arrays、orig_results_adapter、observer_status、orig_budget、framesamp_modul_proxy、transparency_check、run_orig_smvla.sh / run_orig_framesamp_modul.sh / official_rerun_shard.sh / orig_observer_lib.sh",
+    "oracle": "假 InProcSimPool、假 EnvRunner、假 websocket 夹具；期望 trace／arrays／请求字节按 S4 新侧构造式与契约 C1～C11 手写；预算用真实 budget_ledger.py CLI",
+    "positive": "钩子返回对象同一（is）；写出的 trace 与 arrays.npz 过 contract_problems 与 gate2_compare 读取；smvla/orig 请求与 smvla/new 构造逐字节同 sha；orig-attempts.json 取最后终态行唯一 attempt；OBSERVER_COMPLETE=PASS；预算 release→reserve→commit 不重复计轨迹",
+    "negative": "钩子异常不外抛但 observer_hook_errors 递增；对账 FAIL、检查器崩溃、缺报告、封口超时时成绩不变而 OBSERVER_COMPLETE=FAIL；原版提交不符或工作树脏 RUN_BLOCKED；--ledger 放在子命令后被真实 CLI 拒绝；额度不足 RUN_BLOCKED reason=budget；输出根落在历史目录被拒",
+    "boundaries": "未在真实原版代码与真实 GPU 上运行（批次 3a 本机 smoke 核）；原侧 terminated/truncated 记 NOT_OBSERVED；SimpleMemVLA 块内非末步 status 记 NOT_OBSERVED",
+    "nodeids": [
+      "tests/pipeline/evalx/orig_observer/test_orig_observer.py"
+    ],
+    "resource": "cpu；部分启动器用例标 slow",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-ORIG-ARRAYS-MERGE",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/orig_observer/step_arrays.py"
+    ],
+    "symbol": "step_arrays.StepArrays.save 委托 trace_writer.merge_write_npz（接口冻结说明四.4），缺该函数时保持旧写法",
+    "oracle": "sys.modules['trace_writer'] 装替身模块（有／无 merge_write_npz）；期望键、dtype、字节手写",
+    "positive": "有 merge_write_npz 时 save 只调它一次（路径、键 exec_action__%05d、原 dtype 与字节），自己不写盘；空数组不调",
+    "negative": "没有 merge_write_npz 时仍按旧写法原子写 arrays.npz（numpy 读回键、dtype、字节一致，无残留临时文件）",
+    "boundaries": "merge_write_npz 的合并与冲突语义由 R6 测",
+    "nodeids": [
+      "tests/pipeline/evalx/orig_observer/test_step_arrays_merge.py::test_save_delegates_to_merge_write_npz",
+      "tests/pipeline/evalx/orig_observer/test_step_arrays_merge.py::test_save_keeps_old_write_when_merge_missing"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  }
+]

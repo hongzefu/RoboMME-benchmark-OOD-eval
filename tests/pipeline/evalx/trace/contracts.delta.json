@@ -1,0 +1,108 @@
+[
+  {
+    "id": "C13-SG-TRACE-ARRAYS",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/trace_writer.py",
+      "scripts/eval-official/recorder.py",
+      "scripts/eval-official/trace_arrays_check.py"
+    ],
+    "symbol": "trace_writer.merge_write_npz / ArraysConflict / TraceWriter(arrays_path, collect_arrays, policy_seed, effective_cap) / log_step(source_call_id, chunk_index)；recorder.EpisodeRecorder._write_arrays；trace_arrays_check.check / main",
+    "oracle": "冻结说明（docs/plans/1006-stage3-interface-freeze.md）第四节字段约定；数组期望用 hashlib 对原始字节直接算，夹具手写步序与缺观测步",
+    "positive": "每个 attempted 步有 exec_action__%05d（键号 step−1）、有状态的观测步有 exec_state__%05d，end.arrays 摘要逐项等于手算；同键同值合并、录像器与 trace 同目录任意关闭顺序都得到完整并集；header／end 在给出时带 policy_seed、effective_cap，step 行带 source_call_id／chunk_index；检查器对合规局出 TRACE_ARRAYS=PASS",
+    "negative": "同键 dtype／shape／字节不一致抛 ArraysConflict 且原文件一个字节不变；写到一半失败旧文件原样、不留 .tmp；检查器对 float32／float64 混用、数组只在录像器分目录、观测步缺状态、缺观测步补零、改 1 bit、空目录均判 FAIL",
+    "boundaries": "缺观测步不补零（记 missing_state_steps）；不传新参数时 step 行仍是旧 9 键；collect_arrays=False 不写数组也不写 end.arrays；extra_action_keys 只报不判",
+    "nodeids": [
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_merge_write_npz_merges_consistent_keys",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_merge_write_npz_conflict_raises_and_leaves_file_untouched",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_merge_write_npz_is_atomic_when_write_fails",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_trace_writer_collects_actions_and_states_without_zero_fill",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_trace_writer_seed_cap_and_call_links",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_recorder_and_trace_same_dir_any_close_order",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_recorder_conflicting_same_key_raises",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_check_positive_and_fixture_verdict_line",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_check_negative_float32_float64_mixed",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_check_negative_split_dir_arrays_only_in_recorder_dir",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_check_negative_observed_state_missing_and_zero_fill",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_check_negative_tampered_bytes",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_check_empty_root_fails"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-LANGUAGE-LOG",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/trace_writer.py"
+    ],
+    "symbol": "trace_writer.LanguageLog.open_call / message / close_call / reuse / close；read_language；audit_channel_messages",
+    "oracle": "冻结说明第五节的方法与行 schema（字段名与顺序）逐字手写",
+    "positive": "call_open／message／call_close／reuse 四种行的键与顺序等于冻结说明；message_index 在调用内从 0 递增；文字 ensure_ascii=False 原样；numpy token id 转列表",
+    "negative": "dir=in 消息写后未关文件即可从磁盘读到（发送前落盘）；close() 给悬空调用补 status=cancelled 且幂等；收尾后再写抛 RuntimeError；向已关闭调用写消息、未知 model、复用不存在的调用均 ValueError",
+    "boundaries": "不存图片本身，只记引用；call_id 只在一局内唯一",
+    "nodeids": [
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_language_log_open_message_close_schema",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_language_log_in_message_is_on_disk_before_send",
+      "tests/pipeline/evalx/trace/test_trace_arrays_language.py::test_language_log_close_cancels_open_calls_and_rejects_late_writes"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-CLIENT-LANGUAGE",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/smvla_client.py",
+      "scripts/eval-official/framesamp_modul_client.py",
+      "scripts/eval-official/pp_client.py"
+    ],
+    "symbol": "smvla_client.run_episode / PolicyTrace.lang_* / begin_chunk；framesamp_modul_client.TracedClient.infer / RecordingClient._roundtrip；pp_client.TracedConnection.act / _log_generation / _run_episode_async",
+    "oracle": "计划八.11「一局里各路线会有什么记录」手写期望；假服务分带与不带 _sgeval_audit 两种跑同一局",
+    "positive": "带与不带审计键时交给环境的动作字节、发给服务的请求与服务收到的内容完全相同（OBS_EQ 雏形）；FrameSamp+Modulation 每个推理步一个 action_model 调用（fields 原文 + 两张当前帧引用可在 trace 里解析、逐通道分词、server_final_text）；SimpleMemVLA 每次决策 in（任务目标）+ out（子任务原文）；PonderPounce 每个观测一个 action_model 调用，pp_generation 另开 subgoal_model 调用（transition 记换算后子目标，nontransition 显式记无文字输出）；执行步 source_call_id／chunk_index 指向来源调用",
+    "negative": "缺审计键时 server_final_text 记 None 不报错；PonderPounce 断线重发时首次调用记 error、重发调用 transport_attempt=1；审计键不进 trace",
+    "boundaries": "pp_generation 的键（context／text／reasoning／subgoal_raw／kind／committed）由 R3 外壳提供，缺键记 None；第二阶段开关关时 PonderPounce 不记语言账本、不收完整数组（与 BASE 逐字节相同）",
+    "nodeids": [
+      "tests/pipeline/evalx/trace/test_client_language_audit.py::test_smvla_audit_does_not_change_actions_and_language_rows",
+      "tests/pipeline/evalx/trace/test_client_language_audit.py::test_framesamp_audit_does_not_change_actions_and_language_rows",
+      "tests/pipeline/evalx/trace/test_client_language_audit.py::test_pp_audit_does_not_change_actions_and_language_rows",
+      "tests/pipeline/evalx/trace/test_client_language_audit.py::test_pp_act_failure_closes_call_with_error_and_retries_get_transport_attempt"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-MERGE1-CROSS",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/trace_writer.py",
+      "scripts/eval-official/orig_observer/step_arrays.py",
+      "scripts/eval-official/astra_hard_runner.py",
+      "scripts/eval-official/budget_ledger.py",
+      "scripts/eval-official/official_hard_runner.py",
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/pp_server_wrap.py",
+      "scripts/eval-official/pp_client.py",
+      "scripts/eval-official/policy_server_wrap.py"
+    ],
+    "symbol": "merge_write_npz（目录锁超时 MERGE_LOCK_TIMEOUT_S）× StepArrays.save × write_exec_actions × TraceWriter.close；OrigBudget＋open_budget_ledger × AttemptLedger＋budget_caps × BudgetLedger；pp_server_wrap._S2Watch／_audit_block／generation_blocks × pp_client.TracedConnection._log_generation；policy_server_wrap.build_audit × trace_writer.audit_channel_messages",
+    "oracle": "接口冻结说明三、四、五节；两边都用真实代码（不用替身对接），期望键集合、计数与文字在用例里手写",
+    "positive": "R2／R5 数组写法与 TraceWriter.close 任意先后都得到 exec_action 与 exec_state 的并集、end.arrays 无 error；原侧与新侧同开一个真实共享账本：同 config 不拒、恰一行 config、首试／恢复／重试计数手算一致、同 token 续跑同 rid 不写新行；pp 外壳审计键进客户端语言账本后 S2 transition 块有子目标原文、换算后子目标、reasoning、kind、committed、params，nontransition 显式无文字；S1 通道 token_ids／mask 原样、text_reconstructed 记进 call_close.parsed；MME-VLA 外壳通道逐字段落行",
+    "negative": "目录锁被占超过 MERGE_LOCK_TIMEOUT_S 抛 TimeoutError、TraceWriter.close 记 end.arrays.error 且不写文件；恢复额度用满再预约被拒（reserved_for_first_tries／recovery_cap）；换一组 config 参数打开同一账本抛 BudgetConfigMismatch",
+    "boundaries": "PonderPounce 父类服务与 build_pi0_prompt 用桩（外壳自身代码真实执行）；不起网络、不起仿真、不加载模型",
+    "nodeids": [
+      "tests/pipeline/evalx/trace/test_merge1_cross_block.py::test_step_arrays_and_trace_writer_any_order_keep_states",
+      "tests/pipeline/evalx/trace/test_merge1_cross_block.py::test_astra_write_exec_actions_and_trace_writer_any_order_keep_states",
+      "tests/pipeline/evalx/trace/test_merge1_cross_block.py::test_merge_write_npz_lock_timeout_recorded_in_end_arrays",
+      "tests/pipeline/evalx/trace/test_merge1_cross_block.py::test_orig_and_new_side_share_one_real_budget_ledger",
+      "tests/pipeline/evalx/trace/test_merge1_cross_block.py::test_pp_server_wrap_generation_and_text_flag_reach_language_log",
+      "tests/pipeline/evalx/trace/test_merge1_cross_block.py::test_policy_server_wrap_channels_land_in_language_log"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  }
+]

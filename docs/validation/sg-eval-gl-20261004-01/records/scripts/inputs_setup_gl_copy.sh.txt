@@ -1,0 +1,28 @@
+#!/bin/bash
+# GL 执行副本（计划第三节）：$N/robomme_benchmark-sgeval，git clone --no-hardlinks 自本机，检出冻结提交，
+# 初始化子模块（mme-vla、PonderPounce、Astra 及其嵌套 robomme_benchmark），在 NFS 上建三套环境：
+# 主 .venv（本仓库 uv.lock）、third_party/mme-vla/.venv（其 uv.lock）、third_party/PonderPounce/.venv（官方 uv.lock，CUDA 13 构建）。
+# 解释器一律 NFS 上 uv 管理的 3.11.14；UV_LINK_MODE=copy。用法：bash setup_gl_copy.sh <冻结提交 sha>
+set -euo pipefail
+SHA=$1
+SRC=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+C=$N/robomme_benchmark-sgeval
+PYI=$N/uv-python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11
+export UV_LINK_MODE=copy UV_CACHE_DIR=$HOME/.cache/uv
+[ ! -e "$C" ] || { echo "GL_COPY_BLOCKED reason=exists path=$C"; exit 3; }
+git clone --no-hardlinks "$SRC" "$C"
+cd "$C"
+git checkout --detach "$SHA"
+git -c protocol.file.allow=always submodule update --init third_party/mme-vla third_party/PonderPounce third_party/Astra-on-RoboMME
+git -C third_party/Astra-on-RoboMME submodule update --init third_party/robomme_benchmark
+git submodule status
+echo "GL_COPY_HEAD $(git rev-parse HEAD)"
+uv venv --python "$PYI" .venv && UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen --group eval-client
+( cd third_party/mme-vla && uv venv --python "$PYI" .venv && UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen )
+( cd third_party/PonderPounce && uv venv --python "$PYI" .venv && UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen )
+.venv/bin/python -c "import robomme_hard,robomme;print('MAIN_ENV', robomme_hard.__file__)"
+third_party/mme-vla/.venv/bin/python -c "import openpi;print('MME_ENV', openpi.__file__)"
+third_party/PonderPounce/.venv/bin/python -c "import torch,ponderpounce;print('PP_ENV', torch.__version__, torch.version.cuda, ponderpounce.__file__)"
+git status --short | head
+echo "GL_COPY=PASS path=$C head=$(git rev-parse HEAD)"

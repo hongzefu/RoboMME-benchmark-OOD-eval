@@ -1,0 +1,39 @@
+#!/bin/bash
+# 本机复刻 GL 第三档（V9 test-hard，1600 步 strict cap；用户 2026-10-05 批准，不计正式成绩，GL 第三档照跑）。
+# 分片与 GL 逐字节相同（LG3_SHARD_SHA=PASS），参数照抄 gl-scripts/seat_chain.sh 的 POL3；每个分片一次 run_eval_gl.sh（一次起服务，
+# server_epoch 切法与 GL 一致），各写独立 stage。基础设施非 0 退出（rc 3/4/5/信号）即 LG3_STOP，不跳到下一段；同一 stage 重跑即续跑。
+# 用法：bash local_gate3.sh <物理卡号> <模型:分片>…   例：bash local_gate3.sh 0 oracle:00 pp:00 pp:01
+# 一次性脚本，跑完逐字归档到 records/。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+RUN=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261004-01
+G=$RUN/local-g3; N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+CARD=$1; shift
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export PP_PY=$REPO/artifacts/sg-evaluation/pp-local-env/bin/python
+CK=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+MMESG="--mmesg-ckpt $CK/mme_vla_suite/symbolic-grounded-subgoal/79999 --openpi-data-home $REPO/artifacts/v8-evaluation/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+SEAT=$(printf '%02d' $((90+CARD)))
+infra_rc() { case $1 in 3|4|5|129|130|143) return 0;; *) return 1;; esac; }
+echo "LG3_START card=$CARD seat=$SEAT queue=$* git=$(git -C $REPO rev-parse HEAD) $(date -Is)"
+for item in "$@"; do
+  m=${item%%:*}; s=${item##*:}
+  case $m in
+    oracle) POL=(--policies mmesg --mme-variant ground-sg-oracle $MMESG);;
+    qwenvl) POL=(--policies mmesg --mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $CK/vlm_subgoal_predictor/qwenvl/grounded_subgoal/checkpoint-1200 $MMESG);;
+    pp) POL=(--policies pp --pp-ckpt $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme);;
+    *) echo "LG3_STOP reason=unknown_model item=$item"; exit 2;;
+  esac
+  SH=$G/inputs/$m-shard-$s.json
+  n=$(grep -c '"key"' $SH)
+  echo "LG3_SEG_START item=$item n=$n card=$CARD $(date -Is)"
+  bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name lg3-$m-$s --seat $SEAT --repo $REPO --stage $G/stage-$m-$s --shard $SH \
+    --dataset test-hard --max-steps 1600 --strict-cap "${POL[@]}" --media-root $G/media \
+    --reset-budget $(( 2 * n + 20 )) --infra-retry-budget 3 --gpu $CARD 2>&1 | sed -u "s/^/[$m-$s] /"
+  rc=${PIPESTATUS[0]}
+  echo "LG3_SEG_END item=$item rc=$rc $(date -Is)"
+  if infra_rc $rc; then echo "LG3_STOP card=$CARD item=$item rc=$rc"; exit $rc; fi
+done
+echo "LG3_DONE card=$CARD $(date -Is)"

@@ -1,0 +1,22 @@
+#!/bin/bash
+# 第三阶段统一盯盘（本机执行，只读）：每 60 s 核对 GL 四个 worker 日志与本机对拍两侧日志里的收尾／异常行，
+# 以及 GL 队列 done/failed，仅在有新行或新任务时输出。
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03
+C=/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/sg-eval-gl-20261006-03/compare
+PAT='TASK_END|TASK_SUMMARY.*(SEAT_DONE|RUN_BLOCKED|INFRA_EXHAUSTED)|WORKER_STOP|WORKER_END|SHARD_END|SIDE_DONE|RUN_BLOCKED|INFRA_EXHAUSTED|NO_PROGRESS|SERVER_DIED|SEAT_REC_SYNC=FAIL|Traceback|out of memory|CUDA error|svulkan2|EXCLUSIVE|NO RECORD|reset 拒绝|RRT|BUDGET_WARN|route_mismatch|lease_held|错误'
+declare -A seen
+files="$R/logs/p3-worker-14.log $R/logs/p3-worker-15.log $R/logs/p3-worker-16.log $R/logs/p3-worker-19.log $C/side-new.log $C/side-orig.log"
+for f in $files; do seen[$f]=$(wc -l < $f 2>/dev/null || echo 0); done
+qprev=$(ls $R/queue/done $R/queue/failed 2>/dev/null | sort | tr '\n' ' ')
+while true; do
+  for f in $files; do
+    n=$(wc -l < $f 2>/dev/null || echo 0)
+    if [ "$n" -gt "${seen[$f]}" ]; then
+      tail -n +$((seen[$f]+1)) $f | head -n $((n-seen[$f])) | stdbuf -oL tr '\r' '\n' | grep -E "$PAT" | sed "s|^|[$(basename $f .log)] |" | cut -c1-400
+      seen[$f]=$n
+    fi
+  done
+  q=$(ls $R/queue/done $R/queue/failed 2>/dev/null | sort | tr '\n' ' ')
+  [ "$q" != "$qprev" ] && { echo "[queue] done/failed: $(ls $R/queue/done | tr '\n' ' ') | failed: $(ls $R/queue/failed | tr '\n' ' ')"; qprev=$q; }
+  sleep 60
+done

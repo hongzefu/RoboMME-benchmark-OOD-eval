@@ -1,0 +1,42 @@
+#!/bin/bash
+# 本机预检（计划第二部分四）：一张卡上串行跑若干路线，每条路线由 resource_probe 托管，失败不阻塞下一条。
+# 用法：bash preflight_card.sh <物理卡号> <路线名…>
+# 一次性脚本，跑完逐字归档到 docs/validation/<档案>/records/。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+P=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261004-01/preflight
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+CARD=$1; shift
+# 卡号一律经 --gpu 传给启动器（启动器自己设 CUDA_VISIBLE_DEVICES；外层设了会被覆盖，见 12.449）
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export PP_PY=$REPO/artifacts/sg-evaluation/pp-local-env/bin/python
+CK=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+MMESG_CKPT=$CK/mme_vla_suite/symbolic-grounded-subgoal/79999
+QWEN_ADAPTER=$CK/vlm_subgoal_predictor/qwenvl/grounded_subgoal/checkpoint-1200
+PP_CKPT=$N/sg-eval/ckpt/pp/ponderpounce-9b-robomme
+OPENPI=$REPO/artifacts/v8-evaluation/openpi-data
+TOKSHA=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6
+H0=$P/shard-hard0-VideoUnmask.json; V9=$P/shard-v9-VideoUnmask.json
+COMMON_MMESG="--mmesg-ckpt $MMESG_CKPT --openpi-data-home $OPENPI --tokenizer-sha256 $TOKSHA"
+SEAT=$(printf '%02d' $((90+CARD)))
+run_route() {  # 路线名 命令…
+  local r=$1; shift; local st=$P/stage/$r; mkdir -p $st
+  echo "ROUTE_START route=$r card=$CARD $(date -Is)"
+  ( cd $REPO && uv run --no-sync python scripts/eval-official/resource_probe.py --route $r --gpu $CARD --json-out $st/probe.json -- "$@" ) 2>&1 | sed -u "s/^/[$r] /"
+  echo "ROUTE_END route=$r rc=${PIPESTATUS[0]} $(date -Is)"
+}
+for r in "$@"; do case $r in
+  mmesg-oracle-orig) run_route $r bash $REPO/scripts/eval-official/run_official_hard.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $H0 --policy mmesg --mme-variant ground-sg-oracle $COMMON_MMESG --dataset test-hard0 --max-steps 1300 --infra-retry-budget 1 --gpu $CARD ;;
+  mmesg-oracle-new-hard0) run_route $r bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $H0 --dataset test-hard0 --max-steps 1300 --policies mmesg --mme-variant ground-sg-oracle $COMMON_MMESG --reset-budget 3 --infra-retry-budget 1 --gpu $CARD ;;
+  mmesg-oracle-new-v9) run_route $r bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $V9 --dataset test-hard --max-steps 1600 --strict-cap --policies mmesg --mme-variant ground-sg-oracle $COMMON_MMESG --reset-budget 3 --infra-retry-budget 1 --gpu $CARD ;;
+  mmesg-qwenvl-orig) run_route $r bash $REPO/scripts/eval-official/run_official_hard.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $H0 --policy mmesg --mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $QWEN_ADAPTER $COMMON_MMESG --dataset test-hard0 --max-steps 1300 --infra-retry-budget 1 --gpu $CARD ;;
+  mmesg-qwenvl-new-hard0) run_route $r bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $H0 --dataset test-hard0 --max-steps 1300 --policies mmesg --mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $QWEN_ADAPTER $COMMON_MMESG --reset-budget 3 --infra-retry-budget 1 --gpu $CARD ;;
+  mmesg-qwenvl-new-v9) run_route $r bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $V9 --dataset test-hard --max-steps 1600 --strict-cap --policies mmesg --mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $QWEN_ADAPTER $COMMON_MMESG --reset-budget 3 --infra-retry-budget 1 --gpu $CARD ;;
+  pp-orig) run_route $r bash $REPO/scripts/eval-official/run_official_hard.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $H0 --policy pp --pp-ckpt $PP_CKPT --dataset test-hard0 --max-steps 1300 --infra-retry-budget 1 --gpu $CARD ;;
+  pp-new-hard0) run_route $r bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $H0 --dataset test-hard0 --max-steps 1300 --policies pp --pp-ckpt $PP_CKPT --reset-budget 3 --infra-retry-budget 1 --gpu $CARD ;;
+  pp-new-v9) run_route $r bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name pf-$r --seat $SEAT --repo $REPO --stage $P/stage/$r --shard $V9 --dataset test-hard --max-steps 1600 --strict-cap --policies pp --pp-ckpt $PP_CKPT --reset-budget 3 --infra-retry-budget 1 --gpu $CARD ;;
+  *) echo "UNKNOWN_ROUTE $r";;
+esac; done
+echo "PREFLIGHT_CARD_DONE card=$CARD"

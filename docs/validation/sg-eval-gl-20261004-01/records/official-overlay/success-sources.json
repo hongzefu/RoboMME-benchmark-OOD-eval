@@ -1,0 +1,15 @@
+{
+  "schema": "official-overlay-success-proof/1",
+  "v9": {
+    "path": "/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/sg-eval-gl-20261004-01/local-g3/stage-oracle-00/s90/mmesg-ground-sg-oracle/results.jsonl",
+    "sha256": "95ef1ad8aea6551d2bbd5bb09a8d31cfef5f97deef1cc56fad35ddcaade01920",
+    "size": 3410265,
+    "episodes": 800
+  },
+  "xhard0": {
+    "path": "/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/sg-eval-gl-20261004-01/local-g2/gate2-oracle/new-merged.results.jsonl",
+    "sha256": "a78dc420afc928a6cc393e3256ec837290e4511ca5f618477f4e282c88e09502",
+    "size": 788850,
+    "episodes": 192
+  }
+}

@@ -1,0 +1,12 @@
+#!/bin/bash
+# 计划 1.8：client-env 建好后单独编译 flash-attn==2.8.3（--no-build-isolation），构建信息记入日志
+set -euo pipefail
+E=${E:-/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/venvs/client-env}
+export CUDA_HOME=/usr/local/cuda-12.8 PATH=/usr/local/cuda-12.8/bin:$PATH MAX_JOBS=${MAX_JOBS:-12}
+export FLASH_ATTENTION_FORCE_BUILD=TRUE
+nvcc --version | tail -2
+UV_LINK_MODE=copy uv pip install --python "$E/bin/python" setuptools==80.9.0 wheel ninja packaging
+date; t0=$(date +%s)
+UV_LINK_MODE=copy uv pip install --python "$E/bin/python" --no-build-isolation flash-attn==2.8.3
+echo "build_seconds=$(( $(date +%s) - t0 ))"
+"$E/bin/python" -c "import flash_attn,torch;print('FLASH_ATTN=PASS version='+flash_attn.__version__,'torch='+torch.__version__,'cuda='+torch.version.cuda)"

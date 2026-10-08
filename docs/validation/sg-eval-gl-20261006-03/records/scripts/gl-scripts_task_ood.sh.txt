@@ -1,0 +1,37 @@
+#!/bin/bash
+# 第三阶段（1006 计划第二部分四节 runbook 4～5）新侧 OOD 一个分片（被队列任务文件调用）：
+#   task_ood.sh <执行副本> <冻结 sha> <模型> <席号 NN> <分片>
+# 模型 ∈ framesamp smvla pp qwenvl memer；ood ↔ 1800 strict、模型 seed 7、共享预算账本 870/50/50/821（reset 只计量）。
+# 每个 (模型, policy_seed) 独立 stage（$R/ood-new-<模型>-seed7；smoke 用 STAGE_OVERRIDE 另给），媒体根 $R/media。三方服务 venv 指向上一轮执行副本（同锁定提交）。
+set -u
+E=$1; F=$2; MODEL=$3; SEAT=$4; SHARD=$5
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=$N/sgeval-20261006-03; OLD=$N/robomme_benchmark-sgeval
+head=$(git -C $E rev-parse HEAD); dirty=$(git -C $E status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$F" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$F dirty=$dirty"; exit 3; }
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$N/sg-eval/venvs/client-env/bin/python
+export SMVLA_PY=$N/robomme_benchmark-sgeval2-b34/artifacts/v8-two/venvs/smvla-env/bin/python  # 上一轮 b34 执行副本（同锁定 gitlink）
+export MME_VLA_PY=$OLD/third_party/mme-vla/.venv/bin/python PP_PY=$OLD/third_party/PonderPounce/.venv/bin/python
+export PYTHONPATH=$E/src:$E/third_party/mme-vla/packages/openpi-client/src
+export UV_CACHE_DIR=/tmp/uvcache-$SEAT
+export SGEVAL_FFMPEG=$R/tools/ff/ffmpeg
+TOK="--openpi-data-home $N/sg-eval/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+GSG="--groundsg-ckpt $N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 $TOK"   # ckpt/mme 为历史目录名
+WALL=()
+case $MODEL in
+  framesamp) POL=(--policies perceptual-framesamp-modul --framesamp-modul-ckpt $N/sgeval-20261006-02/ckpt/mme/perceptual-framesamp-modul/79999 $TOK);;  # 历史目录名
+  smvla) POL=(--policies smvla --smvla-ckpt $N/SimpleMemVLA/checkpoints/simplememvla_robomme);;
+  pp) POL=(--policies pp --pp-ckpt $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme);;
+  qwenvl) export SEAT_XLA_MEM_FRACTION=0.65; WALL=(--episode-wall 3600)
+          POL=(--policies groundsg --groundsg-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $N/sg-eval/ckpt/qwenvl-groundsg/checkpoint-1200 $GSG);;
+  memer) export SEAT_XLA_MEM_FRACTION=0.65; WALL=(--episode-wall 7200)
+         POL=(--policies groundsg --groundsg-variant ground-sg-memer --memer-adapter $N/sg-eval/ckpt/memer/grounded_subgoal/checkpoint-1300 $GSG);;
+  *) echo "RUN_BLOCKED reason=model"; exit 2;;
+esac
+n=$(grep -c '"key"' $SHARD)
+echo "TASK_OOD model=$MODEL seat=$SEAT shard=$SHARD n=$n exec=$E head=$head host=$(hostname) $(date -Is)"
+bash $E/scripts/eval-official/run_eval_gl.sh --run-name ${RUN_PREFIX:-p3-ood}-$MODEL-s$SEAT --seat $SEAT --repo $E --stage ${STAGE_OVERRIDE:-$R/ood-new-$MODEL-seed7} --shard $SHARD \
+  --dataset ood --max-steps 1800 --strict-cap "${POL[@]}" "${WALL[@]}" --media-root ${MEDIA_OVERRIDE:-$R/media} --gpu 0 \
+  --policy-seed 7 --budget-ledger $R/budget-ledger.jsonl --trajectory-cap 870 --shared-infra-cap 50 --expired-cap 50 --planned-first-tries 821 \
+  --infra-retry-budget ${INFRA:-1}

@@ -1,0 +1,32 @@
+#!/bin/bash
+# 第二阶段席位 worker（在占位 job 的 srun 步骤内运行，经 launch_seat.sh 启动）：循环从 queue/pending 按文件名顺序
+# 原子领取任务（mv 到 running/<worker>__<任务>），bash 执行，日志写 logs/tasks/<任务>.log，结束移入 done/ 或 failed/。
+# 队列空时每 60 秒再查；queue/STOP 存在即退出。任务本身可重入（run_eval_gl.sh 按账本续跑），被中断的任务由主会话移回 pending。
+# 用法：seat_worker.sh <worker 名>
+set -u
+W=$1
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02
+Q=$R/queue
+echo "WORKER_START worker=$W host=$(hostname) $(date -Is)"
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | sed 's/^/GPU_INFO /'
+idle=0
+while true; do
+  [ -e $Q/STOP ] && { echo "WORKER_STOP worker=$W reason=stop_file $(date -Is)"; break; }
+  t=""
+  for f in $(ls $Q/pending 2>/dev/null | sort); do
+    if mv "$Q/pending/$f" "$Q/running/${W}__$f" 2>/dev/null; then t=$f; break; fi
+  done
+  if [ -z "$t" ]; then
+    [ $((idle % 30)) = 0 ] && echo "WORKER_IDLE worker=$W $(date -Is)"
+    idle=$((idle+1)); sleep 60; continue
+  fi
+  idle=0
+  name=${t%.task}; log=$R/logs/tasks/$name.log
+  echo "TASK_START worker=$W task=$name host=$(hostname) $(date -Is)" | tee -a $log
+  bash "$Q/running/${W}__$t" >> $log 2>&1
+  rc=$?
+  echo "TASK_END worker=$W task=$name rc=$rc $(date -Is)" | tee -a $log
+  grep -aE "RUN_BLOCKED|SEAT_REC_SYNC=|OFFICIAL_RENDER_TALLY|OFFICIAL_MEDIA|INFRA_EXHAUSTED|OBSERVER_COMPLETE=|BUDGET_ENFORCEMENT=|SEAT_DONE|OFFICIAL_SEAT_DONE" $log | tail -6 | sed "s/^/TASK_SUMMARY task=$name /"
+  if [ $rc = 0 ]; then mv "$Q/running/${W}__$t" "$Q/done/$t"; else mv "$Q/running/${W}__$t" "$Q/failed/$t"; fi
+done
+echo "WORKER_END worker=$W $(date -Is)"

@@ -1,0 +1,31 @@
+#!/bin/bash
+# 第一档 V9 NEED_RERUN 定性第二次跑（noise_gate.py 细则 3.2～3.4；沿用 maint-regress/scripts/chain_rerun.sh 做法）：
+# 同一席位串行：改后代码（robomme_benchmark-noise@gate1-frozen）第二次 → 旧代码（robomme_benchmark-noise-old@f8f76fba）；
+# 重跑清单 gate1/g1-new-v9.rerun.jsonl = 1 翻转局 + 3 陪跑局，每遍 4 局 --workers 4；最后 gen-regress check --rerun-new/--rerun-old 出最终判定。
+set -u
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=$N/sgeval-20261006-02; NEW=$N/robomme_benchmark-noise; OLD=$N/robomme_benchmark-noise-old
+PY=$NEW/.venv/bin/python; IN=$N/maint-regress/inputs; IDS=$R/gate1/g1-new-v9.rerun.jsonl
+for f in /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /usr/share/vulkan/icd.d/nvidia_icd.json; do [ -f "$f" ] && { export VK_ICD_FILENAMES=$f; break; }; done
+run() {  # <side> <代码根> <期望 HEAD> <遍名> <额外参数…>
+  local side=$1 C=$2 exp=$3 pass=$4; shift 4
+  [ "$(git -C $C rev-parse HEAD)" = "$exp" ] && [ -z "$(git -C $C status --short --ignore-submodules=dirty)" ] \
+    || { echo "RUN_BLOCKED reason=exec_copy side=$side"; return 3; }
+  got=$(PYTHONPATH=$C/src $PY -c "import robomme_hard;print(robomme_hard.__file__)" 2>/dev/null)
+  case "$got" in $C/src/*) echo "IMPORT_CHECK=PASS side=$side $got";; *) echo "IMPORT_CHECK=FAIL side=$side $got"; return 2;; esac
+  local OUT=/tmp/sgev2-$pass STAGE=$R/gate1/$pass
+  [ ! -e "$OUT" ] && [ ! -e "$STAGE" ] || { echo "GATE1_BLOCKED reason=exists $pass"; return 4; }
+  ( cd $C && PYTHONPATH=$C/src $PY scripts/parity/hard_parity.py generate --side H2 --tier v9 --manifest $IN/delivery.local.json \
+      --identities $IDS --specs-root $IN/specs-root --src-root $C --workers 4 --gpu 0 --out $OUT --stage $STAGE "$@" )
+  local rc=$?
+  ( cd $C && PYTHONPATH=$C/src $PY scripts/parity/noise_run.py ship --src $OUT --stage $STAGE --finalize ); local rc2=$?
+  rm -rf -- "$OUT"
+  echo "GATE1_RERUN_END side=$side pass=$pass gen_rc=$rc ship_rc=$rc2 $(date -Is)"
+}
+echo "GATE1_RERUN_START host=$(hostname) n=$(grep -c . $IDS) $(date -Is)"
+run new $NEW "$(cat $R/inputs/gate1-frozen-commit.txt)" g1-new2-v9 --expect-ref $NEW/scripts/configs/noise-ref-20261003.json
+run old $OLD f8f76fbabc27d0b95ea9acbd57288e49411c7fb4 g1-old2-v9
+( cd $NEW && PYTHONPATH=$NEW/src $PY scripts/parity/noise_gate.py gen-regress check --ref $NEW/scripts/configs/noise-ref-20261003.json --set v9 \
+    --new $R/gate1/g1-new-v9 --rerun-new $R/gate1/g1-new2-v9 --rerun-old $R/gate1/g1-old2-v9 \
+    --out $R/gate1/g1-v9-final.regress.jsonl ) 2>&1 | grep -E "GEN_REGRESS|Error|Traceback"
+echo "GATE1_RERUN_DONE $(date -Is)"

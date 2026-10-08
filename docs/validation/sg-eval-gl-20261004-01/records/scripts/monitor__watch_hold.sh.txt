@@ -1,0 +1,17 @@
+#!/bin/bash
+# 排到卡即唤醒：任一 job 不再 PENDING 或行数不符即退出；ssh 连续 5 次失败也退出；最长约 110 分钟
+IDS=${IDS:-63188711,63188712,63188713,63188714,63188715,63188716,63188719,63188720,63188721}
+N=$(echo "$IDS" | tr ',' '\n' | wc -l)
+fail=0; t0=$(date +%s)
+while :; do
+  out=$(ssh -o BatchMode=yes greatlakes "squeue -h -j $IDS -o '%i|%j|%T|%r|%S|%N'" 2>&1); rc=$?
+  if [ $rc -ne 0 ]; then fail=$((fail+1)); [ $fail -ge 5 ] && { echo "WATCH=SSH_FAIL"; echo "$out"; exit 0; }
+  else
+    fail=0
+    rows=$(echo "$out" | grep -c '|')
+    if [ "$rows" -ne "$N" ] || echo "$out" | grep -v '|PENDING|' | grep -q '|'; then
+      echo "WATCH=CHANGED $(date)"; echo "$out"; exit 0; fi
+  fi
+  [ $(( $(date +%s) - t0 )) -ge 6600 ] && { echo "WATCH=TIMEOUT_RENEW $(date)"; echo "$out"; exit 0; }
+  sleep 120
+done

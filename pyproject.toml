@@ -1,0 +1,53 @@
+# RoboMME-benchmark-OOD 的评估仓：外层 load_policy / run_episode 与五个模型 Policy、GL 席位、对拍工具。
+# benchmark 仓以 submodule 挂在 third_party/robomme_benchmark（钉 40 位 sha），本仓不复制其代码。
+# 三个模型客户端子环境各有自己的 pyproject.toml 与 uv.lock，见 envs/。
+[project]
+name = "robomme-hard-eval"
+version = "1.0.0"
+description = "RoboMME OOD evaluation"
+readme = "readme.md"
+requires-python = ">=3.11"
+dependencies = [
+    "robomme",
+    "mani-skill",
+    "opencv-python>=4.11.0.86",
+    "pebble>=5.2.2",
+    "setuptools==80.9.0",
+    "torch==2.9.1",
+    "torchvision==0.24.1",
+]
+
+[project.optional-dependencies]
+dev = ["opencv-python", "pytest"]
+
+[dependency-groups]
+eval-client = [
+    "openpi-client",
+    "pillow>=12.1.1",
+    "tree>=0.2.4",
+]
+
+[tool.uv]
+default-groups = ["eval-client"]
+
+[tool.uv.sources]
+robomme = { path = "third_party/robomme_benchmark", editable = true }
+# uv 不从 path 依赖继承 [tool.uv.sources]，ManiSkill 必须在本仓重新声明，否则会解析成 PyPI 版。
+mani-skill = { git = "https://github.com/YinpeiDai/ManiSkill.git", rev = "07be6fbc66350ddca200abfb0a11b692f078f7fd" }
+openpi-client = { path = "third_party/mme-vla/packages/openpi-client", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robomme_hard_eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p tests._support.resource_policy"
+xfail_strict = true
+markers = [
+    "slow: 起 bash／ffmpeg／websocket／wheel 安装等慢用例，不进日常门禁",
+    "sim: 真实仿真 reset",
+]

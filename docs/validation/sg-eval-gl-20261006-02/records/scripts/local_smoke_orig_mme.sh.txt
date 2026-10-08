@@ -1,0 +1,16 @@
+#!/bin/bash
+# 批次 3a 本机 smoke：只跑 MME 原侧 1 局（SimpleMemVLA 原侧 smoke 已用满 1+2 局额度）。直接调 run_orig_mme.sh。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+S=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261006-02/smoke
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+T=$S/orig-stage/p2-orig-mme-smoke
+export CUDA_VISIBLE_DEVICES=$1
+export ORIG_STAGE_ROOT=$S/orig-stage SGEVAL_BUDGET_LEDGER=$N/sgeval-20261006-02/budget-ledger.jsonl
+export ORIG_MME_CLIENT_PY=$N/sgeval-20261006-02/venvs/orig-mme-client/bin/python
+echo "SMOKE_ORIG_MME_START card=$1 head=$(git -C $REPO rev-parse HEAD) $(date -Is)"
+cd $REPO && MANIFEST=$S/orig-manifest-1.jsonl SHARD=0 PORT=19950 RUN_TAG=p2-orig-mme-smoke SAVE_ROOT=$T/save REC_ROOT=$T/rec VIDEO_DIR=$T/videos \
+  bash scripts/eval-official/orig_observer/run_orig_mme.sh
+echo "SMOKE_ORIG_MME_END rc=$? $(date -Is)"
+find $T -name trace.jsonl | while read t; do uv run --no-sync python -c "
+import json,sys;r=[json.loads(l) for l in open(sys.argv[1])];print('TRACE_ROUTE',r[0]['route'],'END',json.dumps({k:r[-1].get(k) for k in ('status','steps_attempted','steps_observed','frames_recorded','observer_hook_errors')}))" $t; done

@@ -1,0 +1,20 @@
+#!/bin/bash
+# 收尾核对（本机 CPU，只读产物）：finalize_gate.sh <gate2|gate3> [模型…]（缺省五个模型）
+# 逐模型：eval_report（EVAL_COVERAGE／EVAL_REPORT／EVAL_VIDEOS）→ official_media_check（OFFICIAL_MEDIA_INPUTS／OFFICIAL_MEDIA）。
+set -u
+G=$1; shift
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02
+case $G in gate2) DS=test-hard0; EXP=192; CAP=1300;; gate3) DS=test-hard; EXP=800; CAP=1600;; *) echo "用法"; exit 2;; esac
+MODELS=${*:-oracle qwenvl pp smvla mme}
+cd $REPO
+for k in $MODELS; do
+  case $k in oracle) P=mmesg:ground-sg-oracle; L=mmesg-ground-sg-oracle; T=b2;; qwenvl) P=mmesg:ground-sg-qwenvl; L=mmesg-ground-sg-qwenvl; T=b2;;
+    pp) P=pp; L=pp; T=b4;; smvla) P=smvla; L=smvla; T=b3b;; mme) P=mme; L=mme; T=b3b;; esac
+  O=$R/$G-report/eval-$k; rm -rf -- "$O"; mkdir -p $R/$G-report
+  uv run --no-sync python scripts/eval-official/eval_report.py --manifest $R/inputs/manifests/$k-$G.json --stage $R/$G-new-$k --policies $P \
+    --dataset $DS --side new --videos $R/media --out $O --expect-total $EXP --cap $CAP 2>&1 | grep -E "^EVAL_"
+  MAN=$(ls $R/inputs/$T/$k-$G-s*.json | sed 's/^/--manifest /'); LED=$(ls $R/$G-new-$k/s*/$L/$L.ledger.jsonl | sed 's/^/--ledger /')
+  uv run --no-sync python scripts/eval-official/official_media_check.py $MAN $LED --root $R/media/$L/$DS/new --dataset $DS \
+    --out $R/$G-report/official-media-$k.jsonl 2>&1 | grep -E "^OFFICIAL_MEDIA" | sed "s/^/[$k] /"
+done

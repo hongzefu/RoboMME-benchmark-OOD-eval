@@ -1,0 +1,112 @@
+{
+  "note": "T7 生成链路块的植入。非受保护源码，全部在隔离副本（复制 src／scripts／tests／pyproject.toml）里落盘改坏，先确认原版同环境通过，再确认列出的用例全部失败；驱动脚本在会话 scratchpad，未入库；2026-10-04 自检本表全部抓到。",
+  "mutants": [
+    {
+      "id": "M17a",
+      "target": "scripts/injection-dev/_rollout.py::aggregate_v8",
+      "method": "逐格 expected 改为结果行里已交付的数（报告分母改用结果行数）",
+      "expect_fail": [
+        "tests/pipeline/gen/test_shard_aggregate.py::test_pending_cells_when_nothing_ran",
+        "tests/pipeline/gen/test_shard_aggregate.py::test_shortfall_when_failure_not_backfilled"
+      ]
+    },
+    {
+      "id": "M17b",
+      "target": "scripts/injection-dev/_rollout.py::aggregate_v8",
+      "method": "counts 只写非零键（零计数缺项，读方按缺省 0 处理）",
+      "expect_fail": [
+        "tests/pipeline/gen/test_shard_aggregate.py::test_shard_run_delivers_and_serializes_zero_counts"
+      ]
+    },
+    {
+      "id": "M18a",
+      "target": "scripts/injection-dev/_rollout.py::run_continue",
+      "method": "--resume 不按账本重放（回写前中断后重复派发已完成身份）",
+      "expect_fail": [
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_crash_between_rounds_resumes_without_redispatch"
+      ]
+    },
+    {
+      "id": "M18b",
+      "target": "scripts/injection-dev/_rollout.py::run_batch",
+      "method": "resume 时不给 runner 传 --resume（轮内已完成局被重跑）",
+      "expect_fail": [
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_crash_inside_round_resumes_from_partial",
+        "tests/pipeline/gen/test_run_batch.py::test_resume_keeps_done_dirs_and_passes_flag"
+      ]
+    },
+    {
+      "id": "T7-G1",
+      "target": "scripts/injection-dev/_rollout.py::apply_results",
+      "method": "递补改取编号最大的未试候选",
+      "expect_fail": [
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_failure_is_backfilled_with_next_untried_candidate"
+      ]
+    },
+    {
+      "id": "T7-G2",
+      "target": "scripts/injection-dev/_rollout.py::run_continue",
+      "method": "基础设施重试上限 < 改 <=（每身份可重试 2 次）",
+      "expect_fail": [
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_second_infra_failure_is_final_and_backfilled"
+      ]
+    },
+    {
+      "id": "T7-G3",
+      "target": "scripts/injection-dev/_rollout.py::enforce_exec_cap",
+      "method": "执行步上限 > 改 >=",
+      "expect_fail": [
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_exec_cap_boundary_through_real_h5",
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_exec_cap_unit_boundary"
+      ]
+    },
+    {
+      "id": "T7-G4",
+      "target": "scripts/injection-dev/_rollout.py::apply_results",
+      "method": "关掉 MoveCube 同方式递补",
+      "expect_fail": [
+        "tests/pipeline/gen/test_rollout_state_machine.py::test_movecube_backfills_only_within_same_way"
+      ]
+    },
+    {
+      "id": "T7-F1",
+      "target": "scripts/injection-dev/_freeze.py::_select_by_way_quota",
+      "method": "逐方式取编号最大的而不是最小的",
+      "expect_fail": [
+        "tests/pipeline/gen/test_freeze.py::test_v9_movecube_per_way_quota_through_freeze"
+      ]
+    },
+    {
+      "id": "T7-F2",
+      "target": "scripts/injection-dev/_freeze.py::v8_default_candidates",
+      "method": "缺省候选数改为局数 + 1",
+      "expect_fail": [
+        "tests/pipeline/gen/test_freeze.py::test_dry_run_candidates_default_to_quota"
+      ]
+    },
+    {
+      "id": "T7-S1",
+      "target": "scripts/injection-dev/site_build.py::Runner.reusable",
+      "method": "复用已 PASS 步骤时不核产物 sha256",
+      "expect_fail": [
+        "tests/pipeline/gen/test_site_build.py::test_tampered_catalog_is_refused_on_resume"
+      ]
+    },
+    {
+      "id": "T7-S2",
+      "target": "scripts/injection-dev/site_build.py::main",
+      "method": "报告指纹不符也复用",
+      "expect_fail": [
+        "tests/pipeline/gen/test_site_build.py::test_changed_inputs_refuse_reuse"
+      ]
+    },
+    {
+      "id": "T7-E1",
+      "target": "scripts/injection-dev/export_eval_identities.py::check_rows",
+      "method": "判定忽略 delivery_mismatch",
+      "expect_fail": [
+        "tests/pipeline/gen/test_eval_identities.py::test_export_detects_delivery_mismatch"
+      ]
+    }
+  ]
+}

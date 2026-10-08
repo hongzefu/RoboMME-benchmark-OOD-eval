@@ -1,0 +1,15 @@
+#!/bin/bash
+# 只读合并多个轨迹根：merge_traces.sh <目标目录> <根…>。每局建真实目录 <目标>/<局目录名>/，内放指向原文件的符号链接
+# （trace.jsonl、arrays.npz 若有）；同名局在两个根都出现即报错退出（不覆盖）。
+set -u
+DST=$1; shift
+[ -e "$DST" ] && { echo "错误: 目标已存在 $DST"; exit 1; }
+mkdir -p "$DST"; n=0
+for root in "$@"; do
+  while IFS= read -r t; do
+    ep=$(basename "$(dirname "$t")"); d="$DST/$ep"
+    [ -e "$d" ] && { echo "错误: 重复局 $ep"; exit 2; }
+    mkdir "$d"; ln -s "$t" "$d/trace.jsonl"; [ -e "$(dirname "$t")/arrays.npz" ] && ln -s "$(dirname "$t")/arrays.npz" "$d/arrays.npz"; n=$((n+1))
+  done < <(find "$root" -name trace.jsonl -type f)
+done
+echo "MERGED_TRACES dst=$DST episodes=$n"

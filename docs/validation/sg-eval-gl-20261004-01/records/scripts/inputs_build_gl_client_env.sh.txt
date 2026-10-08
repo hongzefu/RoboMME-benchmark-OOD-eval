@@ -1,0 +1,13 @@
+#!/bin/bash
+# GL 侧客户端扩展环境：落 NFS，计算节点只 uv run --no-sync 使用；与本机同一份 client-env/uv.lock
+# robomme 与 openpi-client 是指向 /data 的 editable 路径依赖，GL 节点看不到 /data：两者都不装，运行时由 GL 执行副本的 PYTHONPATH 提供
+set -euo pipefail
+ROOT=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+E=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/venvs/client-env
+export UV_LINK_MODE=copy UV_CACHE_DIR=$HOME/.cache/uv
+uv venv --clear --python /nfs/turbo/coe-chaijy-unreplicated/hongzefu/uv-python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11 "$E"
+cd $ROOT/scripts/eval-official/client-env
+UV_PROJECT_ENVIRONMENT="$E" uv sync --frozen --no-install-project --no-install-package robomme --no-install-package openpi-client
+uv pip install --python "$E/bin/python" setuptools==80.9.0 wheel ninja packaging
+CUDA_HOME=/usr/local/cuda-12.8 uv pip install --python "$E/bin/python" --no-build-isolation flash-attn==2.8.3
+"$E/bin/python" -c "import torch,flash_attn,swift,vla_eval,sapien,msgpack,websockets;print('GL_CLIENT_ENV=PASS torch='+torch.__version__,'flash_attn='+flash_attn.__version__,'sapien='+sapien.__version__)"

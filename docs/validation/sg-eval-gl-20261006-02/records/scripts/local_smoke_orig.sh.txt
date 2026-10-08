@@ -1,0 +1,19 @@
+#!/bin/bash
+# 第二阶段批次 3a 本机 smoke（原侧重跑入口）：SimpleMemVLA 原版 4e0c04f + MME 原版 927c56d 各 1 局（小清单），经 official_rerun_shard.sh。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+S=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261006-02/smoke
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+export CUDA_VISIBLE_DEVICES=$1
+export ORIG_E0_SHA=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02/inputs/e0-sha.txt
+export ORIG_STAGE_ROOT=$S/orig-stage MANIFEST=$S/orig-manifest-1.jsonl
+export SGEVAL_BUDGET_LEDGER=$N/sgeval-20261006-02/budget-ledger.jsonl
+export ORIG_MME_CLIENT_PY=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02/venvs/orig-mme-client/bin/python
+export PYTHONPATH=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/robomme_policy_learning-official-xhard0/packages/openpi-client/src
+mkdir -p $ORIG_STAGE_ROOT
+echo "SMOKE_ORIG_START card=$1 head=$(git -C $REPO rev-parse HEAD) $(date -Is)"
+cd $REPO && bash scripts/eval-official/orig_observer/official_rerun_shard.sh p2-orig3-smoke 0 --run-idx 7
+echo "SMOKE_ORIG_END rc=$? $(date -Is)"
+find $ORIG_STAGE_ROOT -name trace.jsonl | while read t; do uv run --no-sync python -c "
+import json,sys;r=[json.loads(l) for l in open(sys.argv[1])];print('TRACE_ROUTE',r[0]['route'],'END',json.dumps({k:r[-1].get(k) for k in ('status','steps_attempted','steps_observed','frames_recorded','observer_hook_errors')}))" $t; done
+find $ORIG_STAGE_ROOT -name arrays.npz | head; find $ORIG_STAGE_ROOT -name 'orig-attempts.json' -o -name observer-status.json | head

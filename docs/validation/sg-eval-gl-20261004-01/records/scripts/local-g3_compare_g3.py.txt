@@ -1,0 +1,80 @@
+"""本机复刻第三档对 GL 第三档：按 key 对齐终态（用户 2026-10-05 批准方案 C；不计正式成绩）。
+
+两边显卡不同、GroundSG 服务端随机数跨局累积，不比逐步，只比终态与统计量。每个 key 取最后一行（续跑以最后一次为准），
+只统计两边都有终态（success/fail/timeout）的 key；error 行单列。McNemar 用精确二项检验（只看不一致的两类）。
+用法：python compare_g3.py --model oracle --gl <GL results.jsonl…> --local <本机 results.jsonl…> [--out-md F]
+一次性脚本，跑完逐字归档到 records/。
+"""
+import argparse
+import collections
+import json
+from math import comb
+
+TERMINAL = {"success", "fail", "timeout"}
+
+
+def load(paths):
+    rows = {}
+    for p in paths:
+        for line in open(p):
+            if line.strip():
+                r = json.loads(line)
+                rows[r["key"]] = r
+    return rows
+
+
+def status(r):
+    return r.get("result") or r.get("status")
+
+
+def mcnemar_exact(b, c):
+    n = b + c
+    if n == 0:
+        return 1.0
+    k = min(b, c)
+    p = sum(comb(n, i) for i in range(k + 1)) / 2 ** n
+    return min(1.0, 2 * p)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model", required=True)
+    ap.add_argument("--gl", nargs="+", required=True)
+    ap.add_argument("--local", nargs="+", required=True)
+    ap.add_argument("--out-md")
+    a = ap.parse_args()
+    gl, lo = load(a.gl), load(a.local)
+    keys = sorted(set(gl) & set(lo))
+    both = [k for k in keys if status(gl[k]) in TERMINAL and status(lo[k]) in TERMINAL]
+    err = {"gl": sum(status(r) not in TERMINAL for r in gl.values()),
+           "local": sum(status(r) not in TERMINAL for r in lo.values())}
+    agree = sum(status(gl[k]) == status(lo[k]) for k in both)
+    gs = sum(status(gl[k]) == "success" for k in both)
+    ls = sum(status(lo[k]) == "success" for k in both)
+    b = sum(status(gl[k]) == "success" and status(lo[k]) != "success" for k in both)
+    c = sum(status(gl[k]) != "success" and status(lo[k]) == "success" for k in both)
+    p = mcnemar_exact(b, c)
+    n = len(both)
+    line = (f"LG3_COMPARE model={a.model} n={n} gl_rows={len(gl)} local_rows={len(lo)} gl_sr={gs / max(n, 1):.4f} "
+            f"local_sr={ls / max(n, 1):.4f} agree={agree / max(n, 1):.4f} gl_only_success={b} local_only_success={c} "
+            f"mcnemar_p={p:.4g} gl_nonterminal={err['gl']} local_nonterminal={err['local']}")
+    per = collections.defaultdict(lambda: [0, 0, 0, 0])
+    for k in both:
+        t = gl[k].get("task") or k.split("_")[0]
+        s = per[t]
+        s[0] += 1
+        s[1] += status(gl[k]) == "success"
+        s[2] += status(lo[k]) == "success"
+        s[3] += status(gl[k]) == status(lo[k])
+    md = [f"# 第三档本机复刻对照：{a.model}", "", f"`{line}`", "",
+          "| 任务 | 局数 | GL 成功 | 本机成功 | 终态一致 |", "|---|---|---|---|---|"]
+    for t in sorted(per):
+        n_, g_, l_, a_ = per[t]
+        md.append(f"| {t} | {n_} | {g_} | {l_} | {a_} |")
+    if a.out_md:
+        open(a.out_md, "w").write("\n".join(md) + "\n")
+    print(line)
+
+
+if __name__ == "__main__":
+    main()

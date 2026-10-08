@@ -1,0 +1,32 @@
+#!/bin/bash
+# 本机第二档（计划第二部分四「本机第一档与第二档」第 2 条）：一张卡串行跑若干模型，每个模型一条 pair_seat.sh 链，
+# 同一分片（xhard0 16 任务 × 12 局 = 192，原侧与新侧共用）先原侧后新侧、同卡。不阻塞任何事；Astra 不跑。
+# 用法：bash local_gate2.sh <物理卡号> <模型…>   模型取 oracle｜qwenvl｜pp
+# 一次性脚本，跑完逐字归档到 records/。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+RUN=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261004-01
+G=$RUN/local-g2; N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+CARD=$1; shift
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export PP_PY=$REPO/artifacts/sg-evaluation/pp-local-env/bin/python
+CK=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+MMESG="--mmesg-ckpt $CK/mme_vla_suite/symbolic-grounded-subgoal/79999 --openpi-data-home $REPO/artifacts/v8-evaluation/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+SHARD=$RUN/preflight/manifest-hard0/shard-00.json
+SEAT=$(printf '%02d' $((80+CARD)))
+BUDGET="--reset-budget 202 --infra-retry-budget 10 --orig-infra-retry-budget 10"
+for m in "$@"; do
+  case $m in
+    oracle) MODEL=(--policy mmesg --mme-variant ground-sg-oracle $MMESG);;
+    qwenvl) MODEL=(--policy mmesg --mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $CK/vlm_subgoal_predictor/qwenvl/grounded_subgoal/checkpoint-1200 $MMESG);;
+    pp) MODEL=(--policy pp --pp-ckpt $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme);;
+    *) echo "UNKNOWN_MODEL $m"; continue;;
+  esac
+  echo "LOCAL_G2_START model=$m card=$CARD $(date -Is)"
+  bash $REPO/scripts/eval-official/pair_seat.sh --run-name lg2-$m --seat $SEAT --repo $REPO --stage $G/stage-$m --shard $SHARD \
+    "${MODEL[@]}" $BUDGET --gpu $CARD 2>&1 | sed -u "s/^/[$m] /"
+  echo "LOCAL_G2_END model=$m rc=${PIPESTATUS[0]} $(date -Is)"
+done
+echo "LOCAL_G2_DONE card=$CARD"

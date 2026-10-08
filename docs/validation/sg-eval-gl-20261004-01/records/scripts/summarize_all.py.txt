@@ -1,0 +1,82 @@
+"""sg-eval-gl-20261004-01 收尾汇总：读全部 results.jsonl（只读，NFS 不动），出各档按任务成功率表（markdown）。
+每个 key 取最后一行；第二档新侧有补跑合表的用合表文件。一次性脚本，逐字归档到 records/。
+用法：python summarize_all.py > records/tables.md
+"""
+import collections
+import json
+import os
+
+N = "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261004"
+R = "/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/sg-eval-gl-20261004-01"
+
+SETS = [
+    ("第二档", "本机", "Oracle 原版", f"{R}/local-g2/stage-oracle/s80/orig/mmesg-ground-sg-oracle/results.jsonl", 192),
+    ("第二档", "本机", "Oracle 新接口（含 12 局补跑）", f"{R}/local-g2/gate2-oracle/new-merged.results.jsonl", 192),
+    ("第二档", "本机", "QwenVL 原版", f"{R}/local-g2/stage-qwenvl/s81/orig/mmesg-ground-sg-qwenvl/results.jsonl", 192),
+    ("第二档", "本机", "QwenVL 新接口（含 5 局补跑）", f"{R}/local-g2/gate2-qwenvl/new-merged.results.jsonl", 192),
+    ("第二档", "本机", "PonderPounce 原版", f"{R}/local-g2/stage-pp/s80/orig/pp/results.jsonl", 192),
+    ("第二档", "本机", "PonderPounce 新接口", f"{R}/local-g2/stage-pp/s80/pp/results.jsonl", 192),
+    ("第二档", "GL", "Oracle 原版", f"{N}/gate2-oracle/s00/orig/mmesg-ground-sg-oracle/results.jsonl", 192),
+    ("第二档", "GL", "Oracle 新接口（含 12 局补跑）", f"{R}/gl-g2/gate2-oracle/new-merged.results.jsonl", 192),
+    ("第二档", "GL", "PonderPounce 原版（分片 0）", f"{N}/gate2-pp/s01/orig/pp/results.jsonl", 96),
+    ("第二档", "GL", "PonderPounce 新接口（分片 0）", f"{N}/gate2-pp/s01/pp/results.jsonl", 96),
+    ("第二档", "GL", "QwenVL 原版（分片 00）", f"{N}/gate2-qwenvl/s03/orig/mmesg-ground-sg-qwenvl/results.jsonl", 39),
+    ("第二档", "GL", "QwenVL 新接口（分片 00）", f"{N}/gate2-qwenvl/s03/mmesg-ground-sg-qwenvl/results.jsonl", 39),
+    ("第三档", "GL", "Oracle", f"{N}/gate3-oracle/s00/mmesg-ground-sg-oracle/results.jsonl", 800),
+    ("第三档", "GL", "PonderPounce（分片 0）", f"{N}/gate3-pp/s01/pp/results.jsonl", 400),
+    ("第三档", "GL", "QwenVL（分片 00，中断）", f"{N}/gate3-qwenvl/s03/mmesg-ground-sg-qwenvl/results.jsonl", 160),
+    ("第三档", "本机复刻", "Oracle", f"{R}/local-g3/stage-oracle-00/s90/mmesg-ground-sg-oracle/results.jsonl", 800),
+    ("第三档", "本机复刻", "PonderPounce（分片 00，中断）", f"{R}/local-g3/stage-pp-00/s90/pp/results.jsonl", 400),
+    ("第三档", "本机复刻", "QwenVL（分片 00，中断）", f"{R}/local-g3/stage-qwenvl-00/s91/mmesg-ground-sg-qwenvl/results.jsonl", 160),
+]
+
+
+def load(p):
+    rows = {}
+    for line in open(p):
+        if line.strip():
+            r = json.loads(line)
+            rows[r["key"]] = r
+    return rows
+
+
+def status(r):
+    return r.get("result") or r.get("status")
+
+
+def main():
+    print("# 各档成功率总表（收尾时点，自动生成）\n")
+    print("| 档 | 站点 | 模型／侧 | 计划局数 | 已有终态 | 成功 | 失败 | 超时 | error | 成功率（按已有行） |")
+    print("|---|---|---|---|---|---|---|---|---|---|")
+    per_task = {}
+    for gate, site, name, path, plan in SETS:
+        if not os.path.exists(path):
+            print(f"| {gate} | {site} | {name} | {plan} | 文件缺失 | | | | | |")
+            continue
+        rows = load(path)
+        c = collections.Counter(status(r) for r in rows.values())
+        n = len(rows)
+        print(f"| {gate} | {site} | {name} | {plan} | {n} | {c['success']} | {c['fail']} | {c['timeout']} | "
+              f"{n - c['success'] - c['fail'] - c['timeout']} | {100 * c['success'] / max(n, 1):.1f}% |")
+        t = collections.defaultdict(lambda: [0, 0])
+        for k, r in rows.items():
+            task = r.get("task") or k.split("_")[0]
+            t[task][0] += 1
+            t[task][1] += status(r) == "success"
+        per_task[(gate, site, name)] = t
+    for gate in ("第二档", "第三档"):
+        cols = [k for k in per_task if k[0] == gate]
+        tasks = sorted({t for k in cols for t in per_task[k]})
+        print(f"\n## {gate}按任务（成功／已跑）\n")
+        print("| 任务 | " + " | ".join(f"{k[1]} {k[2]}" for k in cols) + " |")
+        print("|---|" + "---|" * len(cols))
+        for t in tasks:
+            cells = []
+            for k in cols:
+                n, s = per_task[k].get(t, [0, 0])
+                cells.append(f"{s}/{n}" if n else "—")
+            print(f"| {t} | " + " | ".join(cells) + " |")
+
+
+if __name__ == "__main__":
+    main()

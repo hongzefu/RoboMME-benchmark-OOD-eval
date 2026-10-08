@@ -1,0 +1,17 @@
+[submodule "third_party/robomme_benchmark"]
+	path = third_party/robomme_benchmark
+	url = https://github.com/hongzefu/RoboMME-benchmark-OOD.git
+[submodule "third_party/mme-vla"]
+	path = third_party/mme-vla
+	url = https://github.com/hongzefu/robomme_policy_learning_MotionJEPA.git
+	branch = eval-official-v1
+[submodule "third_party/SimpleMemVLA"]
+	path = third_party/SimpleMemVLA
+	url = https://github.com/hongzefu/SimpleMemVLA.git
+	branch = eval-official-v1
+[submodule "third_party/PonderPounce"]
+	path = third_party/PonderPounce
+	url = https://github.com/hongzefu/ponderpounce.git
+[submodule "third_party/Astra-on-RoboMME"]
+	path = third_party/Astra-on-RoboMME
+	url = https://github.com/hongzefu/Astra-on-RoboMME.git

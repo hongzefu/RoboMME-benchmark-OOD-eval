@@ -1,0 +1,199 @@
+[
+  {
+    "id": "C17.01",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/site_server.py",
+      "scripts/injection-dev/site/site_app.py"
+    ],
+    "symbol": "MediaHandler._serve/byte_range（固定路由、HEAD、单段 Range）",
+    "oracle": "期望字节直接对磁盘文件切片",
+    "positive": "/、/index.html 返回 site.html 原字节；/api/catalog；缺文件的 /api/subgoals、/api/semantic 返回空表；整文件 200；Range 206 逐字节与 Content-Range；HEAD 不带正文",
+    "negative": "反向区间、越尾起点、bytes=-0、空后缀、非 bytes 单位、多段（逗号与重复头）→ 416 带 bytes */size；空文件任何 Range 不可满足",
+    "boundaries": "闭区间两端都含；右端越界截到末尾；后缀大于文件取整文件",
+    "nodeids": [
+      "tests/pipeline/site/test_site_server.py::test_fixed_routes",
+      "tests/pipeline/site/test_site_server.py::test_media_full_and_head",
+      "tests/pipeline/site/test_site_server.py::test_single_range_bytes_exact",
+      "tests/pipeline/site/test_site_server.py::test_unsatisfiable_ranges_are_416",
+      "tests/pipeline/site/test_site_server.py::test_byte_range_table"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M20c"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C17.02",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/site_server.py"
+    ],
+    "symbol": "SiteFiles.__init__/_open_relative/open_poster（白名单与路径）",
+    "oracle": "白名单只认启动时登记的 ID；不以 URL 拼路径",
+    "positive": "根内 mp4 登记成功（存相对路径）；海报只给白名单 ID",
+    "negative": "根外路径、根内符号链接指向根外、非 mp4、相对路径、非法 ID、文件不存在、站点目录不在根内 → 构造失败；../、%2F、%2e%2e、尾斜杠、大小写、超长 ID 等 → 404 且不回显内容；坏百分号编码 → 400；启动后把目录或文件换成符号链接 → 404（不跟随）",
+    "boundaries": "—",
+    "nodeids": [
+      "tests/pipeline/site/test_site_server.py::test_paths_outside_whitelist_are_404",
+      "tests/pipeline/site/test_site_server.py::test_malformed_percent_encoding_is_400",
+      "tests/pipeline/site/test_site_server.py::test_poster_only_for_whitelisted_ids",
+      "tests/pipeline/site/test_site_server.py::test_symlink_swapped_in_after_start_is_not_followed",
+      "tests/pipeline/site/test_site_server.py::test_file_replaced_by_symlink_is_not_followed",
+      "tests/pipeline/site/test_site_server.py::test_whitelist_construction_rejects",
+      "tests/pipeline/site/test_site_server.py::test_site_dir_must_be_inside_media_root",
+      "tests/pipeline/site/test_site_server.py::test_whitelist_positive_counterpart"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M20a",
+      "M20b"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C17.03",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/site_catalog.py"
+    ],
+    "symbol": "site_catalog.main/build_catalog（V9 小子表）",
+    "oracle": "包内真实 V9 规格切出 StopCube／PickXtimes xhard1 与 MoveCube xhard4 整格；身份表独立给出（交付行 + xhard0 每任务 12 个合成 seed）",
+    "positive": "目录身份与身份表逐一相同、每格 idx 连续、演示帧 = 总帧 − 执行步、媒体白名单全为存在的 mp4、PickXtimes 配置维度对真实交付行 config_mismatch=0、无梯度任务给说明文字、全部未评估",
+    "negative": "真实行改一个配置值重签 → config_mismatch=1 FAIL 不写产物；少一个新值身份、少一个 xhard0 身份、身份重复、交付重复、交付缺 exec_steps、xhard0 一侧缺生成记录各报问题；目标已存在拒绝覆盖；V9 复用模式缺 reused 报错",
+    "boundaries": "表 1 区间两端闭；生成视频排除 FAILED／NO_OBJECT、要求恰好 1 个",
+    "nodeids": [
+      "tests/pipeline/site/test_site_catalog.py::test_small_catalog_matches_independent_identity_table",
+      "tests/pipeline/site/test_site_catalog.py::test_config_mismatch_on_edited_real_row",
+      "tests/pipeline/site/test_site_catalog.py::test_identity_and_delivery_negatives",
+      "tests/pipeline/site/test_site_catalog.py::test_positive_counterpart_has_no_problems",
+      "tests/pipeline/site/test_site_catalog.py::test_refuses_to_overwrite_existing_outputs",
+      "tests/pipeline/site/test_site_catalog.py::test_v9_eval_mode_needs_reused",
+      "tests/pipeline/site/test_site_catalog.py::test_pick_gen_video_rules",
+      "tests/pipeline/site/test_site_catalog.py::test_table1_ok_handles_points_and_ranges"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "T7-C1"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C17.04",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/site_catalog.py"
+    ],
+    "symbol": "site_catalog --cells v9 全量 59 格（43 新值格 + 16 个 xhard0 格）",
+    "oracle": "包内五份真实规格全部交付行",
+    "positive": "992 身份、59 格、config_mismatch=0",
+    "negative": "—",
+    "boundaries": "—",
+    "nodeids": [
+      "tests/pipeline/site/test_site_catalog.py::test_full_59_cells_catalog"
+    ],
+    "resource": "cpu（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C17.05",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/subgoal_lengths.py"
+    ],
+    "symbol": "subgoal_lengths.read_episode/label/main",
+    "oracle": "手写逐帧 subgoal 序列的微型 h5",
+    "positive": "连续相同文字合为一段；模板抹颜色后同模板第二次起记「后续」；执行步 = 帧 − 演示帧；oracle 逐格均值／上限（新值档取 header exec_cap、xhard0 取本地常量 XHARD0_STEP_CAP=1300）；xhard0 新旧入口逐段相同",
+    "negative": "delivery 执行步与 h5 不符 → exec_mismatch=1 FAIL 不写 subgoals.json",
+    "boundaries": "空 h5（官方生成失败）记 0 帧",
+    "nodeids": [
+      "tests/pipeline/site/test_site_catalog.py::test_read_episode_segments_and_demo",
+      "tests/pipeline/site/test_site_catalog.py::test_subgoal_lengths_end_to_end",
+      "tests/pipeline/site/test_site_catalog.py::test_subgoal_exec_mismatch_fails_without_output"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C17.06",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/semantic_diff.py"
+    ],
+    "symbol": "semantic_diff.build/main/norm_goal",
+    "oracle": "手写 subgoals 文档：只换颜色的一格、goal 加一句且 put down 多重复一次的一格、新增 subgoal 类型但无人工说明的一格",
+    "positive": "仅参数变化 / 有语义调整的标签、goal_added 原文、sub_repeat_only、逐局高亮位、配对",
+    "negative": "有调整却无 NOTES 说明 → note_missing=1，main 退出 1",
+    "boundaries": "数量词与数字、颜色、复数一律抹平；动词不同不抹平",
+    "nodeids": [
+      "tests/pipeline/site/test_site_catalog.py::test_semantic_labels_follow_real_differences",
+      "tests/pipeline/site/test_site_catalog.py::test_semantic_main_fails_on_missing_note",
+      "tests/pipeline/site/test_site_catalog.py::test_norm_goal_erases_parameters_only"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C17.07",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/site.html",
+      "scripts/injection-dev/site/site_server.py"
+    ],
+    "symbol": "site.html 引用的路由与字段 ⊆ 服务端实际提供的",
+    "oracle": "路由与字段名从页面脚本正则抽出作清单；断言对象是真实服务对真实建站产物（catalog／subgoals／semantic）的响应",
+    "positive": "三个 fetch 路由 200 JSON 非空；/media/${id} 模板对目录里的媒体 ID 返回 206；S.cat／ep／S.sg／S.sem 的非保护字段都在响应里",
+    "negative": "豁免字段（rerun11、rerun、flip、eval_source、config、round）必须在页面里有存在性判断，不能当整体豁免",
+    "boundaries": "—",
+    "nodeids": [
+      "tests/pipeline/site/test_site_assets.py::test_every_fetched_api_route_is_served",
+      "tests/pipeline/site/test_site_assets.py::test_media_route_template_resolves_catalog_media",
+      "tests/pipeline/site/test_site_assets.py::test_catalog_fields_read_by_page_are_served",
+      "tests/pipeline/site/test_site_assets.py::test_subgoal_and_semantic_fields_read_by_page_are_served",
+      "tests/pipeline/site/test_site_assets.py::test_guarded_list_is_not_a_blanket_exemption"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C17.08",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/eval_transcode.py"
+    ],
+    "symbol": "eval_transcode.render_one（真实 ffmpeg）",
+    "oracle": "合成 FFV1 mkv（前视 2 帧、腕部 1 帧）+ 4 行 frames-*.jsonl（enc 重复）",
+    "positive": "按 idx→enc 展开回 4 帧、演示帧 2、左半红红蓝蓝、右半恒蓝",
+    "negative": "enc 越界记逐局错误、mp4_frames=-1，不抛出",
+    "boundaries": "缺 ffmpeg 时 skip「未验证：缺 ffmpeg」",
+    "nodeids": [
+      "tests/pipeline/site/test_site_assets.py::test_transcode_expands_duplicate_frames"
+    ],
+    "resource": "cpu+ffmpeg（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C17.09",
+    "domain": "C17",
+    "source": [
+      "scripts/injection-dev/site/site.html",
+      "scripts/injection-dev/site/site_browser_check.py",
+      "scripts/injection-dev/site/oracle_browser_check.py"
+    ],
+    "symbol": "真实浏览器筛选、导航、错误态与播放",
+    "oracle": "未验证：计划 Q14 裁决不做真实浏览器交互",
+    "positive": "—",
+    "negative": "—",
+    "boundaries": "—",
+    "nodeids": [],
+    "resource": "browser",
+    "mutants": [],
+    "status": "conditional"
+  }
+]

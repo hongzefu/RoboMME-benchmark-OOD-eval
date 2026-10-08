@@ -1,0 +1,28 @@
+#!/bin/bash
+# 第二阶段批次 2 本机 smoke（1005 计划第二部分四节 runbook 4③）：一张卡跑一条新侧路线 1 局（hard0 VideoUnmask，1300 步），
+# 走 run_eval_gl.sh 完整收尾链（官方重绘 → 转码 → 官方视频），随后 official_media_check.py 出 OFFICIAL_MEDIA=。
+# 用法：smoke_b2.sh <物理卡> <oracle|qwenvl>   一次性脚本，跑完逐字归档到 docs/validation/sg-eval-gl-20261006-02/records/。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+S=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261006-02/smoke
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+CARD=$1; M=$2
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+CK=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+COMMON="--mmesg-ckpt $CK/mme_vla_suite/symbolic-grounded-subgoal/79999 --openpi-data-home $REPO/artifacts/v8-evaluation/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+case $M in
+  oracle) V=(--mme-variant ground-sg-oracle);;
+  qwenvl) V=(--mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $CK/vlm_subgoal_predictor/qwenvl/grounded_subgoal/checkpoint-1200 --episode-wall 3600);;
+esac
+ST=$S/stage-$M; [ ! -e $ST ] || { echo "SMOKE_BLOCKED stage_exists $ST"; exit 4; }
+echo "SMOKE_START model=$M card=$CARD head=$(git -C $REPO rev-parse HEAD) $(date -Is)"
+cd $REPO && bash scripts/eval-official/run_eval_gl.sh --run-name ovl2-smoke-$M --seat $(printf '%02d' $((80+CARD))) --repo $REPO \
+  --stage $ST --shard $S/shard-hard0-1.json --dataset test-hard0 --max-steps 1300 --policies mmesg "${V[@]}" $COMMON \
+  --reset-budget 3 --infra-retry-budget 1 --gpu $CARD --media-root $ST/media
+echo "SMOKE_RUN_END model=$M rc=$? $(date -Is)"
+find $ST -name 'official' -type d | head; find $ST -path '*official*' -name '*.mp4' | head
+L=$(find $ST -name 'ledger*.jsonl' -o -name '*ledger*' -type f | head -1); echo "LEDGER=$L"
+cd $REPO && uv run --no-sync python scripts/eval-official/official_media_check.py --manifest $S/shard-hard0-1.json --ledger "$L" --root $ST/media --dataset test-hard0 --out $ST/official-media.jsonl 2>&1 | tail -3
+echo "SMOKE_DONE model=$M $(date -Is)"

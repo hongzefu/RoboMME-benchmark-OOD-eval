@@ -1,0 +1,14 @@
+{
+ "url": "https://github.com/RoboMME/robomme_benchmark",
+ "orchestration_commit": "d53f21a7947d2d8daf6e3e8bad9f59b4f89a77fa",
+ "tree": "1d4c13697f0c5fbd7a8b05e01c196c984a07406c",
+ "path": "scripts/data-generation",
+ "files": {
+  "generate_dataset.py": "8700ccf91e19135b6766b094630816219d59d9360777b54fd95cd7bb81ab68b3",
+  "validate_generated_dataset_contract.py": "cc6830f4b80714e1964f1e7cef6ddfb152f629d8e974e57e550f0fc028715130",
+  "write_generation_report.py": "53bcfbc91588b927ddb01b8e9163da47ac8713ffae1a1e7c25300bae5dd343f1",
+  "compare_joint_actions.py": "46fcd5b8833974ecf423dc0f180c047811632aab3d70d8866b23c29e0bac2ad9"
+ },
+ "vendored_at": "2026-09-28T04:32:30+00:00",
+ "note": "官方生成编排四文件逐字节 vendor；不得修改（红线 R2）"
+}

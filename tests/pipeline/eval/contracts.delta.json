@@ -1,0 +1,838 @@
+[
+  {
+    "id": "C13-01",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/framesamp_modul_client.py",
+      "scripts/eval-official/smvla_client.py",
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "SeatRunner.run_identities_v8 / run_one → framesamp_modul_client.run_episode / smvla_client.run_episode → eval_report.main",
+    "oracle": "手写七行期望表（成功、失败、上限超时、step 非基础设施异常、step 基础设施异常重试、server 断连、reset 额度耗尽）：每行写明结局、attempt_start／accept 行数、废弃尝试数、两行判定 PASS 与否、客户端退出码",
+    "positive": "success／fail／timeout／error 终局各被唯一接受，分母 1、对应结局计 1；基础设施异常后同身份立即重试且第二次被接受",
+    "negative": "server 断连两次后无 accept → missing=1、V8_EVAL_COVERAGE=FAIL、客户端读回账本打印 RUN_INCOMPLETE、退出码 6；额度耗尽 → 尝试作废、退出码 5、missing=1",
+    "boundaries": "上限超时（ood 启动约定 --max-steps 1600 --strict-cap，手写 1600）：环境恰执行 1600 步、第 1601 次 step 不进环境、exec_over_cap=0；额度 1 时只 build 领到额度、reset 不进环境",
+    "nodeids": [
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_cap_timeout_never_steps_past_cap",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_infra_retry_reruns_same_identity_once",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_ordinary_error_is_final_and_not_retried",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_disconnect_exhausts_two_attempts_then_missing",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_reset_budget_exhaustion_stops_with_exit_5"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M16a",
+      "M16b",
+      "M16c",
+      "M17a",
+      "M17b",
+      "S2-D5",
+      "T8b-K1"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-02",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/framesamp_modul_client.py",
+      "scripts/eval-official/smvla_client.py"
+    ],
+    "symbol": "同一 SeatRunner 连续 run_one(A)、run_one(B)、run_one(A)",
+    "oracle": "假 server 的动作由本局 reset 后收到的帧指纹 + 状态 + 指令确定性生成；第三局执行动作必须与第一局逐位相同",
+    "positive": "A1 与 A2 的 40 个执行动作逐位相同；每局 server 先收 reset，随后第一批帧恰为本局 reset 帧（手算指纹）",
+    "negative": "删掉策略 reset（M13a／M13b）后 A2 带着 A、B 的缓冲推理，动作不同即失败；B 与 A 首动作不同（等式非平凡）",
+    "boundaries": "同身份第二次终态记 late，账本只一条 accept",
+    "nodeids": [
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_abA_third_episode_identical_to_first",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_abA_ledger_marks_repeat_as_late"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M13a",
+      "M13b"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-03",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/eval_manifest.py"
+    ],
+    "symbol": "SeatRunner.builder_for / policy_kwargs / run_one（conn_info、step_cap）/ validate_v8_identity / check_identity（按 --dataset 的身份模式）/ eval_manifest.SHARD_ROW_KEYS",
+    "oracle": "步数上限一律取 --max-steps（按档查表已删），期望按启动约定手写：ood 1600 且 --strict-cap、hard-verify 1300 不带 --strict-cap；身份模式由 --dataset 决定",
+    "positive": "builder 按 (task, dataset) 建、构造参数即 --max-steps，make_env_for_episode 不逐局传步数；conn_info.max_steps／dataset／strict_cap 与之相等；step_cap 只在 --strict-cap 时等于上限；smvla 另收 max_steps=上限、reset_retries=0，perceptual-framesamp-modul 不收关键字；结果行 max_steps＝effective_max_steps＝上限并带 dataset、strict_cap、policy_variant；清单行键与客户端身份行键同一份、不含 effective_max_steps",
+    "negative": "ood：seed／candidate／spec_sha256／tier 任一与真实 builder 解析不符 → RUN_BLOCKED（退出码 3）、写 run_blocked 行、不建环境；hard-verify：seed／source_episode 不符或 candidate／spec_sha256 非 null 同样阻塞；结构核对拒绝缺字段、浮点／bool 整数、指纹长度不对、key 不自洽，以及把另一数据集的行喂进来",
+    "boundaries": "candidate 两侧须同为 null 或同一整数（True≠1）",
+    "nodeids": [
+      "tests/pipeline/eval/test_identity_contract.py::test_max_steps_reaches_builder_conn_and_policy",
+      "tests/pipeline/eval/test_identity_contract.py::test_identity_mismatch_blocks_run",
+      "tests/pipeline/eval/test_identity_contract.py::test_hard_verify_identity_mismatch_blocks_run",
+      "tests/pipeline/eval/test_identity_contract.py::test_validate_identity_row_structure",
+      "tests/pipeline/eval/test_identity_contract.py::test_validate_hard0_identity_row_structure",
+      "tests/pipeline/eval/test_identity_contract.py::test_check_identity_requires_exact_int_candidate",
+      "tests/pipeline/eval/test_identity_contract.py::test_check_identity_hard0_mode",
+      "tests/pipeline/eval/test_identity_contract.py::test_manifest_join_writes_contract_key_without_step_cap"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "S2-D1",
+      "S2-D2"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-03x",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py"
+    ],
+    "symbol": "hard-verify 的步数口径（原 Q16：按档查表 TIER_MAX_STEPS['xhard0'] 与入口 max_steps 不一致，查表已删）",
+    "oracle": "1003 评估计划 1.1／1.2 了结 Q16：hard-verify 由入口给 --max-steps 1300、不带 --strict-cap（手写）",
+    "positive": "不带 --strict-cap 时环境侧不截断：perceptual-framesamp-modul 官方循环 count>max_steps 才停，真实执行第 1301 步、记 timeout、cap_hit=false；结果行 exec_steps／cap_hit／demo_frames／reset_calls 四字段齐全",
+    "negative": "step_cap 若恒等于上限（--strict-cap 失效）则第 1301 步被截断，用例失败（植入 S2-D2）",
+    "boundaries": "StepCapReached／cap_hit 只在 --strict-cap 时生效",
+    "nodeids": [
+      "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_without_strict_cap_lets_official_loop_run_step_1301",
+      "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_result_row_has_exec_fields"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "S2-D2"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-04",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/eval_manifest.py",
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "env_client.v8_key / key_of、eval_manifest.v8_key、eval_report.key_of",
+    "oracle": "键按契约手写为 <task>_<tier>_<seed>",
+    "positive": "6 个真实包内身份，三处（含不带 key 字段的行）给出同一个手写键；带 key 的行直接用 key",
+    "negative": "同 seed 换档：三处都给出与原档不同的键（跨档不碰撞）",
+    "boundaries": "—",
+    "nodeids": [
+      "tests/pipeline/eval/test_identity_contract.py::test_three_key_functions_agree"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-05",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py"
+    ],
+    "symbol": "AttemptLedger",
+    "oracle": "手写事件序列推出 reset 额度、作废尝试、infra 重试数、最终结局判定表、唯一 accept 与 late",
+    "positive": "重新打开账本计数不刷新；第一条最终结局被 accept，之后的终态记 late；悬空尝试按结果行补 attempt_end/accept；「attempt_end 已写、accept 未写」的崩溃窗口在恢复时补写 accept（recovered=true）且不再建环境；全部有 accept 时退出码 0",
+    "negative": "额度用尽抛 ResetBudgetExhausted 且不写行；infra 错误、额度耗尽、运行阻塞、ongoing 都不是最终结局；无结果行的悬空尝试记 infra 错误不 accept；崩溃窗口里最后一次为 infra 错误的不补 accept、照常重试；用满 2 次仍无 accept → RUN_INCOMPLETE、退出码 6",
+    "boundaries": "作废尝试不计 2 次上限与 infra 额度；命令行额度只在大于历史最大值时记 budget_raise",
+    "nodeids": [
+      "tests/pipeline/eval/test_attempt_ledger.py::test_reset_budget_counts_claims_and_survives_reopen",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_budget_raise_only_when_cli_exceeds_history",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_is_final_table",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_single_accept_and_late",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_void_attempts_do_not_count",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_last_end_final_and_dangling",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_row",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_resume_skips_accepted_and_full",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_all_accepted_returns_zero",
+      "tests/pipeline/eval/test_attempt_ledger.py::test_crash_window_final_end_without_accept_gets_accept"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M16b",
+      "S2-D3",
+      "S2-D5"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-06",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py"
+    ],
+    "symbol": "EnvSession.build/reset/step/close",
+    "oracle": "手写假环境与假 builder 的行为",
+    "positive": "reset 原样返回环境输出、录制阶段 reset→run；build 不逐局传步数（make_env_for_episode 只收局号）；step 原样交出动作（dtype 不变）并记 exec_action；第 cap 步成功照常返回；自建 builder 时按 dataset 与 max_steps 建（默认 ood）",
+    "negative": "step_cap 用满后第 cap+1 次抛 StepCapReached 且不进环境；额度被拒时 reset 不进环境、budget_exhausted=True；录制器异常转 RecorderError；环境异常原样上抛且计步；自建 builder 缺 max_steps 或 dataset 非法即 ValueError",
+    "boundaries": "obs=None 的 step 只记 obs_none；close 可重复",
+    "nodeids": [
+      "tests/pipeline/eval/test_env_session.py::test_reset_returns_env_output_unchanged_and_switches_phase",
+      "tests/pipeline/eval/test_env_session.py::test_step_passes_action_unchanged_and_records_exec_action",
+      "tests/pipeline/eval/test_env_session.py::test_step_exception_propagates_and_counts_step",
+      "tests/pipeline/eval/test_env_session.py::test_step_cap_stops_before_env",
+      "tests/pipeline/eval/test_env_session.py::test_success_on_last_allowed_step_is_returned",
+      "tests/pipeline/eval/test_env_session.py::test_claim_reset_order_and_budget_flag",
+      "tests/pipeline/eval/test_env_session.py::test_recorder_failure_becomes_recorder_error",
+      "tests/pipeline/eval/test_env_session.py::test_obs_none_step_is_recorded_without_frames",
+      "tests/pipeline/eval/test_env_session.py::test_close_is_safe_and_releases_env",
+      "tests/pipeline/eval/test_env_session.py::test_own_builder_uses_dataset_and_max_steps"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-07",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/framesamp_modul_client.py",
+      "scripts/eval-official/smvla_client.py"
+    ],
+    "symbol": "framesamp_modul_client.pack_state/run_loop/evaluate_one、smvla_client.step_chunk/run_episode",
+    "oracle": "假环境帧值与动作序列手算；决策上限用 max_steps=32、执行段 16 手算为 4 次、64 步",
+    "positive": "首次决策带全部 reset 帧、exec_start_idx=reset 帧数-1、prompt=task_goal[0]；之后只带新帧、exec_start_idx=0；只执行每块前 OBS_HORIZON 行；smvla 每行 float64 取前 8 维",
+    "negative": "少于 8 维的动作 ValueError 且不进环境；server error 回包、req_sha／帧指纹不符、断连、拒绝连接都记 infra；无标记的环境异常记非 infra error；未知终态记 error",
+    "boundaries": "perceptual-framesamp-modul count>max_steps 即 timeout、步数 max+1；smvla reset 失败带 vk:: 标记记 env_reset 基础设施并按 reset_retries 重试",
+    "nodeids": [
+      "tests/pipeline/eval/test_policy_clients.py::test_pack_state_is_joint7_plus_first_gripper_float32",
+      "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_first_inference_sends_all_reset_frames_then_only_new_frames",
+      "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_timeout_counts_to_max_plus_one",
+      "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_env_exception_becomes_error_without_infra",
+      "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_infra_marker_sets_infra",
+      "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_unknown_terminal_status_is_error",
+      "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_connection_refused_is_infra",
+      "tests/pipeline/eval/test_policy_clients.py::test_step_chunk_converts_rows_to_float64_first8_and_stops_on_done",
+      "tests/pipeline/eval/test_policy_clients.py::test_step_chunk_rejects_short_action",
+      "tests/pipeline/eval/test_policy_clients.py::test_smvla_first_inference_and_messages",
+      "tests/pipeline/eval/test_policy_clients.py::test_smvla_decision_budget_hand_computed",
+      "tests/pipeline/eval/test_policy_clients.py::test_smvla_server_side_failures_are_infra",
+      "tests/pipeline/eval/test_policy_clients.py::test_smvla_step_exception_without_marker_is_final_error",
+      "tests/pipeline/eval/test_policy_clients.py::test_smvla_reset_failure_with_vulkan_marker_is_infra_and_retries_count"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M16c",
+      "T8b-K2"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-08",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py"
+    ],
+    "symbol": "run_identities_v8（普通失败不重试）/ load_identities / check_run_args / build_parser",
+    "oracle": "每身份尝试数手写",
+    "positive": "干净身份清单按 --only 过滤；perceptual-framesamp-modul／smvla／pp／groundsg 两个变体的合法参数组合都通过、默认不带 --strict-cap",
+    "negative": "fail 与非 infra error 只尝试一次、一条 accept；身份行缺 spec_sha256、key 重复、seed 为浮点 → RUN_BLOCKED 退出 3；--dataset／--max-steps 缺任一 → 参数错误退出 2；缺账本三参、groundsg 缺 --groundsg-variant、qwenvl 缺 adapter、变体或 adapter 用错策略、--max-steps 非正 → RUN_BLOCKED reason=args 退出 3",
+    "boundaries": "—",
+    "nodeids": [
+      "tests/pipeline/eval/test_policy_clients.py::test_ordinary_failure_is_not_retried",
+      "tests/pipeline/eval/test_policy_clients.py::test_load_identities_blocks_on_bad_rows",
+      "tests/pipeline/eval/test_policy_clients.py::test_load_identities_accepts_clean_rows_and_only_filter",
+      "tests/pipeline/eval/test_policy_clients.py::test_dataset_and_max_steps_have_no_default",
+      "tests/pipeline/eval/test_policy_clients.py::test_run_args_blocked",
+      "tests/pipeline/eval/test_policy_clients.py::test_run_args_accept_all_four_policies"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M16b",
+      "M16c"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-09",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/eval_manifest.py",
+      "scripts/injection-dev/export_eval_identities.py"
+    ],
+    "symbol": "eval_manifest.build_v9 / build_v9_full / check_source(F-2) / join_delivery / check_exec / split_evaluated / main（--mode v9-new|v9-full）",
+    "oracle": "交付清单取包内规格正式局；身份清单由真实 export_eval_identities.main 导出；已评集合 = 规则外交付行",
+    "positive": "开关关／开两种：xhard0 行数 = 16 × 前置局数，新评行恰为规则行、复用恰为其余，分片不交、每行经真实 builder 解析回同一身份；main 打 V9_EVAL_SHARDS=PASS 并读回核对全 0；--mode v9-full 打 EVAL_SHARDS=PASS mode=v9-full total=800 cells=43（手写）、不写 reused.json",
+    "negative": "导出与建清单开关不一致在第 1 步被拒；源集少行／多键／重复／新值行字段错；交付 missing／duplicate／extra／schema；执行清单指纹、key 重复、混入 xhard0；规则内被复用或规则外未命中；V8 manifest 重复与 schema；格表不符；篡改分片被读回核对发现；空身份清单 FAIL 且不留产物；默认模式仍为 v9-new（缺 --exclude-evaluated 即参数错误）、hard0 不收交付输入、--pair-shards 只用于 hard0",
+    "boundaries": "开关读运行时模块属性（monkeypatch 属性，不注入 sys.modules）",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_manifest.py::test_export_feeds_manifest",
+      "tests/pipeline/eval/test_eval_manifest.py::test_switch_mismatch_rejected_at_source_step",
+      "tests/pipeline/eval/test_eval_manifest.py::test_check_source_rejects_bad_rows",
+      "tests/pipeline/eval/test_eval_manifest.py::test_join_delivery_missing_duplicate_extra",
+      "tests/pipeline/eval/test_eval_manifest.py::test_check_exec_rejects_sha_and_dup_and_xhard0",
+      "tests/pipeline/eval/test_eval_manifest.py::test_split_evaluated_requires_exact_rule",
+      "tests/pipeline/eval/test_eval_manifest.py::test_load_v8_manifest_rejects_duplicates_and_schema",
+      "tests/pipeline/eval/test_eval_manifest.py::test_delivery_cells_must_match_registered_table",
+      "tests/pipeline/eval/test_eval_manifest.py::test_main_writes_and_reads_back",
+      "tests/pipeline/eval/test_eval_manifest.py::test_main_fail_line_and_no_outputs",
+      "tests/pipeline/eval/test_eval_manifest.py::test_main_v9_full_mode",
+      "tests/pipeline/eval/test_eval_manifest.py::test_main_mode_argument_rules"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "F2"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-10",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "build_report / analyze_attempts / main（V8 两行）",
+    "oracle": "按生产格式手写的结果行、账本行与录像目录，每条用例写明期望计数",
+    "positive": "分母恒为清单身份数（4 条结果行、3 个身份 → 3）；六种结局键齐全；微平均与任务宏平均手算；迟到终态不入分；金丝雀不计",
+    "negative": "accept 指向 infra 错误、两个不同 accept、同 attempt 结果行矛盾 → conflicting_terminal；accept 无结果行（非 partial）；清单外身份 extra；同 attempt 重复行 duplicate；task_success 与 status 矛盾、缺 exec_steps、spec／seed 与清单不符、expect_total／cells／total 不符 → count_mismatch；exec_steps 越上限；已接受终态无录像、错误终局无录像无原因、recorder_verify≠PASS → media_unexplained",
+    "boundaries": "exec_steps 恰等于上限不算越限；--partial 不因缺失判 FAIL、结局表照实记缺失；错误终局无录像但写明原因不计",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_report.py::test_clean_report_rates_and_outcome_keys",
+      "tests/pipeline/eval/test_eval_report.py::test_denominator_is_manifest_not_result_rows",
+      "tests/pipeline/eval/test_eval_report.py::test_partial_does_not_fail_on_missing",
+      "tests/pipeline/eval/test_eval_report.py::test_conflicting_terminal",
+      "tests/pipeline/eval/test_eval_report.py::test_accept_without_row_counts_as_conflict_only_when_final",
+      "tests/pipeline/eval/test_eval_report.py::test_extra_and_duplicate",
+      "tests/pipeline/eval/test_eval_report.py::test_late_terminal_ignored",
+      "tests/pipeline/eval/test_eval_report.py::test_canary_rows_not_counted",
+      "tests/pipeline/eval/test_eval_report.py::test_count_mismatch_negatives",
+      "tests/pipeline/eval/test_eval_report.py::test_manifest_header_negatives",
+      "tests/pipeline/eval/test_eval_report.py::test_exec_over_cap",
+      "tests/pipeline/eval/test_eval_report.py::test_media_checks",
+      "tests/pipeline/eval/test_eval_report.py::test_recorder_verify_fail_is_unexplained"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "M17a",
+      "M17b",
+      "T8b-K3"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-11",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "build_reuse（F-3）/ v9_lines",
+    "oracle": "800 局 = 包内全部正式局；新评 = 规则行、复用 = 其余；每格分母必须等于 hard_specs.V9_CELLS",
+    "positive": "两模型 800 局总表逐格等于 V9_CELLS，V9_EVAL_REPORT／COVERAGE=PASS",
+    "negative": "一条复用身份在 reused.json、V8 manifest、V8 结果行里一致地换格（总数不变）→ 两模型各两条「总表格」不符、V9_EVAL_REPORT=FAIL；reused.json 被改 → count_mismatch",
+    "boundaries": "未给 --videos 时视频行照实 FAIL、退出码 1",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_report.py::test_v9_total_table_matches_v9_cells",
+      "tests/pipeline/eval/test_eval_report.py::test_v9_reused_sha_mismatch_is_counted",
+      "tests/pipeline/eval/test_eval_report.py::test_reuse_args_must_come_together"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "F3"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-12",
+    "domain": "C13",
+    "source": [
+      "scripts/evaluation.py",
+      "scripts/evaluation_hard.py"
+    ],
+    "symbol": "入口主循环的 error 分支（status == 'error'）",
+    "oracle": "测试子进程以 __main__ 原样执行入口，builder 与 imageio.mimsave 只在子进程内存里换替身；事件日志手写期望",
+    "positive": "error 局记失败、计入成功率分母（1/3）；每局 env.close；step 动作 8 维",
+    "negative": "已登记语义问题锁定现状：第一局即 error → 读未定义 outcome，NameError 退出（env 已 close、未保存录像）；前一局有终态时 error 局录像名沿用上一局 outcome",
+    "boundaries": "入口 max_steps 数值不断言（Q16）",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_entries.py::test_error_on_first_episode_crashes_after_close",
+      "tests/pipeline/eval/test_eval_entries.py::test_error_after_terminal_reuses_stale_outcome_and_counts_failure"
+    ],
+    "resource": "cpu-subprocess",
+    "mutants": [],
+    "status": "conditional"
+  },
+  {
+    "id": "C13-13",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/smvla_server.py",
+      "scripts/eval-official/smvla_client.py"
+    ],
+    "symbol": "smvla_server._serve/_handler、SMVLAPolicyHost.new_episode/observe/infer、smvla_client.WSPolicyConn",
+    "oracle": "模型三件换 CPU 替身，host 其余方法真实；回环端口真实 websocket",
+    "positive": "整局成功、协议指纹零不符；server 缓冲在两次推理时恰为 3 与 3+16 帧；每局 reset 后随机状态等于纯净参照；两局动作逐位相同",
+    "negative": "推理异常 → 回 error、客户端记 infra server_error；未知消息键、reset 前 infer／observe 都回 error；端口无人监听 → infra connection",
+    "boundaries": "—",
+    "nodeids": [
+      "tests/pipeline/eval/test_smvla_server_protocol.py::test_full_episode_over_real_websocket",
+      "tests/pipeline/eval/test_smvla_server_protocol.py::test_two_episodes_each_reset_fresh",
+      "tests/pipeline/eval/test_smvla_server_protocol.py::test_server_inference_error_is_infra_server_error",
+      "tests/pipeline/eval/test_smvla_server_protocol.py::test_protocol_violations_get_error_reply",
+      "tests/pipeline/eval/test_smvla_server_protocol.py::test_connection_refused_is_infra"
+    ],
+    "resource": "cpu-loopback（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-14",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/recorder.py",
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "EpisodeRecorder（ffv1 无损、降级档、拒绝覆盖）+ 真实录制器接 SeatRunner 喂报告",
+    "oracle": "合成帧手写；去重编号手算",
+    "positive": "解码读回逐帧相同、同流重复帧只编一次（enc=[0,1,2,1,3]）、phase 事件 reset→run、数组与索引 sha；真实录制器下结果行 recorder_verify=PASS、帧数 = 2×(3+20)、报告 media_unexplained=0",
+    "negative": "非空目录拒绝；never_degrade／baseline 时低空间仍 0 档",
+    "boundaries": "2 档只编首尾各 LEVEL2_KEEP 帧（需 libx264，缺则记未验证）",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_recorder.py::test_lossless_roundtrip_and_dedup",
+      "tests/pipeline/eval/test_eval_recorder.py::test_refuses_non_empty_dir",
+      "tests/pipeline/eval/test_eval_recorder.py::test_degrade_level_respects_never_degrade",
+      "tests/pipeline/eval/test_eval_recorder.py::test_level2_keeps_head_and_tail_only",
+      "tests/pipeline/eval/test_eval_recorder.py::test_seat_runner_with_real_recorder_feeds_report"
+    ],
+    "resource": "cpu-ffmpeg（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-15",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/framesamp_modul_client.py"
+    ],
+    "symbol": "make_recording_client（真实 openpi 客户端子类）、cmd_relay（relay 子命令）、transport_check／cmd_transport_check（transport-check 子命令）、payload_digest／response_digest／summarize_timing、run_episode",
+    "oracle": "回环端口上的假 FrameSamp+Modulation server（openpi msgpack_numpy 收发，动作为 rng(k) 的 50×8）＋生产中继＋真实 RecordingClient＋EnvSession（假 builder）；帧数、消息数、执行动作与计时由假环境与假 server 手算",
+    "positive": "执行段 h=OBS_HORIZON、success_at=2h+8：决策 3 次、策略 reset 1 次，执行动作逐位等于 server 前 h 行；中继每方向逐条记 sha 与载荷摘要；transport_check mismatch=0、frames=reset 帧+2h+3×2、messages=15、exec_actions=2h+8；transport-check 子命令 --conn 0 打印 TRANSPORT=PASS、退出 0；计时汇总各 kind 条数与 server 毫秒字段一致",
+    "negative": "c2s／s2c sha 篡改、少一条回包、执行动作与模型行不符、多一条执行动作、prompt 被改、add_buffer 帧与 env 不符、infer 观测与 env 不符，每种都被测出并给出对应 note；--conn 1（中继为空）→ TRANSPORT=FAIL、退出 1；server 回字符串 → 整局 error、非基础设施、记 error_text 事件；中继对非 msgpack 二进制记 decode_error 且原样转发",
+    "boundaries": "只有 1 条 infer 时第 2／3 次计时为 None、稳态退化为全体；infer 未成功往返不进计时；文本帧不解包",
+    "nodeids": [
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_real_client_through_relay_transport_check_passes",
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_transport_check_detects_each_tamper",
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_server_error_text_becomes_error_not_infra",
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_relay_logs_decode_error_for_non_msgpack",
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_payload_and_response_digest_kinds",
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_sha_accepts_bytes_str_and_arrays",
+      "tests/pipeline/eval/test_framesamp_modul_transport.py::test_summarize_timing_hand_computed"
+    ],
+    "resource": "cpu-loopback",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-16",
+    "domain": "C13",
+    "source": [
+      "scripts/injection-dev/eval_video_mover.py",
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "eval_video_mover v8_main --once（v8_move_dir、v8_verify、v8_verdict）+ eval_report.verify_new_videos / v9_lines；--layout sgeval（sgeval_main、sgeval_dirs、sgeval_move_dir、free_gib）",
+    "oracle": "ffmpeg 现做的 3／4／5 帧 ffv1 微型视频，逐文件 sha 手算；运行根按生产布局手写；sgeval 媒体根按 run_eval_gl.sh／run_official_hard.sh 的发布布局手写，传输损坏用 rsync 替身（拷贝后往目的端追加一字节）",
+    "positive": "整目录经 .incoming 原子搬到 <dest>/<policy>/<tier>/<task>/<目录名>/，逐文件 sha 一致、源删除、moved.jsonl 记逐文件 sha；V8_EVAL_VIDEOS=PASS、V9_EVAL_VIDEOS=PASS videos=2；sgeval：按输出键 <label>/<dataset>/<side>/<key>.a<n>/ 搬到 <dest> 同一键下，两端逐文件 sha256 相同才删 NFS 源，SGEVAL_MOVE=PASS moved=3 left=0",
+    "negative": "少一路视频 → missing、坏视频 → decode_fail（搬运脚本与报告两处一致判 FAIL）；搬后文件被替换 → sha_mismatch；搬运记录缺失 → moved_record_absent；sgeval：本机盘剩余低于 --min-free-gib → MOVER_STOP reason=low_disk、sha 不一致 → MOVER_STOP reason=sha_mismatch，两者都保留 NFS 源、退出 1；多 mp4 目录 MOVER_SKIP 不搬",
+    "boundaries": "同内容重搬不落第二份；不同内容落 .dup1、原件逐字节不动；sgeval 发布中的 .incoming 不碰；缺省 --layout v8 行为不变",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_video_mover.py::test_positive_atomic_move_and_report",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_rerun_same_content_no_dup_and_different_content_goes_to_dup1",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_missing_and_broken_media",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_report_catches_tamper_and_absent_move_record",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_sgeval_moves_by_output_key_with_sha_and_deletes_source",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_sgeval_low_disk_stops_and_keeps_source",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_sgeval_sha_mismatch_stops_and_keeps_source",
+      "tests/pipeline/eval/test_eval_video_mover.py::test_sgeval_multi_mp4_is_skipped"
+    ],
+    "resource": "cpu-ffmpeg-subprocess（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-17",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/smvla_server.py"
+    ],
+    "symbol": "smvla_server 进程内：sha256_file／array_sha／frame_sha、make_closures、reseed／rng_digest、SMVLAPolicyHost.new_episode/observe/infer/warmup、_handler（内存假 websocket）、enable_det、main、cmd_serve、_git_head、_setup_paths",
+    "oracle": "模型三件换 CPU 替身（host 用 object.__new__ 构造，其余方法真实）；_handler 喂真实 msgpack 字节，req_sha 由 hashlib 独立算；cmd_serve 的 host 与 asyncio.run 换替身（scripts 侧临时 patch）",
+    "positive": "相机键映射与状态归一化；每局重设后随机状态回到纯净参照；_handler 依次回 metadata、reset（rng_matches_ref）、observe 逐帧指纹、infer 决策序号 0/1，第二局 reset 后序号归零、缓冲清空；cmd_serve 指纹相符时预热、落 metadata、起 server",
+    "negative": "未知消息键、reset 前 observe／infer、推理异常 → 回 error 后关闭且不再处理后续消息；对端断开不回 error；CUBLAS_WORKSPACE_CONFIG 未设 → enable_det 拒绝；固定环境变量未生效 → main 拒绝；config.json 指纹不符 → 退出 2、不起 server；array_sha 同字节不同 dtype／形状指纹不同",
+    "boundaries": "预热不消耗随机数时 rng_consumed_by_warmup 如实为 False；startup_s 在 metadata 落盘之后才补；资源守卫下 CUDA 不可用、不出 torch_cuda 摘要",
+    "nodeids": [
+      "tests/pipeline/eval/test_smvla_server_units.py::test_fingerprints_hand_computed",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_git_head_and_setup_paths",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_make_closures_maps_camera_keys_and_normalizes_state",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_reseed_restores_reference_digest",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_warmup_reports_consumption_and_restoration",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_observe_and_infer_on_real_host_methods",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_handler_dispatch_and_req_sha",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_handler_error_reply_then_close",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_handler_returns_quietly_when_peer_closes_during_send",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_enable_det_requires_cublas_env",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_main_refuses_without_fixed_env",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_main_parses_serve_args",
+      "tests/pipeline/eval/test_smvla_server_units.py::test_cmd_serve_config_sha_gate_and_metadata"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C16-01",
+    "domain": "C16",
+    "source": [
+      "scripts/eval-official/run_seat.sh"
+    ],
+    "symbol": "run_seat.sh（pick_port、start_server、server_ready／http_health、policy_loop、cleanup、write_report、tokenizer_gate、preflight_pp、step_cap_pairing、variant_pairing、note_epoch／epoch_annotate、build_client_cmd、build_server_cmd）",
+    "oracle": "真 bash + 假引擎（seat_fake_engine.py：server 对每个连接回 HTTP 200，客户端按录像器格式写 ffv1 微型录像）+ 空输出 nvidia-smi；每次启动／信号写事件日志（含 argv）",
+    "positive": "正常收尾 EXIT_CODE=0、STEP_CAP_PAIRING=PASS、SEAT_DONE done=2、server 被 TERM；首推理放宽 600 只给 server 新起后的第一个客户端，客户端单独重起传 0；客户端带 --dataset／--max-steps／--strict-cap、不带 --v8；每次 server 就绪在 server-epochs.tsv 记一个 epoch，results.epochs.jsonl 逐行补 server_epoch；pp 路线 /health 200 才就绪、服务 argv 带 --args.seed 0 与 checkpoint、客户端 hard-verify／1300 不带 strict-cap",
+    "negative": "端口被占顺延 +2；server 未就绪先死不起客户端；客户端反复 75 用尽重启预算 → INFRA_EXHAUSTED rc=4；server 中途反复死 → 重起预算用尽 rc=4、客户端全被收、每次就绪各记一个 epoch；客户端 5／3／6 都不重启客户端与服务；SMVLA_PY 未设、perceptual-framesamp-modul／groundsg 缺 tokenizer 参数 → RUN_BLOCKED rc=3；--dataset↔--max-steps 配错（含 strict-cap 配错、未知数据集）→ RUN_BLOCKED reason=step_cap_pairing rc=3 且不起任何进程；groundsg 缺变体、QwenVL 缺 adapter、非 groundsg 给变体 → RUN_BLOCKED reason=variant_pairing；参数错误（含已删除的 --v8、缺账本参数）rc=2",
+    "boundaries": "TERM：客户端与 server 进程组全部结束，EXIT_CODE=143；server 忽略 TERM 时等满宽限再 KILL（约 60 s）。测试侧兜底：每个用例 teardown 按记录的 pid 与 .v8-pgids 按进程组收残留，并用「SIGKILL 掉脚本整组、生产收尾失效」的用例证明兜底有效",
+    "nodeids": [
+      "tests/pipeline/eval/test_seat_scripts.py::test_normal_run_and_first_extra_only_on_fresh_server",
+      "tests/pipeline/eval/test_seat_scripts.py::test_port_busy_moves_to_next_pair",
+      "tests/pipeline/eval/test_seat_scripts.py::test_server_dies_before_ready",
+      "tests/pipeline/eval/test_seat_scripts.py::test_client_infra_exit_restarts_without_first_extra",
+      "tests/pipeline/eval/test_seat_scripts.py::test_client_restart_budget_exhausted",
+      "tests/pipeline/eval/test_seat_scripts.py::test_budget_blocked_and_incomplete_are_not_restarted",
+      "tests/pipeline/eval/test_seat_scripts.py::test_server_death_restart_budget",
+      "tests/pipeline/eval/test_seat_scripts.py::test_term_cleans_up_server_and_client",
+      "tests/pipeline/eval/test_seat_scripts.py::test_smvla_py_unset_blocks",
+      "tests/pipeline/eval/test_seat_scripts.py::test_framesamp_modul_and_groundsg_require_tokenizer_args",
+      "tests/pipeline/eval/test_seat_scripts.py::test_step_cap_pairing_blocks_before_any_process",
+      "tests/pipeline/eval/test_seat_scripts.py::test_variant_pairing_blocks",
+      "tests/pipeline/eval/test_seat_scripts.py::test_bad_args_exit_2",
+      "tests/pipeline/eval/test_seat_scripts.py::test_missing_ledger_args_exit_2",
+      "tests/pipeline/eval/test_seat_scripts.py::test_pp_route_health_ready_and_epochs",
+      "tests/pipeline/eval/test_seat_scripts.py::test_teardown_reaps_orphans_when_production_cleanup_is_bypassed"
+    ],
+    "resource": "cpu-subprocess-bash（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C16-02",
+    "domain": "C16",
+    "source": [
+      "scripts/eval-official/run_eval_gl.sh"
+    ],
+    "symbol": "run_eval_gl.sh（sync_recordings、finalize、on_signal、die2）+ run_seat.sh 库函数 finish_episode_dir／transcode_episode_dir／publish_dir",
+    "oracle": "最小 repo（四个真实脚本 + 假解释器）+ 假引擎按录像器格式写录像目录（ffv1 16×16，4 条帧记录 3 帧编码）与轨迹；真 ffmpeg 转码、ffprobe 数帧",
+    "positive": "每局并入轨迹 → 就地转码为单个 episode.mp4（4 帧，含重复帧展开）→ 删 *.mkv 与 .spool → 经 .incoming 原子发布到 <stage>/media/<label>/<dataset>/new/<key>.a<n>/；节点录像与轨迹副本删除；SEAT_REC_SYNC=PASS n=2 left=0 transcoded=2 frame_mismatch=0 transcode_fail=0、V8_SEAT_DONE outcome=pass；results.epochs.jsonl 带 server_epoch",
+    "negative": "同一运行根再跑：同名目录不覆盖、发布为 .dup1；--no-record 被拒 rc=2 并写 V8_SEAT_DONE outcome=fail；--dataset hard-verify 配 --max-steps 1600 → RUN_BLOCKED reason=step_cap_pairing、V8_SEAT_DONE outcome=fail rc=3、不起任何进程",
+    "boundaries": "TERM：V8_SEAT_DONE 只写一次 outcome=aborted rc=143、EXIT_CODE=143、假进程全部结束；周期同步收到 TERM 时做完手上一局再退出",
+    "nodeids": [
+      "tests/pipeline/eval/test_seat_scripts.py::test_gl_transcodes_publishes_by_output_key_and_rerun_does_not_overwrite",
+      "tests/pipeline/eval/test_seat_scripts.py::test_gl_step_cap_pairing_blocks",
+      "tests/pipeline/eval/test_seat_scripts.py::test_gl_term_finalizes_once",
+      "tests/pipeline/eval/test_seat_scripts.py::test_gl_rejects_no_record"
+    ],
+    "resource": "cpu-subprocess-bash-ffmpeg（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C16-03",
+    "domain": "C16",
+    "source": [
+      "scripts/eval-official/run_official_hard.sh",
+      "scripts/eval-official/pair_seat.sh"
+    ],
+    "symbol": "run_official_hard.sh（plan_round、orig_loop、build_runner_cmd、sync_orig、official_finalize）；pair_seat.sh（run_side、wait_side_released、pair_done）",
+    "oracle": "最小 repo + 假引擎：pp 服务回 HTTP 200，原侧驱动替身按 pp_official_runner.py 的布局写 frames/{front,wrist}.rgb24（3 帧 16×16）、frames.json、trace.jsonl 与结果行，FAKE_RUNNER_INFRA_ONCE 让第 1 次尝试的最后一个身份记 infra；事件日志带时间戳",
+    "positive": "原侧分轮：第 1 轮 --attempt 1 全部身份，infra 身份在重启服务（旧服务 TERM 早于重发）后以 --attempt 2 --only <该身份> 重跑；results.epochs.jsonl 的 server_epoch 依次为 1、1、2；三局都转码为 3 帧 episode.mp4、删 *.rgb24、保留 frames.json 与 trace.jsonl，发布到 media/pp/hard-verify/orig/<key>.a<n>/；OFFICIAL_SEAT_DONE outcome=pass rc=0；pair_seat.sh 先原侧后新侧，两次 SIDE_RELEASED，原侧服务 TERM 早于新侧服务启动，新侧客户端 hard-verify／1300 不带 strict-cap，两侧输出键齐全，PAIR_SEAT_DONE rc=0（第三阶段 R3：pair_seat.sh 尚未转发 --policy-seed 与预算参数，现用例钉住「原侧跑完、新侧 RUN_BLOCKED reason=policy_seed、new_rc=3」的已知缺口，交主会话补转发后改回）",
+    "negative": "--infra-retry-budget 0：infra 身份不重跑，RUN_INCOMPLETE side=orig missing=1、rc=6",
+    "boundaries": "驱动只跑一次（第 2 轮只含需重试的身份）；守卫函数全部来自 run_seat.sh（见 C16-04）",
+    "nodeids": [
+      "tests/pipeline/eval/test_seat_scripts.py::test_official_pp_retries_after_server_restart_and_publishes",
+      "tests/pipeline/eval/test_seat_scripts.py::test_official_retry_budget_zero_leaves_missing",
+      "tests/pipeline/eval/test_seat_scripts.py::test_pair_seat_runs_orig_then_new_on_released_gpu"
+    ],
+    "resource": "cpu-subprocess-bash-ffmpeg（slow）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C16-04",
+    "domain": "C16",
+    "source": [
+      "scripts/eval-official/run_seat.sh",
+      "scripts/eval-official/run_eval_gl.sh",
+      "scripts/eval-official/run_official_hard.sh",
+      "scripts/eval-official/pair_seat.sh"
+    ],
+    "symbol": "EVAL_WIRING：build_client_cmd／build_server_cmd／build_runner_cmd 的逐路线 argv、step_cap_pairing、variant_pairing、三个启动器 source run_seat.sh 的守卫",
+    "oracle": "source 真实脚本（被 source 时只定义函数），逐路线打印 argv；期望值手写（ood↔1600 + --strict-cap、hard-verify↔1300；策略号 smvla 0／perceptual-framesamp-modul 1／groundsg 2／pp 3；history_config 期望手写）",
+    "positive": "新侧 8 条路线、原侧 3 条路线透传参数全对：--dataset／--max-steps／--strict-cap、--groundsg-variant 只在 groundsg、adapter 只在 QwenVL、out／ledger／rec-root／trace-root 落在 <label>（groundsg-<variant>）下、groundsg／pp 用客户端扩展环境、groundsg 客户端与驱动带 USE_HF=1；服务 argv（serve_policy.py --seed=7 --policy.dir、ponderpounce.eval.robomme_server --args.seed 0）；判定行 EVAL_WIRING=PASS routes=11 dataset_mismatch=0 variant_mismatch=0",
+    "negative": "7 组数据集／步数错配（含缺失、未知数据集、strict-cap 配错）与 7 组变体错配（缺变体、QwenVL 缺 adapter 或目录不存在、Oracle 给 adapter、未知变体、非 groundsg 给变体或 adapter）全部 RUN_BLOCKED 返回 3",
+    "boundaries": "run_official_hard.sh／pair_seat.sh／run_eval_gl.sh 不另定义 port_busy、pick_port、noprog_limit、idle_s、start_server、kill_group、publish_dir、transcode_episode_dir；run_seat.sh 代码里不再出现 --v8、被 source 时不运行",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_wiring.py::test_eval_wiring"
+    ],
+    "resource": "cpu-subprocess-bash",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-18",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "eval_report.main_dataset / build_report(dataset=) / verify_dataset_videos / dataset_lines / parse_policy_spec",
+    "oracle": "按生产格式手写的结果行、账本行、本机视频目录；视频帧数用进程内替身（count_media_frames）",
+    "positive": "--dataset hard-verify：身份必备字段为 tier／seed／source_episode（不含 spec_sha256）、exec_steps=1301 不算越限（exec_over_cap=skip）、EVAL_COVERAGE／EVAL_REPORT／EVAL_VIDEOS 三行 PASS；<policy>:<variant> 走 sNN/<policy>-<variant>/、按 policy_variant 过滤，两个变体各自 PASS",
+    "negative": "hard-verify 缺 source_episode → count_mismatch；视频解码失败 → decode_fail=1；ood 越 1600 → exec_over_cap=1、缺 spec_sha256 → count_mismatch；未给 --videos → EVAL_VIDEOS=FAIL videos_root=absent；结果行或清单数据集与 --dataset 不符 → dataset_crossed、EVAL_REPORT=FAIL；--partial 三行一律 FAIL 带 partial=1；缺 --expect-total 即参数错误",
+    "boundaries": "不带 --dataset 时 V8／V9 判定行与口径不变",
+    "nodeids": [
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_hard0_lines_pass_without_spec_and_skip_cap",
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_hard0_requires_source_episode_and_decodable_video",
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_ood_keeps_cap_and_spec",
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_crossed_rows_are_counted",
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_policy_variants_are_separate",
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_partial_always_fails",
+      "tests/pipeline/eval/test_eval_report.py::test_dataset_requires_expect_total"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "S2-D4",
+      "S2-D6"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-19",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/eval_manifest.py",
+      "scripts/eval-official/eval_report.py"
+    ],
+    "symbol": "数据集路由（DATASET_ROUTING）：SeatRunner／load_identities／eval_report 三处不串；eval_manifest.build_hard0 / check_hard0 / main --mode hard0 --pair-shards；SeatRunner.policy_context / close / conn_info",
+    "oracle": "hard0 清单 16 任务 × 12 局 = 192（手写），每行经真实 builder(dataset=\"hard-verify\") 解析回同一身份；步数上限手写 1300／1600；groundsg／pp 策略模块用替身",
+    "positive": "EVAL_SHARDS=PASS mode=hard0 total=192 xhard0=192、分片内正序、两侧共用 shard-NN.json；各数据集 builder、上限、结果行 dataset 都对；hard-verify 结果行 exec_steps／cap_hit／demo_frames／reset_calls 齐全；make_policy_context 整席只调一次、每局同一对象，close 调一次 close_policy_context；conn_info 带 dataset、groundsg_variant、qwenvl_groundSG_adapter_path、trace_dir（<trace-root>/<key>.a<attempt>）、episode_tag；结果行与录制器元数据不含 policy_context；没有 make_policy_context 时为整席共享 dict",
+    "negative": "把 xhard0 身份喂给 --dataset ood、把 V9 身份喂给 --dataset hard-verify：run_one 与 load_identities 都运行阻塞（3）、不建环境；hard0 运行根按 ood 汇总被抓（dataset_crossed=1）；--per-task 0／13、builder 解析出非 xhard0 → ManifestError(stage=hard0)",
+    "boundaries": "默认不变：客户端 --dataset／--max-steps 无默认值（缺即退出 2）；清单默认 v9-new；汇总不带 --dataset 仍出 V8 两行；EnvSession 默认 ood；判定行 DATASET_ROUTING=PASS crossed=0 default_changed=0",
+    "nodeids": [
+      "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_manifest_192_rows_paired_shards",
+      "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_per_task_and_rejections",
+      "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_result_row_has_exec_fields",
+      "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_without_strict_cap_lets_official_loop_run_step_1301",
+      "tests/pipeline/eval/test_dataset_routing.py::test_dataset_routing",
+      "tests/pipeline/eval/test_dataset_routing.py::test_policy_context_built_once_and_conn_info",
+      "tests/pipeline/eval/test_dataset_routing.py::test_policy_context_defaults_to_shared_dict"
+    ],
+    "resource": "cpu",
+    "mutants": [
+      "S2-D2",
+      "S2-D4"
+    ],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-CLIENT-REPLAY",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/client_replay_eq.py"
+    ],
+    "symbol": "run_route / compare / is_clean / side_interface / check_checkouts / FakeSession / FakeWS / SmvlaConn / PPConn / main（--base --base-sha --candidate --candidate-sha --routes；自检强制）",
+    "oracle": "同一检出两侧逐事件相等；故意改动（第 3 步动作首元素 +1、首个推理请求字节、交换第一对相邻环境／服务事件）由子进程内篡改注入，期望差异由篡改位置手写",
+    "positive": "同一检出（--base-sha／--candidate-sha 为其 HEAD）smvla、perceptual-framesamp-modul 两路线 CLIENT_REPLAY_EQ=PASS request_diff=0 action_diff=0 control_diff=0 terminal_diff=0，汇总行 CLIENT_REPLAY_EQ_SUMMARY=PASS；官方名检出判 iface=official，只有改名前模块名的检出判 legacy（名字取自 official_defs 别名表）",
+    "negative": "三类故意改动均被判差异（不给 --self-test 也强制执行：CLIENT_REPLAY_SELFTEST=PASS action=caught request=caught order=caught）；sha 不符 → CLIENT_REPLAY_SHA=FAIL、不跑比较、退出 1；缺 sha 参数退出 2；短 sha／目录不存在被拒；两侧同样崩溃、零事件、缺场景均计 control_diff",
+    "boundaries": "假环境 256×256 确定性画面、服务回包按调用序号确定；只证明固定观测与固定回包下客户端请求、动作、控制流、终态不变，不证明真实服务数值；Astra 不覆盖；groundsg-oracle、pp 路线由主会话对真实 base／candidate 检出跑全量",
+    "nodeids": [
+      "tests/pipeline/eval/test_client_replay_eq.py::test_same_checkout_passes_and_tampers_are_caught",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_sha_mismatch_fails_without_running",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_sha_args_are_required",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_check_checkouts_rejects_short_sha_and_missing_dir",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_scenario_names_match_tool",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_compare_clean_baseline",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_compare_same_crash_on_both_sides_fails",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_compare_zero_events_fails",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_compare_missing_scenario_fails",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_side_interface_official_and_legacy",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_workers_do_not_write_bytecode_into_checkouts",
+      "tests/pipeline/eval/test_client_replay_eq.py::test_tool_official_defs_does_not_shadow_checkout_module"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SEAT-OFFICIAL-MEDIA",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/seat_media_lib.sh",
+      "scripts/eval-official/official_media_check.py"
+    ],
+    "symbol": "seat_media_lib.sh::render_official_dir / _seat_media_transcode（--keep-raw）；official_media_check.py::main（清单模式、--verify-dir 单局模式）",
+    "oracle": "真实小型无损帧夹具（FFV1 + 帧索引 + 契约 trace）走完整收尾链；账本、清单、provenance 手写，期望计数手算",
+    "positive": "重绘插在 trace 合并之后、转码之前；official/*.mp4 出现且 episode.mp4 仍恰一个；已有官方视频完整解码核帧数与 provenance 才 KEPT；OFFICIAL_MEDIA_INPUTS=PASS、OFFICIAL_MEDIA=PASS，无帧 error 局计 no_frame_error",
+    "negative": "重绘失败保留原帧指纹、写 official-render.failed、照常发布、重入恢复；缺失、重复、失败、帧数不符、调换两局视频、普通录像冒充、错 attempt、等数量替换身份均 FAIL",
+    "boundaries": "共享库内部开关缺省 0，只有新侧入口 run_eval_gl.sh 显式开启；不覆盖真实 GPU 渲染",
+    "nodeids": [
+      "tests/pipeline/eval/test_official_media_check.py",
+      "tests/pipeline/eval/test_seat_scripts.py"
+    ],
+    "resource": "cpu；ffmpeg 收尾链用例标 slow",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-BUDGET-LEDGER",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/budget_ledger.py"
+    ],
+    "symbol": "budget_ledger.reserve / commit / release / claim_retry / report_lines / main；env_client.AttemptLedger 共享模式、classify_interrupt、SeatRunner._reserve、EnvSession(budget_claim)",
+    "oracle": "手写账本与并发夹具；上限取计划六节（轨迹 6366 硬、reset 141430 软、Astra 2 硬、共享 infra 50、到期 500）",
+    "positive": "并发争抢最后一个额度仅一方成功；前两次 reset 失败第三次成功记满 6；到期与故障分账；重启换节点不刷新；report 末行 BUDGET_ENFORCEMENT=PASS",
+    "negative": "余额不足在进入 attempt 前拒绝（RUN_BLOCKED reason=budget）；Astra 第 3 局拒绝；半行判 FAIL；默认不开共享模式时 AttemptLedger 与 SeatRunner 账本与 BASE 逐字节相同",
+    "boundaries": "reset 软上限只告警；不覆盖真实 Slurm 到期信号，只按清单或 SLURM_JOB_END_TIME 判",
+    "nodeids": [
+      "tests/pipeline/eval/test_budget_ledger.py"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-LEGACY-NAMES",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/official_defs.py",
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/budget_ledger.py",
+      "scripts/eval-official/eval_report.py",
+      "scripts/eval-official/orig_observer/orig_results_adapter.py",
+      "scripts/eval-official/official_media_check.py"
+    ],
+    "symbol": "official_defs.{LEGACY_POLICY_ALIASES,LEGACY_DATASET_ALIASES,LEGACY_MODULE_ALIASES,LEGACY_CONFIG_KEY_ALIASES,canonical_policy,canonical_dataset,canonical_route,canonical_row,legacy_labels}；env_client.{read_results,POLICY_MODULES}；budget_ledger._read；eval_report.{read_jsonl,load_policy,layout_names,main}；orig_results_adapter.build；official_media_check.{read_rows,main}",
+    "oracle": "1006 改名计划第二部分八.2「兼容」：读历史时旧名映射成官方名，写出与 CLI 只用官方名，别名表只在 official_defs.py 一份；测试里的旧名一律取自别名表",
+    "positive": "旧策略标签／带变体标签／旧数据集名／旧路线与媒体键映射成官方名；历史结果行、账本行、trace 头读入后为官方名；旧运行根目录名与账本文件名可读；POLICY_MODULES 覆盖全部策略且模块文件存在",
+    "negative": "eval_report --policies、orig_results_adapter --policy、official_media_check --dataset 给旧名即 argparse 退出",
+    "boundaries": "只覆盖读入映射与 CLI 拒绝；不改历史留档文件；site_catalog 的页面 ID 是已发布数据键，原样保留",
+    "nodeids": [
+      "tests/pipeline/eval/test_legacy_names.py::test_alias_tables_cover_every_rename",
+      "tests/pipeline/eval/test_legacy_names.py::test_canonical_functions",
+      "tests/pipeline/eval/test_legacy_names.py::test_env_client_reads_legacy_results_as_official",
+      "tests/pipeline/eval/test_legacy_names.py::test_budget_ledger_reads_legacy_route",
+      "tests/pipeline/eval/test_legacy_names.py::test_eval_report_reads_legacy_stage_dirs_and_rejects_legacy_cli",
+      "tests/pipeline/eval/test_legacy_names.py::test_orig_tools_canonicalize_policy",
+      "tests/pipeline/eval/test_legacy_names.py::test_official_media_check_rejects_legacy_cli"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-R3-STAGE3",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/budget_ledger.py",
+      "scripts/eval-official/run_seat.sh",
+      "scripts/eval-official/run_eval_gl.sh",
+      "scripts/eval-official/smvla_server.py",
+      "scripts/eval-official/policy_server_wrap.py"
+    ],
+    "symbol": "EnvSession.step（strict cap）/ SeatRunner.run_one / run_identities / entry_blockers / BudgetLedger.reserve,claim_retry,lease,_load,_append / run_seat.sh::step_cap_pairing,variant_pairing,policy_seed_check,budget_args_check,build_server_cmd,build_client_cmd,progress_idle,recovery_load / policy_server_wrap.run,AuditedPolicy,install_tokenizer_spy / SMVLAPolicyHost.infer,new_episode",
+    "oracle": "手写期望：ood 1800 strict 边界、0／7／42 三个种子逐路线的服务与客户端 argv、870／50／50／821 下的预约与领取序列、三处期限的结果行与账本行、审计开关两侧回包字节",
+    "positive": "EVAL_CAP=PASS（第 1800 次进环境、第 1801 次不进、hard-verify 不 strict、effective_cap 落结果行与 progress）；POLICY_SEEDS=PASS（四类服务命令、客户端、seat_info、结果行 policy_seed／server_seed、路线 seed<n>）；BUDGET_ENFORCEMENT=PASS；DEADLINES=PASS（infra_reason=deadline_<phase>、退出 75、重试成功）；OBS_EQ=PASS（审计开关两侧除审计键外逐字节相同、RNG 与推理次数相同）",
+    "negative": "坏行即拒、config 不一致拒、同 token 不重复扣、第 50 次恢复因首试保留被拒、lease 被占与缺预算参数 RUN_BLOCKED、缺 --policy-seed RUN_BLOCKED、MemER 变体与 adapter 错配 RUN_BLOCKED reason=variant_pairing、多推理一次的坏外壳被查出、同签名重写 progress 不算进展",
+    "boundaries": "纯 CPU：假环境、假模型、假 sentencepiece；不加载权重、不起真实服务；PonderPounce 外壳的审计对照在 tests/pipeline/evalx/pp/test_pp_server_wrap.py（PP_AUDIT_OBS_EQ）",
+    "nodeids": [
+      "tests/pipeline/eval/test_stage3_entry_budget.py"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-R4-SEVEN-ROUTES",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/run_seat.sh",
+      "scripts/eval-official/framesamp_modul_client.py",
+      "scripts/eval-official/smvla_client.py",
+      "scripts/eval-official/smvla_server.py",
+      "scripts/eval-official/pp_client.py",
+      "scripts/eval-official/groundsg_client.py",
+      "scripts/eval-official/official_defs.py",
+      "scripts/eval-official/policy_server_wrap.py",
+      "scripts/eval-official/astra_hard_runner.py",
+      "scripts/eval-official/run_astra.sh",
+      "scripts/eval-official/trace_writer.py"
+    ],
+    "symbol": "七路线（FrameSamp+Modulation、SimpleMemVLA、PonderPounce、GroundSG Oracle／QwenVL／MemER、3-tier Astra）× --policy-seed 0／7／42：run_seat.sh::build_server_cmd → policy_server_wrap.run（create_policy 实参、服务元数据）／SMVLAPolicyHost.new_episode（reseed）／official_defs.make_args（Args.model_seed）与 seed_everything → SeatRunner.run_one 结果行 policy_seed／server_seed／budget_token 与 trace header／identity／end；run_astra.sh VLA 服务 --seed、astra_hard_runner check／run --policy-seed、trace／result／provenance；ood --max-steps 1800 --strict-cap：EnvSession.step 守卫 × 六个真实客户端循环、Astra TracedEnv 守卫；OBS_EQ：policy_server_wrap.AuditedPolicy／install_tokenizer_spy 与 SMVLAPolicyHost._watch_prompt／_audit_block",
+    "oracle": "计划第二部分三节第二段与八.3：期望值在用例里手写（种子取值、1800／1801、timeout、exec_steps、trace 行数）；服务 argv 的种子按路线手写取法；OBS_EQ 比较器手写（模型实际 token id／mask、动作字节、RNG、调用次数四项）",
+    "positive": "POLICY_SEEDS=PASS models=7 seeds=0,7,42 cases=21 cpu_only=1（种子到服务命令、该路线真正用的随机状态、结果行与 trace）；EVAL_CAP=PASS models=7 dataset=ood max_steps=1800 rejected_step=1801（环境恰收 1800 步、timeout、exec_steps=1800、effective_cap=1800、trace 恰 1800 个 step 行）；OBS_EQ=PASS routes=5（观察开关两侧四项全等）",
+    "negative": "对照：同一 FrameSamp+Modulation 路线去掉 strict cap，第 1801 步进入环境（判据有区分力）；OBS_EQ 三类突变（多抽随机数、多推理一次、改一个 token）在外壳与 smvla 服务上各自被比较器拒（6/6）",
+    "boundaries": "纯 CPU：服务连接、swift、环境、Astra 规划／监视／VLA 均为替身，run_astra.sh 的解释器是只记参数的桩；PonderPounce 自身循环在 1800 退出、可不置 cap_hit；PonderPounce 外壳的 OBS_EQ 在 tests/pipeline/evalx/pp/test_pp_server_wrap.py（PP_AUDIT_OBS_EQ）；Astra 无服务端观察层，不适用 OBS_EQ。POLICY_SEEDS 与 EVAL_CAP 两条用例单条超过 10 s，标 slow（pytest -m slow tests/pipeline/eval 执行）",
+    "nodeids": [
+      "tests/pipeline/eval/test_stage3_seven_routes.py::test_policy_seeds_seven_routes_three_seeds",
+      "tests/pipeline/eval/test_stage3_seven_routes.py::test_eval_cap_1800_seven_routes",
+      "tests/pipeline/eval/test_stage3_seven_routes.py::test_obs_eq_on_off_equal_and_three_mutants_rejected"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-R4-CROSS-CHECKERS",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/trace_arrays_check.py",
+      "scripts/eval-official/lang_io_check.py",
+      "scripts/eval-official/env_client.py",
+      "scripts/eval-official/budget_ledger.py",
+      "scripts/eval-official/trace_writer.py",
+      "scripts/eval-official/framesamp_modul_client.py",
+      "scripts/eval-official/smvla_client.py",
+      "scripts/eval-official/pp_client.py",
+      "scripts/eval-official/groundsg_client.py",
+      "scripts/eval-official/astra_hard_runner.py"
+    ],
+    "symbol": "六条 env_client 路线真实客户端经 SeatRunner 产出（另含 PP／GroundSG Oracle 第 5 步环境异常局与一局 Astra）→ trace_arrays_check.main／lang_io_check.main；SeatRunner 换种子（独立目录、同一共享账本）；BudgetLedger.reserve（first／recovery）／claim_retry（infra／expired）／report_lines 的上限一致性",
+    "oracle": "检查器判定行的期望计数在用例里手写；小账本（轨迹 12、首试 9、恢复合计 3）的领取序列手算",
+    "positive": "九局真实产物 TRACE_ARRAYS=PASS；九局真实产物不做任何规范化直接 LANG_IO=PASS image_ref_unresolved=0；缺观测步不补零（end.arrays.missing_state_steps=[5]、无 exec_state__00004）；种子 7 accepted 后种子 42 在独立目录照常重跑，账本 route／token 各带种子；到期接续与 infra 重试共用恢复合计、report 上限与两个领取入口一致",
+    "negative": "篡改一个动作字节 tampered=1；给缺观测步补零 tampered=1；删一个观测步状态 observed_state_missing=1；改一个附图引用哈希 image_ref_unresolved=1；删一个调用关闭行 open_calls=1；第 4 次恢复在 retry 与 reserve 两入口同时被拒；同一身份第二次领重试（第三次 attempt）被拒；改任一构造参数后 reserve／claim_retry 抛 BudgetConfigMismatch、report 判 config_mismatch",
+    "boundaries": "纯 CPU 替身；跨块检查器用例超过 1 s、标 slow；R4 原钉两条缺陷的修复见 C13-R4-DEFECTS-FIXED",
+    "nodeids": [
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_real_route_outputs_pass_checkers_and_injected_faults_fail",
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_seed_switch_with_own_stage_reruns_and_routes_stay_separate",
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_budget_caps_consistent_across_reserve_retry_report"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-R4-DEFECTS-FIXED",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/lang_io_check.py",
+      "scripts/eval-official/env_client.py"
+    ],
+    "symbol": "lang_io_check.frame_sets（exec 帧 0 映射 demo 末帧、按 (phase, cam, frame_idx) 精确比对）；env_client.SeatRunner._check_route（共享模式取得 lease 后、读取待跑身份前核对尝试账本 attempt_start.route）",
+    "oracle": "真实九局产物的检查器期望（PASS、image_ref_unresolved=0）手写；换种子复用尝试账本的期望判定行、退出码与「不写新行」手写；全新 stage 与同路线续跑的 RUN_PLAN 计数手写",
+    "positive": "真实 GroundSG 三变体与 Astra 在内的九局产物不做规范化直接 LANG_IO=PASS image_ref_unresolved=0；全新 stage（空账本）首跑与同路线续跑不误拒（RUN_PLAN accepted=1 todo=1）",
+    "negative": "种子 42 复用种子 7 的尝试账本：RUN_BLOCKED reason=route_mismatch found=pp/seed7/new want=pp/seed42/new、rc=3、不调用策略、结果文件与尝试行不增；缺 route 字段的历史 attempt_start 行 found=legacy 同样拒",
+    "boundaries": "纯 CPU 替身；路线核对只在共享预算模式生效（非共享模式 attempt_start 不记 route，行为与 BASE 相同）",
+    "nodeids": [
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_real_route_outputs_pass_checkers_and_injected_faults_fail",
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_seed_switch_reusing_other_seed_ledger_is_blocked",
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_route_guard_allows_fresh_stage_and_same_route_resume",
+      "tests/pipeline/eval/test_stage3_counterexamples.py::test_route_guard_rejects_legacy_ledger_rows"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified",
+    "note": "1006 MERGE-2 修复：D1 由 FIX-1、D2 由 env_client route 核对"
+  }
+]

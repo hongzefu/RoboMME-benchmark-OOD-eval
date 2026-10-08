@@ -1,0 +1,15 @@
+#!/bin/bash
+# 本机第二档 Oracle 新侧 SwingXtimes 12 局补跑（12.453 修复后；v1/v2 新侧这 12 局因叠字视频文件名超 255 字节记 error）。
+# 只跑新侧、写单独 stage（不动原结果），汇总时以补跑行替换原 error 行。一次性脚本，跑完归档 records/。
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+R=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261004-01; N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+CK=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name lg2-oracle-swing --seat 82 --repo $REPO --stage $R/local-g2/stage-oracle-swing \
+  --shard $R/local-g2/shard-swing-12.json --dataset test-hard0 --max-steps 1300 --policies mmesg --mme-variant ground-sg-oracle \
+  --mmesg-ckpt $CK/mme_vla_suite/symbolic-grounded-subgoal/79999 --openpi-data-home $REPO/artifacts/v8-evaluation/openpi-data \
+  --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 \
+  --reset-budget 28 --infra-retry-budget 2 --gpu 0

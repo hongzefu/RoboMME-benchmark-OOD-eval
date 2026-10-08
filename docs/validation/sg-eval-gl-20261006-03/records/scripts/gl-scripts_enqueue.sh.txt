@@ -1,0 +1,13 @@
+#!/bin/bash
+# 把一个模型的两片 OOD 任务放进 queue/pending：enqueue.sh <模型> <序号前缀>（文件名决定 worker 领取顺序）
+set -eu
+M=$1; P=$2
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03
+E=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/robomme_benchmark-sgeval3
+F=0816c0a9fa5c2ca37b47bba07dd4c36334f2fb79
+for k in 0 1; do
+  t=$R/queue/pending/${P}${k}-$M-s0$k.task
+  [ -e $t ] && { echo "exists $t"; continue; }
+  echo "bash $R/scripts/task_ood.sh $E $F $M ${P}${k} $R/inputs/manifests/ood86/shard-0$k.json" > $t.tmp && mv $t.tmp $t
+  echo "ENQUEUED $(basename $t)"
+done

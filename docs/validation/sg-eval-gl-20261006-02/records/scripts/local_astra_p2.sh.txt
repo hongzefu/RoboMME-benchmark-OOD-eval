@@ -1,0 +1,34 @@
+#!/bin/bash
+# 第二阶段批次 5：Astra 新侧本机 smoke（用户：「唯一需要注意的就是astra还是只跑两次。」≤2 局、5 美元硬上限）。
+# 用法：bash astra_p2.sh <try 序号>   每次 1 局（VideoUnmask，test-hard0 本地局号 0 = 官方 episode 3，1300 步）；
+# 先起费用守卫（--cap 5 --interval 2，新账本），核心跳后再起 run_astra.sh（ASTRA_GUARD_STATE 指向守卫状态文件）。
+# VLA 用卡 0、仿真与监视器用卡 1。密钥只从 ~/.config/astra/openai.key 读进环境变量，不进命令行参数、日志、留档。
+set -u
+TRY=$1
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+A=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261006-02/astra
+ASTRA=$REPO/third_party/Astra-on-RoboMME
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+export VLA_PYTHON=$REPO/third_party/mme-vla/.venv/bin/python
+export SIM_PYTHON=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export VLA_CHECKPOINT=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts/mme_vla_suite/symbolic-grounded-subgoal/79999
+export MONITOR_BASE=$HOME/.cache/huggingface/hub/models--Qwen--Qwen3-VL-4B-Instruct/snapshots/ebb281ec70b05090aa6165b016eac8ec08e71b17
+export MONITOR_ADAPTER=$N/sg-eval/ckpt/astra-monitor
+export OPENPI_DATA_HOME=$REPO/artifacts/v8-evaluation/openpi-data
+export VLA_GPU=0 MONITOR_GPU=1 MAX_STEPS=1300 ASTRA_ROOT=$ASTRA
+export ASTRA_GUARD_STATE=$A/astra-cost-ledger.state.json
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
+( cd $REPO && "$SIM_PYTHON" scripts/eval-official/astra_hard_runner.py prepare --dataset test-hard0 --tasks VideoUnmask --source-episodes 3 --output $A/inputs/new-cases.json ) || exit 3
+if ! tmux has-session -t '=ovl2-astra-guard' 2>/dev/null; then
+  tmux new-session -d -s ovl2-astra-guard "cd $REPO && uv run --no-sync python scripts/eval-official/astra_cost_guard.py --root $A/group_1 --prices $A/inputs/astra-prices.json --ledger $A/astra-cost-ledger.json --state $ASTRA_GUARD_STATE --cap 5 --interval 2 2>&1 | tee -a $A/cost_guard.log"
+fi
+for i in $(seq 1 20); do [ -s "$ASTRA_GUARD_STATE" ] && break; sleep 1; done
+[ -s "$ASTRA_GUARD_STATE" ] || { echo "ASTRA_P2_BLOCKED reason=guard_no_heartbeat"; exit 3; }
+echo "ASTRA_GUARD_UP state=$ASTRA_GUARD_STATE $(head -c 300 $ASTRA_GUARD_STATE)"
+OPENAI_API_KEY="$(cat "$HOME/.config/astra/openai.key")"; export OPENAI_API_KEY
+[ -n "$OPENAI_API_KEY" ] || { echo "ASTRA_P2_BLOCKED reason=no_key"; exit 3; }
+echo "ASTRA_P2_START try=$TRY head=$(git -C $REPO rev-parse HEAD) $(date -Is)"
+PORT=18763 bash $REPO/scripts/eval-official/run_astra.sh $A/inputs/new-cases.json $A/group_1/new-try$TRY
+echo "ASTRA_P2_END try=$TRY rc=$? $(date -Is)"
+tail -2 $A/cost_guard.log

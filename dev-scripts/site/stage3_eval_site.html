@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>第三阶段 OOD 评估视频</title>
+  <style>
+    :root{color-scheme:light;--ink:#19343b;--muted:#63777b;--paper:#f4f4ef;--line:#d8e1dc;--accent:#de6d40;--green:#27665c;--gt:#4a5fa8}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+    button,select,input{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #d89b54;outline-offset:3px}
+    .shell{max-width:1680px;margin:auto;padding:30px 38px 42px}.mast{display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.05em}.mark{height:23px;width:23px;border:2px solid var(--green);border-radius:6px;display:grid;place-items:center}.mark:after{content:"";width:7px;height:7px;background:var(--accent);border-radius:50%}
+    .mast .tag{margin-left:auto;padding:4px 10px;border:1px solid var(--line);border-radius:20px;font-size:12px;letter-spacing:0}
+    .hero{margin:24px 0 14px}h1{font-size:28px;line-height:1.15;letter-spacing:-.04em;font-weight:600;margin:0 0 10px}.lede{color:var(--muted);margin:0;max-width:980px;font-size:13px}
+    .notice{border-left:3px solid var(--accent);padding:10px 14px;background:#f9eadd;font-size:13px;margin:22px 0}
+    .rates-wrap{border:1px solid var(--line);border-radius:9px;overflow-x:auto;background:#fff}.rates{border-collapse:collapse;width:100%;min-width:900px;font-size:13px;table-layout:fixed}.rates th,.rates td{padding:6px 14px;border-bottom:1px solid #edf0ed;text-align:left;white-space:nowrap}.rates thead th{background:#edf1e9;font-weight:550;white-space:normal;line-height:1.25;vertical-align:bottom}.rates thead th small{display:block;font-weight:400;color:var(--muted);font-size:10px}.rates th:first-child{width:150px}.rates tbody tr:last-child td{border-bottom:0}.rates td{font-variant-numeric:tabular-nums}.rates .fraction{color:var(--muted);font-size:11px;margin-left:8px}.rates .ref{color:var(--muted)}.rates tfoot th,.rates tfoot td{border-top:2px solid var(--line);border-bottom:0;background:#edf1e9;font-weight:600}
+    .task-navigation{margin:26px 0 14px}.task-navigation h2{font-size:18px;margin:0 0 12px}.task-tabs{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}.task-tab{background:#fff;border:1px solid var(--line);border-radius:7px;padding:9px 8px;text-align:left;color:var(--ink);font-size:13px;overflow-wrap:anywhere}.task-tab[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff}.task-tab small{display:block;font-size:11px;margin-top:2px;opacity:.65}
+    .controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 0 18px;border-top:1px solid var(--line)}.controls .group{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.controls .label{color:var(--muted);font-size:12px}
+    .toggle{display:inline-flex;align-items:center;gap:5px;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:4px 11px 4px 8px;cursor:pointer;user-select:none}.toggle input{margin:0;accent-color:var(--green)}.toggle.off{opacity:.55}
+    select{background:#fff;border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:7px 28px 7px 10px}
+    .switch{display:flex;padding:3px;background:#e6ebe5;border-radius:8px}.switch button{border:0;border-radius:5px;background:transparent;padding:6px 12px;color:var(--muted);font-size:12px}.switch button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 3px #00000010}
+    .quiet{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 12px;font-size:13px}
+    .workspace{display:grid;grid-template-columns:270px minmax(0,1fr);gap:22px;align-items:start}
+    .library{background:#fff;border:1px solid var(--line);border-radius:11px;overflow:hidden;position:sticky;top:12px;max-height:calc(100vh - 24px);display:flex;flex-direction:column}.library-head{display:flex;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);font-size:13px}.library-head span{color:var(--muted)}.episodes{overflow-y:auto}
+    .episode{width:100%;text-align:left;display:flex;gap:10px;padding:11px 14px;background:#fff;border:0;border-bottom:1px solid #edf0ed;align-items:center;color:var(--ink)}.episode:hover{background:#f6f8f4}.episode[aria-current="true"]{background:#edf5ed;box-shadow:inset 3px 0 var(--green)}.number{font-variant-numeric:tabular-nums;font-size:12px;color:#84948d;width:20px;flex-shrink:0}.episode-copy{min-width:0;flex:1}.episode-copy strong{display:block;font-size:13px;font-weight:550}.dots{display:flex;gap:4px;margin-top:5px}
+    .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#b56745}.dot.success{background:#3d8f65}.dot.timeout{background:#b2944f}.dot.hidden{opacity:.2}
+    .heading h2{font-size:22px;line-height:1.25;font-weight:550;margin:0 0 4px}.identity{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.goal{font-size:14px;margin:8px 0 16px;overflow-wrap:anywhere}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start}
+    .card{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}.card.gt{border-color:var(--gt)}.card-head{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:13px;border-bottom:1px solid #edf0ed;min-width:0}.card-head strong{font-weight:600;white-space:nowrap}.card-head .note{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge{margin-left:auto;font-size:11px;padding:2px 8px;border-radius:10px;color:#fff;background:#b56745;white-space:nowrap}.badge.success{background:#3d8f65}.badge.timeout{background:#b2944f}.badge.gt{background:var(--gt)}
+    .card video{display:block;width:100%;max-height:420px;object-fit:contain;background:#111d21;aspect-ratio:1}.card-meta{padding:7px 12px;font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 12px}.card-meta b{font-weight:500;color:var(--ink)}
+    .empty{padding:30px;text-align:center;color:var(--muted)}.fatal{padding:28px;color:#a33}footer{margin-top:30px;padding-top:15px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}[hidden]{display:none!important}
+    @media(max-width:1100px){.task-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    @media(max-width:850px){.shell{padding:22px 16px}.workspace{grid-template-columns:1fr}.library{position:static;max-height:none}.episodes{max-height:320px}.grid{grid-template-columns:1fr}}
+    @media(max-width:480px){.mast .tag{font-size:10px;padding:3px 6px}.task-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:24px}.heading h2{font-size:19px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <nav class="mast" aria-label="站点信息"><span class="mark" aria-hidden="true"></span><strong>RoboMME 视频观察室</strong><span class="tag">第三阶段 OOD · 86 局</span></nav>
+  <header class="hero"><h1>Task 成功率</h1><p class="lede">每个 Task 的局数随难度格数不同（43 个任务难度格 × 每格 2 局 = 86 局）。GroundSG+Oracle 一列条件不同（1004 轮本机、1600 步），以灰色显示，仅作参考。</p></header>
+  <div class="rates-wrap"><table class="rates" id="success-rates" aria-label="Task 成功率"><thead><tr id="rates-head"><th>Task</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+  <p class="notice" id="scope-notice">—</p>
+  <nav class="task-navigation" aria-label="Task 视频栏目"><h2>按 Task 浏览视频</h2><div id="task-tabs" class="task-tabs"></div></nav>
+  <section class="controls" aria-label="显示控制">
+    <div class="group" id="toggles"><span class="label">显示</span></div>
+    <div class="group"><label class="label" for="filter-tier">难度</label><select id="filter-tier"><option value="">全部难度</option></select></div>
+    <div class="group"><span class="label">版式</span><div class="switch"><button id="view-official" aria-pressed="true">官方版式</button><button id="view-original" aria-pressed="false">原始画面</button></div></div>
+    <div class="group"><button class="quiet" id="play-all">同步从头播放</button><button class="quiet" id="pause-all">全部暂停</button></div>
+  </section>
+  <div id="fatal" class="fatal" hidden role="alert"></div>
+  <section class="workspace" id="workspace" hidden>
+    <aside class="library" aria-label="当前 Task 局目录"><div class="library-head"><strong id="library-task">—</strong><span id="library-count">—</span></div><div class="episodes" id="episodes"></div></aside>
+    <section aria-label="当前局视频">
+      <div class="heading"><h2 id="current-title">—</h2><div class="identity" id="current-identity" data-episode="">—</div></div>
+      <p class="goal" id="task-goal">—</p>
+      <div class="grid" id="grid"></div>
+    </section>
+  </section>
+  <footer>sg-eval-gl-20261006-03 · 生成真值 + GroundSG+Oracle + 5 模型 · 只含视频与成功率，不含语言记录</footer>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const statusNames = {success:"成功", fail:"失败", timeout:"超时"};
+let catalog, filtered = [], current = null, currentTask = "BinFill", version = "official", hidden = new Set();
+function text(id, value) { $(id).textContent = String(value); }
+function store(){ try { localStorage.setItem("stage3-hidden", JSON.stringify([...hidden])); } catch (e) {} }
+function load(){ try { return new Set(JSON.parse(localStorage.getItem("stage3-hidden") || "[]")); } catch (e) { return new Set(); } }
+function columns(){ return [{id:"gt", name:"生成真值", note:"V9 专家轨迹"}, ...catalog.models]; }
+function setHash(){ if(current) history.replaceState(null, "", "#task=" + encodeURIComponent(currentTask) + "&episode=" + encodeURIComponent(current.key)); }
+function pct(r){ return (100 * r.success / r.total).toFixed(1) + "%"; }
+function cell(r, ref){ const td = document.createElement("td"), f = document.createElement("span"); td.textContent = pct(r); if(ref) td.className = "ref"; f.className = "fraction"; f.textContent = r.success + " / " + r.total; td.append(f); return td; }
+function drawRates(){
+  for (const m of catalog.models) { const th = document.createElement("th"), s = document.createElement("small"); th.textContent = m.name; s.textContent = m.note; th.append(s); $("rates-head").append(th); }
+  const body = $("success-rates").tBodies[0];
+  for (const row of catalog.success_rates) { const tr = document.createElement("tr"), t = document.createElement("td"); t.textContent = row.task; tr.append(t); for (const m of catalog.models) tr.append(cell(row[m.id], m.id === "groundsg-oracle")); body.append(tr); }
+  const tr = document.createElement("tr"), th = document.createElement("th"); th.scope = "row"; th.textContent = "总体"; tr.append(th);
+  for (const m of catalog.models) tr.append(cell({success: m.success, total: m.episodes}, m.id === "groundsg-oracle"));
+  tr.id = "overall-rate"; $("success-rates").tFoot.append(tr);
+}
+function drawToggles(){
+  for (const c of columns()) {
+    const label = document.createElement("label"), box = document.createElement("input");
+    label.className = "toggle"; box.type = "checkbox"; box.dataset.model = c.id; box.checked = !hidden.has(c.id);
+    label.classList.toggle("off", !box.checked);
+    box.addEventListener("change", () => { if (box.checked) hidden.delete(c.id); else hidden.add(c.id); label.classList.toggle("off", !box.checked); store(); drawGrid(); drawList(); });
+    label.append(box, document.createTextNode(c.name)); $("toggles").append(label);
+  }
+}
+function chooseTask(task, preferredKey){
+  if (!catalog.tasks.some(t => t.id === task)) return;
+  currentTask = task; $("filter-tier").value = "";
+  document.querySelectorAll(".task-tab").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.task === task)));
+  text("library-task", task); applyFilters(preferredKey);
+}
+function applyFilters(preferredKey){
+  filtered = catalog.episodes.filter(e => e.task === currentTask && (!$("filter-tier").value || e.tier === $("filter-tier").value));
+  text("library-count", filtered.length + " 局");
+  selectEpisode(filtered.find(e => e.key === (preferredKey || current?.key)) || filtered[0]);
+}
+function drawList(){
+  $("episodes").replaceChildren();
+  filtered.forEach((ep, i) => {
+    const b = document.createElement("button"); b.className = "episode"; b.dataset.episode = ep.key; b.setAttribute("aria-current", String(ep.key === current?.key));
+    const n = document.createElement("span"); n.className = "number"; n.textContent = String(i + 1).padStart(2, "0");
+    const copy = document.createElement("span"); copy.className = "episode-copy";
+    const t = document.createElement("strong"); t.textContent = ep.tier + " · 种子 " + ep.seed;
+    const dots = document.createElement("span"); dots.className = "dots";
+    for (const m of catalog.models) { const d = document.createElement("span"); d.className = "dot " + ep.runs[m.id].status + (hidden.has(m.id) ? " hidden" : ""); d.title = m.name + "：" + statusNames[ep.runs[m.id].status]; dots.append(d); }
+    copy.append(t, dots); b.append(n, copy); b.addEventListener("click", () => selectEpisode(ep)); $("episodes").append(b);
+  });
+  if (!filtered.length) { const p = document.createElement("p"); p.className = "empty"; p.textContent = "没有符合筛选条件的局"; $("episodes").append(p); }
+}
+function card(c, ep){
+  const isGt = c.id === "gt", run = isGt ? ep.gt : ep.runs[c.id];
+  const box = document.createElement("article"); box.className = "card" + (isGt ? " gt" : ""); box.dataset.model = c.id;
+  const head = document.createElement("div"); head.className = "card-head";
+  const name = document.createElement("strong"); name.textContent = c.name;
+  const note = document.createElement("span"); note.className = "note"; note.textContent = c.note || "";
+  const badge = document.createElement("span"); badge.className = "badge " + (isGt ? "gt" : run.status); badge.textContent = isGt ? "专家轨迹" : statusNames[run.status];
+  head.append(name, note, badge);
+  const video = document.createElement("video"); video.controls = true; video.muted = true; video.playsInline = true; video.preload = "metadata";
+  const id = isGt ? run.media : run[version + "_media"];
+  video.src = "/media/" + encodeURIComponent(id); video.dataset.media = id;
+  video.addEventListener("loadedmetadata", () => { if (video.videoWidth && video.videoHeight) video.style.aspectRatio = video.videoWidth + " / " + video.videoHeight; });
+  video.addEventListener("error", () => { if (video.error) badge.textContent = "视频加载失败"; });
+  const meta = document.createElement("div"); meta.className = "card-meta";
+  const pairs = [["执行", (run.exec_steps ?? "—") + " 步"], ["视频", run.frames + " 帧"], ["演示", run.demo_frames + " 帧"]];
+  if (!isGt && run.status === "timeout") pairs.push(["", "到步数上限"]);
+  for (const [k, v] of pairs) { const s = document.createElement("span"), b = document.createElement("b"); s.textContent = k ? k + " " : ""; b.textContent = v; s.append(b); meta.append(s); }
+  box.append(head, video, meta); return box;
+}
+function drawGrid(){
+  document.querySelectorAll("#grid video").forEach(v => { v.pause(); v.removeAttribute("src"); v.load(); });
+  $("grid").replaceChildren();
+  if (!current) return;
+  const shown = columns().filter(c => !hidden.has(c.id));
+  for (const c of shown) $("grid").append(card(c, current));
+  if (!shown.length) { const p = document.createElement("p"); p.className = "empty"; p.textContent = "全部模型已隐藏，请在上方勾选要显示的模型"; $("grid").append(p); }
+}
+function selectEpisode(ep){
+  current = ep || null;
+  if (current) {
+    text("current-title", ep.task + " · " + ep.tier + " · 种子 " + ep.seed);
+    $("current-identity").dataset.episode = ep.key;
+    text("current-identity", ep.key + " · " + catalog.models.map(m => m.name + " " + statusNames[ep.runs[m.id].status]).join(" · "));
+    text("task-goal", ep.task_goal); setHash();
+  }
+  drawGrid(); drawList();
+}
+$("filter-tier").addEventListener("change", () => applyFilters());
+for (const v of ["official", "original"]) $("view-" + v).addEventListener("click", () => { if (version !== v) { version = v; $("view-official").setAttribute("aria-pressed", String(v === "official")); $("view-original").setAttribute("aria-pressed", String(v === "original")); drawGrid(); } });
+$("play-all").addEventListener("click", () => document.querySelectorAll("#grid video").forEach(v => { v.currentTime = 0; v.play().catch(() => {}); }));
+$("pause-all").addEventListener("click", () => document.querySelectorAll("#grid video").forEach(v => v.pause()));
+function selectFromHash(){ const h = new URLSearchParams(location.hash.slice(1)), ep = catalog.episodes.find(e => e.key === h.get("episode")); chooseTask(ep?.task || h.get("task") || "BinFill", ep?.key); }
+addEventListener("hashchange", () => { if (catalog && new URLSearchParams(location.hash.slice(1)).get("episode") !== current?.key) selectFromHash(); });
+(async () => { try {
+  const r = await fetch("/api/catalog"); if (!r.ok) throw new Error("视频目录请求失败");
+  catalog = await r.json();
+  if (catalog.schema !== "stage3-eval-site/2" || catalog.episodes.length !== 86 || catalog.success_rates?.length !== 16 || catalog.models?.length !== 6) throw new Error("视频目录或成功率表不完整");
+  hidden = load(); text("scope-notice", catalog.notice); drawRates(); drawToggles();
+  for (const t of catalog.tasks) { const b = document.createElement("button"), n = document.createElement("span"), s = document.createElement("small"); b.className = "task-tab"; b.dataset.task = t.id; b.setAttribute("aria-pressed", "false"); n.textContent = t.id; s.textContent = t.episodes + " 局"; b.append(n, s); b.addEventListener("click", () => chooseTask(t.id)); $("task-tabs").append(b); }
+  for (const tier of catalog.tiers) { const o = document.createElement("option"); o.value = o.textContent = tier; $("filter-tier").append(o); }
+  $("workspace").hidden = false; selectFromHash(); window.__officialSiteReady = true;
+} catch (e) { text("fatal", "站点暂时不可用：" + e.message); $("fatal").hidden = false; console.error(e); } })();
+</script>
+</body>
+</html>

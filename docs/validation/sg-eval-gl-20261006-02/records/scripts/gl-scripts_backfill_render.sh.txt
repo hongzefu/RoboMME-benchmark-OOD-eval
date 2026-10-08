@@ -1,0 +1,16 @@
+#!/bin/bash
+# 收尾补绘：对 media 下带 official-render.failed 标记的局目录（席位内重绘失败、原始帧已保留）重入 render_official_dir；
+# 通过（OFFICIAL_RENDER=PASS/KEPT 且 OFFICIAL_VERIFY=PASS）才删标记。用法：backfill_render.sh <media 子目录…>
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02
+export SGEVAL_FFMPEG=$R/tools/ff/ffmpeg BENCH_PY=$REPO/.venv/bin/python TOOL_PY=$REPO/.venv/bin/python
+cd $REPO; source scripts/eval-official/seat_media_lib.sh
+ok=0; fail=0
+for root in "$@"; do
+  for m in $(find "$root" -maxdepth 2 -name official-render.failed | sort); do
+    d=$(dirname "$m")
+    if render_official_dir "$d"; then rm -f -- "$m"; ok=$((ok+1)); else fail=$((fail+1)); fi
+  done
+done
+echo "BACKFILL_RENDER ok=$ok fail=$fail"

@@ -1,0 +1,48 @@
+# FrameSamp+Modulation 原侧重跑的客户端环境（1005-eval-video-phase2-all-models-rerun-plan.md 批次 3a）：在 client-env 之上只加官方
+# robomme_policy_learning examples/robomme/requirements.txt 钉死的 google-generativeai==0.8.6——原版 eval.py 经
+# subgoal_predictor.py 无条件导入 gemini（google.generativeai），本轮 client-env 没有它（E0 当时的 robomme_env 已删）。
+# 以下为 client-env 原注释：
+# 四模型评估的客户端扩展环境（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.8）。
+# - 不是 benchmark 根目录的 workspace 成员：uv 以本目录为项目根，有自己的 uv.lock；主 .venv 与根 uv.lock 不动（R8）。
+# - 供三处共用：GroundSG-QwenVL 预测器（ms-swift + Qwen3-VL-4B）、PonderPounce 客户端（vla-eval 协议）、
+#   Astra 的仿真与监视器；仿真栈（mani-skill / sapien / torch）版本与主环境一致。
+# - venv 放在本目录 .venv（.gitignore 的 /envs/*/.venv* 不进 git；解释器钉在 NFS 上的 uv managed python，GL 与本机同一个二进制）：
+#     E=<eval 仓>/envs/orig-framesamp-modul-client-env/.venv
+#     UV_LINK_MODE=copy uv venv --python /nfs/turbo/coe-chaijy-unreplicated/hongzefu/uv-python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11 "$E"
+#     cd envs/orig-framesamp-modul-client-env && UV_PROJECT_ENVIRONMENT="$E" UV_LINK_MODE=copy uv sync --frozen
+#   flash-attn==2.8.3 在环境建好后单独编译安装（--no-build-isolation），构建信息记入留档，不写进本文件。
+#   客户端解释器：BENCH_PY="$E/bin/python"
+[project]
+name = "sgeval-orig-framesamp-modul-client-env"
+version = "0.1.0"
+requires-python = "==3.11.*"
+dependencies = [
+    "robomme",
+    "openpi-client",
+    # ms-swift 3.11.1 经 gradio 要求 pillow<12，与主环境 eval-client 组的 >=12.1.1 冲突；
+    # 取 Astra requirements-monitor.txt 的 11.3.0。GroundSG 原侧与新侧都用本环境，两侧一致。
+    "pillow==11.3.0",
+    "tree>=0.2.4",
+    "torch==2.9.1",
+    "torchvision==0.24.1",
+    "ms-swift==3.11.1",
+    "qwen-vl-utils==0.0.14",
+    "transformers==4.57.3",
+    "peft==0.18.1",
+    "imageio",
+    "imageio-ffmpeg",
+    "vla-eval==0.7.0",
+    "psutil",
+    "google-generativeai==0.8.6",
+]
+
+[tool.uv]
+package = false
+# 仿真与数据读取栈对齐主环境 uv.lock（计划 1.5：两侧都用 sapien 3.0.2，不随 Astra 文档覆盖到 3.0.3）。
+constraint-dependencies = ["sapien==3.0.2", "h5py==3.15.1", "msgpack==1.1.2"]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+robomme = { path = "../../third_party/robomme_benchmark", editable = true }
+openpi-client = { path = "../../third_party/mme-vla/packages/openpi-client", editable = true }
+mani-skill = { git = "https://github.com/YinpeiDai/ManiSkill.git", rev = "07be6fbc66350ddca200abfb0a11b692f078f7fd" }

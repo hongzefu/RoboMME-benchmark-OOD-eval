@@ -1,0 +1,43 @@
+#!/bin/bash
+# 本机第一档（计划第二部分四「本机第一档与第二档」第 1 条）：同一张卡、先旧码后新码，各生成一遍
+# V9 每格 3 局（43 格 × 3 = 129）与 xhard0 每任务 3 局（16 × 3 = 48），然后 noise_gate gen-compare 逐局互比（不用 A40 参照）。
+# 本机显卡非 A40，生成一律带 --dev-smoke。粗信号，不阻塞任何事。一次性脚本，跑完逐字归档到 records/。
+# 用法：bash local_gate1.sh <物理卡号>
+set -u
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+RUN=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261004-01
+G=$RUN/local-g1; OLD=$RUN/old-wt
+IN=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/maint-regress/inputs
+export CUDA_VISIBLE_DEVICES=$1
+for f in /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /usr/share/vulkan/icd.d/nvidia_icd.json; do [ -f "$f" ] && { export VK_ICD_FILENAMES=$f; break; }; done
+PY=$REPO/.venv/bin/python
+gen() {  # 侧 集合名 身份文件 tier(v9|x0)
+  local side=$1 set=$2 ids=$3 tier=$4 C out
+  if [ "$side" = old ]; then C=$OLD; else C=$REPO; fi
+  out=$G/$side-$set
+  [ ! -e "$out" ] || { echo "LOCAL_G1_SKIP side=$side set=$set reason=out_exists"; return; }
+  got=$(PYTHONPATH=$C/src $PY -c "import robomme_hard;print(robomme_hard.__file__)" 2>/dev/null)
+  case "$got" in $C/src/*) echo "IMPORT_CHECK=PASS side=$side $got";; *) echo "IMPORT_CHECK=FAIL side=$side $got"; return;; esac
+  echo "LOCAL_G1_START side=$side set=$set $(date -Is)"
+  if [ "$tier" = v9 ]; then
+    ( cd $C && PYTHONPATH=$C/src $PY scripts/parity/hard_parity.py generate --side H2 --tier v9 --manifest $IN/delivery.local.json \
+        --identities $ids --specs-root $IN/specs-root --src-root $C --workers 4 --gpu 0 --out $out --dev-smoke )
+  else
+    ( cd $C && ROBOMME_HARD_XHARD0_IN_TEST_HARD=1 PYTHONPATH=$C/src $PY scripts/parity/hard_parity.py generate --side H --tier xhard0 \
+        --manifest $IN/xhard0_manifest.json --identities $ids --src-root $C --workers 4 --gpu 0 --out $out --dev-smoke )
+  fi
+  echo "LOCAL_G1_END side=$side set=$set rc=$? $(date -Is)"
+}
+# 预检的生成 smoke（与正式遍同形 --workers 4，各 1 局，计入预检预算）先在新码上跑
+gen new smoke-v9 $IN/v9-generate-smoke1.jsonl v9
+gen new smoke-x0 $IN/x0-generate-smoke1.jsonl x0
+for side in old new; do
+  gen $side v9 $IN/v9-129-generate.jsonl v9
+  gen $side x0 $IN/x0-48-generate.jsonl x0
+done
+for s in v9:$IN/v9-129-generate.jsonl x0:$IN/x0-48-generate.jsonl; do
+  set=${s%%:*}; ids=${s#*:}
+  ( cd $REPO && $PY scripts/parity/noise_gate.py gen-compare --ref $G/old-$set --new $G/new-$set --identities $ids --out $G/compare-$set.json )
+  echo "LOCAL_G1_COMPARE set=$set rc=$?"
+done
+echo "LOCAL_G1_DONE"

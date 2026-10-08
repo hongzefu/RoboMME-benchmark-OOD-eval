@@ -1,0 +1,11 @@
+#!/bin/bash
+# GL 登录节点 tmux 内：launch_astra.sh <JobID>；等两卡占位作业 RUNNING，从 ~/.config/astra/openai.key 读密钥进环境变量，srun 跑 astra_gl.sh。
+JOB=$1; R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261004
+mkdir -p $R/logs
+while [ "$(squeue -h -j $JOB -o %T 2>/dev/null)" != "RUNNING" ]; do
+  [ -z "$(squeue -h -j $JOB -o %T 2>/dev/null)" ] && { echo "错误: 作业 $JOB 不在队列"; echo "EXIT_CODE=3"; exit 3; }; sleep 60; done
+OPENAI_API_KEY="$(cat "$HOME/.config/astra/openai.key")"; export OPENAI_API_KEY
+for v in $(env | grep -o '^SLURM_[A-Z_]*'); do unset "$v"; done
+cd /tmp
+srun --jobid=$JOB --overlap --exact --ntasks=1 --cpus-per-task=6 --gpus=2 --gpu_cmode=shared bash $R/scripts/astra_gl.sh 2>&1 | tee -a $R/logs/astra-gl.log
+echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a $R/logs/astra-gl.log

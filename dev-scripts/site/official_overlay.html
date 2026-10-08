@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Oracle 评估视频 · 官方版式</title>
+  <style>
+    :root{color-scheme:light;--ink:#19343b;--muted:#63777b;--paper:#f4f4ef;--line:#d8e1dc;--accent:#de6d40;--green:#27665c}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+    button,select{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}button:focus-visible,select:focus-visible{outline:3px solid #d89b54;outline-offset:3px}
+    .shell{max-width:1580px;margin:auto;padding:30px 38px 42px}.mast{display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.05em}.mark{height:23px;width:23px;border:2px solid var(--green);border-radius:6px;display:grid;place-items:center}.mark:after{content:"";width:7px;height:7px;background:var(--accent);border-radius:50%}
+    .mast .tag{margin-left:auto;padding:4px 10px;border:1px solid var(--line);border-radius:20px;font-size:12px;letter-spacing:0}
+    .hero{display:flex;gap:30px;align-items:flex-end;justify-content:space-between;margin:24px 0 14px}.eyebrow{color:var(--green);font-size:12px;letter-spacing:.12em;margin:0 0 5px}h1{font-size:28px;line-height:1.15;letter-spacing:-.04em;font-weight:600;margin:0 0 10px}.lede{color:var(--muted);margin:0;max-width:900px;font-size:13px}
+    .totals{display:flex;gap:28px;flex-shrink:0}.totals b{display:block;font-size:32px;font-weight:500;line-height:1.2}.totals span{color:var(--muted);font-size:12px}.notice{border-left:3px solid var(--accent);padding:10px 14px;background:#f9eadd;font-size:13px;margin:22px 0}
+    .rates-wrap{max-width:900px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff}.rates{border-collapse:collapse;width:100%;font-size:13px;table-layout:fixed}.rates th,.rates td{padding:6px 16px;border-bottom:1px solid #edf0ed;text-align:left;white-space:nowrap}.rates th{background:#edf1e9;font-weight:550}.rates th:first-child{width:44%}.rates tbody tr:last-child td{border-bottom:0}.rates td[data-rate]{font-variant-numeric:tabular-nums}.rates .fraction{color:var(--muted);font-size:11px;margin-left:10px}.task-navigation{margin:26px 0 18px}.task-navigation h2{font-size:18px;margin-bottom:12px}.task-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.task-tab{background:#fff;border:1px solid var(--line);border-radius:7px;padding:11px 8px;text-align:left;color:var(--ink);font-size:13px;overflow-wrap:anywhere}.task-tab[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff}.task-tab small{display:block;font-size:11px;margin-top:2px;opacity:.65}.section-title{font-size:16px;margin:0 0 4px;overflow-wrap:anywhere}
+    .filters{display:flex;align-items:end;gap:12px;padding:16px 0 22px;border-top:1px solid var(--line)}label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:12px}select{background:#fff;border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:9px 30px 9px 10px;min-width:130px;max-width:100%}.filter-count{margin-left:auto;font-size:13px;color:var(--muted);padding-bottom:8px}
+    .rates tfoot th,.rates tfoot td{border-top:2px solid var(--line);border-bottom:0;background:#edf1e9;font-weight:600}
+    .workspace{display:grid;grid-template-columns:322px minmax(0,1fr);gap:24px;align-items:start}.library{background:#fff;border:1px solid var(--line);border-radius:11px;overflow:hidden}.library-head{display:flex;justify-content:space-between;padding:17px 18px;border-bottom:1px solid var(--line);font-size:13px}.library-head span{color:var(--muted)}.episodes{min-height:440px}.episode{width:100%;text-align:left;display:flex;gap:12px;padding:13px 15px;background:#fff;border:0;border-bottom:1px solid #edf0ed;align-items:center;color:var(--ink)}.episode:hover{background:#f6f8f4}.episode[aria-current="true"]{background:#edf5ed;box-shadow:inset 3px 0 var(--green)}.number{font-variant-numeric:tabular-nums;font-size:12px;color:#84948d;width:23px;flex-shrink:0}.episode-copy{min-width:0;flex:1}.episode-copy strong{display:block;font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.episode-copy small{color:var(--muted);font-size:11px}.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#b56745}.dot.success{background:#3d8f65}.dot.timeout{background:#b2944f}.pager{display:flex;justify-content:space-between;align-items:center;padding:13px 15px;font-size:12px;color:var(--muted)}.quiet{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:7px 12px}
+    .player-panel{min-width:0}.player-heading{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;margin-bottom:14px}h2{font-size:22px;line-height:1.25;font-weight:550;margin:0 0 5px}.identity{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.identity code{font-family:ui-monospace,monospace;font-size:11px}.switch{display:flex;padding:3px;background:#e6ebe5;border-radius:8px;flex-shrink:0}.switch button{border:0;border-radius:5px;background:transparent;padding:7px 12px;color:var(--muted);font-size:12px}.switch button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 3px #00000010}
+    .screen{background:#111d21;border-radius:10px;overflow:hidden;position:relative;display:flex;justify-content:center}video{display:block;width:100%;max-height:660px;aspect-ratio:1;object-fit:contain;background:#111d21}.player-error{position:absolute;bottom:65px;left:20px;right:20px;color:#fff;background:#a4332ce8;padding:10px;border-radius:6px}.transport{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:13px}.position{color:var(--muted);font-size:12px}.transport-right{display:flex;gap:7px}.metadata{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:12px;padding:15px 0;border-bottom:1px solid var(--line)}.metadata strong{font-weight:500;color:var(--ink)}.goal{padding:17px 0}.goal h3,.explanation h3{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.04em;margin:0 0 8px}.goal p{margin:0;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}.explanation{background:#edf1e9;border-radius:9px;padding:15px 17px;font-size:12px;color:var(--muted)}.explanation p{margin:0}.empty{padding:30px;text-align:center;color:var(--muted)}.fatal{padding:28px;color:#a33}footer{margin-top:30px;padding-top:15px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}[hidden]{display:none!important}
+    @media(min-width:1200px){.screen video{max-height:610px}.screen{padding:0 40px}}
+    @media(max-width:850px){.shell{padding:22px 18px}.hero{align-items:flex-start;gap:20px}.totals{gap:18px}.totals b{font-size:26px}.workspace{grid-template-columns:1fr}.player-panel{grid-row:1}.library{grid-row:2}.episodes{min-height:0}.screen video{max-height:600px}.filters{flex-wrap:wrap}.filter-count{width:100%;margin:0;padding:0}.player-heading{align-items:flex-start}}
+    @media(max-width:480px){.shell{padding:18px 14px}.mast{font-size:11px}.mast .tag{font-size:10px;padding:3px 6px}.hero{flex-direction:column;gap:16px;margin-top:25px}.totals{gap:26px}.totals b{font-size:24px}.lede{font-size:13px}.notice{font-size:12px}.filters{gap:10px}.filters label{min-width:0;flex:1 1 30%}select{min-width:0;width:100%;padding:9px 20px 9px 7px;font-size:12px}.player-heading{flex-direction:column;gap:10px}h2{font-size:20px}.switch{align-self:flex-start}.transport{flex-wrap:wrap}.transport-right{margin-left:auto}.quiet{font-size:12px;padding:7px 10px}.screen{border-radius:8px}.metadata{gap:7px 12px}.task-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.task-tab{font-size:12px}.rates{font-size:11px}.rates th:first-child{width:42%}.rates th,.rates td{padding:6px 5px}.rates .fraction{display:block;margin-left:0;font-size:10px}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <nav class="mast" aria-label="站点信息"><span class="mark" aria-hidden="true"></span><strong>RoboMME 视频观察室</strong><span class="tag">本机 Oracle 复刻</span></nav>
+  <header class="hero"><div><h1>Task 成功率</h1><p class="lede">两列均为本机 Oracle 新接口结果：Xhard 每 Task 50 局；原版hard 每 Task 12 局。</p></div></header>
+  <div class="rates-wrap"><table class="rates" id="success-rates" aria-label="Task 成功率"><thead><tr><th>Task</th><th>Xhard</th><th>原版hard</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+  <p class="notice" id="scope-notice">本机 Oracle 复刻视频，供版式与行为检查；不代表 Great Lakes 正式评估成绩。</p>
+  <nav class="task-navigation" aria-label="Task 视频栏目"><h2>按 Task 浏览视频</h2><div id="task-tabs" class="task-tabs"></div></nav>
+  <h2 class="section-title" id="task-section-title">—</h2>
+  <section class="filters" aria-label="当前 Task 视频筛选"><label>难度<select id="filter-tier"><option value="">全部难度</option></select></label><label>终态<select id="filter-status"><option value="">全部终态</option><option value="success">成功</option><option value="fail">失败</option><option value="timeout">超时</option></select></label><span class="filter-count">当前 Task 筛选后 <strong id="filtered-count">—</strong> / 50 局</span></section>
+  <div id="fatal" class="fatal" hidden role="alert"></div>
+  <section class="workspace" id="workspace" hidden>
+    <aside class="library" aria-label="当前 Task 视频目录"><div class="library-head"><strong id="library-task">—</strong><span>每页 10 局</span></div><div class="episodes" id="episodes"></div><div class="pager"><button class="quiet" id="page-prev">上一页</button><span id="page-position">—</span><button class="quiet" id="page-next">下一页</button></div></aside>
+    <section class="player-panel" id="player-panel" aria-label="当前视频">
+      <div class="player-heading"><div><h2 id="current-task">—</h2><div class="identity" id="current-identity" data-episode="">—</div></div><div class="switch" aria-label="视频版本"><button id="view-official" aria-pressed="true">官方版式</button><button id="view-original" aria-pressed="false">原始画面</button></div></div>
+      <div class="screen"><video id="player" controls playsinline preload="metadata" aria-label="评估视频播放器"></video><div id="player-error" class="player-error" hidden role="alert"></div></div>
+      <div class="transport"><span class="position" id="current-position">—</span><div class="transport-right"><button class="quiet" id="episode-prev">← 上一局</button><button class="quiet" id="episode-next">下一局 →</button></div></div>
+      <div class="metadata" id="metadata"></div>
+      <div class="goal"><h3>任务目标</h3><p id="task-goal">—</p></div>
+      <div class="explanation"><h3>官方版式说明</h3><p>上方依次显示 Frame、Task Goal、Action、State 和 Subgoal。子目标坐标以黄色点标记；视频演示帧带红框。画面由已有视频离线重绘，超时局按官方循环保留的帧数展示。</p></div>
+    </section>
+  </section>
+  <footer>16 任务 × 每任务 50 局 = 800 局 · 独立视频浏览 · 原始视频与重绘视频分别保留</footer>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const statusNames = {success:"成功", fail:"失败", timeout:"超时"};
+let catalog, filtered = [], current = null, currentTask="BinFill", pageIndex = 0, version = "official", sourceGeneration = 0;
+const pageSize = 10;
+function text(id, value) { $(id).textContent = String(value); }
+function setHash(id) { history.replaceState(null, "", "#task=" + encodeURIComponent(currentTask) + "&episode=" + encodeURIComponent(id)); }
+function drawRates() {
+  const body=$("success-rates").tBodies[0];body.replaceChildren();
+  for(const row of catalog.success_rates){const tr=document.createElement("tr");tr.dataset.task=row.task;const task=document.createElement("td");task.textContent=row.task;tr.append(task);for(const key of ["v9","xhard0"]){const rate=row[key],td=document.createElement("td"),fraction=document.createElement("span");td.dataset.rate=key;td.dataset.success=String(rate.success);td.dataset.total=String(rate.total);td.textContent=(100*rate.success/rate.total).toFixed(1)+"%";fraction.className="fraction";fraction.textContent=rate.success+" / "+rate.total;td.append(fraction);tr.append(td);}body.append(tr);}
+  const foot=$("success-rates").tFoot,overall=document.createElement("tr"),label=document.createElement("th");
+  foot.replaceChildren();overall.id="overall-rate";label.scope="row";label.textContent="总体";overall.append(label);
+  for(const key of ["v9","xhard0"]){
+    const rate=catalog.success_rates.reduce((sum,row)=>({success:sum.success+row[key].success,total:sum.total+row[key].total}),{success:0,total:0});
+    const td=document.createElement("td"),fraction=document.createElement("span");
+    td.dataset.rate=key;td.dataset.success=String(rate.success);td.dataset.total=String(rate.total);
+    td.textContent=(100*rate.success/rate.total).toFixed(1)+"%";fraction.className="fraction";fraction.textContent=rate.success+" / "+rate.total;
+    td.append(fraction);overall.append(td);
+  }
+  foot.append(overall);
+}
+function chooseTask(task,preferredId) {
+  if(!catalog.tasks.some(row=>row.id===task))return;
+  currentTask=task;for(const key of ["tier","status"])$("filter-"+key).value="";
+  document.querySelectorAll(".task-tab").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.task===task)));
+  text("task-section-title",task+" · 视频栏目");text("library-task",task);$("workspace").dataset.task=task;
+  applyFilters(preferredId);
+}
+function drawList() {
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  pageIndex = Math.min(pageIndex, pages - 1);
+  $("episodes").replaceChildren();
+  filtered.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize).forEach((ep, i) => {
+    const button = document.createElement("button"); button.className = "episode"; button.dataset.episode = ep.id;
+    button.setAttribute("aria-current", String(ep.id === current?.id));
+    const number = document.createElement("span"); number.className="number"; number.textContent=String(pageIndex * pageSize + i + 1).padStart(2,"0");
+    const copy = document.createElement("span"); copy.className="episode-copy";
+    const title = document.createElement("strong"); title.textContent="局 "+ep.episode_id+" · "+statusNames[ep.status];
+    const detail = document.createElement("small"); detail.textContent=ep.tier + " · 种子 " + ep.seed;
+    const dot = document.createElement("span"); dot.className="dot " + ep.status; dot.title=statusNames[ep.status];
+    copy.append(title,detail); button.append(number,copy,dot); button.addEventListener("click",()=>selectEpisode(ep)); $("episodes").append(button);
+  });
+  if (!filtered.length) { const empty=document.createElement("p"); empty.className="empty"; empty.textContent="没有符合筛选条件的视频"; $("episodes").append(empty); }
+  text("page-position", (pageIndex+1) + " / " + pages);
+  $("page-prev").disabled=pageIndex===0; $("page-next").disabled=pageIndex+1>=pages;
+}
+function loadVideo(position=0) {
+  const player=$("player"), generation=++sourceGeneration;
+  player.pause(); $("player-error").hidden=true;
+  player.src="/media/" + encodeURIComponent(current[version + "_media"]);
+  player.dataset.version=version; player.dataset.episode=current.id;
+  player.onloadedmetadata=()=> { if(generation===sourceGeneration && position>0) player.currentTime=Math.min(position,Math.max(0,player.duration-.1)); };
+  player.load();
+  $("view-official").setAttribute("aria-pressed",String(version==="official"));
+  $("view-original").setAttribute("aria-pressed",String(version==="original"));
+}
+function selectEpisode(ep) {
+  current=ep; const index=filtered.findIndex(row=>row.id===ep.id); pageIndex=Math.floor(Math.max(0,index)/pageSize);
+  $("player-panel").hidden=false; text("current-task",ep.task);
+  $("current-identity").dataset.episode=ep.id; text("current-identity",ep.task + " · " + ep.tier + " · 种子 " + ep.seed + " · " + statusNames[ep.status]);
+  text("current-position", "当前第 " + (index+1) + " / " + filtered.length + " 局");
+  $("episode-prev").disabled=index<=0; $("episode-next").disabled=index+1>=filtered.length;
+  $("metadata").replaceChildren();
+  const details=[["终态",statusNames[ep.status]],["视频",ep.frames+" 帧"],["演示",ep.demo_frames+" 帧"],["执行",ep.exec_steps+" 步"],["时长",(ep.frames/30).toFixed(1)+" 秒"]];
+  if(ep.omitted_timeout_frames) details.push(["超时末帧","按官方循环省略 1 帧"]);
+  details.forEach(([label,value])=>{const span=document.createElement("span"),strong=document.createElement("strong");span.textContent=label+" ";strong.textContent=value;span.append(strong);$("metadata").append(span);});
+  text("task-goal",ep.task_goal); setHash(ep.id); loadVideo(); drawList();
+}
+function applyFilters(preferredId) {
+  filtered=catalog.episodes.filter(ep=>ep.task===currentTask&&(!$("filter-tier").value||ep.tier===$("filter-tier").value)&&(!$("filter-status").value||ep.status===$("filter-status").value));
+  text("filtered-count",filtered.length); $("filtered-count").dataset.count=String(filtered.length); pageIndex=0;
+  const chosen=filtered.find(ep=>ep.id===(preferredId||current?.id))||filtered[0];
+  if(chosen) selectEpisode(chosen); else {current=null;$("player").pause();$("player").removeAttribute("src");$("player").load();$("player-panel").hidden=true;drawList();}
+}
+for(const id of ["filter-tier","filter-status"]) $(id).addEventListener("change",()=>applyFilters());
+for(const [id,delta] of [["page-prev",-1],["page-next",1]]) $(id).addEventListener("click",()=>{pageIndex+=delta;drawList();});
+for(const [id,delta] of [["episode-prev",-1],["episode-next",1]]) $(id).addEventListener("click",()=>{const index=filtered.findIndex(ep=>ep.id===current?.id);if(filtered[index+delta])selectEpisode(filtered[index+delta]);});
+for(const nextVersion of ["official","original"]) $("view-"+nextVersion).addEventListener("click",()=>{if(current&&version!==nextVersion){const position=$("player").currentTime;version=nextVersion;loadVideo(position);}});
+$("player").addEventListener("error",()=>{if($("player").error){text("player-error","视频加载失败，请稍后重试。");$("player-error").hidden=false;}});
+function selectFromHash(){const hash=new URLSearchParams(location.hash.slice(1)),ep=catalog.episodes.find(row=>row.id===hash.get("episode"));chooseTask(ep?.task||hash.get("task")||"BinFill",ep?.id);}
+addEventListener("hashchange",()=>{if(catalog)selectFromHash();});
+(async()=>{try{const response=await fetch("/api/catalog");if(!response.ok)throw new Error("视频目录请求失败");catalog=await response.json();if(catalog.schema!=="official-overlay-site/1"||catalog.episodes.length!==800||catalog.success_rates?.length!==16)throw new Error("视频目录或成功率表不完整");text("scope-notice",catalog.notice);drawRates();for(const task of catalog.tasks){const button=document.createElement("button");button.className="task-tab";button.dataset.task=task.id;button.setAttribute("aria-pressed","false");const name=document.createElement("span"),count=document.createElement("small");name.textContent=task.id;count.textContent="50 局";button.append(name,count);button.addEventListener("click",()=>chooseTask(task.id));$("task-tabs").append(button);}for(const tier of catalog.tiers){const option=document.createElement("option");option.value=option.textContent=tier;$("filter-tier").append(option);}$("workspace").hidden=false;selectFromHash();window.__officialSiteReady=true;}catch(error){text("fatal","站点暂时不可用："+error.message);$("fatal").hidden=false;console.error(error);}})();
+</script>
+</body>
+</html>

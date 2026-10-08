@@ -1,0 +1,35 @@
+#!/bin/bash
+# 第二阶段新侧一个分片（批次 3b／4 版：smvla、mme 补权重参数；SMVLA_PY 用执行副本内 artifacts/v8-two/venvs/smvla-env 缺省）（被队列任务文件调用）：task_new.sh <批次执行副本> <冻结 sha> <模型> <档 gate2|gate3> <席号 NN> <分片>
+# 环境变量照抄上一轮 seat_chain_v2.sh；三方服务 venv 指向上一轮执行副本（计划四节 runbook 4）；开启 S8 共享预算账本。
+set -u
+E=$1; F=$2; MODEL=$3; G=$4; SEAT=$5; SHARD=$6
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=$N/sgeval-20261006-02; OLD=$N/robomme_benchmark-sgeval
+head=$(git -C $E rev-parse HEAD); dirty=$(git -C $E status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$F" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$F dirty=$dirty"; exit 3; }
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$N/sg-eval/venvs/client-env/bin/python
+export MME_PY=$OLD/third_party/mme-vla/.venv/bin/python PP_PY=$OLD/third_party/PonderPounce/.venv/bin/python
+export PYTHONPATH=$E/src:$E/third_party/mme-vla/packages/openpi-client/src
+export UV_CACHE_DIR=/tmp/uvcache-$SEAT
+export SGEVAL_BUDGET_LEDGER=$R/budget-ledger.jsonl
+MMESG="--mmesg-ckpt $N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --openpi-data-home $N/sg-eval/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+WALL=()
+case $MODEL in
+  oracle) POL=(--policies mmesg --mme-variant ground-sg-oracle $MMESG);;
+  qwenvl) export SEAT_XLA_MEM_FRACTION=0.65; WALL=(--episode-wall 3600)
+          POL=(--policies mmesg --mme-variant ground-sg-qwenvl --qwenvl-groundsg-adapter $N/sg-eval/ckpt/qwenvl-groundsg/checkpoint-1200 $MMESG);;
+  pp) POL=(--policies pp --pp-ckpt $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme);;
+  smvla) POL=(--policies smvla --smvla-ckpt $N/SimpleMemVLA/checkpoints/simplememvla_robomme);;
+  mme) POL=(--policies mme --mme-ckpt $R/ckpt/mme/perceptual-framesamp-modul/79999 --openpi-data-home $N/sg-eval/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6);;
+  *) echo "RUN_BLOCKED reason=model"; exit 2;;
+esac
+case $G in
+  gate2) DS=(--dataset test-hard0 --max-steps 1300);;
+  gate3) DS=(--dataset test-hard --max-steps 1600 --strict-cap);;
+esac
+n=$(grep -c '"key"' $SHARD)
+echo "TASK_NEW model=$MODEL gate=$G seat=$SEAT shard=$SHARD n=$n exec=$E head=$head host=$(hostname)"
+bash $E/scripts/eval-official/run_eval_gl.sh --run-name p2-$G-$MODEL-s$SEAT --seat $SEAT --repo $E --stage $R/$G-new-$MODEL --shard $SHARD \
+  "${DS[@]}" "${POL[@]}" "${WALL[@]}" --media-root $R/media --gpu 0 \
+  --reset-budget $(( 2 * n + 20 )) --infra-retry-budget ${INFRA:-3}

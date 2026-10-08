@@ -1,0 +1,139 @@
+[
+  {
+    "id": "C13-GSG-01",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/official_defs.py",
+      "scripts/eval-official/groundsg_client.py",
+      "scripts/eval-official/official_hard_runner.py"
+    ],
+    "symbol": "groundsg_client.run_episode（SessionRunner 委托 EnvSession）与 official_hard_runner.run_identity（官方 EnvRunner 原文 + TapRunner／EnvTap）都调官方 EpisodeEvaluator.eval_each_episode 原文",
+    "oracle": "两侧同一组假环境（下一帧由所执行动作决定）、各自一个同实现的假服务（动作块由本局请求指纹决定，指纹函数手写）、各自一份 swift 替身；手写期望：消息顺序 reset→(add_buffer→infer)×3、首批 3 帧且 exec_start_idx=2、之后每批 16 帧且 exec_start_idx=0、提示词=任务目标、Oracle 子目标取决策时 info 的 grounded_subgoal_online、执行动作=各动作块前 16 行",
+    "positive": "两个变体 × 五种情形（success／fail／timeout／unknown／env 抛异常）：请求（轨迹 request 行、假服务收到的指纹、Qwen 请求）、执行（环境收到的动作字节、轨迹 step 行）、终态（status／步数／error／轨迹 end 行）逐项相同；判定行 OFFICIAL_ADAPTER=PASS variants=2 payload_diff=0 exec_diff=0 terminal_diff=0；slow：两侧经真实 websocket 客户端连回环假服务同样逐项相同（OFFICIAL_ADAPTER_WS=PASS）",
+    "negative": "换一局（source_episode 不同）后请求指纹与首个动作都不同（等式非平凡）；适配器若不逐步同步 info（Oracle 子目标停在 reset 时）则请求与动作逐项不同",
+    "boundaries": "官方循环 count > max_steps 才 timeout：max_steps=1300 时两侧都执行 1301 步、原侧外围帧 3+1301；--strict-cap 下第 max_steps+1 次 step 不进环境，适配入口收住 StepCapReached 记 timeout；官方 unknown → status=error、error=success_flag=unknown、非基础设施，同一上下文下一局照常跑（原侧分片不中止）",
+    "nodeids": [
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_official_adapter_matches_official_loop",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_comparison_is_not_trivial",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_oracle_messages_hand_expected",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_mme_vla_loop_times_out_only_after_count_exceeds_1300",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_strict_cap_stops_before_env_and_reports_timeout",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_unknown_is_error_and_does_not_stop_seat",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_trace_location_fallbacks",
+      "tests/pipeline/evalx/groundsg/test_groundsg_websocket.py::test_real_websocket_clients_match",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_orig_side_keeps_official_video_and_counts"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-GSG-02",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/official_defs.py",
+      "scripts/eval-official/groundsg_client.py"
+    ],
+    "symbol": "official_defs.extract_defs / load_groundsg / make_args / build_predictor；groundsg_client.make_policy_context / close_policy_context",
+    "oracle": "官方源码只读引用 SGEVAL_THIRD_PARTY，所读五个文件的 sha256 由测试独立计算并打印；Qwen 引擎为不读权重的替身，记下构造参数",
+    "positive": "extract_defs 只执行点名的顶层定义（import 行与模块级副作用不执行），记整文件 sha256；Oracle 变体不读 qwenvl/api.py、不导入 swift、不取 Gemini／MemER／QwenVL 类；QwenVL 变体只取 QwenVLSubgoalPredictor 与 Qwen3VLModel，引擎构造一次且参数为 Qwen/Qwen3-VL-4B-Instruct、adapters=[adapter]、attn_impl=flash_attention_2，推理配置 max_tokens=128、temperature=0；环境变量 IMAGE_MAX_TOKEN_NUM=256、VIDEO_MAX_TOKEN_NUM=64、FPS_MAX_FRAMES=10，QwenVL 另有 USE_HF=1、HF_HUB_OFFLINE=1、TRANSFORMERS_OFFLINE=1；SeatRunner 两局只调一次 make_policy_context、每局同一上下文、close 一次",
+    "negative": "use_oracle 与 use_qwenvl 同真／同假、或开 gemini／memer 时构造预测器即 AssertionError；QwenVL 缺 adapter、groundsg_variant 非法即 ValueError；run_episode 收到空上下文、变体或步数与上下文不一致即报错",
+    "boundaries": "点名不存在的定义抛 KeyError；Qwen 临时目录 <trace_dir>/qwen-tmp/<dataset>/<episode_tag>/ 局末删除，ep<id>_QwenVL_log.jsonl 归档到轨迹目录",
+    "nodeids": [
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_extract_defs_takes_only_named_source",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_official_sources_hashes_recorded",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_oracle_variant_never_loads_qwen",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_qwenvl_variant_loads_only_qwen_classes",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_variants_are_mutually_exclusive",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_run_episode_rejects_mismatched_context",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_policy_context_built_once_per_seat"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-GSG-03",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/official_hard_runner.py",
+      "scripts/eval-official/groundsg_client.py"
+    ],
+    "symbol": "official_hard_runner：--check-imports / main 参数与分片核对 / run_identity 原始帧与结果行 / run_shard 服务不可达中止",
+    "oracle": "导入断言在子进程里跑（只加官方 examples/robomme 与仓库 src）；原始帧字节数与首帧内容按假环境手算",
+    "positive": "OFFICIAL_IMPORTS=PASS：robomme 来自仓库 src/robomme/、robomme_hard 未导入、官方模块未被整模块导入，两个变体的官方定义可摘取；判定行 OFFICIAL_HARD_SOURCE=PASS robomme_hard_imported=0；每局目录 <out>/<key>.a<attempt>/ 只含 trace.jsonl 与 frames/（QwenVL 另有归档日志），frames.json 为 pix_fmt=rgb24、order=reset_all_then_per_step_last、demo_frames／init_frames／exec_steps／missing_steps 与各流宽高帧数；官方 builder 构造参数 dataset=test、joint_angle、max_steps 透传、每任务只建一次",
+    "negative": "缺 --variant、QwenVL 缺 adapter、Oracle 带 adapter、分片行 tier 非 xhard0、每局目录已存在：退出码 3 并打印 GROUNDSG_ORIG_BLOCKED；服务不可达：该局 error（infra、groundsg_unreachable）并停止分片",
+    "boundaries": "环境抛异常的那步不出帧、步号记入 missing_steps，帧数 = 3 + exec_steps - len(missing_steps)",
+    "nodeids": [
+      "tests/pipeline/evalx/groundsg/test_groundsg_orig_runner.py::test_official_hard_source_imports_only_official_robomme",
+      "tests/pipeline/evalx/groundsg/test_groundsg_orig_runner.py::test_cli_rejects_bad_input_with_exit_3",
+      "tests/pipeline/evalx/groundsg/test_groundsg_orig_runner.py::test_raw_frames_format_and_missing_steps",
+      "tests/pipeline/evalx/groundsg/test_groundsg_orig_runner.py::test_server_unreachable_aborts_shard"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-GSG-04",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/official_defs.py",
+      "scripts/eval-official/groundsg_client.py",
+      "scripts/eval-official/official_hard_runner.py"
+    ],
+    "symbol": "official_defs：VARIANT_MEMER、load_memer_model／patch_memer_class（MemER 兼容层 MEMER_COMPAT_SOURCE、MEMER_COMPAT_SHA256、MemERResponseError）、make_args(model_seed=, memer_adapter_path=)、assert_one_predictor、build_predictor、seed_everything；groundsg_client／official_hard_runner 的 MemER 装配与 policy_seed 贯通",
+    "oracle": "真实摘取的官方 Qwen3VLModelMemER（套兼容层与官方原文两份）配假 PtEngine（FakeSwift 逐次脚本回复，不读权重）；提醒句、温度 0.7、日志 retry 行、隔一张取帧下标、关键帧合并结果（3、5、20 → 5、20）全部手写；compat=False 的官方原文做 B 情形与 1／≥15 帧的逐字节对照",
+    "positive": "MEMER_COMPAT=PASS cases=8 fingerprint=<MEMER_COMPAT_SHA256>：A 首次空关键帧取出子目标、B 记忆非空合法回复与官方原函数返回值／记忆／日志字节相同、C1／D1 坏坏好采用第三次、C2 坏坏坏沿用上一次（fallback=last_valid）、D2 坏坏坏抛 MemERResponseError、E 缺键走重问、F 不足 15 帧隔一张取到第 1 张；第二、三次请求 user 末尾追加提醒句且 temperature=0.7、附图与首问相同、日志 retry=1,2；MEMER_WIRING=PASS predictor=MemERSubgoalPredictor（只摘 MemER 类、引擎参数取官方原文、Args 恰 use_memer、日志归档、临时区清空）；policy_seed 0／7／42 两侧都进 Args.model_seed，QwenVL／MemER 构造前 seed_everything（random／numpy／torch 实测重置）",
+    "negative": "坏回复 [1,2] 越界、[0]、负数、bool、1.0、缺键、非字符串、空串、非列表、非对象、换算失败：update_history_subgoals 抛异常且关键帧／历史／执行帧不变（官方原文对 [1,2] 先写第 1 张再越界）；官方原文在 A、E、空记忆合并、5／14 帧时抛 IndexError；上游类缺被补方法时补丁 KeyError；三预测器互斥（含 memer+oracle、memer+gemini）、adapter 误配八种、model_seed 缺／负／bool／非整数一律拒；MemER 三次坏且无上一次 → status=error、error_kind=model_response_error、infra=false、同上下文下一局照常；引擎抛异常时 memer-tmp 照样清空",
+    "boundaries": "不加载真实 Qwen3-VL 与 adapter（MEMER_SMOKE 在真实资产上另验）；重问开随机采样（temperature=0.7）使重问结果不可逐位复现，成绩表注明；短帧时附图张数少于官方",
+    "nodeids": [
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_memer_compat_cases",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_atomic_validation_rejects_without_touching_state",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_conversion_failure_is_atomic",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_bad_then_good_retry_keeps_first_request_memory_and_images",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_merge_empty_memory_and_regression",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_patch_refuses_changed_upstream",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_memer_wiring",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_memer_model_response_error_is_named_error_and_cleans_up",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_engine_exception_cleans_memer_tmp",
+      "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_policy_seed_reaches_args_and_seed_everything"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-GSG-05",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/groundsg_client.py",
+      "scripts/eval-official/official_hard_runner.py",
+      "scripts/eval-official/run_official_hard.sh"
+    ],
+    "symbol": "groundsg_client：LangTap／install_language／open_language_log／TracingClient 审计键 pop／EpisodeTap source_call_id；official_hard_runner：OrigBudget（reserve／claim_reset／claim_retry／commit／release、route、token）、run_shard(budget=)、main 参数核对；run_official_hard.sh：check_stage3_args、build_runner_cmd 转发",
+    "oracle": "LanguageLog 按接口冻结说明第五节签名手写严格替身（关键字名错即 TypeError）；动作服务替身回包带冻结格式的 _sgeval_audit；共享账本按冻结说明三写假账本（调用顺序记账、token 幂等）；期望调用序列、retry、温度、reuse 步号、route／token 字符串全部手写",
+    "positive": "MemER 坏坏好：subgoal_model 三次 retry=0,1,2、前两次 parsed=None、第三次 parsed 为换算后子目标、重问 user 原文带提醒句、附图 recent frame_idx=0、demo[0:2]；last_valid 与 model_response_error 两种 fallback；QwenVL keep_period 复用记 reuse（16、32 步）；Oracle 动作字段 subgoal_source=oracle；action_model 记任务／符号两路通道与 server_final_text、截断；每个执行步 source_call_id 指向动作调用、chunk_index 连续、附图哈希都在轨迹帧哈希里、无悬空调用；原侧同格式；原侧账本 reserve(first)→claim_reset(build)→claim_reset(reset)→commit，第 2 次尝试 claim_retry→reserve(recovery)，同 token 续跑不多记；route groundsg/<variant>/seed<n>/orig",
+    "negative": "没有 LanguageLog 时 step 行仍是旧 9 键、不写 language.jsonl；审计键无论有无账本都在交给官方代码前 pop；重试名额被拒不预约、不建局目录、记 budget_retry_denied；轨迹额度不足停片 budget_blocked；没建环境就失败 release；驱动缺 policy_seed／任一预算参数／MemER adapter 配错／max_steps≠1300 退出 3（参数核对先于导入）；启动器缺 --policy-seed 或预算参数 RUN_BLOCKED 退出 3、不建状态目录",
+    "boundaries": "LanguageLog 与 budget_ledger 新签名分别由 R6、R3 提供，本条用替身按冻结说明验调用；真实 budget_ledger 的 token 幂等与首试保留额度由 R3 测；服务端 seed 与 variant_pairing 的 MemER 放行在 run_seat.sh（R3）",
+    "nodeids": [
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_memer_language_log_retries_and_audit",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_memer_language_log_fallback_and_named_error",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_qwenvl_reuse_and_oracle_source",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_orig_side_writes_language_log",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_audit_key_popped_without_language_log",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_step_rows_unchanged_without_language_log",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_orig_budget_call_sequence_first_try",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_orig_budget_retry_is_idempotent_by_token",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_orig_budget_retry_denied_and_exhausted",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_orig_budget_releases_when_never_built",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_orig_budget_route_carries_variant_and_seed",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_runner_cli_blocks_before_any_import",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_run_official_hard_requires_stage3_args",
+      "tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py::test_build_runner_cmd_forwards_memer_seed_and_budget"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  }
+]

@@ -1,0 +1,103 @@
+{
+  "anchors": {
+    "parity-anchor-v6": {
+      "commit": "ce3843b4fbe981307655570425ec39a3cdaad4a7",
+      "driver": "595.71.05",
+      "equivalence": "ANCHOR_EQUIV=PASS files=15+14 content_affecting=0（34a1ceab/b1afc804→ce3843b4：导入路径、输出目录判定放宽、bucket 上传白名单与比对补读 robomme_module、注释与 README）",
+      "gpu_model": "NVIDIA A40",
+      "registered_at": "2026-09-29T06:19:40+00:00",
+      "segments": {
+        "native": {
+          "bucket_prefix": "H-34a1cea-a40/native",
+          "dir": "P-native",
+          "driver": "595.71.05",
+          "env_module_prefix": [
+            "robomme_hard"
+          ],
+          "generated_at_commit": "34a1ceabf5a2bbf6f88aadf39303ceaccc54319b",
+          "gpu_model": "NVIDIA A40",
+          "identities_sha256": "8ce50fb82fd2f7779cf05e7449f09a66426e1a1056fe1fe0342499807e70346e",
+          "rows": 144,
+          "source_side": "H",
+          "worker": [
+            "train_split_worker.run_one"
+          ]
+        },
+        "xhard": {
+          "bucket_prefix": "H-b1afc80-a40/xhard",
+          "dir": "P-xhard",
+          "driver": "595.71.05",
+          "env_module_prefix": [
+            "robomme_hard"
+          ],
+          "generated_at_commit": "b1afc8047da813e3c64f0ae32624f5ff7748d7b3",
+          "gpu_model": "NVIDIA A40",
+          "identities_sha256": "26241df10f6afd4d95dc040582bdb252e3733ee874b4e7a6a74419ecef71d9c1",
+          "rows": 165,
+          "source_side": "H",
+          "worker": [
+            "train_split_worker.run_one"
+          ]
+        }
+      }
+    },
+    "parity-anchor-v7": {
+      "commit": "77fbe70ae82ce04b0a1da80955e712cfe0626c50",
+      "driver": "595.71.05",
+      "equivalence": "generated=77fbe70a（xhard0、v7 两段与锚点提交相同，无需等价核验）；native 段沿用 parity-anchor-v6 缓存（generated_at 34a1ceab，其与 ce3843b4 等价见 v6 登记 ANCHOR_EQUIV=PASS），77fbe70a 上 PARITY_P_H=PASS tier=native compared=144 sha_equal=143 tol=PASS（唯一差异 PickHighlight seed 12300 为 RRT 噪声，首个分叉步 549）为其与本锚点代码等价的依据（用户 2026-09-29 定 2a）；xhard0 段 h5 字节取自 bucket O-1fadc0e-a40/xhard0，与 77fbe70a 的 H 侧逐局 sha 相同（PARITY_O_H xhard0 sha_equal=192），元数据取自 H 侧 identities（REBUILD_H_XHARD0=PASS）；用户 2026-09-29「1 不挡住」：PARITY_H_H2=FAIL 不作为打锚点前提",
+      "gpu_model": "NVIDIA A40",
+      "registered_at": "2026-09-29T19:54:47+00:00",
+      "segments": {
+        "native": {
+          "bucket_prefix": "H-34a1cea-a40/native",
+          "dir": "P-native",
+          "driver": "595.71.05",
+          "env_module_prefix": [
+            "robomme_hard"
+          ],
+          "generated_at_commit": "34a1ceabf5a2bbf6f88aadf39303ceaccc54319b",
+          "gpu_model": "NVIDIA A40",
+          "identities_sha256": "8ce50fb82fd2f7779cf05e7449f09a66426e1a1056fe1fe0342499807e70346e",
+          "rows": 144,
+          "source_side": "H",
+          "worker": [
+            "train_split_worker.run_one"
+          ]
+        },
+        "v7": {
+          "bucket_prefix": null,
+          "dir": "H-v7",
+          "driver": "595.71.05",
+          "env_module_prefix": [
+            "robomme_hard"
+          ],
+          "generated_at_commit": "77fbe70ae82ce04b0a1da80955e712cfe0626c50",
+          "gpu_model": "NVIDIA A40",
+          "identities_sha256": "5da1f31cc985eb1cbc4c872865ca815d4a75a0f664fb46e1775b1e4250c1f573",
+          "rows": 1100,
+          "source_side": "H",
+          "worker": [
+            "train_split_worker.run_one"
+          ]
+        },
+        "xhard0": {
+          "bucket_prefix": "O-1fadc0e-a40/xhard0",
+          "dir": "H-xhard0",
+          "driver": "595.71.05",
+          "env_module_prefix": [
+            "robomme_hard"
+          ],
+          "generated_at_commit": "77fbe70ae82ce04b0a1da80955e712cfe0626c50",
+          "gpu_model": "NVIDIA A40",
+          "identities_sha256": "6d887a5733a6e3a90e289a6bc6a58f2dabb61ca37c9d7ebfda85d1bf323ff3ba",
+          "rows": 192,
+          "source_side": "H",
+          "worker": [
+            "train_split_worker.run_one"
+          ]
+        }
+      }
+    }
+  },
+  "schema": "parity-anchors/1"
+}

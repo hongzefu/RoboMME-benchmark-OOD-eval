@@ -1,0 +1,19 @@
+#!/bin/bash
+# 计划 1.4 做法 A：本机 PonderPounce 环境；依赖照官方 uv.lock 导出的钉死版本，只把 torch/torchvision（及其 CUDA 运行库、triton）
+# 换成同版本号的 CUDA 12.6 构建；不动 third_party/PonderPounce/.venv 与其 uv.lock
+set -euo pipefail
+ROOT=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+E=$ROOT/artifacts/sg-evaluation/pp-local-env
+R=$ROOT/artifacts/sg-evaluation/sg-eval-gl-20261004-01/inputs
+export UV_LINK_MODE=copy
+uv venv --clear --python /nfs/turbo/coe-chaijy-unreplicated/hongzefu/uv-python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11 "$E"
+uv pip install --python "$E/bin/python" --index-url https://download.pytorch.org/whl/cu126 torch==2.14.0+cu126 torchvision==0.29.0+cu126
+uv pip install --python "$E/bin/python" -r $R/pp-local-reqs-nontorch.txt
+uv pip install --python "$E/bin/python" --no-deps -e $ROOT/third_party/PonderPounce
+uv pip freeze --python "$E/bin/python" > $R/pp-local-env.freeze.txt
+CUDA_VISIBLE_DEVICES=${GPU:-0} "$E/bin/python" - <<'PY'
+import torch, transformers, vla_eval, ponderpounce
+assert torch.cuda.is_available(), "cuda 不可用"
+x = torch.randn(256, 256, device="cuda"); y = (x @ x).sum().item()
+print(f"PP_LOCAL_ENV=PASS torch={torch.__version__} cuda={torch.version.cuda} transformers={transformers.__version__} ponderpounce={ponderpounce.__file__}")
+PY

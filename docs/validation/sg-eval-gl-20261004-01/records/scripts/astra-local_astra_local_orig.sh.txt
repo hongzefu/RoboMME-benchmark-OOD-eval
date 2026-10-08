@@ -1,0 +1,28 @@
+#!/bin/bash
+# Astra 本机冒烟（计划第二部分四；用户批准本机 2 局，失败可加到 6 局，用完仍失败即停）：原侧 1 局 → 新侧 1 局，
+# 都是 VideoUnmask、官方 test episode 3（= test-hard0 本地局号 0），xhard0 步数 1300；VLA 用 0 号卡、仿真与监视器用 1 号卡。
+# 用法：bash astra_local_orig.sh <try 序号>   （只跑原侧 1 局；astra_local.sh 第一次调用时原侧清单路径写错未跑成，局数未消耗）
+# 密钥只从 ~/.config/astra/openai.key 读进环境变量，不进命令行参数、日志、留档。一次性脚本，跑完逐字归档到 records/。
+set -u
+TRY=$1
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+A=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261004-01/astra-local
+ASTRA=$REPO/third_party/Astra-on-RoboMME
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+export VLA_PYTHON=$REPO/third_party/mme-vla/.venv/bin/python
+export SIM_PYTHON=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export VLA_CHECKPOINT=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts/mme_vla_suite/symbolic-grounded-subgoal/79999
+export MONITOR_BASE=$HOME/.cache/huggingface/hub/models--Qwen--Qwen3-VL-4B-Instruct/snapshots/ebb281ec70b05090aa6165b016eac8ec08e71b17
+export MONITOR_ADAPTER=$N/sg-eval/ckpt/astra-monitor
+export OPENPI_DATA_HOME=$REPO/artifacts/v8-evaluation/openpi-data
+export VLA_GPU=0 MONITOR_GPU=1
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
+OPENAI_API_KEY="$(cat "$HOME/.config/astra/openai.key")"; export OPENAI_API_KEY
+[ -n "$OPENAI_API_KEY" ] || { echo "ASTRA_LOCAL_BLOCKED reason=no_key"; exit 3; }
+# 原侧清单：官方 prepare_cases（test，episode 3，只 VideoUnmask）
+( cd $ASTRA && PYTHONPATH=examples/champ "$SIM_PYTHON" examples/champ/prepare_cases.py --output $A/inputs/orig-cases --dataset test --tasks VideoUnmask --episodes 3 )
+echo "ASTRA_LOCAL_START try=$TRY $(date -Is)"
+PORT=18762 bash $ASTRA/examples/champ/run.sh $A/inputs/orig-cases/all.json $A/group_0/orig-try$TRY
+echo "ASTRA_LOCAL_SIDE side=orig try=$TRY rc=$? $(date -Is)"
+echo "ASTRA_LOCAL_DONE try=$TRY"

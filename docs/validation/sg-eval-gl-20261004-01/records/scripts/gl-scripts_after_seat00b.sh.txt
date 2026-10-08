@@ -1,0 +1,22 @@
+#!/bin/bash
+# GL 登录节点 tmux 内：等 seat00b（作业 63188711）的第三档 Oracle 链结束（seat00b.log 出现 EXIT_CODE=），
+# 若链正常结束（SEAT_CHAIN_DONE）则在同一占位作业里：① 跑第二档 Oracle 12 局 SwingXtimes 补跑；② 按席位角色队列领下一项
+# （seat03 QwenVL：第二档 shard-00 + 第三档 shard-00）。链非正常结束则只报告、不接续。一次性脚本，跑完逐字归档到 records/。
+JOB=63188711
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261004
+L=$R/logs/seat00b.log
+until grep -q '^EXIT_CODE=' $L; do
+  [ -z "$(squeue -h -j $JOB -o %T 2>/dev/null)" ] && { echo "AFTER00B_STOP reason=job_gone"; exit 3; }
+  sleep 60
+done
+grep -q SEAT_CHAIN_DONE $L || { echo "AFTER00B_STOP reason=chain_not_done $(grep '^EXIT_CODE=' $L)"; exit 3; }
+for v in $(env | grep -o '^SLURM_[A-Z_]*'); do unset "$v"; done
+cd /tmp
+echo "AFTER00B_SWING_LAUNCH $(date -Is)"
+srun --jobid=$JOB --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared bash $R/scripts/oracle_g2_swing.sh 2>&1 | tee -a $R/logs/seat00-swing.log
+rc=${PIPESTATUS[0]}; echo "EXIT_CODE=$rc" | tee -a $R/logs/seat00-swing.log
+[ $rc = 0 ] || { echo "AFTER00B_STOP reason=swing_rc$rc"; exit $rc; }
+echo "AFTER00B_NEXT seat=03 model=qwenvl $(date -Is)"
+srun --jobid=$JOB --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared bash $R/scripts/seat_chain.sh --seat 03 --model qwenvl \
+  --gate2 $R/inputs/qwenvl/gate2/shard-00.json --gate3 $R/inputs/qwenvl/gate3/shard-00.json 2>&1 | tee -a $R/logs/seat03b.log
+echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a $R/logs/seat03b.log

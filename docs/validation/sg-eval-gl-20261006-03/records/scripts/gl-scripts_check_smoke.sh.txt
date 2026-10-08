@@ -1,0 +1,14 @@
+#!/bin/bash
+# GL smoke 收尾核对（本机执行，只读）：check_smoke.sh <模型> <label>
+set -u
+M=$1; L=$2
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+ST=$R/smoke/stage-$M
+cd $REPO; export UV_CACHE_DIR=$REPO/artifacts/cache/uv
+RES=$(ls $ST/s*/$L/results.jsonl | head -1)
+tail -1 $RES | uv run --no-project python -c "import json,sys;r=json.loads(sys.stdin.read());print('RESULT', {k:r.get(k) for k in ['key','status','exec_steps','cap_hit','effective_cap','max_steps','policy_seed','server_seed','error','infra_reason']})"
+LED=$(ls $ST/s*/$L/$L.ledger.jsonl | head -1)
+uv run --no-sync python scripts/eval-official/official_media_check.py --manifest $R/inputs/smoke-ood-1.json --ledger $LED --root $R/smoke/media/$L/ood/new --dataset ood --policy-seed 7 --out $ST/official-media.jsonl 2>&1 | tail -1
+uv run --no-sync python scripts/eval-official/lang_io_check.py --require-server-text --root $R/smoke/media/$L/ood/new 2>&1 | tail -1
+uv run --no-sync python scripts/eval-official/trace_arrays_check.py $R/smoke/media/$L/ood/new 2>&1 | tail -1

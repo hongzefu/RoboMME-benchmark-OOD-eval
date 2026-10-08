@@ -1,0 +1,6 @@
+#!/bin/bash
+# 一席串行跑第一档两遍：V9 43 格 × 3 局 = 129，xhard0 16 任务 × 3 局 = 48，合计 177。
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02
+echo "CHAIN_GATE1_START host=$(hostname) $(date -Is)"
+for p in v9 x0; do bash $R/scripts/gate1_pass.sh $p; echo "CHAIN_STEP step=gate1-$p rc=$? $(date -Is)"; done
+echo "CHAIN_GATE1_DONE $(date -Is)"

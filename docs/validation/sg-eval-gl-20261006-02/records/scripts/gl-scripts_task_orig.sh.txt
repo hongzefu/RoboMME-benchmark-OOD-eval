@@ -1,0 +1,16 @@
+#!/bin/bash
+# 第二阶段批次 3a：SimpleMemVLA、MME 原侧重跑一个分片（被队列任务文件调用）：task_orig.sh <执行副本> <冻结 sha> <分片 0-9>
+# 经执行副本里的 orig_observer/official_rerun_shard.sh（原版代码 + 只读观测器，先 SMVLA 后 MME，各自 3 遍重评）。
+set -u
+E=$1; F=$2; I=$3
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=$N/sgeval-20261006-02; OLD=$N/robomme_benchmark-sgeval
+head=$(git -C $E rev-parse HEAD); dirty=$(git -C $E status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$F" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$F dirty=$dirty"; exit 3; }
+export ORIG_STAGE_ROOT=$R/gate2-orig-rerun ORIG_E0_SHA=$R/inputs/e0-sha.txt
+export SGEVAL_BUDGET_LEDGER=$R/budget-ledger.jsonl
+export ORIG_MME_CLIENT_PY=$R/venvs/orig-mme-client/bin/python MME_PY=$OLD/third_party/mme-vla/.venv/bin/python
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+mkdir -p $ORIG_STAGE_ROOT
+echo "TASK_ORIG shard=$I exec=$E head=$head host=$(hostname)"
+cd $E && bash scripts/eval-official/orig_observer/official_rerun_shard.sh p2-orig $I --run-idx 1

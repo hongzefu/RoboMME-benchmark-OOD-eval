@@ -1,0 +1,347 @@
+{
+ "rows": [
+  {
+   "builder_episode": 0,
+   "seed": 510300,
+   "source_episode": 3,
+   "task": "PickXtimes",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 510700,
+   "source_episode": 7,
+   "task": "PickXtimes",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 511100,
+   "source_episode": 11,
+   "task": "PickXtimes",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 520300,
+   "source_episode": 3,
+   "task": "StopCube",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 520700,
+   "source_episode": 7,
+   "task": "StopCube",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 521100,
+   "source_episode": 11,
+   "task": "StopCube",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 530300,
+   "source_episode": 3,
+   "task": "SwingXtimes",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 530700,
+   "source_episode": 7,
+   "task": "SwingXtimes",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 531100,
+   "source_episode": 11,
+   "task": "SwingXtimes",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 540302,
+   "source_episode": 3,
+   "task": "BinFill",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 540701,
+   "source_episode": 7,
+   "task": "BinFill",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 541100,
+   "source_episode": 11,
+   "task": "BinFill",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 550300,
+   "source_episode": 3,
+   "task": "VideoUnmaskSwap",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 550700,
+   "source_episode": 7,
+   "task": "VideoUnmaskSwap",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 551100,
+   "source_episode": 11,
+   "task": "VideoUnmaskSwap",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 560300,
+   "source_episode": 3,
+   "task": "VideoUnmask",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 560700,
+   "source_episode": 7,
+   "task": "VideoUnmask",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 561100,
+   "source_episode": 11,
+   "task": "VideoUnmask",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 570300,
+   "source_episode": 3,
+   "task": "ButtonUnmaskSwap",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 570700,
+   "source_episode": 7,
+   "task": "ButtonUnmaskSwap",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 571100,
+   "source_episode": 11,
+   "task": "ButtonUnmaskSwap",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 580300,
+   "source_episode": 3,
+   "task": "ButtonUnmask",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 580700,
+   "source_episode": 7,
+   "task": "ButtonUnmask",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 581100,
+   "source_episode": 11,
+   "task": "ButtonUnmask",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 590300,
+   "source_episode": 3,
+   "task": "VideoRepick",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 590700,
+   "source_episode": 7,
+   "task": "VideoRepick",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 591100,
+   "source_episode": 11,
+   "task": "VideoRepick",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 600300,
+   "source_episode": 3,
+   "task": "VideoPlaceButton",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 600700,
+   "source_episode": 7,
+   "task": "VideoPlaceButton",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 601100,
+   "source_episode": 11,
+   "task": "VideoPlaceButton",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 610300,
+   "source_episode": 3,
+   "task": "VideoPlaceOrder",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 610701,
+   "source_episode": 7,
+   "task": "VideoPlaceOrder",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 611101,
+   "source_episode": 11,
+   "task": "VideoPlaceOrder",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 620301,
+   "source_episode": 3,
+   "task": "PickHighlight",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 620700,
+   "source_episode": 7,
+   "task": "PickHighlight",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 621100,
+   "source_episode": 11,
+   "task": "PickHighlight",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 630300,
+   "source_episode": 3,
+   "task": "InsertPeg",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 630700,
+   "source_episode": 7,
+   "task": "InsertPeg",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 631100,
+   "source_episode": 11,
+   "task": "InsertPeg",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 640300,
+   "source_episode": 3,
+   "task": "MoveCube",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 640700,
+   "source_episode": 7,
+   "task": "MoveCube",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 641100,
+   "source_episode": 11,
+   "task": "MoveCube",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 650300,
+   "source_episode": 3,
+   "task": "PatternLock",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 650700,
+   "source_episode": 7,
+   "task": "PatternLock",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 651100,
+   "source_episode": 11,
+   "task": "PatternLock",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 0,
+   "seed": 660300,
+   "source_episode": 3,
+   "task": "RouteStick",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 1,
+   "seed": 660700,
+   "source_episode": 7,
+   "task": "RouteStick",
+   "tier": "xhard0"
+  },
+  {
+   "builder_episode": 2,
+   "seed": 661100,
+   "source_episode": 11,
+   "task": "RouteStick",
+   "tier": "xhard0"
+  }
+ ],
+ "rule": "直接采用 v7.5 评估小样本 identities-small48.json（每任务 3 局）；行规范化为 task／tier=xhard0／seed／source_episode／builder_episode（开关为 1 时的 xhard0 前置编号），按 (任务规范序, source_episode) 排序",
+ "schema": "gate-set-xhard0/1",
+ "sha256": "2dda3ecf5203b646e2ca7ca91dbb6c1ccee2010674f797dd7c7ad16401297216",
+ "source": {
+  "file": "identities-small48.json",
+  "sha256": "a45c20d913edf84e4841e8c4ffea3c1f9b27bebd995408cbe64369305a731035"
+ }
+}

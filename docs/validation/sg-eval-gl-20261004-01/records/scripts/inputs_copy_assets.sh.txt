@@ -1,0 +1,30 @@
+#!/bin/bash
+# 计划第三节：本机已有资产 rsync 到 NFS，逐文件 sha256 两端比对
+set -euo pipefail
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+P=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+R=/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/sg-eval-gl-20261004-01/inputs
+mkdir -p $N/sg-eval/ckpt/mme/symbolic-grounded-subgoal $N/sg-eval/ckpt/qwenvl-groundsg $N/sg-eval/openpi-data/big_vision $N/hf-cache/hub
+declare -a PAIRS=(
+ "$P/mme_vla_suite/symbolic-grounded-subgoal/79999/|$N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999/"
+ "$P/mme_vla_suite/symbolic-grounded-subgoal/history_config.txt|$N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/history_config.txt"
+ "$P/vlm_subgoal_predictor/qwenvl/grounded_subgoal/checkpoint-1200/|$N/sg-eval/ckpt/qwenvl-groundsg/checkpoint-1200/"
+ "/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/v8-evaluation/openpi-data/big_vision/paligemma_tokenizer.model|$N/sg-eval/openpi-data/big_vision/paligemma_tokenizer.model"
+ "$HOME/.cache/huggingface/hub/models--Qwen--Qwen3-VL-4B-Instruct/|$N/hf-cache/hub/models--Qwen--Qwen3-VL-4B-Instruct/"
+)
+: > $R/assets.sha256.src; : > $R/assets.sha256.dst
+for pr in "${PAIRS[@]}"; do
+  s=${pr%%|*}; d=${pr##*|}
+  echo "RSYNC $s -> $d"
+  rsync -a "$s" "$d"
+  if [ -d "$s" ]; then
+    (cd "$s" && find . -type f -print0 | sort -z | xargs -0 sha256sum) | sed "s|  \./|  $(basename "$d")/|" >> $R/assets.sha256.src
+    (cd "$d" && find . -type f -print0 | sort -z | xargs -0 sha256sum) | sed "s|  \./|  $(basename "$d")/|" >> $R/assets.sha256.dst
+  else
+    echo "$(sha256sum < "$s" | cut -d' ' -f1)  $(basename "$d")" >> $R/assets.sha256.src
+    echo "$(sha256sum < "$d" | cut -d' ' -f1)  $(basename "$d")" >> $R/assets.sha256.dst
+  fi
+done
+n=$(wc -l < $R/assets.sha256.src); mm=$(diff $R/assets.sha256.src $R/assets.sha256.dst | grep -c '^<' || true)
+cp $R/assets.sha256.src $R/assets.sha256
+echo "ASSETS=$([ "$mm" = 0 ] && echo PASS || echo FAIL) files=$n mismatch=$mm scope=local-copies"

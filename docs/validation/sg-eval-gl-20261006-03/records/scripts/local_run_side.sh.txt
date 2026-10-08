@@ -1,0 +1,35 @@
+#!/bin/bash
+# 1006 计划第二部分四节 runbook 第 8 步：MemER hard-verify 对拍（本机 sled-vail）一侧 8 片串行。
+# 用法：run_side.sh <new|orig> <物理卡>。清单 inputs/manifests/hv192/shard-00..07.json（16 任务 × 12 局 = 192，HV192 keys_sha256=4b86ca9d…）；
+# 1300 步、模型 seed 7、同一份 adapter checkpoint-1300、共享账本 $N/sgeval-20261006-03/budget-ledger.jsonl（870/50/50/821）。
+# 新侧 run_eval_gl.sh（席号 5k）、原侧 run_official_hard.sh（席号 6k），每片独立席号目录；片内续跑由账本保证，已接受身份跳过。
+set -u
+SIDE=$1; CARD=$2
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+B=$REPO/artifacts/sg-evaluation/sg-eval-gl-20261006-03
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+unset CUDA_VISIBLE_DEVICES
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$REPO/artifacts/sg-evaluation/venvs/client-env/bin/python
+export UV_CACHE_DIR=$REPO/artifacts/cache/uv SEAT_XLA_MEM_FRACTION=0.65
+CK=/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts
+COMMON=(--dataset hard-verify --max-steps 1300 --groundsg-variant ground-sg-memer
+  --memer-adapter $REPO/artifacts/sg-eval/ckpt/memer/grounded_subgoal/checkpoint-1300
+  --groundsg-ckpt $CK/mme_vla_suite/symbolic-grounded-subgoal/79999
+  --openpi-data-home $REPO/artifacts/v8-evaluation/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6
+  --policy-seed 7 --budget-ledger $N/sgeval-20261006-03/budget-ledger.jsonl --trajectory-cap 870 --shared-infra-cap 50 --expired-cap 50 --planned-first-tries 821
+  --infra-retry-budget 1 --episode-wall 3600 --gpu $CARD)
+ST=$B/compare/stage-$SIDE
+echo "SIDE_START side=$SIDE card=$CARD head=$(git -C $REPO rev-parse HEAD) dirty=$(git -C $REPO status --short --ignore-submodules=dirty -- . ':!docs/subagent-stats' | wc -l) $(date -Is)"
+for k in 0 1 2 3 4 5 6 7; do
+  SH=$B/inputs/manifests/hv192/shard-0$k.json
+  if [ $SIDE = new ]; then
+    bash $REPO/scripts/eval-official/run_eval_gl.sh --run-name p3-local-new-s5$k --seat 5$k --repo $REPO --stage $ST --shard $SH \
+      --policies groundsg "${COMMON[@]}" --media-root $ST/media
+  else
+    bash $REPO/scripts/eval-official/run_official_hard.sh --run-name p3-local-orig-s6$k --seat 6$k --repo $REPO --stage $ST --shard $SH \
+      --policy groundsg "${COMMON[@]}" --media-root $ST/media
+  fi
+  echo "SHARD_END side=$SIDE shard=0$k rc=$? $(date -Is)"
+done
+echo "SIDE_DONE side=$SIDE $(date -Is)"

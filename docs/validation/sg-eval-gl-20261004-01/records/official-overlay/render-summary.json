@@ -1,0 +1,44 @@
+{
+  "schema": "official-overlay-summary/1",
+  "code_commit": "6a23af541b4f136e754eeb06e8fd1548700c4b23",
+  "episodes": 800,
+  "tasks": {
+    "BinFill": 50,
+    "ButtonUnmaskSwap": 50,
+    "ButtonUnmask": 50,
+    "InsertPeg": 50,
+    "MoveCube": 50,
+    "PatternLock": 50,
+    "PickHighlight": 50,
+    "PickXtimes": 50,
+    "RouteStick": 50,
+    "StopCube": 50,
+    "SwingXtimes": 50,
+    "VideoPlaceButton": 50,
+    "VideoPlaceOrder": 50,
+    "VideoRepick": 50,
+    "VideoUnmaskSwap": 50,
+    "VideoUnmask": 50
+  },
+  "status": {
+    "fail": 192,
+    "success": 414,
+    "timeout": 194
+  },
+  "sizes": {
+    "512x512": 311,
+    "512x528": 265,
+    "512x560": 224
+  },
+  "frames": 848318,
+  "demo_frames": 246698,
+  "init_frames": 800,
+  "exec_steps": 600820,
+  "source_mp4_bytes": 1289673040,
+  "output_bytes": 2161212582,
+  "shortened_names": 17,
+  "omitted_timeout_frames": 0,
+  "reused_in_batch": 1,
+  "summary_line": "OFFICIAL_RENDER_SUMMARY=PASS total=800 ok=800 fail=0 reused=1",
+  "exit_code": 0
+}

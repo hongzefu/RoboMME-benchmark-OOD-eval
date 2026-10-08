@@ -1,0 +1,128 @@
+[
+  {
+    "id": "C13-ASTRA-WIRING",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/astra_hard_runner.py"
+    ],
+    "symbol": "astra_hard_runner.prepare_cases / run_cases / run_one → Astra examples/champ/runner.episode（上游只读引用）",
+    "oracle": "手写期望：BenchmarkEnvBuilder 构造参数逐项（dataset、action_space=joint_angle、gui_render=False、max_steps=1300／1800），hard-verify 本地局号 0 ↔ 官方 test episode 3（16 任务），V9 连通局为 VideoUnmask xhard1 第 0 局；urlopen 替身计数为 0",
+    "positive": "真实 S1 builder（环境打桩）下两局 success：Astra 原样产物 identity.json／decisions.jsonl／actions.npy／result.json／rollout.mp4／monitor_inputs 齐全，dataset 字段为 hard-verify；planner_calls 为分片共用目录；PILOT_FINISHED.json 写出；trace.jsonl 逐步 40 行、请求序列 vla_reset、planner×1、vla_infer×3、monitor×2；判定行 ASTRA_WIRING=PASS api_calls=0 builder_dataset_ok=1",
+    "negative": "数据集与步数配对不符（hard-verify+1600、ood+1300、ood+1600）、RUN 上层不叫 group_0／group_1、output 或 spool 已存在、局清单身份与 builder 不符、真实 validate_checkpoints 遇假目录：均在建目录与任何规划请求之前拒绝",
+    "boundaries": "ood 1800 步（第三阶段，strict）环境永不结束时循环恰好执行 1800 步、terminal_reason=timeout、cap_hit=false（用例函数名沿用历史名 _1600_steps，登记于总表）；make_env_for_episode 只传局号、不逐局覆盖步数",
+    "nodeids": [
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_prepare_hard0_local_zero_is_official_episode_3",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_prepare_v9_connectivity_is_videounmask_xhard1_first",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_astra_wiring_xhard0",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_v9_connectivity_runs_exactly_1600_steps",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_step_cap_pairing_blocks_before_any_side_effect",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_layout_requires_group_dir",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_existing_output_or_spool_is_refused",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_real_validate_checkpoints_rejects_fake_dirs",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_identity_mismatch_blocks_before_requests",
+      "tests/pipeline/evalx/astra/test_astra_wiring.py::test_env_sources_point_to_repo_src"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-ASTRA-STOP",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/astra_hard_runner.py",
+      "scripts/eval-official/astra_cost_guard.py"
+    ],
+    "symbol": "astra_hard_runner.run_cases（复刻上游 main() 第③④⑤项）+ astra_cost_guard.cycle 写 group_*/STOP.json",
+    "oracle": "手写期望表：规划替身第 k 局（k=1、2）返回 error → 规划请求恰 k 次、只开 k 局；单局规划上限 1 → 1 次请求后停；错误序列 error、success、error、error、error → 开 5 局后停、第 6 局不开；费用替身单次 20.08 美元、投影 40.16 > 30 → 只发 1 次请求、下一局前停",
+    "positive": "三条规则各自以 AstraStop(reason=planner_error／infra_errors／host_stop) 停分片，不写 PILOT_FINISHED.json；STOP.json 写在 group_0；真实 ResponsesClient 在 STOP.json 存在时拒绝发送；判定行 ASTRA_STOP_RULES=PASS cases=3",
+    "negative": "真实 ResponsesClient（假密钥）遇 HTTP 500：urlopen 替身恰被调用 1 次即停，不重试、不外联",
+    "boundaries": "非规划类错误计数在正常结局后清零（上游「连续」口径）；Planner bridge failed／Pilot planner-call 两种前缀都单次即停",
+    "nodeids": [
+      "tests/pipeline/evalx/astra/test_astra_stop_rules.py::test_planner_error_on_episode_k_stops_and_sends_no_more",
+      "tests/pipeline/evalx/astra/test_astra_stop_rules.py::test_planner_call_limit_prefix_stops",
+      "tests/pipeline/evalx/astra/test_astra_stop_rules.py::test_real_responses_client_http_error_stops_after_one_offline_attempt",
+      "tests/pipeline/evalx/astra/test_astra_stop_rules.py::test_three_consecutive_infra_errors_stop",
+      "tests/pipeline/evalx/astra/test_astra_stop_rules.py::test_cost_cap_writes_stop_and_no_more_requests",
+      "tests/pipeline/evalx/astra/test_astra_stop_rules.py::test_astra_stop_rules_summary"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-ASTRA-COST",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/astra_cost_guard.py"
+    ],
+    "symbol": "astra_cost_guard.price_usage / scan / cycle / main --once",
+    "oracle": "手算：(10000-4000)×2 + 4000×0.5 + 1000×8 = 22000 → 0.022 美元；reasoning 另计时加 600×8/1e6；累计 2.0、最坏一次 2.016384、投影 4.016384 > 4.0 → 写 STOP",
+    "positive": "只计与 request.json 同目录的 response.json（监视器响应不计）；账本读回后加第二个根不重复计；在途（api_started 无 response）计入投影；两个 group 目录都写 STOP.json，打印 ASTRA_COST 与 ASTRA_COST=STOP",
+    "negative": "缺字段按 0 计并列入告警；无 usage 的错误响应计 no_usage；单价缺 output 拒绝启动；未到线不写 STOP",
+    "boundaries": "根直接给到 spool 时从祖先定位 group_0",
+    "nodeids": [
+      "tests/pipeline/evalx/astra/test_astra_cost_guard.py::test_price_usage_hand_computed",
+      "tests/pipeline/evalx/astra/test_astra_cost_guard.py::test_missing_fields_count_zero_and_warn",
+      "tests/pipeline/evalx/astra/test_astra_cost_guard.py::test_scan_counts_only_planner_spool_and_dedupes_across_roots_and_ledger",
+      "tests/pipeline/evalx/astra/test_astra_cost_guard.py::test_cap_projection_writes_stop_in_every_group",
+      "tests/pipeline/evalx/astra/test_astra_cost_guard.py::test_below_cap_no_stop_and_root_inside_group",
+      "tests/pipeline/evalx/astra/test_astra_cost_guard.py::test_prices_must_be_given"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-ASTRA-LAUNCHER",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/run_astra.sh"
+    ],
+    "symbol": "run_astra.sh（照抄上游 examples/champ/run.sh，只换 PYTHONPATH 第四段）",
+    "oracle": "静态逐行对照上游 run.sh：环境变量、VLA 启动命令（env -u OPENAI_API_KEY；上游 --seed=42 改为 --seed=\"$POLICY_SEED\"，第三阶段 R5）、GPU 相同与目录已存在两条拒绝原文；PYTHONPATH 前三段语义相同、第四段由 third_party/robomme_benchmark/src 换为本仓库 src",
+    "positive": "bash -n 通过；含 NO_PROXY 与 trap 清理；起跑前调 astra_hard_runner.py check",
+    "negative": "VLA_GPU==MONITOR_GPU → exit 2；RUN 已存在 → exit 2 且目录内不新增文件；RUN 上层非 group_* → exit 2；缺 OPENAI_API_KEY → 非 0；任何输出不含密钥；脚本不含 NO_PROGRESS、密钥文件路径、--key-file",
+    "boundaries": "拒绝路径不建 RUN 目录、不起任何服务",
+    "nodeids": [
+      "tests/pipeline/evalx/astra/test_run_astra_script.py::test_bash_syntax",
+      "tests/pipeline/evalx/astra/test_run_astra_script.py::test_copied_items_and_differences_static",
+      "tests/pipeline/evalx/astra/test_run_astra_script.py::test_same_gpu_exits_2",
+      "tests/pipeline/evalx/astra/test_run_astra_script.py::test_existing_run_dir_refused",
+      "tests/pipeline/evalx/astra/test_run_astra_script.py::test_run_dir_outside_group_refused",
+      "tests/pipeline/evalx/astra/test_run_astra_script.py::test_missing_key_refused_without_leaking"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-ASTRA-STAGE3",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/astra_hard_runner.py",
+      "scripts/eval-official/run_astra.sh"
+    ],
+    "symbol": "astra_hard_runner.{DATASET_STEP_PAIRING,DATASET_STRICT_CAP,check_policy_seed,TracedEnv.step,TracedPlanner,PlannerLanguageCall,TracedMonitor,TracedClient,write_exec_actions,write_provenance,GuardedResponsesClient.transport_hook} + run_astra.sh --policy-seed",
+    "oracle": "手写期望：ood↔1800 strict、hard-verify↔1300 非 strict（冻结说明 2.1）；--policy-seed 必填非负整数、缺失 RUN_BLOCKED reason=policy_seed 退出 3（2.2）；VLA 服务 argv 含 --seed=<n>；language.jsonl 行结构按冻结说明第五节；planner 输入原文 = spool prompt.txt 全文，monitor system = 上游 input_contract.NORMAL",
+    "positive": "ood 第 1800 步进真实环境、第 1801 步不进且 trace 不多一行、cap_hit=true；Astra 循环越界时本局记 timeout、arrays 恰 1800 键、照常 PILOT_FINISHED；seed 0／7／42 进服务命令、服务元数据、trace identity／end、result.json、provenance、录制器 meta，cloud_seed=null；两局语言账本 planner／monitor／action_model 三类齐全、附图引用全部可在 trace 解析、执行步全部可追溯、非模板回复 fallback=continue_last；429 重试另开 transport_attempt=1 的调用；判定行 EVAL_CAP=PASS route=astra max_steps=1800 rejected_step=1801、POLICY_SEEDS=PASS route=astra seeds=0,7,42、ASTRA_LANG_IO=PASS … unresolved_steps=0 open_calls=0 image_ref_unresolved=0",
+    "negative": "runner check／run 与 run_cases 缺 seed 在建任何目录前拒绝；启动器缺 seed、空值、非整数、负数退出 3 且不建 RUN、不起服务；假 planner 发送时抛异常：输入已先落盘、调用 status=error",
+    "boundaries": "hard-verify 第 1301 次 step 照常进底层环境；LanguageLog／merge_write_npz 不存在（R6 未合入）时不记账本、保持 np.savez；费用守卫与两局硬守卫既有用例不变",
+    "nodeids": [
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_ood_strict_cap_step_1800_runs_and_1801_never_reaches_env",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_hard_verify_is_not_strict",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_strict_cap_overrun_finishes_as_timeout",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_policy_seed_missing_or_bad_blocks",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_policy_seed_required_before_side_effects",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_launcher_policy_seed_missing_or_bad_exits_3",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_policy_seeds_service_command_and_trace",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_language_log_planner_monitor_action",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_language_input_persisted_before_send_failure",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_transport_retry_opens_new_call_with_attempt",
+      "tests/pipeline/evalx/astra/test_astra_stage3.py::test_write_exec_actions_uses_merge_write_npz_when_present"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  }
+]

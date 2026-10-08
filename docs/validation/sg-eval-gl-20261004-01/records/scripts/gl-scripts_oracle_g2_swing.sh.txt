@@ -1,0 +1,23 @@
+#!/bin/bash
+# GL 第二档 Oracle 新侧 12 局 SwingXtimes 补跑（用户 2026-10-05 批准的补跑方案 A）。
+# 原新侧用 63b28966 跑，这 12 局因叠字视频文件名超 255 字节记 error；此处用冻结提交 a299fcdc（含 12.453 修复）只跑新侧，
+# 写独立 stage gate2-oracle/s00-swing，不动原结果；汇总时按 key 以补跑行替换原 error 行。环境取法照抄 seat_chain.sh。
+# 在占位作业内由 srun 调用。一次性脚本，跑完逐字归档到 records/。
+set -u
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+C=$N/robomme_benchmark-sgeval
+R=$N/sgeval-20261004
+FROZEN=$(cat $R/inputs/frozen-commit.txt)
+echo "G2_SWING_START host=$(hostname) $(date -Is)"
+head=$(git -C $C rev-parse HEAD); dirty=$(git -C $C status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$FROZEN" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$FROZEN dirty=$dirty"; exit 3; }
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SGEVAL_CLIENT_PY=$N/sg-eval/venvs/client-env/bin/python
+export PYTHONPATH=$C/src:$C/third_party/mme-vla/packages/openpi-client/src
+export UV_CACHE_DIR=/tmp/uvcache-00
+MMESG="--mmesg-ckpt $N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --openpi-data-home $N/sg-eval/openpi-data --tokenizer-sha256 8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6"
+SH=$R/inputs/oracle/gate2/shard-swing-12.json
+bash $C/scripts/eval-official/run_eval_gl.sh --run-name g2-oracle-swing-s00 --seat 00 --repo $C --stage $R/gate2-oracle/s00-swing --shard $SH \
+  --dataset test-hard0 --max-steps 1300 --policies mmesg --mme-variant ground-sg-oracle $MMESG --media-root $R/gate2-oracle/s00-swing/media \
+  --reset-budget 44 --infra-retry-budget 3
+rc=$?; echo "G2_SWING_END rc=$rc $(date -Is)"; exit $rc

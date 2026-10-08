@@ -1,0 +1,14 @@
+#!/bin/bash
+# GL 席位兜底巡检：每 60 s 扫全部 seat*.log 的新增停机／故障行；有即退出唤醒，60 分钟无事件也退出唤醒一次。
+L=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261004/logs
+declare -A base; for f in $L/seat*.log; do base[$f]=$(wc -l < $f); done
+end=$(( $(date +%s) + 3600 ))
+while [ $(date +%s) -lt $end ]; do
+  for f in $L/seat*.log; do
+    b=${base[$f]:-0}
+    hit=$(tail -n +$((b+1)) $f | grep -E "CHAIN_STOP|SEAT_CHAIN_DONE|RUN_BLOCKED|INFRA_EXHAUSTED|RUN_INCOMPLETE|RESET_BUDGET_EXHAUSTED|ImportError|Traceback|OutOfMemory|SERVER_DIED|NO_PROGRESS|SEAT_REC_SYNC=FAIL" | head -3)
+    [ -n "$hit" ] && { echo "HEARTBEAT=EVENT $(basename $f) $(date +%T)"; echo "$hit" | cut -c1-200; exit 0; }
+  done
+  sleep 60
+done
+echo "HEARTBEAT=TICK $(date +%T)"

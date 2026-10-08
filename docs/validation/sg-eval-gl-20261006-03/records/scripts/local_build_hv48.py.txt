@@ -1,0 +1,19 @@
+"""用户 2026-10-06 裁决「每任务 3 局」：MemER hard-verify 对拍缩减为 16 任务 × 3 局 = 48（原 192）。
+源：hv192 清单（已用 hard-verify builder 逐局反查）；每任务按 builder_episode 升序取前 3 局；一个分片（两侧共用，沿用席号 50／60 续跑）。"""
+import json, hashlib, collections, sys
+from pathlib import Path
+SRC = Path(sys.argv[1]); OUT = Path(sys.argv[2]); OUT.mkdir(parents=True, exist_ok=True)
+rows = json.loads(SRC.read_text())['rows']
+by = collections.defaultdict(list)
+for r in rows: by[r['task']].append(r)
+sel = []
+for t in sorted(by): sel += sorted(by[t], key=lambda r: r['builder_episode'])[:3]
+assert len(by) == 16 and len(sel) == 48
+keep = ('task','tier','seed','candidate','builder_episode','source_episode','spec_sha256','key')
+(OUT / 'shard-00.json').write_text(json.dumps([{k: r[k] for k in keep} for r in sel], ensure_ascii=False, indent=1))
+man = {'schema': 'sgeval3-hv48/1', 'dataset': 'hard-verify', 'source': str(SRC), 'source_sha256': hashlib.sha256(SRC.read_bytes()).hexdigest(),
+       'rule': '用户 2026-10-06 裁决每任务 3 局：16 任务 × 每任务 builder_episode 升序前 3 局', 'total': 48, 'shards': {'00': 48},
+       'rows': [dict({k: r[k] for k in keep}, shard='00') for r in sel]}
+(OUT / 'manifest.json').write_text(json.dumps(man, ensure_ascii=False, indent=1))
+fp = hashlib.sha256(json.dumps(sorted(r['key'] for r in sel)).encode()).hexdigest()
+print(f"HV48_MANIFEST=PASS tasks=16 per_task=3 total=48 keys_sha256={fp} includes_BinFill_540302={'BinFill_xhard0_540302' in {r['key'] for r in sel}} includes_BinFill_543501={'BinFill_xhard0_543501' in {r['key'] for r in sel}}")

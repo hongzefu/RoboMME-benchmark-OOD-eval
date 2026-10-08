@@ -1,0 +1,21 @@
+"""本轮专用 manifest：沿用上一轮各档 manifest.json 的元信息，rows 换成本轮分片文件里的身份行并写入本轮席号（shard=NN）。
+输出 inputs/manifests/<model>-<gate>.json；核对身份集合与上一轮 manifest 完全相同。"""
+import json, glob, re
+from pathlib import Path
+N = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu'); R = N / 'sgeval-20261006-02'; I = N / 'sgeval-20261004/inputs'
+out = R / 'inputs/manifests'; out.mkdir(parents=True, exist_ok=True)
+src = {'oracle': 'oracle', 'qwenvl': 'qwenvl', 'pp': 'pp', 'smvla': 'oracle', 'mme': 'oracle'}
+tag = {'oracle': 'b2', 'qwenvl': 'b2', 'pp': 'b4', 'smvla': 'b3b', 'mme': 'b3b'}
+for m in src:
+    for g in ('gate2', 'gate3'):
+        base = json.loads((I / src[m] / g / 'manifest.json').read_text())
+        rows = []
+        for f in sorted((R / 'inputs' / tag[m]).glob(f'{m}-{g}-s*.json')):
+            seat = re.search(r'-s(\d+)\.json$', f.name).group(1)
+            for r in json.loads(f.read_text()):
+                r = dict(r); r['shard'] = seat; rows.append(r)
+        want = {r['key'] for r in base['rows']}; got = [r['key'] for r in rows]
+        assert len(got) == len(set(got)) and set(got) == want, (m, g, len(got), len(want))
+        base = dict(base); base['rows'] = rows; base['note_phase2'] = f'sg-eval-gl-20261006-02：{m} {g} 本轮分片，shard=本轮席号'
+        (out / f'{m}-{g}.json').write_text(json.dumps(base, ensure_ascii=False, indent=1))
+        print(m, g, len(rows), sorted({r["shard"] for r in rows}))

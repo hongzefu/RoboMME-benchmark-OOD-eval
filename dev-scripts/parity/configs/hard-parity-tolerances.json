@@ -1,0 +1,23 @@
+{
+  "action_max_rad": 0.041265913943240015,
+  "calibrated_at": "2026-09-28T06:12:21+00:00",
+  "calibrated_from": "O:P native",
+  "frames_max": 5,
+  "image_mad": 1.0,
+  "n": 144,
+  "raw_max": {
+    "action_max": 0.027510609295493343,
+    "frames_max": 0.0,
+    "image_mad": 0.14435587675847064,
+    "state_max": 0.027424335479736328
+  },
+  "raw_p95": {
+    "action_max": 0.0,
+    "frames_max": 0.0,
+    "image_mad": 0.0,
+    "state_max": 0.0
+  },
+  "rule": "最大值 × 1.5（帧数向上取整），下界 0.005/0.005/1.0/5，合理性上界 0.05/0.05/10/200（U-22）",
+  "state_max": 0.04113650321960449,
+  "tol_file_note": "由 hard_parity.py compare --pair O:P --calibrate 写入；改阈值须改本文件并写进留档（R21）"
+}

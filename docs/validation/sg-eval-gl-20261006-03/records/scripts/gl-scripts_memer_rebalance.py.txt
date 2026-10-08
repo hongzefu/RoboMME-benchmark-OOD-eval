@@ -1,0 +1,21 @@
+"""MemER OOD 换片（1800 步每局 46～56 分钟，两席跑不完）：从 ood-new-memer-seed7 的各席尝试账本取已接受身份，
+把 ood86 的 86 个身份里未接受的按行序交替均分成 N 片，写 inputs/manifests/ood86/ood-memer-rb-NN.json。
+用法：memer_rebalance.py <N>。只读账本、只新增分片文件；被打断的身份在新席里从第 1 次尝试开始（共享账本同 token 幂等）。"""
+import json, sys, glob
+from pathlib import Path
+R = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03')
+N = int(sys.argv[1])
+rows = json.loads((R / 'inputs/manifests/ood86/manifest.json').read_text())['rows']
+acc = set()
+for led in glob.glob(str(R / 'ood-new-memer-seed7/s*/groundsg-ground-sg-memer/groundsg-ground-sg-memer.ledger.jsonl')):
+    for l in open(led):
+        try: d = json.loads(l)
+        except Exception: continue
+        if d.get('kind') == 'accept': acc.add(d.get('key'))
+left = [r for r in rows if r['key'] not in acc]
+keep = ('task','tier','seed','candidate','builder_episode','source_episode','spec_sha256','key')
+for k in range(N):
+    part = [{kk: r[kk] for kk in keep} for r in left[k::N]]
+    (R / f'inputs/manifests/ood86/ood-memer-rb-{k:02d}.json').write_text(json.dumps(part, ensure_ascii=False, indent=1))
+    print(f'shard rb-{k:02d} n={len(part)}')
+print(f'MEMER_REBALANCE accepted={len(acc)} left={len(left)} shards={N} total_check={len(acc)+len(left)}')

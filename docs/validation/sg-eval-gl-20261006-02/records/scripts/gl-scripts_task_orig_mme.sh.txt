@@ -1,0 +1,28 @@
+#!/bin/bash
+# 批次 3a 补跑：只跑某片的 MME 原侧（该片 SimpleMemVLA 部分已完成；MME 部分因 GL glibc 2.28 下 cryptography 轮子不兼容失败，
+# 失败目录已归档到 gate2-orig-rerun/_failed-glibc-s<i>/）。照抄 official_rerun_shard.sh 的 MME 段：同一端口规则（--run-idx 1 →
+# PORT_BASE+100+4i）、节点本地目录、跑完 rsync 到 <stage>/mme/s<i> 并核对文件清单与大小后删节点副本。
+# 用法：task_orig_mme.sh <执行副本> <冻结 sha> <分片>
+set -u
+E=$1; F=$2; I=$3
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=$N/sgeval-20261006-02; OLD=$N/robomme_benchmark-sgeval
+head=$(git -C $E rev-parse HEAD); dirty=$(git -C $E status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$F" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$F dirty=$dirty"; exit 3; }
+export PATH=$E/.venv/bin:$PATH
+export ORIG_STAGE_ROOT=$R/gate2-orig-rerun SGEVAL_BUDGET_LEDGER=$R/budget-ledger.jsonl
+export ORIG_MME_CLIENT_PY=$R/venvs/orig-mme-client/bin/python MME_PY=$OLD/third_party/mme-vla/.venv/bin/python
+export HF_HOME=$N/hf-cache HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+G=$R/gate2-orig-rerun/p2-orig; SAVE=$G/mme/s$I; DST=$G/stage/mme/s$I; NT=/tmp/orig-p2-orig-mme-s$I-${SLURM_JOB_ID:-local}
+for d in "$SAVE" "$DST" "$NT"; do [ -e "$d" ] && { echo "错误: 目录已存在 $d"; exit 1; }; done
+mkdir -p "$NT/mme"
+PORT=$((19200 + 1 * 100 + I * 4))
+echo "TASK_ORIG_MME shard=$I exec=$E head=$head host=$(hostname) port=$PORT py3=$(python3 --version 2>&1)"
+cd $E && env MANIFEST=$N/v7-eval/eval-official-xhard0-192.jsonl SHARD=$I PORT=$PORT RUN_TAG=orig-p2-orig-s$I SAVE_ROOT=$SAVE \
+  REC_ROOT=$NT/mme/rec VIDEO_DIR=$NT/mme/videos NODE_TMP=$NT bash scripts/eval-official/orig_observer/run_orig_mme.sh
+rc=$?; echo "MME_SHARD_END rc=$rc"
+mkdir -p "$DST" && rsync -a "$NT/mme/" "$DST/" || { echo "STAGE_FAIL rsync"; exit 1; }
+a=$(cd "$NT/mme" && find . -type f -printf '%P %s\n' | LC_ALL=C sort | sha256sum); b=$(cd "$DST" && find . -type f -printf '%P %s\n' | LC_ALL=C sort | sha256sum)
+[ "$a" = "$b" ] || { echo "STAGE_FAIL 文件清单或大小不符"; exit 1; }
+rm -rf -- "$NT"; echo "STAGED policy=mme dst=$DST"
+exit $rc

@@ -1,0 +1,9 @@
+ACCEPT_GROUP model=pp label=pp variant=none 2026-10-07T11:13:58-04:00
+EVAL_COVERAGE=PASS dataset=ood policy=pp expected=86 missing=0 extra=0 duplicate=0 conflicting_terminal=0 error_final=0 no_frame_error=0 policy_seed=7
+EVAL_REPORT=PASS dataset=ood policy=pp count_mismatch=0 dataset_crossed=0 media_unexplained=0 exec_over_cap=0 cap=1800 cap_mismatch=0 policy_seed=7
+EVAL_VIDEOS=PASS dataset=ood policy=pp expected=86 accepted=86 videos=86 no_frame_error=0 missing=0 decode_fail=0 policy_seed=7
+OFFICIAL_MEDIA_INPUTS=PASS missing=0 extra=0 ambiguous=0 identity_mismatch=0 attempt_mismatch=0 provenance_missing=0
+OFFICIAL_MEDIA=PASS total=86 skip=0 fail=0 no_frame_error=0 videos=86 accepted=86 policy_seed=7 report=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/reports/pp-r2/official-media.jsonl
+TRACE_ARRAYS=PASS episodes=87 attempted_steps_missing=0 observed_state_missing=0 tampered=0 dtype_mixed=0 unreadable=0 summary_mismatch=0 extra_action_keys=0
+LANG_IO=PASS episodes=87 unresolved_steps=0 open_calls=0 image_ref_unresolved=0 order_bad=0 extra_calls=0 reply_missing=0 retry_mismatch=0 server_text_empty=0 system_inconsistent=0 language_missing=0 bad_rows=0
+VIDEO_LAYOUT=PASS model=pp seed=7 videos=86 no_frame_error=0 error_named=0 accepted=86 published=86 reused=0 problems=0 mode=publish dir=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/publish-pp-r2/pp/seed7/videos

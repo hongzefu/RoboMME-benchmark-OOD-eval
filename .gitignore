@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv
+# 产物根整体不进 git（权重、h5 等旧资产在此逐项只读 symlink 引用旧仓）
+/artifacts/
+# Claude Code 子代理 worktree（计划执行模式）
+/.claude/worktrees/
+# 三个模型子环境的 venv
+/envs/*/.venv*
+# 运行产物与媒体
+/runs/
+*.mp4
+*.mkv
+*.h5
+*.hdf5

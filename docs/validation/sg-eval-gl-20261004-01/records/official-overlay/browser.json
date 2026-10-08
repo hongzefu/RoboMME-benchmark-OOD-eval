@@ -1,0 +1,126 @@
+{
+  "schema": "official-overlay-browser/1",
+  "status": "PASS",
+  "base": "http://sled-vail.eecs.umich.edu:8083",
+  "checks": {
+    "catalog": {
+      "episodes": 800,
+      "tasks": 16,
+      "per_task": {
+        "BinFill": 50,
+        "PickXtimes": 50,
+        "SwingXtimes": 50,
+        "PickHighlight": 50,
+        "VideoUnmask": 50,
+        "ButtonUnmask": 50,
+        "VideoUnmaskSwap": 50,
+        "ButtonUnmaskSwap": 50,
+        "VideoRepick": 50,
+        "PatternLock": 50,
+        "RouteStick": 50,
+        "VideoPlaceButton": 50,
+        "VideoPlaceOrder": 50,
+        "MoveCube": 50,
+        "InsertPeg": 50,
+        "StopCube": 50
+      },
+      "statuses": {
+        "fail": 192,
+        "success": 414,
+        "timeout": 194
+      }
+    },
+    "rate_sources": {
+      "v9": {
+        "sha256": "95ef1ad8aea6551d2bbd5bb09a8d31cfef5f97deef1cc56fad35ddcaade01920",
+        "size": 3410265,
+        "episodes": 800
+      },
+      "xhard0": {
+        "sha256": "a78dc420afc928a6cc393e3256ec837290e4511ca5f618477f4e282c88e09502",
+        "size": 788850,
+        "episodes": 192
+      }
+    },
+    "range": {
+      "official": {
+        "status": 206,
+        "content_range": "bytes 0-1023/3951355",
+        "bytes": 1024
+      },
+      "original": {
+        "status": 206,
+        "content_range": "bytes 0-1023/2184734",
+        "bytes": 1024
+      }
+    },
+    "success_rates": {
+      "rows": 16,
+      "columns": 3,
+      "v9_success": 414,
+      "xhard0_success": 139
+    },
+    "task_sections": {
+      "tasks": 16,
+      "per_task": 50,
+      "independent_lists": true
+    },
+    "non_demo_playback": {
+      "episode": "BinFill_xhard1_16400000.a1",
+      "version": "official",
+      "played_time": 0.506918,
+      "seek_time": 23.375,
+      "duration": 42.5,
+      "pause": true
+    },
+    "filters": {
+      "task_count": 50,
+      "combined_count": 2,
+      "visible": 2
+    },
+    "navigation": {
+      "next_previous": true,
+      "pagination": true,
+      "selected": "BinFill_xhard1_16401100.a1"
+    },
+    "original_playback": {
+      "episode": "BinFill_xhard1_16401100.a1",
+      "version": "original",
+      "played_time": 0.515532,
+      "seek_time": 29.351666,
+      "duration": 53.366667,
+      "pause": true
+    },
+    "version_switch": true,
+    "demo_playback": {
+      "episode": "VideoPlaceButton_xhard1_17000000.a1",
+      "version": "official",
+      "played_time": 0.513207,
+      "seek_time": 47.96,
+      "duration": 87.2,
+      "pause": true
+    },
+    "responsive": {
+      "widths": [
+        390,
+        768
+      ],
+      "horizontal_overflow": false
+    },
+    "rates_after_filters": {
+      "rows": 16,
+      "columns": 3,
+      "v9_success": 414,
+      "xhard0_success": 139
+    }
+  },
+  "failures": [],
+  "page_errors": [],
+  "http_errors": [],
+  "screenshots": [
+    "demo-official.png",
+    "narrow-390.png",
+    "narrow-768.png",
+    "wide-official.png"
+  ]
+}

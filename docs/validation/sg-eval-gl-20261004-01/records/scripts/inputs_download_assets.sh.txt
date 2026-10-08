@@ -1,0 +1,35 @@
+#!/bin/bash
+# 计划第三节「需下载」四项：全部钉 40 位 revision；hub 缓存落 NFS 后补写 refs/main（已存在且不同则失败不覆盖）
+set -euo pipefail
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=/data/hongzefu/robomme_benchmark_MotionJEPANewTask/artifacts/sg-evaluation/sg-eval-gl-20261004-01/inputs
+HFRUN="uv run --no-project --quiet --with huggingface_hub==1.32.0 python"
+export HF_HUB_DISABLE_TELEMETRY=1 HF_XET_HIGH_PERFORMANCE=1
+$HFRUN - <<'PY'
+import os, pathlib, hashlib, json
+from huggingface_hub import snapshot_download
+N="/nfs/turbo/coe-chaijy-unreplicated/hongzefu"
+HUB=f"{N}/hf-cache/hub"
+jobs=[
+ ("worv-ai/ponderpounce-9b-robomme","5691e05614e8e6581d6358959e60561acfa73534",dict(local_dir=f"{N}/sg-eval/ckpt/pp/ponderpounce-9b-robomme")),
+ ("bingaochen/Astra-on-RoboMME-Monitor","18ac28316a8b22c758945546c95f3910fc5dd27b",dict(local_dir=f"{N}/sg-eval/ckpt/astra-monitor")),
+ ("Qwen/Qwen3.5-9B","c202236235762e1c871ad0ccb60c8ee5ba337b9a",dict(cache_dir=HUB,ignore_patterns=["*.safetensors"])),
+ ("google/paligemma-3b-pt-224","35e4f46485b4d07967e7e9935bc3786aad50687c",dict(cache_dir=HUB,ignore_patterns=["*.safetensors"])),
+]
+for repo,rev,kw in jobs:
+    print(f"DOWNLOAD {repo}@{rev}",flush=True)
+    p=snapshot_download(repo_id=repo,revision=rev,**kw)
+    print(f"DONE {repo} -> {p}",flush=True)
+    if "cache_dir" in kw:
+        ref=pathlib.Path(HUB)/("models--"+repo.replace("/","--"))/"refs"/"main"
+        if ref.exists() and ref.read_text().strip()!=rev:
+            raise SystemExit(f"REFS_MAIN_CONFLICT {repo} existing={ref.read_text().strip()} want={rev}")
+        ref.parent.mkdir(parents=True,exist_ok=True); ref.write_text(rev)
+        print(f"REFS_MAIN {repo}={rev}",flush=True)
+PY
+# 发布源清单核对
+for f in config.json model.safetensors norm_stats.json README.md; do test -s $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme/$f || { echo "PP_FILES=FAIL missing=$f"; exit 3; }; done
+echo "PP_FILES=PASS"
+(cd $N/sg-eval/ckpt/astra-monitor && sha256sum -c SHA256SUMS) && echo "ASTRA_MONITOR_SHA256SUMS=PASS"
+(cd $N/sg-eval/ckpt/pp/ponderpounce-9b-robomme && find . -type f -not -path './.cache/*' -print0 | sort -z | xargs -0 sha256sum) > $R/pp-weights.sha256
+echo "DOWNLOAD_ALL=PASS"

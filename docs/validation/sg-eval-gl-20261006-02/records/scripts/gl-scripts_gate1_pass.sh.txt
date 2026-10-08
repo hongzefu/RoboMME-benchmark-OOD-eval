@@ -1,0 +1,39 @@
+#!/bin/bash
+# 第二阶段第一档一遍生成（1005 计划第二部分四节 runbook 2；沿用 sgeval-20261004/scripts/gate1_pass.sh 做法）。
+# 执行副本 = robomme_benchmark-noise 检出开工时 HEAD（inputs/gate1-frozen-commit.txt），借用其 .venv，PYTHONPATH=<副本>/src。
+# 生成带 --expect-ref（逐局当场判 match／jitter_info／flip），节点本地输出 → ship --finalize 回 NFS → gen-regress check 出判定行。
+# 用法：gate1_pass.sh <v9|x0>
+set -u
+SET=$1
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+R=$N/sgeval-20261006-02; C=$N/robomme_benchmark-noise
+FROZEN=$(cat $R/inputs/gate1-frozen-commit.txt)
+head=$(git -C $C rev-parse HEAD); dirty=$(git -C $C status --short --ignore-submodules=dirty | wc -l)
+[ "$head" = "$FROZEN" ] && [ "$dirty" = 0 ] || { echo "RUN_BLOCKED reason=exec_copy head=$head frozen=$FROZEN dirty=$dirty"; exit 3; }
+PY=$C/.venv/bin/python
+IN=$N/maint-regress/inputs
+got=$(PYTHONPATH=$C/src $PY -c "import robomme_hard;print(robomme_hard.__file__)" 2>/dev/null)
+case "$got" in $C/src/*) echo "IMPORT_CHECK=PASS $got";; *) echo "IMPORT_CHECK=FAIL $got"; exit 2;; esac
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | sed 's/^/GPU_INFO /'
+for f in /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /usr/share/vulkan/icd.d/nvidia_icd.json; do [ -f "$f" ] && { export VK_ICD_FILENAMES=$f; break; }; done
+PASS=g1-new-$SET; OUT=/tmp/sgev2-$PASS; STAGE=$R/gate1/$PASS
+[ ! -e "$OUT" ] || { echo "GATE1_BLOCKED reason=node_out_exists $OUT"; exit 4; }
+[ ! -e "$STAGE" ] || { echo "GATE1_BLOCKED reason=stage_exists $STAGE"; exit 4; }
+mkdir -p $R/gate1
+if [ "$SET" = v9 ]; then
+  ( cd $C && PYTHONPATH=$C/src $PY scripts/parity/hard_parity.py generate --side H2 --tier v9 --manifest $IN/delivery.local.json \
+      --identities $IN/v9-129-generate.jsonl --specs-root $IN/specs-root --src-root $C --workers 4 --gpu 0 \
+      --out $OUT --stage $STAGE --expect-ref $C/scripts/configs/noise-ref-20261003.json )
+  rc=$?; NSET=v9
+else
+  ( cd $C && ROBOMME_HARD_XHARD0_IN_TEST_HARD=1 PYTHONPATH=$C/src $PY scripts/parity/hard_parity.py generate --side H --tier xhard0 \
+      --manifest $IN/xhard0_manifest.json --identities $IN/x0-48-generate.jsonl --src-root $C --workers 4 --gpu 0 \
+      --out $OUT --stage $STAGE --expect-ref $C/scripts/configs/noise-ref-20261003.json )
+  rc=$?; NSET=xhard0
+fi
+echo "GATE1_GENERATE pass=$PASS rc=$rc $(date -Is)"
+( cd $C && PYTHONPATH=$C/src $PY scripts/parity/noise_run.py ship --src $OUT --stage $STAGE --finalize ); echo "GATE1_SHIP pass=$PASS rc=$?"
+rm -rf -- "$OUT"
+( cd $C && PYTHONPATH=$C/src $PY scripts/parity/noise_gate.py gen-regress check --ref $C/scripts/configs/noise-ref-20261003.json --set $NSET \
+    --new $STAGE --out $R/gate1/$PASS.regress.jsonl --rerun-identities-out $R/gate1/$PASS.rerun.jsonl ) 2>&1 | grep -E "GEN_REGRESS|Error|Traceback"
+echo "GATE1_PASS_END pass=$PASS gen_rc=$rc"

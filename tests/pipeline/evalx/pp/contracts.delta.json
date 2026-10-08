@@ -1,0 +1,110 @@
+[
+  {
+    "id": "C13-PP-PROTOCOL",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/pp_client.py",
+      "scripts/eval-official/pp_official_runner.py"
+    ],
+    "symbol": "pp_client.run_episode / ObsPacker.make / exec_action8 / episode_start_payload；pp_official_runner.run_shard / make_tracing_bench_class / make_fixed_sid_recorder_class",
+    "oracle": "非 slow：按 vla-eval 0.7.0 源码事实手写的帧序列（HELLO → EPISODE_START → (OBSERVATION, ACTION)×n → EPISODE_END；首条观测带 video_history／wrist_video_history／episode_restart；states 为 float64 拼接后转 float32）。slow：按路径加载 SGEVAL_VLA_EVAL_ROOT 下的 vla-eval 源码，真实 SyncEpisodeRunner + RoboMMEBenchmark（假 builder）+ Connection 经回环假服务产生的帧序列",
+    "positive": "新侧与期望逐帧相同（帧类型、顺序、观测键、dtype/shape、字节、sid、局号、seq）；原侧 run_shard 经记录子类与固定 sid 记录器后帧序列与真实 SyncEpisodeRunner 相同；两侧 trace.jsonl 的请求哈希、动作、画面逐行相同；打印 PP_PROTOCOL=PASS frames_diff=0 order_diff=0",
+    "negative": "比对器自检：states 改 float64、sid 改值、删 episode_restart 各计 1 个 frames_diff；交换两帧、少一帧计入 order_diff",
+    "boundaries": "动作交给环境前展平为 Python float 列表并取前 8 维；EPISODE_END 的 elapsed_sec 为墙钟，只断言存在、不比值；env 报 error 或观测为空时与官方一样结束本局并发 EPISODE_END",
+    "nodeids": [
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_protocol_sequence_matches_handwritten_sync_runner_order",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_frame_comparator_is_not_vacuous",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_env_error_status_and_empty_obs_end_episode_like_official",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_trace_rows_and_canonical_bytes",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_official_sources_pin_protocol_constants",
+      "tests/pipeline/evalx/pp/test_pp_protocol_wire.py::test_new_and_orig_frames_identical_to_vla_eval_sync_runner"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified",
+    "note": "wire 用例标 slow（依赖主检出 artifacts 下 client-env 的 vla-eval 源码，缺失即失败、不跳过）；官方源码经 SGEVAL_THIRD_PARTY 只读引用并打印 sha256。"
+  },
+  {
+    "id": "C13-PP-SID",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/pp_client.py"
+    ],
+    "symbol": "pp_client.fixed_sid / episode_idx_of",
+    "oracle": "计划 1.4「固定 sid」行手写：xhard0 为 <task>|<source_episode>|<seed>，V9 为 <task>|<tier>|<seed>；eid 与 sid 相同；EPISODE_START 的 episode_idx 取官方局号 source_episode",
+    "positive": "xhard0、V9 两种身份的 sid 字面值；EPISODE_START 载荷整体等于手写字典",
+    "negative": "dataset=hard-verify 而 tier 非 xhard0、source_episode 为 bool 或 None 均 ValueError",
+    "boundaries": "PonderPounce 噪声种子 crc32(f\"{seed}:{sid}:{n}\") 的原文由官方源码字符串断言钉住",
+    "nodeids": [
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_fixed_sid_rules",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_official_sources_pin_protocol_constants"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-PP-STEPS-RECONNECT",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/pp_client.py",
+      "scripts/eval-official/pp_official_runner.py"
+    ],
+    "symbol": "pp_client._run_episode_async 的 range(max_steps) 循环与 _act_with_reconnect；pp_official_runner.run_shard 的异常与 reconnect 分支",
+    "oracle": "手写计数：xhard0 恰好 1300 个动作、最后一个动作之后不再发观测；V9 strict cap 1600；ConnectionClosed 后 reconnect 一次、重发同一条观测、EPISODE_START 只发一次",
+    "positive": "1300／1600 个动作与 EPISODE_END.steps 相等；断线一次仍成功；原侧 TimeoutError 局记 infra error 后 reconnect 并继续下一局",
+    "negative": "断线超过上限、act 超时、服务 ERROR 均记 error（infra=True）且不发 EPISODE_END；step_cap 小于循环上限时第 cap+1 次 step 不进环境、记 timeout；原侧 ConnectionError 中止分片",
+    "boundaries": "驱动内 reconnect 只用于同一局断线；跨局的基础设施重试由席位脚本重启服务后重发同一 sid",
+    "nodeids": [
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_xhard0_exactly_1300_actions_and_no_trailing_observation",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_v9_strict_cap_loop_matches_cap_and_cap_hit_is_timeout_without_episode_end",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_reconnect_within_episode_never_resends_episode_start",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_server_error_and_timeout_are_infra_errors",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_orig_runner_timeout_reconnects_and_continues",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_orig_runner_unreachable_aborts_shard"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-PP-ORIG-RUNNER",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/pp_official_runner.py"
+    ],
+    "symbol": "assert_official_only / load_shard / RawFrameWriter / EpisodeCapture / EnvProxy / run_shard 结果行",
+    "oracle": "子进程 --check-imports 的判定行；假环境逐帧字节手算；分片行键按 eval_manifest hard0 模式",
+    "positive": "OFFICIAL_IMPORTS=PASS 且 robomme 来自仓库 src/robomme、robomme_hard_imported=0；原始帧 count = demo_frames + 1 + exec_steps、文件字节数 = count×H×W×3、首帧与第 4 帧字节等于假环境；结果行含 side=orig、dataset=hard-verify、status、exec_steps、demo_frames、max_steps、sid",
+    "negative": "分片含非 xhard0 行或 key 重复即 ValueError",
+    "boundaries": "只覆写 RoboMMEBenchmark.reset 并以委托代理包住环境 step，不改 src/robomme 任何方法；新侧轨迹位置 trace_path > <trace_dir（每局目录）>/trace.jsonl > <录像器目录>/trace.jsonl，trace_dir 下不再套 key.a<attempt>",
+    "nodeids": [
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_orig_runner_rows_frames_and_trace",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_orig_load_shard_rejects_non_xhard0_and_duplicates",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_orig_runner_imports_only_official_robomme",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_module_import_does_not_require_vla_eval",
+      "tests/pipeline/evalx/pp/test_pp_protocol.py::test_trace_path_resolution"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-PP-SERVER-WRAP",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/pp_server_wrap.py"
+    ],
+    "symbol": "SubgoalReportingServer._fire_s1 / _dispense / latest_visible_subgoal / 入口 run_server",
+    "oracle": "锁定父类真实方法 + CPU 桩，原类与外壳两套节拍各 200 步逐步比较；子目标按节拍算式独立推出",
+    "positive": "动作、RNG 状态、cursor、chunk、触发计数除新增 subgoal 外一致（PP_SERVER_ACTION_EQ=PASS）；ready 之前回旧子目标、chunk 用尽不变、首个子目标前 None",
+    "negative": "多抽一次随机数、多推一次 cursor 的坏外壳被查出；父类文件 sha256 与 gitlink 723df357 钉死",
+    "boundaries": "父类依赖 vla-eval，测试用主检出 client-env 解释器子进程跑 CPU；不覆盖真实 GPU 推理数值",
+    "nodeids": [
+      "tests/pipeline/evalx/pp/test_pp_server_wrap.py"
+    ],
+    "resource": "cpu（client-env 子进程）",
+    "mutants": [],
+    "status": "verified"
+  }
+]

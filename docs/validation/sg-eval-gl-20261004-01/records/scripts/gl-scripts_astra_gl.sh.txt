@@ -1,0 +1,40 @@
+#!/bin/bash
+# GL Astra 两卡作业内（计划第二部分五「第二档（Astra）」）：已批 GL 第二档 32 局（原侧 16 + 新侧 16）＋ V9 连通 1 局，基础设施重试 0。
+# 顺序：代理连通（不产生费用的 GET /v1/models）→ 原侧 run.sh 16 局（group_0）→ 新侧 run_astra.sh 16 局（group_1）→ V9 连通 1 局（group_1）。
+# 规划服务出错／花费到线：Astra 上游与新侧驱动各自停机，本脚本不重跑；原侧停了新侧仍按已批局数跑，除非原因是花费到线（STOP.json 存在即跳过）。
+# 密钥由登录节点 tmux 以环境变量 OPENAI_API_KEY 传入（srun 继承），本脚本不读文件、不打印。
+# 计算节点有 HTTP 代理：保留 http(s)_proxy 供 OpenAI 请求，本机回环走 NO_PROXY。
+set -u
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+C=$N/robomme_benchmark-sgeval; R=$N/sgeval-20261004; A=$R/astra
+ASTRA=$C/third_party/Astra-on-RoboMME
+[ -n "${OPENAI_API_KEY:-}" ] || { echo "ASTRA_GL_BLOCKED reason=no_key"; exit 3; }
+export VLA_PYTHON=$C/third_party/mme-vla/.venv/bin/python
+export SIM_PYTHON=$N/sg-eval/venvs/client-env/bin/python
+export VLA_CHECKPOINT=$N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999
+export MONITOR_BASE=$N/hf-cache/hub/models--Qwen--Qwen3-VL-4B-Instruct/snapshots/ebb281ec70b05090aa6165b016eac8ec08e71b17
+export MONITOR_ADAPTER=$N/sg-eval/ckpt/astra-monitor
+export OPENPI_DATA_HOME=$N/sg-eval/openpi-data HF_HOME=$N/hf-cache
+export VLA_GPU=0 MONITOR_GPU=1
+export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
+echo "ASTRA_GL_START host=$(hostname) $(date -Is)"; nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader | sed 's/^/GPU_INFO /'
+code=$("$SIM_PYTHON" - <<'PY'
+import os,urllib.request
+req=urllib.request.Request('https://api.openai.com/v1/models',headers={'Authorization':'Bearer '+os.environ['OPENAI_API_KEY']})
+try:
+    with urllib.request.urlopen(req,timeout=30) as r: print(r.status)
+except Exception as e: print('ERR',type(e).__name__)
+PY
+)
+echo "ASTRA_PROXY_CHECK status=$code"
+[ "$code" = 200 ] || { echo "ASTRA_GL_BLOCKED reason=proxy_or_key status=$code"; exit 3; }
+mkdir -p $A/inputs $A/group_0 $A/group_1
+( cd $ASTRA && PYTHONPATH=examples/champ "$SIM_PYTHON" examples/champ/prepare_cases.py --output $A/inputs/orig-cases --dataset test --episodes 3 )
+( cd $C && PYTHONPATH=$C/src "$SIM_PYTHON" scripts/eval-official/astra_hard_runner.py prepare --dataset test-hard0 --source-episodes 3 --output $A/inputs/new-cases.json )
+( cd $C && PYTHONPATH=$C/src "$SIM_PYTHON" scripts/eval-official/astra_hard_runner.py prepare --dataset test-hard --tasks VideoUnmask --tier xhard1 --index 0 --output $A/inputs/v9-cases.json )
+stopped() { ls $A/group_*/STOP.json >/dev/null 2>&1; }
+stopped || { PORT=18762 bash $ASTRA/examples/champ/run.sh $A/inputs/orig-cases/all.json $A/group_0/orig; echo "ASTRA_GL_SIDE side=orig rc=$? $(date -Is)"; }
+stopped || { PORT=18763 MAX_STEPS=1300 ASTRA_ROOT=$ASTRA bash $C/scripts/eval-official/run_astra.sh $A/inputs/new-cases.json $A/group_1/new; echo "ASTRA_GL_SIDE side=new rc=$? $(date -Is)"; }
+stopped || { PORT=18764 MAX_STEPS=1600 ASTRA_ROOT=$ASTRA bash $C/scripts/eval-official/run_astra.sh $A/inputs/v9-cases.json $A/group_1/v9conn; echo "ASTRA_GL_SIDE side=v9conn rc=$? $(date -Is)"; }
+stopped && echo "ASTRA_GL_STOPPED $(ls $A/group_*/STOP.json)"
+echo "ASTRA_GL_DONE $(date -Is)"

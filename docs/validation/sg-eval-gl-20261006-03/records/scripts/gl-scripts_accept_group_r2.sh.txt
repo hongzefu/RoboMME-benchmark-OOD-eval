@@ -1,0 +1,21 @@
+#!/bin/bash
+# accept_group.sh 的 PonderPounce 4 卡重跑（r2）版：stage／媒体根／分片／报告／发布根改指 r2。
+# 用法：accept_group.sh <模型> <label> [variant]
+set -u
+M=$1; L=$2; V=${3:-}
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03
+REPO=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+ST=$R/ood-new-$M-seed7-r2; MED=$R/media-pp-r2/$L/ood/new; MAN=$R/inputs/manifests/ood86
+OUT=$R/reports/$M-r2; mkdir -p $OUT
+cd $REPO; export UV_CACHE_DIR=$REPO/artifacts/cache/uv
+P="uv run --no-sync python scripts/eval-official"
+echo "ACCEPT_GROUP model=$M label=$L variant=${V:-none} $(date -Is)"
+PSPEC=$L; [ -n "$V" ] && PSPEC=groundsg:$V
+$P/eval_report.py --manifest $MAN/manifest.json --stage $ST --policies $PSPEC --dataset ood --side new --out $OUT --videos $R/media-pp-r2 --expect-total 86 --cap 1800 --policy-seed 7 2>&1 | grep -E "^[A-Z_0-9]+=" 
+LEDS=(); for f in $ST/s*/$L/$L.ledger.jsonl; do LEDS+=(--ledger $f); done
+$P/official_media_check.py --manifest $MAN/pp-r2-shard-00.json --manifest $MAN/pp-r2-shard-01.json --manifest $MAN/pp-r2-shard-02.json --manifest $MAN/pp-r2-shard-03.json "${LEDS[@]}" --root $MED --dataset ood --policy-seed 7 --out $OUT/official-media.jsonl 2>&1 | tail -2
+$P/trace_arrays_check.py $MED 2>&1 | tail -1
+$P/lang_io_check.py --require-server-text --root $MED --out-json $OUT/lang-io.json 2>&1 | tail -1
+VA=(); [ -n "$V" ] && VA=(--variant $V)
+MID=$L; [ -n "$V" ] && MID=groundsg
+$P/publish_videos.py --run-root $ST --run-root $MED --out-root $R/publish-pp-r2 --model-id $MID "${VA[@]}" --policy-seed 7 --dataset ood --side new --manifest $MAN/manifest.json --expect-total 86 --mode link --out-json $OUT/publish.json 2>&1 | tail -1

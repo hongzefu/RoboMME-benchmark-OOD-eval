@@ -1,0 +1,222 @@
+[
+  {
+    "id": "C13-SG-TRACE",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/trace_writer.py"
+    ],
+    "symbol": "TraceWriter / image_sha256 / array_record / bytes_record / read_trace / canonical_bytes / validate_trace / find_traces / subgoal_sequence（每局 trace.jsonl）",
+    "oracle": "计划 1.7 字段约定；夹具手写数组与画面，哈希期望用 hashlib 直接对原始字节算",
+    "positive": "header→demo→request/response/history/step→end 行序与字段逐项等于手写期望；数组按原始 dtype/shape 哈希（float64 与 float32 同值哈希不同）；canonical_bytes 与键序无关；validate_trace 对合规轨迹返回空",
+    "negative": "动作改 1 bit 哈希改变；close 后再写抛 RuntimeError；with 块内异常以 status=error、terminal_reason=exception:<类型> 收尾；step 断号、end 缺失、exec_steps 不符、demo 不在首个 step 之前（其前只许 header／request／response／history）均被 validate_trace 报出；gate2_compare 对动作改 1 bit、画面哈希改变判分叉（见 C13-SG-GATE2）",
+    "boundaries": "只覆盖 trace 字段，不覆盖视频字节；相邻浮点（只差最后一位）规范化字节不同",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_trace_writer.py::test_row_order_and_fields",
+      "tests/pipeline/evalx/report/test_sgx_trace_writer.py::test_array_hash_keeps_dtype_and_shape",
+      "tests/pipeline/evalx/report/test_sgx_trace_writer.py::test_flip_one_bit_changes_hash",
+      "tests/pipeline/evalx/report/test_sgx_trace_writer.py::test_canonical_bytes_deterministic_and_dtype_sensitive",
+      "tests/pipeline/evalx/report/test_sgx_trace_writer.py::test_write_after_close_raises_and_exit_closes_with_error",
+      "tests/pipeline/evalx/report/test_sgx_trace_writer.py::test_validate_trace_reports_structure_problems"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified",
+    "note": "主会话先提交接口桩（计划 1.8），S7 补全实现、用例转 verified；签名与字段名未改，只新增 canonical_bytes／validate_trace／find_traces／subgoal_sequence 与 close 后拒写。"
+  },
+  {
+    "id": "C13-SG-GATE2",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/gate2_compare.py",
+      "scripts/eval-official/trace_writer.py"
+    ],
+    "symbol": "gate2_compare.compare / compare_traces / final_rows / epoch_firsts / TraceIndex / verdict_line / main（--mode astra、--groundsg、--site、--expect-total）",
+    "oracle": "两侧轨迹由 TraceWriter 按生产格式写出，变异点（第几步、哪个字段）在用例里手写，首个分叉步与类型手算",
+    "positive": "两侧相同 → GATE2=INFO 且 identical_trace=compared；动作改 1 bit 判 action、画面改 1 像素判 obs、状态判 state、子目标判 text、提前终止判 stop、请求字节判 request，分叉步逐个等于手写值；Astra 模式只比终态与子任务序列；--groundsg 按 server_epoch（缺省按分片文件首行）出 first_episode_identical=<n>/<启动次数>；--site local 判定行带 site=local；全部夹具通过时打印 GATE2_SELFTEST=PASS",
+    "negative": "一侧缺身份 → GATE2=INCOMPLETE missing=1；同侧同身份两条最终行 → duplicate=1、INCOMPLETE；缺轨迹文件 → missing_trace=1、INCOMPLETE；--expect-total 与配对数不符 → INCOMPLETE；infra 尝试行不算重复",
+    "boundaries": "原侧只起一次服务时新侧第二次启动的首局不算对齐（first_episode_aligned 少 1）；判定恒为 INFO／INCOMPLETE，退出码恒 0，不阻塞",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_identical_sides",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_action_one_bit_and_frame_hash",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_state_text_stop_request_kinds",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_missing_identity_is_incomplete",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_duplicate_final_rows_incomplete_but_infra_rows_ignored",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_missing_trace_and_expect_total",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_terminal_mismatch_counted",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_astra_mode_compares_terminal_and_subtasks",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_groundsg_first_episode_with_server_epoch",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_groundsg_without_epoch_uses_first_row_per_shard_file",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_cli_site_local_and_outputs",
+      "tests/pipeline/evalx/report/test_sgx_gate2_compare.py::test_gate2_selftest"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-MODEL-REPORT",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/model_eval_report.py"
+    ],
+    "symbol": "model_eval_report.summarize_set / read_ledgers / read_gate2 / build_report / verdict_lines / main",
+    "oracle": "结果行、账本行、gate2 摘要按生产格式手写，覆盖数、成功率（按任务、按档）、预算数手算",
+    "positive": "覆盖、缺失、终态分布、按任务与按档成功率逐项等于手算；gate2 摘要并入 Markdown 表；预算从账本（attempt_start／reset_claim 行数）或结果行（行数／reset_calls 之和）计，PASS 行为 attempts=<n><=<上限> resets=<n><=<上限>",
+    "negative": "有缺失的集合 → MODEL_EVAL_REPORT=PARTIAL；同身份终态冲突、重复、清单外多余均计入且判不完整；超上限 → EVAL_BUDGET=FAIL、退出码 1",
+    "boundaries": "未给上限 → EVAL_BUDGET=NA；infra 尝试计入预算、不计覆盖；xhard0 结果行的档取 identity.tier",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_model_eval_report.py::test_coverage_rates_by_task_and_tier",
+      "tests/pipeline/evalx/report/test_sgx_model_eval_report.py::test_duplicate_conflict_and_manifest",
+      "tests/pipeline/evalx/report/test_sgx_model_eval_report.py::test_gate2_merge_budget_from_ledger_and_cli",
+      "tests/pipeline/evalx/report/test_sgx_model_eval_report.py::test_stage3_matrix_by_policy_seed"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-RESOURCE-PROBE",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/resource_probe.py"
+    ],
+    "symbol": "resource_probe.ProcFS / GpuStream / Sampler / summarize / verdict_line / gpu_cmd / main（附着 --pid 与托管 -- 命令）",
+    "oracle": "假 /proc 目录树（stat 的 comm 含空格与括号）与替身 nvidia-smi 脚本；峰值、CPU 核数手算",
+    "positive": "进程树只含根及其子孙；RSS 与显存峰值为同一时刻之和；VmHWM 之和、cpu_cores_used、episode_s 等于手算；nvidia-smi 为每卡单个持久 -lms 查询；主进程退出后出 PREFLIGHT=PASS 行且含各标签峰值",
+    "negative": "无关进程与窗口外的显存样本不计入；托管命令退出码非 0 → PREFLIGHT=FAIL、退出码 1",
+    "boundaries": "测试不调用真实 nvidia-smi 与 GPU（资源守卫）；附着模式退出码记 na",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_resource_probe.py::test_tree_mem_vram_and_peaks",
+      "tests/pipeline/evalx/report/test_sgx_resource_probe.py::test_gpu_cmd_is_single_persistent_query",
+      "tests/pipeline/evalx/report/test_sgx_resource_probe.py::test_attach_mode_ends_when_main_exits",
+      "tests/pipeline/evalx/report/test_sgx_resource_probe.py::test_managed_command_rc"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-CAP-PROBE",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/cap_probe.py"
+    ],
+    "symbol": "cap_probe.run_loop / derive_range / hold_action / verdict_line / main（--loop strict|mme-vla|range、--derive-range、--official）",
+    "oracle": "CPU 假环境仿 DemonstrationWrapper 的 max_steps+2 截断；期望步数与终止原因手写",
+    "positive": "mme-vla 1301／loop_count、range 1300／loop_exit、strict 1600／strict_cap 且第 1601 次不进环境；--derive-range 由同一局前 1300 步得出 range 行并标 source=prefix；动作恒为当前关节位置",
+    "negative": "环境先截断 → 如实报 env_truncated 与实际步数、STEP_CAP=FAIL、builder_cap_ok=0；环境提前 terminated → env_terminated；--derive-range 配非 perceptual-framesamp-modul 循环被拒",
+    "boundaries": "真实仿真不在测试里跑（预检时由主会话在本机跑）；--official 判定行标 official=1、dataset=test",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_cap_probe.py::test_loops_against_builder_cap",
+      "tests/pipeline/evalx/report/test_sgx_cap_probe.py::test_env_truncates_first_is_reported_honestly",
+      "tests/pipeline/evalx/report/test_sgx_cap_probe.py::test_derive_range_from_mme_vla_prefix",
+      "tests/pipeline/evalx/report/test_sgx_cap_probe.py::test_hold_action_keeps_joints_and_gripper",
+      "tests/pipeline/evalx/report/test_sgx_cap_probe.py::test_main_mme_vla_with_derive_range",
+      "tests/pipeline/evalx/report/test_sgx_cap_probe.py::test_main_strict_official_label_and_rejects_bad_combo"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
+    "id": "C13-SG-VIDEO-CHECK",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/video_check.py"
+    ],
+    "symbol": "video_check.check / expected_frames / raw_files / FFTools / verdict_line / main（--frames-rule demo+exec|field|fixed|none）",
+    "oracle": "按输出键 <policy>[-<variant>]/<dataset>/<side>/<key>.a<attempt>/ 手建目录；非 slow 用替身给编码名、解码结果与帧数，slow 用真实 ffmpeg 编 h264／mpeg4 并截断一份",
+    "positive": "合格目录 → VIDEO_SAVED=PASS 且 bytes 等于手算；帧数口径 demo_frames+exec_steps+偏移、结果行字段、固定值三种各自生效；真实 h264 完整解码帧数相符",
+    "negative": "缺 mp4、编码非 h264、解码出错、帧数差 1、残留 .spool／*.mkv／*.png（含 --raw-root 额外目录）、一局多个 mp4、孤儿目录与两行指向同一目录均计数并判 FAIL；没有任何局也判 FAIL",
+    "boundaries": "infra 作废尝试的目录可有可无；缺公式字段按不符计",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_video_check.py::test_pass_layout_and_frame_formula",
+      "tests/pipeline/evalx/report/test_sgx_video_check.py::test_each_failure_kind_counted",
+      "tests/pipeline/evalx/report/test_sgx_video_check.py::test_duplicate_rows_and_rules",
+      "tests/pipeline/evalx/report/test_sgx_video_check.py::test_real_ffmpeg_h264_decode_and_counts",
+      "tests/pipeline/evalx/report/test_sgx_video_check.py::test_no_frame_error_counted_separately_and_policy_seed"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "verified",
+    "note": "test_real_ffmpeg_h264_decode_and_counts 标 slow（真起 ffmpeg），日常门禁不跑，S7 验收以 -m slow 单独跑。"
+  },
+  {
+    "id": "C13-SG-VIDEO-LAYOUT",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/publish_videos.py",
+      "scripts/eval-official/render_official_video.py"
+    ],
+    "symbol": "publish_videos.run / plan_episode / name_terminal / read_index / write_index / place / main（--verify、--mode link|copy、--accept-from、--expect-total）",
+    "oracle": "1006 计划八.7 与接口冻结说明第六节：上游 mme-vla 布局 <run 根>/<model_id>/seed<policy_seed>/[oracle|qwenvl|memer/]videos/<task>_ep<N>_<success|fail|timeout>_<task_goal>_<tier>.mp4；夹具手写运行根、账本、局目录，期望文件名与索引列手写",
+    "positive": "success／fail／strict-cap（trace terminal_reason=error、status=timeout）三局发布为三态命名、默认硬链接、局目录原位不动；index.tsv 11 列逐项等于手写；重复发布同名同 sha 幂等（published=0 reused=3、索引字节不变）；--verify PASS；hard-verify 用源局号、copy 模式；超长 task_goal 截断加哈希 ≤255 字节；86 个身份全无帧 → videos=0 no_frame_error=86 accepted=86 PASS（用户裁决的具名例外、单列）",
+    "negative": "infra a1＋accepted a2 只发 a2；同名异 sha → conflict、不覆盖；--verify 发现已发布文件被篡改、目录里有 _error_ 命名或索引外文件 → FAIL；有帧的 error 局 → error_named=1 FAIL；trace／sidecar 种子不符 → seed_mismatch、一处都没写 → seed_unproven；--expect-total 不符 → FAIL；groundsg 不给变体或其他模型给变体 → 参数错误",
+    "boundaries": "不解码视频（解码与帧数归 official_media_check）；无帧 error 局只进索引不出视频；原侧无 AttemptLedger 时用 --accept-from results",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_publish_layout_three_terminals_index_and_idempotent",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_only_accepted_attempt_is_published",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_same_name_different_sha_fails_and_verify_catches_tamper",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_all_86_identities_no_frame",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_error_with_frames_is_error_named_and_not_published",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_policy_seed_mismatch_and_unproven",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_hard_verify_source_episode_copy_mode_and_no_variant",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_verify_rejects_error_named_and_extra_files",
+      "tests/pipeline/evalx/report/test_sgx_publish_videos.py::test_long_goal_truncated_with_hash"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "planned",
+    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，待主会话合并后跑通再改 verified。"
+  },
+  {
+    "id": "C13-SG-LANG-IO",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/lang_io_check.py"
+    ],
+    "symbol": "lang_io_check.check_episode / check / frame_sets / image_refs / memer_log_counts / main（--root、--require-server-text、--expect-system）",
+    "oracle": "1006 计划八.11「验收」与接口冻结说明第五节的 LanguageLog 行格式；夹具手写 trace 与 language.jsonl，期望计数手写",
+    "positive": "两局各 4 个执行步、2 次动作模型调用、1 次子目标调用 → LANG_IO=PASS 全部计数为 0；reuse 行使无 source_call_id 的步可追溯；MemER 归档日志请求／回复数与账本一致时通过；无外壳路线不要求 server_final_text",
+    "negative": "改 system（与多数不同或不等于 --expect-system 哈希）、交换消息顺序、同一步多一次动作模型调用、缺回复、缺 call_close、引用错 attempt（图引用哈希对不上）、server_final_text 为空、retry 跳号或与 MemER 日志次数不符、执行步无来源或指向之后的调用、缺 language.jsonl 均 FAIL",
+    "boundaries": "只读；帧哈希只核是哪一帧，不核像素；extra_calls 只在 trace 有 response 行时核",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_pass_two_episodes",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_changed_system_fails",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_swapped_message_order_fails",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_extra_call_in_same_step_fails",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_missing_reply_and_dangling_call_fail",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_language_from_wrong_attempt_fails",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_empty_server_final_text_fails",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_memer_retry_count_against_archived_log",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_unresolved_step_reuse_and_missing_language",
+      "tests/pipeline/evalx/report/test_sgx_lang_io_check.py::test_system_grouped_by_route_mixed_root"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "planned",
+    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，待主会话合并后跑通再改 verified。"
+  },
+  {
+    "id": "C13-SG-GATE2-HOST-LANG",
+    "domain": "C13",
+    "source": [
+      "scripts/eval-official/gate2_compare.py"
+    ],
+    "symbol": "gate2_compare.compare_ext(expect_host=) / host_matches / read_language / language_messages / compare_language / text_snippets / ext_lines（--expect-host）",
+    "oracle": "1006 计划八.10 第 6 条、八.11 与冻结说明第九节；两侧轨迹由 TraceWriter 写出，language.jsonl 手写，期望计数与片段手写",
+    "positive": "两侧同一主机（长短主机名等同）→ GATE2_PROVENANCE=PASS mode=host；语言账本相同 → prompt_diff=0 reply_diff=0；两侧都没有 language.jsonl → prompt_diff=NA reply_diff=NA",
+    "negative": "一侧异主机、一侧缺主机 → GATE2_PROVENANCE=FAIL foreign_rows=1 unknown_rows=1、GATE2=INVALID reason=cross_machine；不给 --expect-host 时 GL 模式原检查不变；user 文字与回复不同 → prompt_diff／reply_diff 计数并输出 GATE2_LANG_FIRST_DIFF 两侧片段；只一侧多一次调用计 prompt_diff、只一侧有账本计 lang_missing",
+    "boundaries": "默认（非扩展）模式输出与此前逐字节相同（见 test_gate2_inputs 的 BASE 对照）",
+    "nodeids": [
+      "tests/pipeline/evalx/report/test_sgx_gate2_lang_host.py::test_expect_host_same_machine_passes_and_lang_identical",
+      "tests/pipeline/evalx/report/test_sgx_gate2_lang_host.py::test_expect_host_cross_machine_invalid",
+      "tests/pipeline/evalx/report/test_sgx_gate2_lang_host.py::test_language_prompt_and_reply_diff_with_first_snippet",
+      "tests/pipeline/evalx/report/test_sgx_gate2_lang_host.py::test_language_extra_call_and_missing_files"
+    ],
+    "resource": "cpu",
+    "mutants": [],
+    "status": "planned",
+    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，待主会话合并后跑通再改 verified。"
+  }
+]

@@ -1,0 +1,44 @@
+"""第二档原侧重跑（批次 3a）合表准备（只读原产物，写 gate2-report/annot 与 traces）：
+- 每片终态行合成一份 <policy>-orig-rerun.jsonl，并补注 node（取该片任务日志 TASK_ORIG／TASK_ORIG_MME 行的 host=，
+  第 0 片 MME 取补跑任务日志），node_source 写明来源；补 exec_steps = steps（原版行只写 steps）。
+- 10 片 orig-attempts.json 合成一份 {"identities": [...]}。
+用法：prep_orig_rerun.py <smvla|mme>
+"""
+import json, re, sys, glob
+from pathlib import Path
+R = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-02'); G = R / 'gate2-orig-rerun/p2-orig'
+pol = sys.argv[1]
+host = {}
+for log in sorted((R / 'logs/tasks').glob('211o*.log')):
+    txt = log.read_text(errors='replace')
+    for m in re.finditer(r'TASK_ORIG(_MME)? shard=(\d+) .*?host=(\S+)', txt):
+        mme_only, shard, h = m.group(1), int(m.group(2)), m.group(3)
+        # 按各段自己的结束行判定该段在此任务里成功（整片任务 rc 可能因另一段失败而非 0）
+        if pol == 'smvla' and not mme_only and 'SMVLA_SHARD_END rc=0' in txt:
+            host[shard] = (h, log.name)
+        if pol == 'mme' and 'MME_SHARD_END rc=0' in txt:
+            host[shard] = (h, log.name)
+out = R / f'gate2-report/annot/{pol}-orig-rerun.jsonl'; n = 0
+with out.open('w') as f:
+    for s in range(10):
+        pat = (G / f'smvla/s{s}').glob('episodes-shard*.jsonl') if pol == 'smvla' else (G / f'mme/s{s}').glob('mmevla-official-xhard0/ckpt79999/seed7/episodes.jsonl')
+        files = list(pat); assert len(files) == 1, (s, files)
+        h, src = host[s]
+        for l in files[0].read_text().splitlines():
+            if not l.strip(): continue
+            r = json.loads(l); r.setdefault('exec_steps', r.get('steps'))
+            r['node'] = h; r['node_source'] = f'主会话补注：logs/tasks/{src} 的 host= 行（原版逐局行不写节点）'
+            f.write(json.dumps(r, ensure_ascii=False) + '\n'); n += 1
+ids = []
+for s in range(10):
+    d = json.loads((G / f'stage/{pol}/s{s}/rec/orig-attempts.json').read_text()); ids += d['identities']
+# SimpleMemVLA 原版逐局行不带 attempt：按适配器映射（每身份唯一 attempt）补上，供对比工具按 trace 头绑定；已有 attempt 的行不动
+amap = {(i['task'], int(i['source_episode'])): i['attempt'] for i in ids if i.get('attempt') is not None}
+rows = [json.loads(l) for l in out.read_text().splitlines() if l.strip()]
+filled = 0
+for r in rows:
+    if r.get('attempt') is None:
+        r['attempt'] = amap[(r['task'], int(r['source_episode']))]; r['attempt_source'] = 'orig-attempts.json（主会话补注）'; filled += 1
+out.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows))
+(R / f'gate2-report/annot/{pol}-orig-attempts.json').write_text(json.dumps({'identities': ids}, ensure_ascii=False, indent=1))
+print(f'PREP_ORIG policy={pol} rows={n} attempt_filled={filled} attempts={len(ids)} shards_with_host={len(host)} hosts={sorted(set(v[0][:6] for v in host.values()))}')

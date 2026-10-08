@@ -1,0 +1,66 @@
+{
+ "sets": [
+  {
+   "policy": "perceptual-framesamp-modul",
+   "dataset": "ood",
+   "side": "new",
+   "site": "gl",
+   "results": [
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/ood-new-framesamp-seed7/s*/perceptual-framesamp-modul/results.jsonl"
+   ],
+   "expect_total": 86,
+   "manifest": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/inputs/manifests/ood86/manifest.json",
+   "policy_seed": 7
+  },
+  {
+   "policy": "smvla",
+   "dataset": "ood",
+   "side": "new",
+   "site": "gl",
+   "results": [
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/ood-new-smvla-seed7/s*/smvla/results.jsonl"
+   ],
+   "expect_total": 86,
+   "manifest": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/inputs/manifests/ood86/manifest.json",
+   "policy_seed": 7
+  },
+  {
+   "policy": "pp",
+   "dataset": "ood",
+   "side": "new",
+   "site": "gl",
+   "results": [
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/ood-new-pp-seed7-r2/s*/pp/results.jsonl"
+   ],
+   "expect_total": 86,
+   "manifest": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/inputs/manifests/ood86/manifest.json",
+   "policy_seed": 7
+  },
+  {
+   "policy": "groundsg",
+   "dataset": "ood",
+   "side": "new",
+   "site": "gl",
+   "results": [
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/ood-new-qwenvl-seed7/s*/groundsg-ground-sg-qwenvl/results.jsonl"
+   ],
+   "expect_total": 86,
+   "manifest": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/inputs/manifests/ood86/manifest.json",
+   "policy_seed": 7,
+   "variant": "ground-sg-qwenvl"
+  },
+  {
+   "policy": "groundsg",
+   "dataset": "ood",
+   "side": "new",
+   "site": "gl",
+   "results": [
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/ood-new-memer-seed7/s*/groundsg-ground-sg-memer/results.jsonl"
+   ],
+   "expect_total": 86,
+   "manifest": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03/inputs/manifests/ood86/manifest.json",
+   "policy_seed": 7,
+   "variant": "ground-sg-memer"
+  }
+ ]
+}

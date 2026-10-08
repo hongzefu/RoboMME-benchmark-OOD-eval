@@ -1,0 +1,19 @@
+#!/bin/bash
+# GL 客户端环境的 flash-attn 2.8.3 重编（GL 节点 glibc 2.28；本机编出的 .so 需 GLIBC_2.32，GL 上 ImportError）。
+# 用 conda-forge gcc 11 + sysroot 2.17 作编译器（目标 glibc ≤ 2.17），CUDA 12.8 本机工具链，torch 不变；装进 NFS 上 GL 客户端环境。
+set -euo pipefail
+ROOT=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+T=$ROOT/artifacts/sg-evaluation/toolchain-glibc217
+GE=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/venvs/client-env
+[ -x $T/bin/x86_64-conda-linux-gnu-g++ ] || micromamba create -y -q -p $T -c conda-forge gxx_linux-64=11 sysroot_linux-64=2.17
+export CC=$T/bin/x86_64-conda-linux-gnu-gcc CXX=$T/bin/x86_64-conda-linux-gnu-g++
+export CUDA_HOME=/usr/local/cuda-12.8 PATH=/usr/local/cuda-12.8/bin:$PATH
+export NVCC_PREPEND_FLAGS="-ccbin $CXX" FLASH_ATTENTION_FORCE_BUILD=TRUE MAX_JOBS=${MAX_JOBS:-16} UV_LINK_MODE=copy
+$CXX --version | head -1
+date; t0=$(date +%s)
+uv pip install --python $GE/bin/python --no-build-isolation --reinstall --no-deps --no-cache flash-attn==2.8.3
+echo "build_seconds=$(( $(date +%s) - t0 ))"
+f=$(ls $GE/lib/python3.11/site-packages/flash_attn_2_cuda*.so)
+g=$(objdump -T $f | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -t. -k2,2n -u | tail -1)
+x=$(objdump -T $f | grep -oE 'GLIBCXX_[0-9.]+' | sort -t. -k3,3n -u | tail -1)
+echo "FA_GL_BUILD glibc_max=$g glibcxx_max=$x"

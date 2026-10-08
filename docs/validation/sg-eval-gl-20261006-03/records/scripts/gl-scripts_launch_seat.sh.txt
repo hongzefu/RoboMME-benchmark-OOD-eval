@@ -1,0 +1,16 @@
+#!/bin/bash
+# 第三阶段（1006 计划）席位启动器：照抄 sgeval-20261004/scripts/launch_seat_v2.sh 体例。
+# GL 登录节点 tmux 内：launch_seat.sh <JobID> <日志名> <链脚本绝对路径> <链脚本参数…>
+# 等占位作业 RUNNING → 清 SLURM_* → srun 进占位作业跑链脚本（只有这一步带 --gpu_cmode=shared）。
+JOB=$1; NAME=$2; CHAIN=$3; shift 3
+R=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sgeval-20261006-03
+mkdir -p $R/logs
+while [ "$(squeue -h -j $JOB -o %T 2>/dev/null)" != "RUNNING" ]; do
+  st=$(squeue -h -j $JOB -o %T 2>/dev/null); [ -z "$st" ] && { echo "错误: 作业 $JOB 不在队列"; echo "EXIT_CODE=3" | tee -a $R/logs/$NAME.log; exit 3; }
+  sleep 60
+done
+echo "SEAT_LAUNCH job=$JOB name=$NAME node=$(squeue -h -j $JOB -o %N) chain=$CHAIN $(date -Is)" | tee -a $R/logs/$NAME.log
+for v in $(env | grep -o '^SLURM_[A-Z_]*'); do unset "$v"; done
+cd /tmp
+srun --jobid=$JOB --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared bash "$CHAIN" "$@" 2>&1 | tee -a $R/logs/$NAME.log
+echo "EXIT_CODE=${PIPESTATUS[0]}" | tee -a $R/logs/$NAME.log

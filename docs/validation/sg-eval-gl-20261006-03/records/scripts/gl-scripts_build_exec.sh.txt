@@ -1,0 +1,23 @@
+#!/bin/bash
+# 1006 计划第二部分四节 runbook 1：从冻结提交建 NFS 执行副本 robomme_benchmark-sgeval3（照 sg-eval-gl-20261006-02 launch.md 做法）。
+# 子模块从本机副本初始化（不走外网）；主 .venv 用共享解释器 3.11.14、uv sync --frozen --group eval-client；
+# SimpleMemVLA 客户端环境由任务脚本 SMVLA_PY 指向上一轮 b34 执行副本的 smvla-env（同一锁定 gitlink），三方服务 venv 沿用 robomme_benchmark-sgeval（同锁定提交）。
+set -eu
+F=$1
+SRC=/data/hongzefu/robomme_benchmark_MotionJEPANewTask
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+E=$N/robomme_benchmark-sgeval3
+[ ! -e $E ] || { echo "BUILD_BLOCKED exists $E"; exit 4; }
+export UV_LINK_MODE=copy UV_CACHE_DIR=$HOME/.cache/uv UV_PYTHON_INSTALL_DIR=$N/uv-python
+echo "BUILD_START frozen=$F $(date -Is)"
+git clone --no-hardlinks -q $SRC $E
+git -C $E checkout -q $F
+for m in mme-vla PonderPounce SimpleMemVLA; do
+  git -C $E config submodule.third_party/$m.url $SRC/third_party/$m
+  git -C $E -c protocol.file.allow=always submodule update --init -q third_party/$m
+done
+git -C $E submodule status
+cd $E && uv venv -q --python $N/uv-python/cpython-3.11.14-linux-x86_64-gnu/bin/python3.11 .venv && uv sync -q --frozen --group eval-client
+.venv/bin/python -c "import robomme_hard,sys; print('ROBOMME_HARD', robomme_hard.__file__)"
+head=$(git -C $E rev-parse HEAD); dirty=$(git -C $E status --short --ignore-submodules=dirty | wc -l)
+echo "EXEC_COPY=$([ "$head" = "$F" ] && [ "$dirty" = 0 ] && echo PASS || echo FAIL) head=$head dirty=$dirty path=$E $(date -Is)"
