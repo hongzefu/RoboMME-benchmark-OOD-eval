@@ -1,40 +1,35 @@
 #!/usr/bin/env python3
-"""三侧对拍入口（0927 计划第一部分 §5.4、§6.1，第二部分 §1.3 / §3.2 / §3.4）：generate / publish / compare。
+"""对拍入口（0927 计划第一部分 §5.4、§6.1，第二部分 §1.3 / §3.2 / §3.4；评估仓 dev-scripts/parity）：generate / publish /
+compare / anchor / import-delivery / binding / export-xhard0-manifest / smoke。
 
-三侧：O 官方（vendor 编排 d53f21a7 + 环境源码 1fadc0ec worktree，官方 ``_worker``）；P 修改前（tag ``pre-hard-split``
-worktree，官方 ``_worker``）；H 修改后（拆包后 HEAD，``--force-mirror`` + ``ROBOMME_ENV_PACKAGE=robomme_hard``）。
-判定是「行为一致」（用户 U-1）：身份、setup、结构、任务成功全等才 PASS；动作／状态／图像／帧数四项差异按
-``scripts/configs/hard-parity-tolerances.json`` 的阈值判（U-19）；sha 相等数等只作参考。
+benchmark 包取自子模块 ``third_party/robomme_benchmark``。侧：O 官方（vendor 编排 d53f21a7 + 子模块 ``robomme``，官方
+``_worker``）；P 修改前（锚点登记的缓存）；H 修改后（子模块 ``robomme_hard``，``--force-mirror`` +
+``ROBOMME_ENV_PACKAGE=robomme_hard``）；H2 第二次生成。判定是「行为一致」（用户 U-1）：身份、setup、结构、任务成功全等
+才 PASS；动作／状态／图像／帧数四项差异按同目录 ``configs/hard-parity-tolerances.json`` 的阈值判（U-19）；sha 相等数等
+只作参考。
 
-原三档（``--tier native``）的 144 局清单 ``subset_manifest.json`` 原在 ``scripts/configs/newtask-v3/``，12.214 起已从工作树删除（用户 2026-09-28 指令：只保留对拍容差与 v6 采样设计）；需要重跑原三档对拍时用 ``git show 6e70c0bf:scripts/configs/newtask-v3/subset_manifest.json`` 取回（6e70c0bf 是删除前最后一个含该文件的提交，即 12.213）。
+原三档（``--tier native``）的 144 局清单 ``subset_manifest.json`` 随原三档对拍退役，未搬入评估仓（旧仓 git 历史
+``6e70c0bf`` 可取回）；xhard0 按数据集名取局：H 侧镜像 worker 的 gym.make 实参取自构建器 ``dataset="hard-verify"``。
 
 子命令::
 
     # 生成（GL 节点；--stage 给 NFS 暂存目录时每局 sha256 后搬到暂存并删本地副本）
-    uv run --frozen --no-sync python scripts/parity/hard_parity.py generate --side O --tier native \
-        --manifest <原三档 144 局清单 subset_manifest.json> --src-root <1fadc0ec worktree> \
-        --workers 16 --gpu 0 --out /tmp/hs/O-native --stage <NFS>/hs-stage/O-native
-    # 上传 bucket 并逐对象读回核对（sled-vail）
-    uv run --no-sync python scripts/parity/hard_parity.py publish --side O --tier native
+    uv run --frozen --no-sync python dev-scripts/parity/hard_parity.py generate --side O --tier xhard0 \
+        --manifest dev-scripts/parity/configs/xhard0/xhard0_manifest.json --src-root third_party/robomme_benchmark \
+        --workers 16 --gpu 0 --out /tmp/hs/O-xhard0 --stage <NFS>/hs-stage/O-xhard0
     # 比对（sled-vail，读 /data 上的拉回目录）
-    uv run --no-sync python scripts/parity/hard_parity.py compare --pair O:P --tier native \
-        --manifest <原三档 144 局清单 subset_manifest.json> --calibrate
+    uv run --no-sync python dev-scripts/parity/hard_parity.py compare --pair O:H --tier xhard0 \
+        --manifest dev-scripts/parity/configs/xhard0/xhard0_manifest.json
+    # 拆仓验收：1 任务 × {hard-verify, ood} × 2 局 × 2 侧 = 8 次生成后按容差比（PARITY_GEN_SMOKE）
+    uv run --no-sync python dev-scripts/parity/hard_parity.py smoke --task VideoUnmask \
+        --hard-verify-episodes 0:2 --ood-episodes 0:2 --hard-verify-sides O,H --ood-sides H_old,H_new \
+        --h-old-src <旧仓 SRC 只读快照>/src --workers 2 --out <目录>
 
 ``generate`` 默认断言 GPU 型号为 A40；``--dev-smoke`` 放行本机 Ada（开发冒烟，``NATIVE_SMOKE``）。
 
-v8 二次生成对拍（``--tier v8``）与 v6 四档回归（``--tier xhard``）已于 1003 维护计划细则 2.3 删除（git 历史可取回）；
-v9 沿用 v8 的交付清单格式（schema ``v8-delivery/1``）、分母核对与五终态。
-
-v9 二次生成对拍（1002 方案 §2.3 ``PARITY_H_H2 tier=v9``、§2.4.2 第 6 步）：只比新生成的 80 局（MoveCube 50 +
-InsertPeg 30），``--identities`` 给 assemble 的 800 行清单（只取 ``source == "v9-new"``）或任意身份 jsonl；默认目录
-``artifacts/newtask-v9/parity/{h5,compare}``，``--cells`` 缺省 ``v9full``（V9_CELLS，与 EXPECTED_CELLS 是否已切换无关）::
-
-    D=artifacts/newtask-v9/delivery/delivery.local.json
-    uv run --no-sync python scripts/parity/hard_parity.py import-delivery --tier v9 --delivery $D --identities $D
-    uv run --frozen --no-sync python scripts/parity/hard_parity.py generate --side H2 --tier v9 \\
-        --manifest $D --identities $D --specs-root artifacts/newtask-v9/specs-root --src-root <...> --out <...>
-    uv run --no-sync python scripts/parity/hard_parity.py compare --pair H:H2 --tier v9 \\
-        --manifest $D --identities $D --specs-root artifacts/newtask-v9/specs-root
+v9 二次生成对拍（1002 方案 §2.3 ``PARITY_H_H2 tier=v9``）：``--identities`` 给 assemble 的 800 行清单（只取
+``source == "v9-new"``）或任意身份 jsonl；默认目录 ``artifacts/newtask-v9/parity/{h5,compare}``，``--cells`` 缺省
+``v9full``（V9_CELLS）。v8 二次生成对拍（``--tier v8``）与 v6 四档回归（``--tier xhard``）已于 1003 维护计划细则 2.3 删除。
 """
 
 from __future__ import annotations
@@ -56,11 +51,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
-RUNNER = ROOT / "scripts" / "parity" / "train_split_runner.py"
-GENERATE_H5 = ROOT / "scripts" / "injection-dev" / "generate_h5.py"
-VENDOR = ROOT / "scripts" / "parity" / "official"
-TOLERANCES = ROOT / "scripts" / "configs" / "hard-parity-tolerances.json"
+import _common  # noqa: E402  同目录：评估仓根、子模块根、hard_specs 轻量加载
+
+HERE = _common.HERE
+ROOT = _common.REPO_ROOT
+RUNNER = HERE / "train_split_runner.py"
+GENERATE_H5 = HERE / "generate_h5.py"
+VENDOR = _common.OFFICIAL_ROOT
+TOLERANCES = _common.CONFIGS / "hard-parity-tolerances.json"
 # v8 起默认目录（1001 方案第一部分 §2.3）；compare／publish／binding 另可用 --h5-root／--compare-root 显式指定
 LOCAL_H5_ROOT = ROOT / "artifacts" / "newtask-v8" / "parity" / "h5"
 COMPARE_ROOT = ROOT / "artifacts" / "newtask-v8" / "parity" / "compare"
@@ -69,8 +67,7 @@ V9_LOCAL_H5_ROOT = ROOT / "artifacts" / "newtask-v9" / "parity" / "h5"
 V9_COMPARE_ROOT = ROOT / "artifacts" / "newtask-v9" / "parity" / "compare"
 ANCHORS = ROOT / "docs" / "validation" / "parity-anchors.json"
 #: xhard0 清单 v8 不变（xhard0 即官方 hard，§2.5「不动」）
-XHARD0_MANIFEST = ROOT / "scripts" / "configs" / "xhard0" / "xhard0_manifest.json"
-HARD_SPECS_FILE = ROOT / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+XHARD0_MANIFEST = _common.CONFIGS / "xhard0" / "xhard0_manifest.json"
 BUCKET = "HongzeFu/robomme-hard-parity"
 HF = ["uvx", "--from", "huggingface_hub==1.8.0", "--with", "click", "hf"]
 #: H2＝v8 正式局的第二次生成（gen2），与 H（gen1）比对 PARITY_H_H2
@@ -152,24 +149,11 @@ def native_rows(manifest: Path) -> list[dict[str, Any]]:
     return [{"task": r["task"], "tier": r["difficulty"], "episode": int(r["episode"]), "seed": int(r["seed"])} for r in rows]
 
 
-_HARD_SPECS_LIGHT = None
-
-
 def hard_specs_light():
     """``hard_specs`` 是纯函数模块，但经 ``robomme_hard.env_record_wrapper`` 包导入会连带导入仿真（R9 精神：本进程
-    不导入 robomme_hard 包）。已导入过包时直接复用包内模块；否则按文件路径单独加载一份（不经包 ``__init__``）。"""
-    global _HARD_SPECS_LIGHT
-    loaded = sys.modules.get("robomme_hard.env_record_wrapper.hard_specs")
-    if loaded is not None:
-        return loaded
-    if _HARD_SPECS_LIGHT is None:
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location("_hard_specs_light", HARD_SPECS_FILE)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _HARD_SPECS_LIGHT = module
-    return _HARD_SPECS_LIGHT
+    不导入 robomme_hard 包）。已导入过包时直接复用包内模块；否则按文件路径单独加载子模块里的那一份
+    （``_common.hard_specs_light``，不经包 ``__init__``）。"""
+    return _common.hard_specs_light()
 
 
 # ── v8 交付清单读取适配（S2-B 产出，键名以 §2.2 第 7 条为准；不确定的键名集中在这里兜底）──────────────
@@ -242,7 +226,7 @@ def rows_for(tier: str, manifest: Path) -> list[dict[str, Any]]:
     raise ParityError(f"未知档 {tier!r}（只支持 {TIERS}）")
 
 
-#: v9 具名格表（与 ``scripts/injection-dev/_rollout.py`` 的 ``V9_SMOKE_CELLS``／``V9_SHARD_TASKS`` 同值，测试逐项核对；
+#: v9 具名格表（与同目录 ``_rollout.py`` 的 ``V9_SMOKE_CELLS``／``V9_SHARD_TASKS`` 同值，测试逐项核对；
 #: 本模块只用标准库、不导入 robomme_hard 包，故不 import _rollout）
 V9_SMOKE_CELLS = {("MoveCube", "xhard4"): 1, ("InsertPeg", "xhard4"): 1}
 V9_SHARD_TASKS = {"shard1": ("MoveCube",)}
@@ -465,13 +449,13 @@ class Mover(threading.Thread):
 
     @staticmethod
     def _load_noise_gate():
-        """按文件路径加载 ``scripts/parity/noise_gate.py``（模块顶层只依赖标准库）。"""
+        """按文件路径加载同目录的 ``noise_gate.py``（模块顶层只依赖标准库）。"""
         import importlib.util
 
         name = "_hard_parity_noise_gate"
         if name in sys.modules:
             return sys.modules[name]
-        spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / "parity" / "noise_gate.py")
+        spec = importlib.util.spec_from_file_location(name, HERE / "noise_gate.py")
         mod = importlib.util.module_from_spec(spec)
         sys.modules[name] = mod
         assert spec.loader is not None
@@ -603,6 +587,25 @@ def xhard0_subset_rows(rows: list[dict[str, Any]], subset: set[tuple[str, str, i
     return [r for r in rows if (r["task"], int(r["seed"])) in keys]
 
 
+def run_with_mover(command: list[str], env: dict[str, str], out: Path, side: str, tier: str, meta: dict[str, Any], *,
+                   stage: Path | None = None, expect_ref: Path | None = None):
+    """起生成子进程（输出进 ``<out>/generate.log``），同时用 :class:`Mover` 逐局写 ``<out>/identities.jsonl``。
+    返回 ``(子进程结果, identities 行, mover)``。``generate`` 与 ``smoke`` 共用。"""
+    mover = Mover(out, stage, side, tier, meta, expect_ref=expect_ref)
+    mover.start()
+    with (out / "generate.log").open("a", encoding="utf-8") as log:
+        proc = subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+    runner_json = out / "_runner" / "results.json"
+    if runner_json.exists():
+        payload = json.loads(runner_json.read_text())
+        meta.update(robomme_module=payload.get("robomme_module"), worker=payload.get("worker"))
+    mover.stop_flag.set()
+    mover.join()
+    lines = [json.loads(t) for t in (out / "identities.jsonl").read_text().splitlines() if t.strip()] \
+        if (out / "identities.jsonl").exists() else []
+    return proc, lines, mover
+
+
 def cmd_generate(args) -> int:
     if args.expect_ref is not None:
         # 参照校验（schema／顶层 sha／partial 拒收）提前到建输出目录、写 launch 之前：参照坏时不留任何文件。
@@ -657,9 +660,9 @@ def cmd_generate(args) -> int:
             env["ROBOMME_ENV_PACKAGE"] = "robomme_hard"
             meta["worker"] = "train_split_worker.run_one"
             if args.tier == "xhard0":
-                # H 侧 gym.make 实参取自 robomme_hard 的 ood builder 的 xhard0 条目（R9）
-                command += ["--builder-route", "ood"]
-                meta["builder_route"] = "ood"
+                # H 侧 gym.make 实参取自 robomme_hard 的 builder（dataset="hard-verify"，局 0～11 即 xhard0）（R9）
+                command += ["--builder-route", "hard-verify"]
+                meta["builder_route"] = "hard-verify"
         else:
             env["ROBOMME_ENV_PACKAGE"] = "robomme"
             meta["worker"] = "official._worker"
@@ -693,18 +696,8 @@ def cmd_generate(args) -> int:
     (out / f"launch-{int(time.time())}.json").write_text(json.dumps(launch, ensure_ascii=False, indent=2))
     print(f"GENERATE_START side={args.side} tier={args.tier} rows={len(rows)} gpu={facts['gpu_model']} "
           f"driver={facts['driver']} workers={args.workers}", flush=True)
-    mover = Mover(out, args.stage, args.side, args.tier, meta, expect_ref=args.expect_ref)
-    mover.start()
-    with (out / "generate.log").open("a", encoding="utf-8") as log:
-        proc = subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
-    runner_json = out / "_runner" / "results.json"
-    if runner_json.exists():
-        payload = json.loads(runner_json.read_text())
-        meta.update(robomme_module=payload.get("robomme_module"), worker=payload.get("worker"))
-    mover.stop_flag.set()
-    mover.join()
-    lines = [json.loads(t) for t in (out / "identities.jsonl").read_text().splitlines() if t.strip()] \
-        if (out / "identities.jsonl").exists() else []
+    proc, lines, mover = run_with_mover(command, env, out, args.side, args.tier, meta, stage=args.stage,
+                                        expect_ref=args.expect_ref)
     got = {ident(r) for r in lines}
     want = {ident(r) for r in rows}
     ok_count = sum(r["success"] for r in lines)
@@ -939,8 +932,14 @@ def calibrate(pairs: list[dict[str, Any]]) -> tuple[bool, dict[str, Any]]:
     return not ceiling_hit, {"payload": payload, "ceiling_hit": ceiling_hit}
 
 
-def _anchor_registry() -> dict[str, Any]:
-    return json.loads(ANCHORS.read_text()) if ANCHORS.is_file() else {"schema": "parity-anchors/1", "anchors": {}}
+def _anchor_registry(*, create: bool = False) -> dict[str, Any]:
+    """锚点登记表 ``docs/validation/parity-anchors.json``。文件缺失时响亮失败（原先静默返回空锚点，会把「登记表丢了」
+    误报成「锚点未登记」）；只有 ``anchor register`` 首次登记（``create=True``）允许从空表起步。"""
+    if ANCHORS.is_file():
+        return json.loads(ANCHORS.read_text())
+    if create:
+        return {"schema": "parity-anchors/1", "anchors": {}}
+    raise ParityError(f"锚点登记表不存在：{ANCHORS}")
 
 
 def _git_tag_commit(tag: str) -> str | None:
@@ -991,7 +990,7 @@ def cmd_anchor(args) -> int:
         ok, line, _ = anchor_check(args.tag, args.h5_root)
         print(line, flush=True)
         return 0 if ok else 1
-    registry = _anchor_registry()
+    registry = _anchor_registry(create=True)
     if args.tag in registry["anchors"] and not args.replace:
         raise ParityError(f"锚点 {args.tag} 已登记；锚点不移动（R5），要换锚点就另打新 tag")
     segments, gpus = {}, set()
@@ -1268,11 +1267,16 @@ def cmd_compare(args) -> int:
         for record in pair_rows:
             stream.write(json.dumps(record, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     n = len(keys)
-    produced = counts["both_success"] + counts["both_fail"]
-    judged = n > 0 and manifest_dup == 0 \
+    # 实际比较数：两侧 h5 都可读（pair_metrics 无错）的身份；任一侧 h5 读不出计 unreadable，不计入 compared
+    compared = sum(1 for m in metrics.values() if m.get("error") is None)
+    unreadable = sum(1 for m in metrics.values() if m.get("error") is not None)
+    # 判定：分母非空、实际比较数 > 0 且等于身份数；两侧同失败（both_fail）单列、不计入通过——同失败只会让结论
+    # 落到 FAIL（另打 PARITY_BOTH_FAIL=REVIEW 交人工看），不能 PASS
+    judged = n > 0 and compared > 0 and compared == n and unreadable == 0 and counts["both_fail"] == 0 \
+        and manifest_dup == 0 \
         and all(counts[k] == n for k in ("identity_equal", "success_equal", "binding_ok")) \
-        and counts["setup_equal"] == counts["both_success"] and counts["schema_equal"] == counts["both_success"] \
-        and produced == n and counts["recovery_mismatch"] == 0 and not left_problems and not right_problems
+        and counts["setup_equal"] == counts["both_success"] == n and counts["schema_equal"] == n \
+        and counts["recovery_mismatch"] == 0 and not left_problems and not right_problems
     if denom is not None:
         if sum(terminal.values()) != n:  # 互斥终态合计必须等于 compared（实现自检，不应发生）
             raise ParityError(f"五终态合计 {sum(terminal.values())} ≠ compared {n}")
@@ -1283,7 +1287,8 @@ def cmd_compare(args) -> int:
         ("action_max", "action_max"), ("state_max", "state_max"), ("image_mad", "image_mad"), ("frames_max", "frames_diff"))}
     divergence = [m["first_divergence"] for m in ok_metrics if m.get("first_divergence") is not None]
     shape = SHAPES[args.tier]
-    base = (f"tier={args.tier} shape={shape} compared={n} identity_equal={counts['identity_equal']} "
+    base = (f"tier={args.tier} shape={shape} keys={n} compared={compared} unreadable={unreadable} "
+            f"identity_equal={counts['identity_equal']} "
             f"setup_equal={counts['setup_equal']} schema_equal={counts['schema_equal']} "
             f"success_equal={counts['success_equal']} both_success={counts['both_success']} both_fail={counts['both_fail']}")
     name = f"PARITY_{left_side}_{right_side}"
@@ -1316,7 +1321,8 @@ def cmd_compare(args) -> int:
               flush=True)
     else:
         # v8：分母与五终态在前（§3 判定行形状）；容差分类里的 noise 改名 tol_noise，免得与终态 noise 同名
-        print(f"{name}={verdict} tier={args.tier} compared={n} cells={denom['frozen_cells']} missing={denom['missing']} "
+        print(f"{name}={verdict} tier={args.tier} keys={n} compared={compared} unreadable={unreadable} "
+              f"cells={denom['frozen_cells']} missing={denom['missing']} "
               f"extra={denom['extra']} duplicate={denom['duplicate']} identity_equal={counts['identity_equal']} "
               + " ".join(f"{state}={terminal[state]}" for state in TERMINAL_STATES)
               + f" expected={denom['expected']} frozen={denom['sizes']['frozen']} delivery={denom['sizes']['delivery']} "
@@ -1333,7 +1339,8 @@ def cmd_compare(args) -> int:
     print(f"PARITY_REFERENCE=INFO pair={args.pair} tier={args.tier} first_divergence_n={len(divergence)} "
           f"first_divergence_median={sorted(divergence)[len(divergence) // 2] if divergence else None} "
           f"first_divergence_min={min(divergence) if divergence else None}", flush=True)
-    summary = {"verdict": verdict, "counts": counts, "worst": worst, "tolerances": tol, "tol_hits": tol_hits,
+    summary = {"verdict": verdict, "keys": n, "compared": compared, "unreadable": unreadable, "counts": counts,
+               "worst": worst, "tolerances": tol, "tol_hits": tol_hits,
                "noise": noise, "tol_over": fail_over, "hard_line_5pct": hard_line, "both_fail": both_fail_rows,
                "left_dir": str(left_dir), "right_dir": str(right_dir), "p_anchor": args.p_anchor,
                "left_problems": left_problems, "right_problems": right_problems,
@@ -1387,13 +1394,8 @@ def official_recovery_mode(episode: int) -> str:
 
 
 def _all_tasks() -> tuple[str, ...]:
-    """16 任务规范序（与 train_split_runner 同法取 scripts/injection-dev/seed_layout.py）。"""
-    path = str(ROOT / "scripts" / "injection-dev")
-    if path not in sys.path:
-        sys.path.insert(0, path)
-    from seed_layout import ALL_TASKS  # noqa: PLC0415
-
-    return tuple(ALL_TASKS)
+    """16 任务规范序：``hard_specs.ALL_TASKS``（按文件轻量加载，不导入 robomme_hard 包）。"""
+    return tuple(hard_specs_light().ALL_TASKS)
 
 
 def xhard0_records(src_root: Path) -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -1444,11 +1446,12 @@ def check_xhard0(rows: list[dict[str, Any]], manifest: dict[str, Any] | None = N
 
 
 def _builder_xhard0_rows() -> list[dict[str, Any]]:
-    """在子进程里读 robomme_hard builder 的 xhard0 条目（本进程不导入 robomme_hard，R9 精神）。"""
+    """在子进程里读 robomme_hard builder（``dataset="hard-verify"``，局 0～11 即 xhard0）的条目（本进程不导入
+    robomme_hard，R9 精神）。"""
     code = ("import json;from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder as B;"
             f"tasks={list(_all_tasks())!r};out=[]\n"
             "for t in tasks:\n"
-            " b=B(t,dataset='ood')\n"
+            " b=B(t,dataset='hard-verify')\n"
             " for ep in range(12):\n"
             "  i=b.resolve_identity(ep);assert i['tier']=='xhard0',i;assert b._hard_env_kwargs(ep)=={'seed':i['seed'],'difficulty':'hard'}\n"
             "  out.append({'task':t,'episode':i['source_episode'],'seed':i['seed']})\n"
@@ -1460,7 +1463,7 @@ def _builder_xhard0_rows() -> list[dict[str, Any]]:
 
 
 def cmd_export_xhard0_manifest(args) -> int:
-    rows, sources = xhard0_records(args.src_root)
+    rows, sources = xhard0_records(args.src_root if args.src_root is not None else _common.bench_root())
     manifest = {
         "schema": "train-parity-manifest/1", "kind": "xhard0",
         "source_repo": "https://github.com/RoboMME/robomme_benchmark.git",
@@ -1479,6 +1482,263 @@ def cmd_export_xhard0_manifest(args) -> int:
         args.out.write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
         ok, line = check_xhard0(rows, json.loads(args.out.read_text()), _builder_xhard0_rows())
     print(line, flush=True)
+    return 0 if ok else 1
+
+
+# ── smoke：拆仓验收的生成链路对拍（PARITY_GEN_SMOKE）────────────────────────────
+
+#: 生成次数硬上限：1 任务 × 2 数据集 × 2 局 × 2 侧 = 8（项目 P3：超过即须另行授权，本子命令一律拒跑）
+SMOKE_MAX_GENERATIONS = 8
+#: 两个数据集各自的两侧：hard-verify 用官方 ``_worker``（O）对本仓子模块（H）；ood 用拆分前旧代码树（H_old）对本仓子模块（H_new）
+SMOKE_SIDES = {"hard-verify": ("O", "H"), "ood": ("H_old", "H_new")}
+#: H_old 侧解释器：拆分前旧仓的 venv（旧侧本来就是旧代码，用它自己的依赖）
+OLD_PYTHON = Path("/data/hongzefu/robomme_benchmark_MotionJEPANewTask/.venv/bin/python")
+
+_SMOKE_RESOLVE = r'''
+import json, sys
+dataset, task, eps = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+import robomme_hard
+from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+builder = BenchmarkEnvBuilder(task, dataset=dataset)
+rows = []
+for ep in eps:
+    identity = dict(builder.resolve_identity(ep))
+    identity["builder_episode"] = ep
+    identity["task"] = task
+    rows.append(identity)
+print("RESOLVE_JSON " + json.dumps({"robomme_hard_file": robomme_hard.__file__, "episodes": builder.get_episode_num(),
+                                    "rows": rows}, default=str))
+'''
+
+
+def parse_episode_range(text: str) -> list[int]:
+    """``a:b`` → builder 局号半开区间 ``[a, b)``；须 ``0 ≤ a < b``。"""
+    head, sep, tail = str(text).partition(":")
+    try:
+        lo, hi = int(head), int(tail)
+    except ValueError as exc:
+        raise ParityError(f"局号区间须写成 a:b（半开区间）：{text!r}") from exc
+    if not sep or lo < 0 or hi <= lo:
+        raise ParityError(f"局号区间须为 0 ≤ a < b：{text!r}")
+    return list(range(lo, hi))
+
+
+def smoke_generations(tasks: list[str], episodes: dict[str, list[int]], sides: dict[str, tuple[str, ...]]) -> int:
+    """smoke 的生成次数 = 任务数 × Σ（各数据集局数 × 该数据集侧数）。"""
+    return len(tasks) * sum(len(episodes[ds]) * len(sides[ds]) for ds in episodes)
+
+
+def _parse_sides(text: str, dataset: str) -> tuple[str, ...]:
+    sides = tuple(s.strip() for s in str(text).split(",") if s.strip())
+    if sides != SMOKE_SIDES[dataset]:
+        raise ParityError(f"--{dataset}-sides 只接受 {','.join(SMOKE_SIDES[dataset])}（收到 {text!r}）")
+    return sides
+
+
+def resolve_builder_identities(python: str | Path, src: Path, dataset: str, task: str,
+                               episodes: list[int]) -> list[dict[str, Any]]:
+    """在独立进程里用 ``src`` 下的 ``robomme_hard`` 构建器把 builder 局号解析成身份（只构建 builder，不建环境、不 reset）；
+    断言该进程导入的 ``robomme_hard`` 位于 ``src`` 下。"""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(src)
+    proc = subprocess.run([str(python), "-c", _SMOKE_RESOLVE, dataset, task, json.dumps(episodes)],
+                          capture_output=True, text=True, env=env, cwd=str(src))
+    line = next((t for t in reversed(proc.stdout.splitlines()) if t.startswith("RESOLVE_JSON ")), None)
+    if proc.returncode != 0 or line is None:
+        raise ParityError(f"{dataset}/{task} builder 解析失败（{python}）：{proc.stderr[-1500:]}")
+    payload = json.loads(line[len("RESOLVE_JSON "):])
+    where = Path(payload["robomme_hard_file"]).resolve()
+    if not str(where).startswith(str(Path(src).resolve()) + os.sep):
+        raise ParityError(f"{dataset} 解析进程导入的 robomme_hard 不在 {src} 下：{where}")
+    return payload["rows"]
+
+
+def _round_modules(out: Path) -> set[str]:
+    """generate_h5 replay 各轮 runner 探针记下的 ``robomme`` 模块路径（``_rounds/*/results.json``）。"""
+    found = set()
+    for path in out.glob("_rounds/*/results.json"):
+        module = json.loads(path.read_text()).get("robomme_module")
+        if module:
+            found.add(str(module))
+    return found
+
+
+def smoke_compare(dataset: str, sides: tuple[str, str], want: list[dict[str, Any]], dirs: dict[str, Path],
+                  tol: dict[str, float], module_roots: dict[str, Path] | None = None) -> dict[str, Any]:
+    """一个数据集的两侧逐身份比对（键 (task, seed)）。
+
+    * 两侧都无 h5（同失败）→ ``both_fail``，单列、不计入通过；
+    * 只有一侧有 h5 → ``one_side``；两侧都有但读不出（``pair_metrics`` 报错）→ ``unreadable``；
+    * 两侧可读 → ``compared``；setup／结构／帧连续不等计 ``struct_bad``；动作／状态／图像／帧数任一项超
+      ``hard-parity-tolerances.json`` 计 ``tol_over``（4 局的 smoke 上 5% 硬线即任一超限）；
+    * 绑定：O 侧须为官方 ``_worker``、robomme 不来自 robomme_hard；其余侧环境类模块须属于 robomme_hard；
+      ``module_roots`` 给出的侧另核 runner 探针记下的 robomme 路径在该源码树下。"""
+    lines = {side: {(l["task"], int(l["seed"])): l for l in side_lines(dirs[side])} for side in sides}
+    counts = {k: 0 for k in ("identities", "compared", "both_fail", "one_side", "unreadable", "struct_bad",
+                             "tol_over", "binding_bad", "missing")}
+    records = []
+    for row in want:
+        key = (row["task"], int(row["seed"]))
+        counts["identities"] += 1
+        a, b = (lines[side].get(key) for side in sides)
+        record: dict[str, Any] = {"dataset": dataset, "task": key[0], "seed": key[1],
+                                  "builder_episode": row["builder_episode"], "tier": row.get("tier"),
+                                  "left": a, "right": b}
+        if a is None or b is None:
+            counts["missing"] += 1
+            record["state"] = "missing"
+            records.append(record)
+            continue
+        for side, line in zip(sides, (a, b)):
+            check = "O" if side == "O" else "H"
+            if not _binding_ok(check, line):
+                counts["binding_bad"] += 1
+        ok_a, ok_b = bool(a.get("success") and a.get("path")), bool(b.get("success") and b.get("path"))
+        if not ok_a and not ok_b:
+            counts["both_fail"] += 1
+            record["state"] = "both_fail"
+        elif ok_a != ok_b:
+            counts["one_side"] += 1
+            record["state"] = "one_side"
+        else:
+            m = pair_metrics(str(dirs[sides[0]] / a["path"]), str(dirs[sides[1]] / b["path"]))
+            record.update({k: v for k, v in m.items() if k not in ("left", "right")})
+            if m.get("error") is not None:
+                counts["unreadable"] += 1
+                record["state"] = "unreadable"
+            else:
+                counts["compared"] += 1
+                record["state"] = "compared"
+                if not (m.get("setup_equal") and m.get("schema_equal") and m.get("contiguous")):
+                    counts["struct_bad"] += 1
+                over = {k: m[f] for k, f in (("action_max", "action_max"), ("state_max", "state_max"),
+                                              ("image_mad", "image_mad"), ("frames_max", "frames_diff")) if m[f] > tol[k]}
+                if over:
+                    counts["tol_over"] += 1
+                    record["tol_over"] = over
+        records.append(record)
+    for side, root in (module_roots or {}).items():
+        modules = _round_modules(dirs[side])
+        prefix = str(Path(root).resolve()) + os.sep
+        if not modules or any(not str(Path(m).resolve()).startswith(prefix) for m in modules):
+            counts["binding_bad"] += 1
+    return {"dataset": dataset, "sides": list(sides), "counts": counts, "records": records}
+
+
+def cmd_smoke(args) -> int:
+    """PARITY_GEN_SMOKE（拆仓验收第二行，行为一致层级）：1 任务 × {hard-verify, ood} × 2 局 × 2 侧 = 8 次生成。
+
+    * hard-verify 局（builder 局号，局 0、1 对应官方原 episode 3、7）：O＝官方 ``_worker``（vendor 编排 + 子模块
+      ``robomme``，``ROBOMME_ENV_PACKAGE=robomme``）对 H＝镜像 worker + 子模块 ``robomme_hard``（gym.make 实参取自
+      builder ``dataset="hard-verify"``）；两侧都经 ``train_split_runner.py``，身份与官方 test 元数据 hard 子集双向核对；
+    * ood 局：H_old＝``--h-old-src`` 指向的拆分前旧代码树（旧仓 venv 解释器，``PYTHONPATH`` 指向它，进程内断言
+      ``robomme_hard.__file__`` 在其下）对 H_new＝本仓子模块；两侧都经 ``generate_h5.py --mode replay`` 按各自包内规格重放；
+    * 身份一律以 builder 的解析为准（独立进程构建 builder，不建环境）；ood 两侧解析出的身份（档、seed、spec_sha256）
+      须逐局相同，否则不生成；
+    * 之后按 ``configs/hard-parity-tolerances.json`` 比。PASS 须：身份数 = 期望、两侧都有可读 h5 且实际比较数 =
+      身份数、``both_fail``（单列，不计入通过）= 0、超容差 = 0，结构与包绑定全对。"""
+    task = args.task
+    hs = hard_specs_light()
+    if task not in hs.ALL_TASKS:
+        raise ParityError(f"未知任务 {task!r}")
+    episodes = {"hard-verify": parse_episode_range(args.hard_verify_episodes),
+                "ood": parse_episode_range(args.ood_episodes)}
+    sides = {"hard-verify": _parse_sides(args.hard_verify_sides, "hard-verify"),
+             "ood": _parse_sides(args.ood_sides, "ood")}
+    planned = smoke_generations([task], episodes, sides)
+    if planned > SMOKE_MAX_GENERATIONS:
+        raise ParityError(f"smoke 生成次数 {planned} 超过硬上限 {SMOKE_MAX_GENERATIONS}"
+                          "（1 任务 × 2 数据集 × 2 局 × 2 侧）；更大规模须另行授权，不经本子命令")
+    h_old_src = Path(args.h_old_src).resolve()
+    if not (h_old_src / "robomme_hard" / "__init__.py").is_file():
+        raise ParityError(f"--h-old-src 须为含 robomme_hard 的 src 目录：{h_old_src}")
+    old_python = Path(args.h_old_python)
+    if not old_python.is_file():
+        raise ParityError(f"H_old 侧解释器不存在：{old_python}")
+    tol = load_tolerances()
+    out = Path(args.out)
+    if out.exists() and any(out.iterdir()):
+        raise ParityError(f"{out} 已存在且非空；smoke 不续跑，另起目录")
+    bench = _common.bench_root()
+    new_src = bench / "src"
+
+    # ① 身份：以 builder 的解析为准
+    hv_rows = resolve_builder_identities(sys.executable, new_src, "hard-verify", task, episodes["hard-verify"])
+    ood_rows = resolve_builder_identities(sys.executable, new_src, "ood", task, episodes["ood"])
+    old_rows = resolve_builder_identities(old_python, h_old_src, "ood", task, episodes["ood"])
+    keys = ("task", "tier", "seed", "spec_sha256")
+    if [{k: r.get(k) for k in keys} for r in ood_rows] != [{k: r.get(k) for k in keys} for r in old_rows]:
+        raise ParityError(f"ood 局 {args.ood_episodes} 新旧两棵树解析出的身份不同：新 {ood_rows}，旧 {old_rows}")
+    if any(r.get("tier") != "xhard0" or r.get("source_episode") is None for r in hv_rows):
+        raise ParityError(f"hard-verify 局应全为 xhard0 且带官方原 episode：{hv_rows}")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "identities.json").write_text(json.dumps({"hard-verify": hv_rows, "ood": ood_rows, "ood_old": old_rows},
+                                                    ensure_ascii=False, indent=1, default=str) + "\n")
+    print(f"SMOKE_IDENTITIES task={task} hard_verify={[(r['builder_episode'], r['source_episode'], r['seed']) for r in hv_rows]} "
+          f"ood={[(r['builder_episode'], r['tier'], r['seed']) for r in ood_rows]} generations={planned}", flush=True)
+
+    # ② 生成：hard-verify 两侧经 generate（tier xhard0，子集身份），ood 两侧经 generate_h5 replay
+    dirs: dict[str, dict[str, Path]] = {"hard-verify": {}, "ood": {}}
+    gen_rc: dict[str, int] = {}
+    subset = out / "hard-verify-identities.jsonl"
+    subset.write_text("".join(json.dumps({"task": r["task"], "tier": "xhard0", "seed": int(r["seed"])}) + "\n"
+                              for r in hv_rows))
+    for side in sides["hard-verify"]:
+        side_out = out / "hard-verify" / side
+        dirs["hard-verify"][side] = side_out
+        gen_args = argparse.Namespace(side=side, tier="xhard0", manifest=XHARD0_MANIFEST, src_root=bench,
+                                      workers=args.workers, gpu=args.gpu, out=side_out, stage=None, smoke=0,
+                                      dev_smoke=True, specs_root=None, identities=subset, resume=False,
+                                      expect_ref=None)
+        gen_rc[f"hard-verify/{side}"] = cmd_generate(gen_args)
+    ood_ids = out / "ood-identities.jsonl"
+    ood_ids.write_text("".join(json.dumps({"task": r["task"], "tier": r["tier"], "seed": int(r["seed"])}) + "\n"
+                               for r in ood_rows))
+    roots = {"H_old": (old_python, h_old_src), "H_new": (Path(sys.executable), new_src)}
+    for side in sides["ood"]:
+        python, src = roots[side]
+        side_out = out / "ood" / side
+        side_out.mkdir(parents=True)
+        dirs["ood"][side] = side_out
+        command = [str(python), str(GENERATE_H5), "--mode", "replay", "--identities", str(ood_ids),
+                   "--output", str(side_out), "--workers", str(args.workers), "--gpu", str(args.gpu),
+                   "--pkg", "robomme_hard", "--src-root", str(src.parent), "--expect-src", str(src), "--dev-smoke"]
+        env = dict(os.environ)
+        env.update(PYTHONUNBUFFERED="1", OMP_NUM_THREADS="1", MKL_NUM_THREADS="1", PYTHONPATH=str(src))
+        print(f"GENERATE_START side={side} dataset=ood rows={len(ood_rows)} python={python} src={src}", flush=True)
+        proc, _lines, mover = run_with_mover(command, env, side_out, side, "ood",
+                                             {"worker": "train_split_worker.run_one"})
+        gen_rc[f"ood/{side}"] = 0 if proc.returncode == 0 and not mover.errors else 1
+        print(f"SMOKE_SIDE dataset=ood side={side} exit={proc.returncode} mover_errors={len(mover.errors)}", flush=True)
+
+    # ③ 比对
+    results = [smoke_compare("hard-verify", sides["hard-verify"], hv_rows, dirs["hard-verify"], tol),
+               smoke_compare("ood", sides["ood"], ood_rows, dirs["ood"], tol,
+                             module_roots={"H_old": h_old_src, "H_new": new_src})]
+    total = {k: sum(r["counts"][k] for r in results) for k in results[0]["counts"]}
+    with (out / "pairs.jsonl").open("w", encoding="utf-8") as stream:
+        for result in results:
+            for record in result["records"]:
+                stream.write(json.dumps(record, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    expected = len(hv_rows) + len(ood_rows)
+    ok = (total["identities"] == expected and total["compared"] == expected and total["compared"] > 0
+          and total["both_fail"] == 0 and total["tol_over"] == 0 and total["struct_bad"] == 0
+          and total["binding_bad"] == 0 and total["one_side"] == 0 and total["unreadable"] == 0
+          and total["missing"] == 0)
+    for result in results:
+        c = result["counts"]
+        print(f"PARITY_GEN_SMOKE_DATASET=INFO dataset={result['dataset']} pair={':'.join(result['sides'])} "
+              + " ".join(f"{k}={v}" for k, v in c.items()), flush=True)
+    print(f"PARITY_GEN_SMOKE_DETAIL=INFO generations={planned} side_exit={gen_rc} struct_bad={total['struct_bad']} "
+          f"binding_bad={total['binding_bad']} one_side={total['one_side']} unreadable={total['unreadable']} "
+          f"missing={total['missing']}", flush=True)
+    (out / "summary.json").write_text(json.dumps({"ok": ok, "task": task, "episodes": episodes, "generations": planned,
+                                                  "side_exit": gen_rc, "totals": total, "tolerances": tol,
+                                                  "datasets": [{k: v for k, v in r.items() if k != "records"}
+                                                               for r in results]},
+                                                 ensure_ascii=False, indent=2) + "\n")
+    print(f"PARITY_GEN_SMOKE={'PASS' if ok else 'FAIL'} identities={total['identities']} sides=2 "
+          f"compared={total['compared']} both_fail={total['both_fail']} tol_over={total['tol_over']}", flush=True)
     return 0 if ok else 1
 
 
@@ -1508,7 +1768,7 @@ def build_parser() -> argparse.ArgumentParser:
                           "身份 tier 须为 xhard0，只生成子集，运行器仍拿完整 --manifest 核对")
     gen.add_argument("--resume", action="store_true")
     gen.add_argument("--expect-ref", type=Path, default=None,
-                     help="噪声基线参照文件（noise_gate.py gen-regress build-ref 产物，如 scripts/configs/noise-ref-20261003.json）："
+                     help="噪声基线参照文件（noise_gate.py gen-regress build-ref 产物，如 dev-scripts/parity/configs/noise-ref-20261003.json）："
                           "每局算出 sha 后当场判 match／jitter_info／flip 写进 identities 的 verdict；match 删本地大文件不复制，"
                           "flip 照常复制并追加 flips.jsonl、打印 EPISODE_FLIP。不给时行为不变")
     gen.set_defaults(func=cmd_generate)
@@ -1574,16 +1834,32 @@ def build_parser() -> argparse.ArgumentParser:
     bind.add_argument("--p-anchor", default=None)
     bind.set_defaults(func=cmd_binding)
     x0 = sub.add_parser("export-xhard0-manifest", help="从官方 test 元数据导出 xhard0 的 16×1×12 清单（XHARD0_IDENTITY）")
-    x0.add_argument("--src-root", type=Path, default=ROOT, help="只读其 src/robomme/env_metadata/test/")
+    x0.add_argument("--src-root", type=Path, default=None,
+                    help="只读其 src/robomme/env_metadata/test/（缺省 benchmark 子模块根）")
     x0.add_argument("--out", type=Path, default=XHARD0_MANIFEST)
     x0.set_defaults(func=cmd_export_xhard0_manifest)
+    sm = sub.add_parser("smoke", help="拆仓验收：1 任务 × {hard-verify, ood} × 2 局 × 2 侧 = 8 次生成后按容差比（PARITY_GEN_SMOKE）",
+                        description=cmd_smoke.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sm.add_argument("--task", required=True, help="任务名（两个数据集都有的任务，如 VideoUnmask）")
+    sm.add_argument("--hard-verify-episodes", default="0:2",
+                    help="hard-verify 的 builder 局号半开区间 a:b（局 0、1 对应官方原 episode 3、7，以 builder 解析为准）")
+    sm.add_argument("--ood-episodes", default="0:2", help="ood 的 builder 局号半开区间 a:b")
+    sm.add_argument("--hard-verify-sides", default="O,H", help="hard-verify 两侧（固定 O,H：官方 _worker 对本仓子模块）")
+    sm.add_argument("--ood-sides", default="H_old,H_new", help="ood 两侧（固定 H_old,H_new：拆分前旧代码树对本仓子模块）")
+    sm.add_argument("--h-old-src", type=Path, required=True,
+                    help="拆分前旧仓 SRC 只读快照的 src 目录（git worktree add --detach <快照> <SRC> 后的 <快照>/src）")
+    sm.add_argument("--h-old-python", type=Path, default=OLD_PYTHON, help="H_old 侧解释器（缺省旧仓 .venv）")
+    sm.add_argument("--workers", type=int, default=2)
+    sm.add_argument("--gpu", default="0")
+    sm.add_argument("--out", type=Path, required=True, help="输出目录（须不存在或为空）")
+    sm.set_defaults(func=cmd_smoke)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     for name in ("manifest", "src_root", "out", "stage", "local", "left", "right", "h5_root", "compare_root",
-                 "specs_root", "delivery"):
+                 "specs_root", "delivery", "h_old_src"):
         value = getattr(args, name, None)
         if isinstance(value, Path) and not value.is_absolute():
             setattr(args, name, (Path.cwd() / value).resolve())

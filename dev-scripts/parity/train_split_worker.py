@@ -42,7 +42,8 @@ def run_one(payload: tuple) -> dict[str, Any]:
     # V4：payload 可带第 4 项 disable_recovery（runner --no-recovery）；三元组时行为与改动前逐字相同
     job, sampling_config, episode_spec = payload[:3]
     disable_recovery = bool(payload[3]) if len(payload) > 3 else False
-    # V7 xhard0（v7 方案第二部分 §1.5）：第 5 项 builder_route="ood" 时 gym.make 实参取自 robomme_hard builder
+    # xhard0（v7 方案第二部分 §1.5）：第 5 项 builder_route="hard-verify" 时 gym.make 实参取自 robomme_hard 构建器
+    # dataset="hard-verify" 的条目（按数据集名取局：该数据集只有 xhard0，局 0～11 对应官方原 episode 3,7,…,47）
     builder_route = payload[4] if len(payload) > 4 else None
     import generate_dataset as official  # 官方固定源码，父进程已把其目录放进 sys.path
 
@@ -103,17 +104,17 @@ def run_one(payload: tuple) -> dict[str, Any]:
             # 用于建场景的值来自冻结规格；旧的 episode_spec 注入通道保持不变（红线 R9）。
             kwargs["native_episode_spec"] = episode_spec
         if builder_route is not None:
-            if builder_route != "ood" or env_package != "robomme_hard":
-                raise ValueError(f"builder_route={builder_route!r} 只允许 ood 且环境包为 robomme_hard")
+            if builder_route != "hard-verify" or env_package != "robomme_hard":
+                raise ValueError(f"builder_route={builder_route!r} 只允许 hard-verify 且环境包为 robomme_hard")
             builder_mod = importlib.import_module("robomme_hard.env_record_wrapper.hard_builder")
-            builder = builder_mod.BenchmarkEnvBuilder(job.task, dataset="ood")
-            hits = [ep for ep in range(builder.get_episode_num())
-                    if builder.resolve_identity(ep)["tier"] == "xhard0"
-                    and builder.resolve_identity(ep)["seed"] == job.seed
-                    and builder.resolve_identity(ep)["source_episode"] == job.episode]
+            builder = builder_mod.BenchmarkEnvBuilder(job.task, dataset=builder_route)
+            identities = [builder.resolve_identity(ep) for ep in range(builder.get_episode_num())]
+            hits = [ep for ep, ident in enumerate(identities)
+                    if ident["tier"] == "xhard0" and ident["seed"] == job.seed
+                    and ident["source_episode"] == job.episode]
             if len(hits) != 1:
-                raise ValueError(f"ood builder 里找不到唯一的 xhard0 条目：{job.task} seed={job.seed} ep={job.episode}"
-                                 f"（命中 {len(hits)} 条；xhard0 已默认退出 ood，需 ROBOMME_HARD_XHARD0_IN_TEST_HARD=1）")
+                raise ValueError(f"{builder_route} 构建器里找不到唯一的 xhard0 条目：{job.task} seed={job.seed} "
+                                 f"ep={job.episode}（命中 {len(hits)} 条）")
             chosen = builder._hard_env_kwargs(hits[0])
             if set(chosen) != {"seed", "difficulty"} or chosen != {"seed": job.seed, "difficulty": job.difficulty}:
                 raise ValueError(f"builder 路线的环境参数与官方 job 不符：{chosen}")

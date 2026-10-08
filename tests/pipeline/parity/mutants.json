@@ -1,400 +1,448 @@
 {
- "note": "T6 对拍块的具名植入。非受保护源码（scripts/parity/*）在隔离副本里按 patch 逐字替换（每个 old 必须恰好命中 1 次）后跑 expect_fail 里的用例，至少一个失败才算抓到；原版在同环境须全过（R9）。",
- "mutants": [
-  {
-   "id": "M10",
-   "target": "scripts/parity/noise_gate.py::expect_verdict",
-   "method": "稳定局只看成功、不再核 sha 属于基线（交换两个身份的产物、总数不变即可蒙混）",
-   "patch": [
+  "note": "T6 对拍块的具名植入。非受保护源码（dev-scripts/parity/*）在隔离副本里按 patch 逐字替换（每个 old 必须恰好命中 1 次）后跑 expect_fail 里的用例，至少一个失败才算抓到；原版在同环境须全过（R9）。",
+  "mutants": [
     {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "if cls == \"stable\" and ok and sha in shas:",
-     "new": "if cls == \"stable\" and ok:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_交换两个身份的产物_总数不变也判翻转",
-    "tests/pipeline/parity/test_gen_regress.py::test_expect_verdict真值表"
-   ],
-   "contracts": [
-    "C15.03"
-   ]
-  },
-  {
-   "id": "M15a",
-   "target": "scripts/parity/noise_gate.py::compare_h5",
-   "method": "逐帧内容比较跳过 obs/joint_state 一个数据集",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "_value_key(lg[ds][()]) == _value_key(rg[ds][()]) for ds in ld)",
-     "new": "_value_key(lg[ds][()]) == _value_key(rg[ds][()]) for ds in ld if ds != \"obs/joint_state\")"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_h5_comparators.py::test_某一数据集从某帧起分叉_三者都抓到且分叉步一致"
-   ],
-   "contracts": [
-    "C15.01"
-   ]
-  },
-  {
-   "id": "M15b",
-   "target": "scripts/parity/noise_gate.py::load_identities",
-   "method": "冻结检查集被清空（零字节或只剩 {}）时读成空清单而不报错",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "    path = Path(path)\n    if path.suffix == \".jsonl\":\n        raw = read_jsonl(path)",
-     "new": "    path = Path(path)\n    if path.read_text(encoding=\"utf-8\").strip() in (\"\", \"{}\"):\n        return []\n    if path.suffix == \".jsonl\":\n        raw = read_jsonl(path)"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_compare.py::test_冻结检查集被清空_不得读成空清单",
-    "tests/pipeline/parity/test_gen_compare.py::test_身份清单四种格式_重复与空文件拒收"
-   ],
-   "contracts": [
-    "C15.02"
-   ]
-  },
-  {
-   "id": "M15c",
-   "target": "scripts/parity/noise_gate.py::load_side/read_run",
-   "method": "侧与新跑里的重复身份不再标记（遗漏身份用重复行补齐即可蒙混）",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "            entry[\"duplicate\"] = True",
-     "new": "            pass"
+      "id": "T6-F5",
+      "target": "dev-scripts/parity/noise_gate.py::classify_pair",
+      "method": "去掉 F-5 合法性检查（两个空文件又会判 byte_equal）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "        problem = h5_problem(entry[\"h5\"])",
+          "new": "        problem = None"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_h5_comparators.py::test_F5_空文件或非h5_两份字节相同也不判byte_equal"
+      ],
+      "contracts": [
+        "C15.01"
+      ]
     },
     {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "            dup.append(key)",
-     "new": "            pass"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_compare.py::test_侧里身份重复_遗漏身份用重复行补齐",
-    "tests/pipeline/parity/test_gen_regress.py::test_遗漏身份用重复行补齐_既缺局又重复"
-   ],
-   "contracts": [
-    "C15.02",
-    "C15.04"
-   ]
-  },
-  {
-   "id": "T6-G1",
-   "target": "scripts/parity/noise_gate.py::_final_class",
-   "method": "把回归判成噪声（改后两次相同、旧代码回到基线时返回 noise）",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "return \"regression\" if expect_verdict",
-     "new": "return \"noise\" if expect_verdict"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_四格定性"
-   ],
-   "contracts": [
-    "C15.05"
-   ]
-  },
-  {
-   "id": "T6-G2",
-   "target": "scripts/parity/noise_gate.py::regress_check",
-   "method": "陪跑行计入判定（去掉陪跑行的 continue，陪跑局也做四格定性并计数）",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "                r[\"filler_old_match\"] = expect_verdict(entry, bool(od[\"ok\"]), od[\"sha\"]) == \"match\"\n                continue",
-     "new": "                r[\"filler_old_match\"] = expect_verdict(entry, bool(od[\"ok\"]), od[\"sha\"]) == \"match\""
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_陪跑局不参与判定_只报告"
-   ],
-   "contracts": [
-    "C15.05"
-   ]
-  },
-  {
-   "id": "T6-G3",
-   "target": "scripts/parity/noise_gate.py::regress_check",
-   "method": "翻转上限放宽（超过 FLIP_RERUN_MAX 的两倍才直接 FAIL）",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "elif n_flip > FLIP_RERUN_MAX:",
-     "new": "elif n_flip > FLIP_RERUN_MAX * 2:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_翻转数等于上限仍进第二次跑_超过上限直接FAIL"
-   ],
-   "contracts": [
-    "C15.04"
-   ]
-  },
-  {
-   "id": "T6-G4",
-   "target": "scripts/parity/noise_gate.py::regress_check",
-   "method": "确认为噪声的翻转上限放宽一局",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "over = final_counts[\"noise\"] > NOISE_MAX[set_name]",
-     "new": "over = final_counts[\"noise\"] > NOISE_MAX[set_name] + 1"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_确认为噪声的翻转_上限处PASS_超一局FAIL"
-   ],
-   "contracts": [
-    "C15.05"
-   ]
-  },
-  {
-   "id": "T6-G5",
-   "target": "scripts/parity/noise_gate.py::_precondition",
-   "method": "跑法前提不再核 GPU 型号",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "if PRECOND_GPU not in str(facts[\"gpu_model\"]):",
-     "new": "if False:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_跑法前提不满足_本遍无效INVALID"
-   ],
-   "contracts": [
-    "C15.04"
-   ]
-  },
-  {
-   "id": "T6-F5",
-   "target": "scripts/parity/noise_gate.py::classify_pair",
-   "method": "去掉 F-5 合法性检查（两个空文件又会判 byte_equal）",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "        problem = h5_problem(entry[\"h5\"])",
-     "new": "        problem = None"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_h5_comparators.py::test_F5_空文件或非h5_两份字节相同也不判byte_equal"
-   ],
-   "contracts": [
-    "C15.01"
-   ]
-  },
-  {
-   "id": "T6-F8",
-   "target": "scripts/parity/train_split_parity.py::compare_h5_pair",
-   "method": "不再比根组属性（F-8 回退）",
-   "patch": [
-    {
-     "file": "scripts/parity/train_split_parity.py",
-     "old": "mismatches: list[dict[str, object]] = _attr_mismatches(\"/\", dict(lf.attrs), dict(rf.attrs))",
-     "new": "mismatches: list[dict[str, object]] = []"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_h5_comparators.py::test_属性变化_noise与train看得见_hard看不见"
-   ],
-   "contracts": [
-    "C15.01"
-   ]
-  },
-  {
-   "id": "T6-MV",
-   "target": "scripts/parity/hard_parity.py::Mover.handle",
-   "method": "match 局不删节点大文件，照常复制到暂存",
-   "patch": [
-    {
-     "file": "scripts/parity/hard_parity.py",
-     "old": "            if verdict == \"match\":",
-     "new": "            if verdict == \"match\" and False:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_mover_ship_pull.py::test_Mover_expect_ref_逐局判定与搬运"
-   ],
-   "contracts": [
-    "C15.06"
-   ]
-  },
-  {
-   "id": "T6-SH",
-   "target": "scripts/parity/noise_run.py::cmd_ship",
-   "method": "ship 不认 verdict=match（按设计未复制的局记为缺失）",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_run.py",
-     "old": "        if ln.get(\"verdict\") == \"match\":",
-     "new": "        if False:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_mover_ship_pull.py::test_ship_finalize_认match局为按设计不复制"
-   ],
-   "contracts": [
-    "C15.06"
-   ]
-  },
-  {
-   "id": "T6-D1",
-   "target": "scripts/parity/hard_parity.py::_v8_denominator",
-   "method": "分母不再计重复（duplicate 恒为 0）",
-   "patch": [
-    {
-     "file": "scripts/parity/hard_parity.py",
-     "old": "\"dup_keys\": dup_keys, \"duplicate\": duplicate,",
-     "new": "\"dup_keys\": dup_keys, \"duplicate\": 0,"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_hard_parity_compare.py::test_v9_重复行"
-   ],
-   "contracts": [
-    "C15.13"
-   ]
-  },
-  {
-   "id": "T6-D2",
-   "target": "scripts/parity/hard_parity.py::_v8_denominator",
-   "method": "子集口径下清单外身份不再计 missing（冻结集缺一局只剩 extra）",
-   "patch": [
-    {
-     "file": "scripts/parity/hard_parity.py",
-     "old": "            + (len(sets[\"identities\"] - sets[\"frozen\"]) if subset is not None else 0),",
-     "new": "            + 0,"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_hard_parity_compare.py::test_v9_冻结集缺一局_子集清单含清单外身份"
-   ],
-   "contracts": [
-    "C15.13"
-   ]
-  },
-  {
-   "id": "T6-D3",
-   "target": "scripts/parity/hard_parity.py::cmd_compare",
-   "method": "去掉「compared > 0」：空清单 0 = 0 判 PASS",
-   "patch": [
-    {
-     "file": "scripts/parity/hard_parity.py",
-     "old": "judged = n > 0 and manifest_dup == 0",
-     "new": "judged = manifest_dup == 0"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_hard_parity_compare.py::test_native负例_空清单_重复行_一侧缺局"
-   ],
-   "contracts": [
-    "C15.13"
-   ]
-  },
-  {
-   "id": "T6-P1",
-   "target": "scripts/parity/noise_gate.py::NOISE_MAX",
-   "method": "改口径：V9 噪声上限 2 → 3",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "NOISE_MAX = {\"v9\": 2, \"xhard0\": 1}",
-     "new": "NOISE_MAX = {\"v9\": 3, \"xhard0\": 1}"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_parity_pins.py::test_gen_regress闸门常量与钉值相等"
-   ],
-   "contracts": [
-    "C15.14"
-   ]
-  },
-  {
-   "id": "FX-1",
-   "target": "scripts/parity/hard_regression.py::_pre_state_name_only",
-   "method": "撤回修复 1：不再要求键集合确实不同，同键互换取值又被当成仅改名",
-   "patch": [
-    {
-     "file": "scripts/parity/hard_regression.py",
-     "old": "    return _state_names(a) != _state_names(b) and _name_agnostic(a) == _name_agnostic(b)\n",
-     "new": "    return _name_agnostic(a) == _name_agnostic(b)\n"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_同键互换取值是真差异_FAIL",
-    "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_同样的左右对调出现在未声明任务_真差异",
-    "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_仅改名判定辅助_正例与负例"
-   ],
-   "contracts": [
-    "C15.08"
-   ]
-  },
-  {
-   "id": "FX-1b",
-   "target": "scripts/parity/hard_regression.py::_pre_state_name_only",
-   "method": "声明映射分支失效：BUS 已声明的左右按钮对调不再认作改名（真实闸门会翻 FAIL）",
-   "patch": [
-    {
-     "file": "scripts/parity/hard_regression.py",
-     "old": "    if renames and _apply_renames(a, renames) == b:",
-     "new": "    if False and renames and _apply_renames(a, renames) == b:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_已声明的BUS左右按钮对调_记name_only",
-    "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_仅改名判定辅助_正例与负例"
-   ],
-   "contracts": [
-    "C15.08"
-   ]
-  },
-  {
-   "id": "FX-2",
-   "target": "scripts/parity/noise_gate.py::regress_check",
-   "method": "撤回修复 2：任一启动记录缺 host 时静默跳过同一节点核对",
-   "patch": [
-    {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "        lacking = [label for label, h in host_of.items() if not h]\n        if lacking:",
-     "new": "        lacking = [label for label, h in host_of.items() if not h]\n        if lacking and False:"
+      "id": "M15a",
+      "target": "dev-scripts/parity/noise_gate.py::compare_h5",
+      "method": "逐帧内容比较跳过 obs/joint_state 一个数据集",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "_value_key(lg[ds][()]) == _value_key(rg[ds][()]) for ds in ld)",
+          "new": "_value_key(lg[ds][()]) == _value_key(rg[ds][()]) for ds in ld if ds != \"obs/joint_state\")"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_h5_comparators.py::test_某一数据集从某帧起分叉_两者都抓到且分叉步一致"
+      ],
+      "contracts": [
+        "C15.01"
+      ]
     },
     {
-     "file": "scripts/parity/noise_gate.py",
-     "old": "        elif len(set(host_of.values())) != 1:",
-     "new": "        elif None not in host_of.values() and len(set(host_of.values())) != 1:"
-    }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_gen_regress.py::test_任一启动记录缺host_本遍无效_不静默放过"
-   ],
-   "contracts": [
-    "C15.05"
-   ]
-  },
-  {
-   "id": "FX-3",
-   "target": "scripts/parity/hard_regression.py::_xhard0_reset_verdict",
-   "method": "撤回修复 3：期望局数写回 16 × 每任务局数",
-   "patch": [
+      "id": "M10",
+      "target": "dev-scripts/parity/noise_gate.py::expect_verdict",
+      "method": "稳定局只看成功、不再核 sha 属于基线（交换两个身份的产物、总数不变即可蒙混）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "if cls == \"stable\" and ok and sha in shas:",
+          "new": "if cls == \"stable\" and ok:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_交换两个身份的产物_总数不变也判翻转",
+        "tests/pipeline/parity/test_gen_regress.py::test_expect_verdict真值表"
+      ],
+      "contracts": [
+        "C15.03"
+      ]
+    },
     {
-     "file": "scripts/parity/hard_regression.py",
-     "old": "    ok = not det and len(rows) == n_tasks * per_task",
-     "new": "    ok = not det and len(rows) == 16 * per_task"
+      "id": "M15b",
+      "target": "dev-scripts/parity/noise_gate.py::load_identities",
+      "method": "冻结检查集被清空（零字节或只剩 {}）时读成空清单而不报错",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "    path = Path(path)\n    if path.suffix == \".jsonl\":\n        raw = read_jsonl(path)",
+          "new": "    path = Path(path)\n    if path.read_text(encoding=\"utf-8\").strip() in (\"\", \"{}\"):\n        return []\n    if path.suffix == \".jsonl\":\n        raw = read_jsonl(path)"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_compare.py::test_冻结检查集被清空_不得读成空清单",
+        "tests/pipeline/parity/test_gen_compare.py::test_身份清单四种格式_重复与空文件拒收"
+      ],
+      "contracts": [
+        "C15.02"
+      ]
+    },
+    {
+      "id": "M15c",
+      "target": "dev-scripts/parity/noise_gate.py::load_side/read_run",
+      "method": "侧与新跑里的重复身份不再标记（遗漏身份用重复行补齐即可蒙混）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "            entry[\"duplicate\"] = True",
+          "new": "            pass"
+        },
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "            dup.append(key)",
+          "new": "            pass"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_compare.py::test_侧里身份重复_遗漏身份用重复行补齐",
+        "tests/pipeline/parity/test_gen_regress.py::test_遗漏身份用重复行补齐_既缺局又重复"
+      ],
+      "contracts": [
+        "C15.02",
+        "C15.04"
+      ]
+    },
+    {
+      "id": "T6-G1",
+      "target": "dev-scripts/parity/noise_gate.py::_final_class",
+      "method": "把回归判成噪声（改后两次相同、旧代码回到基线时返回 noise）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "return \"regression\" if expect_verdict",
+          "new": "return \"noise\" if expect_verdict"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_四格定性"
+      ],
+      "contracts": [
+        "C15.05"
+      ]
+    },
+    {
+      "id": "T6-G2",
+      "target": "dev-scripts/parity/noise_gate.py::regress_check",
+      "method": "陪跑行计入判定（去掉陪跑行的 continue，陪跑局也做四格定性并计数）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "                r[\"filler_old_match\"] = expect_verdict(entry, bool(od[\"ok\"]), od[\"sha\"]) == \"match\"\n                continue",
+          "new": "                r[\"filler_old_match\"] = expect_verdict(entry, bool(od[\"ok\"]), od[\"sha\"]) == \"match\""
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_陪跑局不参与判定_只报告"
+      ],
+      "contracts": [
+        "C15.05"
+      ]
+    },
+    {
+      "id": "T6-G3",
+      "target": "dev-scripts/parity/noise_gate.py::regress_check",
+      "method": "翻转上限放宽（超过 FLIP_RERUN_MAX 的两倍才直接 FAIL）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "elif n_flip > FLIP_RERUN_MAX:",
+          "new": "elif n_flip > FLIP_RERUN_MAX * 2:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_翻转数等于上限仍进第二次跑_超过上限直接FAIL"
+      ],
+      "contracts": [
+        "C15.04"
+      ]
+    },
+    {
+      "id": "T6-G4",
+      "target": "dev-scripts/parity/noise_gate.py::regress_check",
+      "method": "确认为噪声的翻转上限放宽一局",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "over = final_counts[\"noise\"] > NOISE_MAX[set_name]",
+          "new": "over = final_counts[\"noise\"] > NOISE_MAX[set_name] + 1"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_确认为噪声的翻转_上限处PASS_超一局FAIL"
+      ],
+      "contracts": [
+        "C15.05"
+      ]
+    },
+    {
+      "id": "T6-G5",
+      "target": "dev-scripts/parity/noise_gate.py::_precondition",
+      "method": "跑法前提不再核 GPU 型号",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "if PRECOND_GPU not in str(facts[\"gpu_model\"]):",
+          "new": "if False:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_跑法前提不满足_本遍无效INVALID"
+      ],
+      "contracts": [
+        "C15.04"
+      ]
+    },
+    {
+      "id": "T6-MV",
+      "target": "dev-scripts/parity/hard_parity.py::Mover.handle",
+      "method": "match 局不删节点大文件，照常复制到暂存",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "            if verdict == \"match\":",
+          "new": "            if verdict == \"match\" and False:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_mover_ship_pull.py::test_Mover_expect_ref_逐局判定与搬运"
+      ],
+      "contracts": [
+        "C15.06"
+      ]
+    },
+    {
+      "id": "T6-SH",
+      "target": "dev-scripts/parity/noise_run.py::cmd_ship",
+      "method": "ship 不认 verdict=match（按设计未复制的局记为缺失）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_run.py",
+          "old": "        if ln.get(\"verdict\") == \"match\":",
+          "new": "        if False:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_mover_ship_pull.py::test_ship_finalize_认match局为按设计不复制"
+      ],
+      "contracts": [
+        "C15.06"
+      ]
+    },
+    {
+      "id": "T6-D1",
+      "target": "dev-scripts/parity/hard_parity.py::_v8_denominator",
+      "method": "分母不再计重复（duplicate 恒为 0）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "\"dup_keys\": dup_keys, \"duplicate\": duplicate,",
+          "new": "\"dup_keys\": dup_keys, \"duplicate\": 0,"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_v9_重复行"
+      ],
+      "contracts": [
+        "C15.13"
+      ]
+    },
+    {
+      "id": "T6-D2",
+      "target": "dev-scripts/parity/hard_parity.py::_v8_denominator",
+      "method": "子集口径下清单外身份不再计 missing（冻结集缺一局只剩 extra）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "            + (len(sets[\"identities\"] - sets[\"frozen\"]) if subset is not None else 0),",
+          "new": "            + 0,"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_v9_冻结集缺一局_子集清单含清单外身份"
+      ],
+      "contracts": [
+        "C15.13"
+      ]
+    },
+    {
+      "id": "T6-D3",
+      "target": "dev-scripts/parity/hard_parity.py::cmd_compare",
+      "method": "去掉「compared > 0」：空清单 0 = 0 判 PASS",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "judged = n > 0 and manifest_dup == 0",
+          "new": "judged = manifest_dup == 0"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_native负例_空清单_重复行_一侧缺局"
+      ],
+      "contracts": [
+        "C15.13"
+      ]
+    },
+    {
+      "id": "T6-P1",
+      "target": "dev-scripts/parity/noise_gate.py::NOISE_MAX",
+      "method": "改口径：V9 噪声上限 2 → 3",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "NOISE_MAX = {\"v9\": 2, \"xhard0\": 1}",
+          "new": "NOISE_MAX = {\"v9\": 3, \"xhard0\": 1}"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_parity_pins.py::test_gen_regress闸门常量与钉值相等"
+      ],
+      "contracts": [
+        "C15.14"
+      ]
+    },
+    {
+      "id": "FX-1",
+      "target": "dev-scripts/parity/hard_regression.py::_pre_state_name_only",
+      "method": "撤回修复 1：不再要求键集合确实不同，同键互换取值又被当成仅改名",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_regression.py",
+          "old": "    return _state_names(a) != _state_names(b) and _name_agnostic(a) == _name_agnostic(b)\n",
+          "new": "    return _name_agnostic(a) == _name_agnostic(b)\n"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_同键互换取值是真差异_FAIL",
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_同样的左右对调出现在未声明任务_真差异",
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_仅改名判定辅助_正例与负例"
+      ],
+      "contracts": [
+        "C15.08"
+      ]
+    },
+    {
+      "id": "FX-1b",
+      "target": "dev-scripts/parity/hard_regression.py::_pre_state_name_only",
+      "method": "声明映射分支失效：BUS 已声明的左右按钮对调不再认作改名（真实闸门会翻 FAIL）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_regression.py",
+          "old": "    if renames and _apply_renames(a, renames) == b:",
+          "new": "    if False and renames and _apply_renames(a, renames) == b:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_已声明的BUS左右按钮对调_记name_only",
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_仅改名判定辅助_正例与负例"
+      ],
+      "contracts": [
+        "C15.08"
+      ]
+    },
+    {
+      "id": "FX-2",
+      "target": "dev-scripts/parity/noise_gate.py::regress_check",
+      "method": "撤回修复 2：任一启动记录缺 host 时静默跳过同一节点核对",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "        lacking = [label for label, h in host_of.items() if not h]\n        if lacking:",
+          "new": "        lacking = [label for label, h in host_of.items() if not h]\n        if lacking and False:"
+        },
+        {
+          "file": "dev-scripts/parity/noise_gate.py",
+          "old": "        elif len(set(host_of.values())) != 1:",
+          "new": "        elif None not in host_of.values() and len(set(host_of.values())) != 1:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_gen_regress.py::test_任一启动记录缺host_本遍无效_不静默放过"
+      ],
+      "contracts": [
+        "C15.05"
+      ]
+    },
+    {
+      "id": "FX-3",
+      "target": "dev-scripts/parity/hard_regression.py::_xhard0_reset_verdict",
+      "method": "撤回修复 3：期望局数写回 16 × 每任务所选局数（不按所选任务数计）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_regression.py",
+          "old": "    ok = not det and len(rows) > 0 and len(rows) == n_tasks * per_task",
+          "new": "    ok = not det and len(rows) > 0 and len(rows) == 16 * per_task"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_期望局数随任务清单长度变化",
+        "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_episodes子集_官方原号取自hard侧解析_分母按所选身份"
+      ],
+      "contracts": [
+        "C15.08"
+      ]
+    },
+    {
+      "id": "E5-SM1",
+      "target": "dev-scripts/parity/hard_parity.py::cmd_smoke",
+      "method": "两侧同失败当作已比较、也不再单列拦截（both_fail 计入通过）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "          and total[\"both_fail\"] == 0 and total[\"tol_over\"] == 0 and total[\"struct_bad\"] == 0",
+          "new": "          and total[\"tol_over\"] == 0 and total[\"struct_bad\"] == 0"
+        },
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "            counts[\"both_fail\"] += 1\n            record[\"state\"] = \"both_fail\"",
+          "new": "            counts[\"both_fail\"] += 1\n            counts[\"compared\"] += 1\n            record[\"state\"] = \"both_fail\""
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_smoke.py::test_两侧同失败单列且不计入通过"
+      ],
+      "contracts": [
+        "C15.19"
+      ]
+    },
+    {
+      "id": "E5-SM2",
+      "target": "dev-scripts/parity/hard_parity.py::cmd_smoke",
+      "method": "生成次数硬上限失效",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "    if planned > SMOKE_MAX_GENERATIONS:",
+          "new": "    if planned > 10 * SMOKE_MAX_GENERATIONS:"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_smoke.py::test_参数闸门在生成之前拒跑"
+      ],
+      "contracts": [
+        "C15.19"
+      ]
+    },
+    {
+      "id": "E5-CMP1",
+      "target": "dev-scripts/parity/hard_parity.py::cmd_compare",
+      "method": "同失败重新计入通过、不要求实际比较数（回到 both_fail 可判 PASS 的旧口径）",
+      "patch": [
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "    judged = n > 0 and compared > 0 and compared == n and unreadable == 0 and counts[\"both_fail\"] == 0 \\\n",
+          "new": "    judged = n > 0 and unreadable == 0 \\\n"
+        },
+        {
+          "file": "dev-scripts/parity/hard_parity.py",
+          "old": "        and counts[\"setup_equal\"] == counts[\"both_success\"] == n and counts[\"schema_equal\"] == n \\\n",
+          "new": "        and counts[\"setup_equal\"] == counts[\"both_success\"] and counts[\"schema_equal\"] == counts[\"both_success\"] \\\n"
+        }
+      ],
+      "expect_fail": [
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_全部两侧同失败_不得PASS",
+        "tests/pipeline/parity/test_hard_parity_compare.py::test_一局两侧同失败_其余一致也FAIL"
+      ],
+      "contracts": [
+        "C15.13"
+      ]
     }
-   ],
-   "expect_fail": [
-    "tests/pipeline/parity/test_xhard0_reset_verdict.py::test_期望局数随任务清单长度变化"
-   ],
-   "contracts": [
-    "C15.08"
-   ]
-  }
- ]
+  ]
 }

@@ -31,7 +31,7 @@ GUARDED = """            try:
 
 @pytest.fixture
 def rollout():
-    return load_script("injection-dev/_rollout.py")
+    return load_script("parity/_rollout.py")
 
 
 def _write_h5(path: Path, steps: int) -> None:
@@ -107,7 +107,7 @@ def test_run_batch_survives_h5_removed_between_list_and_open(monkeypatch, batch,
 
 def _unguarded_copy(tmp_path: Path):
     """隔离副本：把 12.403 的 try/except 换回保护前的单行回读，另执行一份模块（不改主检出、不登记 sys.modules）。"""
-    src = script_path("injection-dev/_rollout.py").read_text(encoding="utf-8")
+    src = script_path("parity/_rollout.py").read_text(encoding="utf-8")
     assert src.count(GUARDED) == 1, "12.403 保护的源码形态变了，反向用例需同步"
     lines = src.split(GUARDED, 1)
     tail = lines[1].split("\n", 4)  # 去掉 except 体的三行注释与赋值

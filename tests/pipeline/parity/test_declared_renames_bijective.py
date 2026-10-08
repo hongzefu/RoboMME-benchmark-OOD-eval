@@ -50,18 +50,21 @@ def test_identity_and_cycle_accepted(R):
 def test_module_load_rejects_non_permutation(tmp_path, monkeypatch):
     src = script_path("parity/hard_regression.py").read_text(encoding="utf-8")
     assert src.count(DECLARED) == 1, "现行改名映射的源码形态变了，本用例需同步"
-    # 隔离副本放在 tmp/<a>/<b>/ 下：模块按 parents[2] 推仓库根并往 sys.path 插路径，用例结束由 monkeypatch 还原
-    copy = tmp_path / "scripts" / "parity" / "hard_regression_bad.py"
+    # 隔离副本放在 tmp/dev-scripts/parity/ 下，同目录带一份 _common.py（模块顶层按同目录模块名 import _common）；
+    # sys.path 的改动用例结束由 monkeypatch 还原
+    copy = tmp_path / "dev-scripts" / "parity" / "hard_regression_bad.py"
     copy.parent.mkdir(parents=True)
+    (copy.parent / "_common.py").write_text(script_path("parity/_common.py").read_text(encoding="utf-8"),
+                                            encoding="utf-8")
     copy.write_text(src.replace(DECLARED, '{"button_left": "button_right", "button_right": "button_right"}'),
                     encoding="utf-8")
-    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(sys, "path", [str(copy.parent), *sys.path])
     spec = importlib.util.spec_from_file_location("_t6_hard_regression_bad_renames", copy)
     module = importlib.util.module_from_spec(spec)
     with pytest.raises(ValueError, match="不是置换"):
         spec.loader.exec_module(module)
     # 对照：同一流程只是不改映射时照常加载
-    good = tmp_path / "scripts" / "parity" / "hard_regression_good.py"
+    good = tmp_path / "dev-scripts" / "parity" / "hard_regression_good.py"
     good.write_text(src, encoding="utf-8")
     spec = importlib.util.spec_from_file_location("_t6_hard_regression_good_renames", good)
     spec.loader.exec_module(importlib.util.module_from_spec(spec))

@@ -1,12 +1,12 @@
 """C15.17 ``hard_regression.py`` 的纯函数：记录点路径的静态收集（``record_path_patterns``／``is_record_path``）、
-规格逐叶比对（``compare_specs``）、reset-replay 判定行（``replay_verdict``）、``--out`` 与规格根档序的输入校验。
+规格逐叶比对（``compare_specs``）、规格根档序的输入校验、``--episodes`` 局号区间与按数据集名推每任务局数。
+（reset-replay 判定行与 ``--out`` 校验随 ``reset-replay`` 子命令在拆仓时删除。）
 
 期望由本文件手写的小输入推出：路径正则按 AST 规则手写，判定行字段按手写的目标与记录行手数。
 """
 from __future__ import annotations
 
 import json
-import re
 
 import pytest
 
@@ -65,92 +65,7 @@ def test_compare_specs_splits_record_within_tol_from_injected(hr):
     assert hr.compare_specs(s4, dict(s4), pats) == {"injected": 0, "within": 0, "max_abs": 0.0, "paths": []}
 
 
-# ── reset-replay 判定行 ──────────────────────────────────────────────────────
-
-
-def _targets():
-    return [{"task": "A", "tier": "xhard1", "seed": 1, "spec_sha256": "s1"},
-            {"task": "B", "tier": "xhard2", "seed": 2, "spec_sha256": "s2"}]
-
-
-def _row(t, **binding):
-    b = {"injected_mismatch": 0, "layout_drift": 0, "unused": 0, "mode": "replay", "spec_sha256": t["spec_sha256"]}
-    b.update(binding)
-    return dict(t, ok=True, binding=b)
-
-
-TABLE = {("A", "xhard1"): 1, ("B", "xhard2"): 1}
-
-
-def _verdict(hr, rows, *, version="v9", table=TABLE, limited=False, targets=None):
-    ok, line = hr.replay_verdict(targets or _targets(), rows, version=version, table=table, limited=limited)
-    return ok, dict(t.split("=", 1) for t in line.split()), line
-
-
-def test_replay_verdict_pass(hr):
-    ok, f, line = _verdict(hr, [_row(t) for t in _targets()])
-    assert ok and line == ("V9_RESET_REPLAY=PASS shape=cells2 resets=2 replay=2 injected_mismatch=0 layout_drift=0 "
-                           "spec_bound=2 unused=0 layout_hit_bad=0 errors=0")
-
-
-@pytest.mark.parametrize("case,field,want", [
-    ("error", "errors", "1"),
-    ("injected", "injected_mismatch", "1"),
-    ("drift", "layout_drift", "2"),
-    ("unused", "unused", "1"),
-    ("not_replay", "replay", "1"),
-    ("spec_other", "spec_bound", "1"),
-    ("hit_bad", "layout_hit_bad", "1"),
-    ("missing_row", "resets", "1"),
-])
-def test_replay_verdict_each_failure(hr, case, field, want):
-    t = _targets()
-    rows = [_row(t[0]), _row(t[1])]
-    if case == "error":
-        rows[1] = dict(t[1], ok=False, error="RuntimeError: x")
-    elif case == "injected":
-        rows[0] = _row(t[0], injected_mismatch=1)
-    elif case == "drift":
-        rows[0] = _row(t[0], layout_drift=2)
-    elif case == "unused":
-        rows[1] = _row(t[1], unused=1)
-    elif case == "not_replay":
-        rows[1] = _row(t[1], mode="sample")
-    elif case == "spec_other":
-        rows[1] = _row(t[1], spec_sha256="其他规格")
-    elif case == "hit_bad":
-        rows[0] = _row(t[0], layered=True, layout_hit=["p1"], layout_paths_expected=["p1", "p2"])
-    else:
-        rows = rows[:1]
-    ok, f, _ = _verdict(hr, rows)
-    assert not ok and f["V9_RESET_REPLAY"] == "FAIL" and f[field] == want
-
-
-def test_replay_verdict_cell_count_and_versions(hr):
-    rows = [_row(t) for t in _targets()]
-    big = {**TABLE, ("C", "xhard3"): 1}
-    ok, _, _ = _verdict(hr, rows, table=big)
-    assert not ok  # 未截断时目标数必须等于完整格表格数，缺格不得静默少测
-    ok, _, _ = _verdict(hr, rows, table=big, limited=True)
-    assert ok  # --limit 截断时不要求
-    # 非 /4 口径不核 spec_bound，判定行名随版本
-    loose = [dict(r, spec_sha256=None) for r in rows]
-    ok, f, line = _verdict(hr, loose, version="v7", table=None)
-    assert ok and line.startswith("V7_RESET_REPLAY=PASS ") and f["spec_bound"] == "0"
-    ok, _, _ = _verdict(hr, loose, version="v9")
-    assert not ok
-
-
 # ── 输入校验 ────────────────────────────────────────────────────────────────
-
-
-def test_replay_out_must_be_file(hr, tmp_path):
-    with pytest.raises(SystemExit, match="必须是 jsonl 文件路径"):
-        hr._replay_out_path(str(tmp_path))
-    with pytest.raises(SystemExit, match="必须是 jsonl 文件路径"):
-        hr._replay_out_path("artifacts/x/")
-    assert hr._replay_out_path(str(tmp_path / "r.jsonl")) == tmp_path / "r.jsonl"
-    assert hr.replay_key({"task": "A", "tier": "x", "seed": 1}) == ("A", "x", 1, None)  # 旧记录无 spec_sha256 永不命中
 
 
 def test_specs_tiers_detects_v4_header(hr, tmp_path, capsys):
@@ -164,18 +79,27 @@ def test_specs_tiers_detects_v4_header(hr, tmp_path, capsys):
     (root / hs.TIERS[1]).mkdir()
     (root / hs.TIERS[1] / "specs.jsonl").write_text(json.dumps({"schema": hs.SCHEMA}) + "\n", encoding="utf-8")
     assert hr.specs_tiers(str(root)) == (hs.TIERS, True)  # 只含部分档的局部根也判 /4
-    with pytest.raises(SystemExit, match="规格根不是"):
-        hr.specs_version(str(tmp_path / "empty-root"))
     capsys.readouterr()
 
 
-def test_xhard0_switch_guard(hr):
-    on = type("HS", (), {"XHARD0_IN_TEST_HARD": True, "XHARD0_PER_TASK": 12})
-    off = type("HS", (), {"XHARD0_IN_TEST_HARD": False, "xhard0_prefix": staticmethod(lambda: 0)})
-    legacy = type("HS", (), {"XHARD0_PER_TASK": 7})  # 旧 hard_specs 无开关：视为开、前置局数取 XHARD0_PER_TASK
-    hr._require_xhard0_in_test_hard(on)
-    hr._require_xhard0_in_test_hard(legacy)
-    with pytest.raises(SystemExit, match="xhard0 已退出 ood"):
-        hr._require_xhard0_in_test_hard(off)
-    assert (hr._xhard0_prefix(on), hr._xhard0_prefix(off), hr._xhard0_prefix(legacy)) == (12, 0, 7)
-    assert re.fullmatch(r"\d+", str(hr._xhard0_prefix(hr._hs_light())))
+def test_episodes_half_open_range(hr):
+    """``--episodes a:b`` 是 builder 局号半开区间；不给即全部；越界、倒序、格式错一律报错（不静默截断）。"""
+    assert hr.parse_episodes("0:2", 12) == [0, 1]
+    assert hr.parse_episodes("11:12", 12) == [11]
+    assert hr.parse_episodes(None, 3) == [0, 1, 2]
+    for bad in ("2:2", "3:1", "-1:2", "0:13", "0", "a:b"):
+        with pytest.raises(SystemExit):
+            hr.parse_episodes(bad, 12)
+
+
+def test_expected_episodes_by_dataset_name(hr):
+    """按数据集名取局：hard-verify 只有 xhard0（XHARD0_PER_TASK），ood 只有新值档（格表在该任务的局数之和）。"""
+    hs = type("HS", (), {"XHARD0_PER_TASK": 5, "EXPECTED_CELLS": {("A", "xhard1"): 3, ("A", "xhard2"): 4,
+                                                                   ("B", "xhard1"): 9}})
+    assert hr.expected_episodes("A", hs, "hard-verify") == 5
+    assert hr.expected_episodes("A", hs, "ood") == 7
+    assert hr.expected_episodes("A", hs, "ood", {("A", "xhard4"): 2}) == 2
+    with pytest.raises(ValueError, match="未知数据集"):
+        hr.expected_episodes("A", hs, "test")
+    real = hr._hs_light()
+    assert hr.expected_episodes(real.ALL_TASKS[0], real, "hard-verify") == real.XHARD0_PER_TASK

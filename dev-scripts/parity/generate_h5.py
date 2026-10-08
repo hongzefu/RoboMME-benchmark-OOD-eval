@@ -2,18 +2,18 @@
 """第二阶段入口：只读 jsonl → 生成 h5 → 按状态机回写（0927 计划第一部分 §5.2；v8 方案第二部分 §2.2 第 7 条）。
 
     # 正常生产：只接受 hard-specs/4 规格根（<root>/<tier>/specs.jsonl），按 --cells 逐格跑（V8_DELIVERY_SET）
-    uv run --no-sync python scripts/injection-dev/generate_h5.py --mode continue \\
+    uv run --no-sync python dev-scripts/parity/generate_h5.py --mode continue \\
         --specs <规格根> --cells v9smoke --output <输出目录> --workers 1 --gpu 0
     # 分片：切片 → 片内 continue → 聚合（V9 的 MoveCube 片即 --cells v9shard1）
-    uv run --no-sync python scripts/injection-dev/generate_h5.py --mode split \\
+    uv run --no-sync python dev-scripts/parity/generate_h5.py --mode split \\
         --specs <冻结根> --cells v9shard1 --output <gen1>/shard-movecube
-    uv run --no-sync python scripts/injection-dev/generate_h5.py --mode continue \\
+    uv run --no-sync python dev-scripts/parity/generate_h5.py --mode continue \\
         --specs <gen1>/shard-movecube/specs --cells v9shard1 --output <gen1>/shard-movecube --workers 4 --gpu 0
     # 只重算聚合（规格根 + 各片账本目录）；整树搬迁后（GL NFS → 本机 /data）用 --rebase 换 h5／mp4 前缀并逐个核 sha256
-    uv run --no-sync python scripts/injection-dev/generate_h5.py --mode aggregate --specs <规格根> --cells v9 \\
+    uv run --no-sync python dev-scripts/parity/generate_h5.py --mode aggregate --specs <规格根> --cells v9 \\
         --shards <账本目录,...> --rebase <旧前缀>=<新前缀> --output <目录> [--out <新 delivery.json 路径>]
     # 对拍专用：按身份清单只读重放，不递补、不回写（--specs 给 /4 规格根或单文件，缺省读包内）
-    uv run --no-sync python scripts/injection-dev/generate_h5.py --mode replay \\
+    uv run --no-sync python dev-scripts/parity/generate_h5.py --mode replay \\
         --identities <gen1 的 delivery.json 或 jsonl> --specs <规格根> --output <输出目录>
 
 - ``--cells``：``v9``（V9_CELLS 43 格 800，continue／aggregate 缺省；split 必填）、``v9shard1``、``v9smoke``
@@ -23,7 +23,10 @@
   continue 与 replay、``--mode merge``（V8 四席合并）。
 - ``--resume``：沿用已有 ``--output`` 续跑；有 h5 却无 partial 记录的身份标 UNKNOWN 并停止；v8 另按账本
   ``<output>/results.jsonl`` 重放已有结果、基础设施重试计数跨重启保留。
-- 环境包由 ``--pkg``（默认 robomme_hard）经 ``ROBOMME_ENV_PACKAGE`` 传给 worker。
+- 环境包由 ``--pkg``（默认 robomme_hard）经 ``ROBOMME_ENV_PACKAGE`` 传给 worker；``--src-root`` 缺省 benchmark
+  子模块根（worker 从 ``<src-root>/src`` 导入环境）。
+- ``--expect-src``：断言本进程导入的 ``robomme_hard`` 位于给定 src 目录下（对拍 smoke 的 H_old／H_new 两侧用，
+  防止 ``PYTHONPATH`` 被 editable 安装遮住而静默跑错代码树）。
 """
 
 from __future__ import annotations
@@ -86,13 +89,20 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--gpu", default="0")
     parser.add_argument("--pkg", default="robomme_hard", choices=("robomme", "robomme_hard"))
-    parser.add_argument("--src-root", default=str(_common.REPO_ROOT))
+    parser.add_argument("--src-root", default=None, help="环境源码树根（其下 src/robomme_hard）；缺省 benchmark 子模块根")
+    parser.add_argument("--expect-src", default=None,
+                        help="断言本进程的 robomme_hard 位于该 src 目录下（不符即停，不生成）")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dev-smoke", action="store_true", help="放行非 A40（本机开发冒烟）；正式生成一律 A40（v7 D-9）")
     args = parser.parse_args()
 
     output = Path(args.output)
-    src_root = Path(args.src_root).resolve()
+    src_root = Path(args.src_root).resolve() if args.src_root else _common.bench_root()
+    if args.expect_src:
+        where = Path(hard_specs.__file__).resolve()
+        if not str(where).startswith(str(Path(args.expect_src).resolve()) + os.sep):
+            raise SystemExit(f"robomme_hard 解析到 {where}，不在 --expect-src {args.expect_src} 下")
+        print(f"EXPECT_SRC=PASS robomme_hard={where}", flush=True)
 
     # ── 不起仿真的两个子模式：切片、聚合 ──
     if args.mode == "split":

@@ -1,7 +1,8 @@
 """C15 ``hard_regression.py xhard0-reset-parity`` 的判定层（XHARD0_RESET_PARITY／XHARD0_DEMO_DIFF）。
 
 GPU 探针 ``_run_probe`` 换成返回手写探针结果的替身（monkeypatch 模块属性，不注入 sys.modules）；真实的
-``cmd_xhard0_reset_parity`` 逐字段比、仅改名判定、合并上一轮、写报告，再由真实 ``_xhard0_reset_verdict`` 出判定行。
+``cmd_xhard0_reset_parity`` 按 ``--episodes`` 选 hard-verify 局、以 hard 侧解析出的 ``source_episode`` 取官方原号、
+逐字段比、仅改名判定、合并上一轮、写报告，再由真实 ``_xhard0_reset_verdict`` 出判定行（分母按所选身份计）。
 每任务局数取一个小的测试值（不是业务常量）；任务清单取生产的 16 任务规范序。
 """
 from __future__ import annotations
@@ -27,24 +28,38 @@ def tasks():
     return tuple(F.hard_parity().hard_specs_light().ALL_TASKS)
 
 
+def source_episode(builder_ep: int) -> int:
+    """手写的官方原 episode 号：hard-verify 局 k ↔ 原号 3 + 4k（与清单夹具同式）。"""
+    return 3 + 4 * builder_ep
+
+
 def probe_row(side: str, task: str, ep: int, idx: int) -> dict:
-    seed = 500000 + 100 * idx
-    return {"episode": ep, "seed": seed, "difficulty": "hard" if side == "official" else "xhard0",
+    """hard 侧 ``ep`` 是 builder 局号、官方侧是原号；seed 按 builder 局号手写，两侧同一身份相同。"""
+    builder_ep = ep if side == "hard" else (ep - 3) // 4
+    seed = 500000 + 100 * builder_ep
+    return {"episode": ep, "source_episode": source_episode(ep) if side == "hard" else ep,
+            "seed": seed, "difficulty": "hard" if side == "official" else "xhard0",
             "make_kwargs": {"env_id": task, "seed": seed}, "wrapper_chain": ["A", "B", task],
             "pre_demo_state": {"actors": {"cube_0": [0.1, 0.2], "button_left": [0.3, 0.4]},
                                "articulations": {"panda": [1.0]}},
             "task_goal": [f"do {task}"], "choices": [], "demo_frames": 5, "demo_digest": "d", "post_state": "p"}
 
 
-def run(R, tasks, tmp_path, monkeypatch, capsys, mutate=None, only_tasks=None, merge_with=None):
-    """mutate(side, task, idx, row) 就地改替身返回值。返回 (退出码, 判定行, 报告行)。"""
+def run(R, tasks, tmp_path, monkeypatch, capsys, mutate=None, only_tasks=None, merge_with=None, episodes=None,
+        drop=None, calls=None):
+    """mutate(side, task, idx, row) 就地改替身返回值；drop(side, task, idx) 为真时该局探针不返回（模拟少一局）；
+    calls 给列表时记下每次探针调用的 (side, task, eps)。返回 (退出码, 判定行, 报告行)。"""
     tmp_path.mkdir(parents=True, exist_ok=True)
-    manifest = {"rows": [{"task": t, "episode": 3 + 4 * i} for t in tasks for i in range(PER_TASK)]}
+    manifest = {"rows": [{"task": t, "episode": source_episode(i)} for t in tasks for i in range(PER_TASK)]}
     (tmp_path / "m.json").write_text(json.dumps(manifest))
 
     def fake_probe(side, task, src, eps, gpu):
+        if calls is not None:
+            calls.append((side, task, list(eps)))
         out = []
         for idx, ep in enumerate(eps):
+            if drop and drop(side, task, idx):
+                continue
             row = probe_row(side, task, ep, idx)
             if mutate:
                 mutate(side, task, idx, row)
@@ -52,10 +67,9 @@ def run(R, tasks, tmp_path, monkeypatch, capsys, mutate=None, only_tasks=None, m
         return out
 
     monkeypatch.setattr(R, "_run_probe", fake_probe)
-    monkeypatch.setattr(R, "_hard_specs", lambda: types.SimpleNamespace(ALL_TASKS=tasks, XHARD0_PER_TASK=PER_TASK))
-    monkeypatch.setattr(R, "_require_xhard0_in_test_hard", lambda hs: None)
+    monkeypatch.setattr(R, "_hs_light", lambda: types.SimpleNamespace(ALL_TASKS=tasks, XHARD0_PER_TASK=PER_TASK))
     args = types.SimpleNamespace(manifest=str(tmp_path / "m.json"), out=str(tmp_path / "out"), src_root=str(tmp_path),
-                                 gpu="0", tasks=",".join(only_tasks) if only_tasks else None,
+                                 gpu="0", tasks=",".join(only_tasks) if only_tasks else None, episodes=episodes,
                                  merge_with=merge_with, report_name="r.jsonl")
     rc = R.cmd_xhard0_reset_parity(args)
     out = capsys.readouterr().out.strip().splitlines()
@@ -211,8 +225,13 @@ def test_演示层差异只报告(R, tasks, tmp_path, monkeypatch, capsys):
 
 
 def test_局数不齐即FAIL_合并上一轮补齐后PASS(R, tasks, tmp_path, monkeypatch, capsys):
+    # 分母按所选身份计：只选 2 个任务即 2 × PER_TASK 局，齐了就 PASS
     rc, out, report = run(R, tasks, tmp_path / "a", monkeypatch, capsys, only_tasks=tasks[:2])
-    assert rc == 1 and f"compared={2 * PER_TASK} " in verdict_line(out)
+    assert rc == 0 and f" shape=2x1x{PER_TASK} compared={2 * PER_TASK} " in verdict_line(out)
+    # 探针少返回一局（所选身份没比全）即 FAIL
+    rc, out, _ = run(R, tasks, tmp_path / "d", monkeypatch, capsys, only_tasks=tasks[:2],
+                     drop=lambda side, task, idx: side == "official" and task == tasks[1] and idx == 1)
+    assert rc == 1 and f" compared={2 * PER_TASK - 1} " in verdict_line(out)
     full_rc, _out, full = run(R, tasks, tmp_path / "b", monkeypatch, capsys)
     assert full_rc == 0
     prev = tmp_path / "prev.jsonl"
@@ -236,7 +255,7 @@ def test_判定函数_局数多一局也FAIL(R, tasks):
 
 
 def test_期望局数随任务清单长度变化(R, tasks, tmp_path, monkeypatch, capsys):
-    """期望局数 = 任务清单长度 × 每任务局数，不写死 16：任务清单缩到 3 个时，3×PER_TASK 局即 PASS。"""
+    """期望局数 = 任务数 × 所选局数，不写死 16 × 12：任务清单缩到 3 个时，3×PER_TASK 局即 PASS。"""
     short = tasks[:3]
     rc, out, report = run(R, short, tmp_path, monkeypatch, capsys)
     line = verdict_line(out)
@@ -246,3 +265,28 @@ def test_期望局数随任务清单长度变化(R, tasks, tmp_path, monkeypatch
              "demo_equal": True, "post_equal": True} for t in short for i in range(PER_TASK)]
     assert R._xhard0_reset_verdict(rows, PER_TASK, n_tasks=3) == 0
     assert R._xhard0_reset_verdict(rows, PER_TASK, n_tasks=len(tasks)) == 1
+
+
+def test_episodes子集_官方原号取自hard侧解析_分母按所选身份(R, tasks, tmp_path, monkeypatch, capsys):
+    """``--episodes 1:2``：hard 侧只跑 builder 局 1，官方侧拿 hard 侧解析出的原号（3 + 4×1 = 7）；
+    1 任务 × 1 局 → ``shape=1x1x1 compared=1``。"""
+    calls = []
+    rc, out, report = run(R, tasks, tmp_path, monkeypatch, capsys, only_tasks=tasks[4:5], episodes="1:2", calls=calls)
+    line = verdict_line(out)
+    assert rc == 0 and line.startswith("XHARD0_RESET_PARITY=PASS shape=1x1x1 compared=1 ")
+    assert calls == [("hard", tasks[4], [1]), ("official", tasks[4], [7])]
+    assert [(r["hard_episode"], r["source_episode"]) for r in report] == [(1, 7)]
+
+
+def test_hard侧解析出的原号与清单不符即确定性差异(R, tasks, tmp_path, monkeypatch, capsys):
+    def mutate(side, task, idx, row):
+        if side == "hard" and task == tasks[0] and idx == 0:
+            row["source_episode"] = 99
+    rc, out, report = run(R, tasks, tmp_path, monkeypatch, capsys, only_tasks=tasks[:1], mutate=mutate)
+    line = verdict_line(out)
+    assert rc == 1 and " det_diff=1 " in line and "source_episode" in line
+
+
+def test_episodes越界即拒(R, tasks, tmp_path, monkeypatch, capsys):
+    with pytest.raises(SystemExit):
+        run(R, tasks, tmp_path, monkeypatch, capsys, episodes=f"0:{PER_TASK + 1}")

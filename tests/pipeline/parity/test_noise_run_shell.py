@@ -1,4 +1,4 @@
-"""C16 壳脚本 ``scripts/parity/noise_run_gl.sh``：真 bash 子进程 + 假真实命令（``true``／``false``／``sleep``）。
+"""C16 壳脚本 ``dev-scripts/parity/noise_run_gl.sh``：真 bash 子进程 + 假真实命令（``true``／``false``／``sleep``）。
 
 标 ``slow``（起 bash、等信号），不进日常门禁。核：preflight 不过不执行真实命令也不写 finish；真实命令退出码进
 ``EXIT_CODE=`` 尾行与账本 finish 行；导出的线程环境变量；TERM 中断时收掉真实命令仍写 finish 与 ``EXIT_CODE=143``；
@@ -20,7 +20,7 @@ import parity_fixtures as F
 
 pytestmark = pytest.mark.slow
 
-WRAPPER = F.REPO / "scripts" / "parity" / "noise_run_gl.sh"
+WRAPPER = F.REPO / "dev-scripts" / "parity" / "noise_run_gl.sh"
 CAPS = {"gen": {"attempts": 10, "resets": 30, "retries": 2}, "total": {"attempts": 15, "resets": 40, "retries": 3}}
 
 

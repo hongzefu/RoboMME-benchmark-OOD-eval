@@ -18,7 +18,7 @@ import pytest
 import parity_fixtures as F
 
 TIER = "xhard5"
-SRC_SPECS = F.REPO / "src" / "robomme_hard" / "env_metadata" / "ood" / TIER / "specs.jsonl"
+SRC_SPECS = F.bench_root() / "src" / "robomme_hard" / "env_metadata" / "ood" / TIER / "specs.jsonl"
 OUTSIDE = ("StopCube", TIER, 99_999_999)
 
 
@@ -176,7 +176,8 @@ def test_v9_全集口径下一侧多出清单外身份(hp, v9, capsys):
     out = dict(task=OUTSIDE[0], tier=TIER, episode=999, seed=OUTSIDE[2], sha="0" * 64)
     rc, line, _ = run(hp, capsys, build(v9, left=v9["rows"] + [out]))
     f = fields(line)
-    assert rc == 1 and (f["missing"], f["extra"], f["compared"]) == ("0", "1", str(v9["n"] + 1))
+    # 分母（keys）含清单外那一局；实际比较数只算两侧都有可读 h5 的身份（清单外那局只在一侧）
+    assert rc == 1 and (f["missing"], f["extra"], f["keys"], f["compared"]) == ("0", "1", str(v9["n"] + 1), str(v9["n"]))
 
 
 @pytest.mark.parametrize("party", ["delivery", "left"])
@@ -240,6 +241,68 @@ def test_native负例_空清单_重复行_一侧缺局(hp, tmp_path, capsys, cas
         assert f["manifest_duplicate"] == "1"
     else:
         assert f["identity_equal"] == "2"
+
+
+def _fail_lines(side_dir: Path, seeds: set[int]) -> None:
+    """把一侧 identities 里给定 seed 的行改成「生成失败、无 h5」。"""
+    lines = [json.loads(t) for t in (side_dir / "identities.jsonl").read_text(encoding="utf-8").splitlines()]
+    for line in lines:
+        if line["seed"] in seeds:
+            line.update(success=False, path=None, sha256=None, error_type="DatasetGenerationError")
+    F.write_jsonl(side_dir / "identities.jsonl", lines)
+
+
+def _corrupt(side_dir: Path, seeds: set[int]) -> None:
+    """把一侧给定 seed 的 h5 换成读不出的字节（identities 仍记成功）。"""
+    for line in (json.loads(t) for t in (side_dir / "identities.jsonl").read_text(encoding="utf-8").splitlines()):
+        if line["seed"] in seeds:
+            (side_dir / line["path"]).write_bytes(b"not an hdf5 file\n" * 4)
+
+
+def _dirs(argv):
+    return Path(argv[argv.index("--left") + 1]), Path(argv[argv.index("--right") + 1])
+
+
+def test_全部两侧同失败_不得PASS(hp, tmp_path, capsys):
+    """both_fail 单列、不计入通过：三局两侧都没产出时 compared=0，判 FAIL（另打 PARITY_BOTH_FAIL=REVIEW）。"""
+    argv, rows = native_world(tmp_path, "xhard0", "hard")
+    seeds = {r["seed"] for r in rows}
+    for d in _dirs(argv):
+        _fail_lines(d, seeds)
+    rc = hp.main(argv)
+    out = capsys.readouterr().out.splitlines()
+    f = fields(next(t for t in out if t.startswith("PARITY_O_H=")))
+    assert rc == 1 and f["PARITY_O_H"] == "FAIL"
+    assert (f["keys"], f["compared"], f["both_fail"], f["unreadable"]) == ("3", "0", "3", "0")
+    assert any(t.startswith("PARITY_BOTH_FAIL=REVIEW ") for t in out)
+
+
+def test_一局两侧同失败_其余一致也FAIL(hp, tmp_path, capsys):
+    argv, rows = native_world(tmp_path, "xhard0", "hard")
+    for d in _dirs(argv):
+        _fail_lines(d, {rows[0]["seed"]})
+    rc, line, summary = run(hp, capsys, argv)
+    f = fields(line)
+    assert rc == 1 and line.startswith("PARITY_O_H=FAIL ")
+    assert (f["keys"], f["compared"], f["both_fail"], f["unreadable"]) == ("3", "2", "1", "0")
+    assert summary["compared"] == 2 and summary["verdict"] == "FAIL"
+
+
+@pytest.mark.parametrize("both", [False, True], ids=["一侧不可读", "两侧全部不可读_0比较"])
+def test_h5不可读_不计入compared且FAIL(hp, tmp_path, capsys, both):
+    argv, rows = native_world(tmp_path, "native", "easy")
+    left, right = _dirs(argv)
+    if both:
+        seeds = {r["seed"] for r in rows}
+        _corrupt(left, seeds)
+        _corrupt(right, seeds)
+    else:
+        _corrupt(left, {rows[1]["seed"]})
+    rc, line, _ = run(hp, capsys, argv)
+    f = fields(line)
+    assert rc == 1 and line.startswith("PARITY_O_H=FAIL ")
+    want = ("0", "3") if both else ("2", "1")
+    assert (f["compared"], f["unreadable"], f["both_fail"]) == (*want, "0")
 
 
 def test_identities只用于v9(hp, tmp_path):

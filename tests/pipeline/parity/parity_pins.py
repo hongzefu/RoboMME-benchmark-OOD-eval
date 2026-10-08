@@ -1,7 +1,7 @@
 """对拍块的钉值文件（红线 R8 允许的「钉值文件」：业务常量字面值只出现在这里与 tests/contract/test_constants.py）。
 
 每项注明用户口径出处（1003-code-test-maintenance-todo.md 第二部分「对拍细则」）。改这些值等于改闸门口径，
-须先改计划与用户确认；``test_parity_pins.py`` 断言 ``scripts/parity/noise_gate.py`` 里的同名常量与这里逐个相等。
+须先改计划与用户确认；``test_parity_pins.py`` 断言 ``dev-scripts/parity/noise_gate.py`` 里的同名常量与这里逐个相等。
 """
 from __future__ import annotations
 

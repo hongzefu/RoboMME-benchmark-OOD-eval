@@ -7,7 +7,7 @@ GL 节点上的 ``hard_parity.py generate`` 每局搬到 ``<stage>/<段>/episode
 每局 h5 都在 ``/data`` 且 sha 相等，打 ``PULL_SEGMENT=PASS|FAIL``；全部段完成后退出并打 ``PULL_DONE``。
 NFS 上只存在途的局；段结束确认目录下无大文件后 ``rmdir`` 空目录由 runbook 手工执行（显式逐目录）。
 
-    uv run --no-sync python scripts/parity/hard_pull.py --stage <NFS>/hs-stage --dest artifacts/newtask-v6/hard-split/h5 \
+    uv run --no-sync python dev-scripts/parity/hard_pull.py --stage <NFS>/hs-stage --dest artifacts/newtask-v6/hard-split/h5 \
         --segments smoke-O-native,O-native,H-xhard,smoke-P-native,P-native,smoke-H-native,H-native
 
 ``--identities <jsonl>``（对拍细则 3.4「只回传翻转局」，如 ``gen-regress check --rerun-identities-out`` 写的重跑清单

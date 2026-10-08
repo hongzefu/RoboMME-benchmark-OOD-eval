@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """噪声基线 GL 单遍运行包装的 Python 逻辑（1003-noise-baseline-plan.md 第一部分 3.3，第二部分 §一、§二 S3、§四、§五）。
 
-每一遍生成都经 ``scripts/parity/noise_run_gl.sh`` 启动，壳脚本依次调本文件的 ``preflight`` → 真实命令 → ``finish``。
+每一遍生成都经同目录 ``noise_run_gl.sh`` 启动，壳脚本依次调本文件的 ``preflight`` → 真实命令 → ``finish``。
 噪声工具只留生成这一条线（1003 代码测试维护计划「细则 2.5」：评估分片 ``eval-shard`` 已删，``--kind`` 只认 ``gen``；
 账本里历史的 ``eval``／``digest`` 行仍照常累计）。三个子命令：
 

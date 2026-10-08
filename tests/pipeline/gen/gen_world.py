@@ -1,12 +1,13 @@
-"""生成链路测试的公共世界：唯一一份 FakeRunner、CPU 抽签替身、微型 h5 与经真实 ``_freeze.freeze`` 封存的小规格根。
-
-计划原写 ``tests/_support/gen_world.py``；``_support`` 归主会话，本块按分配表放在 ``tests/pipeline/gen/``。
+"""生成链路测试的公共世界：唯一一份 FakeRunner、微型 h5 与按 ``hard-specs/4`` 规则签好的小规格根。
 
 设计口径：
-- 生产模块一律经 ``generate_h5.py``／``freeze_specs.py`` 的模块属性取得（它们按普通模块名导入 ``_rollout``、
-  ``_freeze``、``_draw``），测试与生产拿到的是同一个模块对象，打补丁时不会出现两份副本。
-- 抽签替身只替换 ``_draw.draw_task`` 的 ``draw_one`` 注入点（生产预留的单测入口），抽签循环、合并、封存、签名、
-  落盘全部走真实代码。
+- 生产模块一律经 ``generate_h5.py`` 的模块属性取得（它按普通模块名导入 ``_rollout``），测试与生产拿到的是同一个
+  模块对象，打补丁时不会出现两份副本。
+- 规格抽签封存（旧仓 ``freeze_specs``／``_freeze.freeze``／``_draw``）随拆仓退役、不搬进评估仓；这里的
+  :func:`freeze_file` 是测试侧的最小签名器：按抽签循环的推进规则造草稿行（每格候选 ``0..n-1``，``fail`` 给出的局在
+  成功前先失败若干次、attempt 随之递增），选前 ``配额`` 个候选为正式局，按 ``hard_specs`` 的 ``identity_sha256``／
+  ``delivery_sha256`` 签名，再过真实 ``hard_specs.validate_specs``，最后经真实 ``_freeze_min.write_jsonl_exclusive``
+  排他落盘。生成链路读到的仍是一份通过全部契约校验的 /4 规格文件。
 - ``FakeRunner`` 冒充 ``train_split_runner.py`` 的命令行契约：读 ``--jobs-json``，按剧本在局目录写真实 h5／mp4／
   ``spec_replay.json``，逐局追加 ``results.partial.jsonl``，最后按模式写或不写 ``results.json``；作为
   ``subprocess.run`` 的替身装进 ``_rollout``，``run_batch`` 与 ``run_continue`` 的解析、记账全部是真实代码。
@@ -14,6 +15,7 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 import types
@@ -27,23 +29,20 @@ from tests._support.loaders import load_script
 
 # ── 生产模块（同一对象）──────────────────────────────────────────────
 
-GH = load_script("injection-dev/generate_h5.py")
-FS = load_script("injection-dev/freeze_specs.py")
+GH = load_script("parity/generate_h5.py")
 R = GH._rollout
-F = FS._freeze
-D = FS._draw
 H = R.hard_specs
-assert FS._rollout is R, "freeze_specs 与 generate_h5 须共用同一个 _rollout 模块对象"
+FM = load_script("parity/_freeze_min.py")
 
 SPEC_KIND = "native-newvalue/2"
 
 
-# ── 抽签替身 ────────────────────────────────────────────────────────
+# ── 规格与草稿行 ──────────────────────────────────────────────────────
 
 
 def fake_spec(task: str, tier: str, episode: int, attempt: int, way: int | None = None) -> dict[str, Any]:
     """一条形如 SpecRecorder.to_dict() 的规格：构造期 initializations.0 与正式 reset 的最大序号；
-    ``way`` 只写在最大序号那次（_freeze._movecube_way 的口径），构造期故意写另一个值以检出取错序号。"""
+    ``way`` 只写在最大序号那次（_freeze_min._movecube_way 的口径），构造期故意写另一个值以检出取错序号。"""
     spec: dict[str, Any] = {"spec_kind": SPEC_KIND,
                             "identity": {"task": task, "difficulty": tier, "episode": episode, "attempt": attempt},
                             "objects": {"probe": episode * 10 + attempt}, "actions": {}}
@@ -52,55 +51,61 @@ def fake_spec(task: str, tier: str, episode: int, attempt: int, way: int | None 
     return spec
 
 
-class FakeDraw:
-    """``draw_one(task, seed, episode, sampling)`` 替身：``fail[(task, episode)]`` 给出该局前若干次 attempt 失败；
-    ``ways[task]`` 是 ``episode → way`` 函数（MoveCube 用）。逐次调用记在 ``calls``。"""
-
-    def __init__(self, tier: str, fail: dict[tuple[str, int], int] | None = None, ways: dict | None = None,
-                 seed_rule: dict | None = None):
-        self.tier = tier
-        self.fail = dict(fail or {})
-        self.ways = dict(ways or {})
-        self.seed_rule = seed_rule
-        self.calls: list[tuple[str, int, int, int]] = []
-        self._attempt: dict[tuple[str, int], int] = {}
-
-    def __call__(self, task, seed, episode, sampling):
-        attempt = self._attempt.get((task, episode), 0)
-        self._attempt[(task, episode)] = attempt + 1
-        self.calls.append((task, seed, episode, attempt))
-        if attempt < self.fail.get((task, episode), 0):
-            return False, None, "ResetRejected", "替身：布局不可行"
-        way = self.ways[task](episode) if task in self.ways else None
-        return True, fake_spec(task, self.tier, episode, attempt, way), None, None
-
-
-def header_parts(tier: str, tasks: list[str], drafts: list[dict], run_id: str = "t7") -> dict[str, Any]:
-    return {"difficulty": tier, "tasks": list(tasks), "seed_rule": H.seed_rule_for(tier, "v8"),
-            "sampling_config": {t: {"decision": {"t7": True}, "native": {"task": t}} for t in tasks},
-            "recovery_rule": {"rule": "t7 替身"}, "identity_source": "formula", "run_id": run_id,
-            "draw_stats": D.draw_stats(drafts), "provenance": {"env_package": "robomme_hard", "note": "t7"}}
-
-
-def draw(tier: str, plan: dict[str, tuple[int, int]], *, fail=None, ways=None, max_resets: int = 1000):
-    """``plan = {task: (配额, 候选数)}`` → 经真实 ``_draw.draw_task`` 循环抽出的草稿行与替身。"""
-    fake = FakeDraw(tier, fail, ways)
-    drafts: list[dict] = []
+def drafts(tier: str, plan: dict[str, tuple[int, int]], *, fail=None, ways=None) -> list[dict[str, Any]]:
+    """``plan = {task: (配额, 候选数)}`` → 按抽签循环推进规则造的成功草稿行（每个候选 ``attempt`` = 先失败的次数）。"""
+    rule = H.seed_rule_for(tier, "v8")
+    rows = []
     for task, (_quota, cands) in plan.items():
-        drafts += D.draw_task(task, {}, cands, max_resets, fake, tier, H.seed_rule_for(tier, "v8"))
-    return drafts, fake
+        for episode in range(cands):
+            attempt = (fail or {}).get((task, episode), 0)
+            way = ways[task](episode) if ways and task in ways else None
+            spec = fake_spec(task, tier, episode, attempt, way)
+            rows.append({"task": task, "difficulty": tier, "episode": episode, "attempt": attempt,
+                         "seed": H.seed_for(task, episode, attempt, rule), "spec": spec,
+                         "spec_sha256": H.spec_sha256(spec)})
+    return rows
+
+
+def sign(tier: str, plan: dict[str, tuple[int, int]], *, fail=None, ways=None, select=None,
+         run_id: str = "t7") -> tuple[dict, list[dict]]:
+    """草稿行 → 签好的 ``(header, rows)``：每任务正式局取 ``select[task]``（缺省前 ``配额`` 个候选），header 与行的键、
+    签名与 ``hard-specs/4`` 契约一致，返回前过真实 ``hard_specs.validate_specs``。"""
+    tasks = list(plan)
+    rule = H.seed_rule_for(tier, "v8")
+    chosen = {t: list(select[t]) if select else list(range(plan[t][0])) for t in tasks}
+    rows = []
+    for d in drafts(tier, plan, fail=fail, ways=ways):
+        flag = d["episode"] in chosen[d["task"]]
+        rows.append({"record": "spec", "task": d["task"], "tier": tier, "candidate": d["episode"],
+                     "episode": d["episode"], "seed": d["seed"], "attempt": d["attempt"], "spec": d["spec"],
+                     "spec_sha256": d["spec_sha256"], "selected": flag, "tried": False, "initial_selected": flag,
+                     "rollout": None, "layout_parent": None})
+    # 每任务 reset 尝试数 = 候选数（各成功一次）+ 先失败的次数
+    attempted = {t: plan[t][1] + sum(n for (task, _e), n in (fail or {}).items() if task == t) for t in tasks}
+    sampling = {t: {"decision": {"t7": True}, "native": {"task": t}} for t in tasks}
+    header = {
+        "record": "header", "schema": H.SCHEMA, "layout_rule": dict(H.LAYOUT_RULE), "exec_cap": H.EXEC_CAP,
+        "difficulty": tier, "tasks": tasks, "per_env": {t: plan[t][1] for t in tasks}, "runtime": dict(H.RUNTIME),
+        "seed_rule": dict(rule), "select_rule": copy.deepcopy(chosen), "sampling_config": sampling,
+        "sampling_config_sha256": H.digest(sampling), "recovery_rule": {"rule": "t7 替身"},
+        "identity_source": "formula", "run_id": run_id,
+        "draw_stats": {"attempted": sum(attempted.values()), "freeze_per_env": {
+            t: {"attempted": attempted[t], "candidates": plan[t][1], "initial_selected": chosen[t],
+                "candidates_requested": plan[t][1]} for t in tasks}},
+        "provenance": {"env_package": "robomme_hard", "note": "t7"},
+        "delivery_per_cell": {t: len(chosen[t]) for t in tasks},
+    }
+    header["identity_sha256"] = H.identity_sha256(header, rows)
+    header["delivery_sha256"] = H.delivery_sha256(rows)
+    H.validate_specs(header, rows, expected_cells=H.resolve_cell_table({(t, tier): len(chosen[t]) for t in tasks}))
+    return header, rows
 
 
 def freeze_file(path: Path, tier: str, plan: dict[str, tuple[int, int]], *, fail=None, ways=None,
                 select=None, run_id: str = "t7") -> tuple[dict, list[dict]]:
-    """抽签 → 真实 ``_freeze.freeze`` → 真实 ``write_jsonl_exclusive`` 落一份 /4 规格文件。"""
-    drafts, _ = draw(tier, plan, fail=fail, ways=ways)
-    tasks = list(plan)
-    if select is None:
-        select = {t: tuple(range(plan[t][0])) for t in tasks}
-    header, rows = F.freeze(drafts, header_parts(tier, tasks, drafts, run_id), select,
-                            {t: plan[t][1] for t in tasks}, schema=H.SCHEMA)
-    F.write_jsonl_exclusive(Path(path), [header, *rows])
+    """签名 → 真实 ``_freeze_min.write_jsonl_exclusive`` 落一份 /4 规格文件（已存在即拒，不覆盖）。"""
+    header, rows = sign(tier, plan, fail=fail, ways=ways, select=select, run_id=run_id)
+    FM.write_jsonl_exclusive(Path(path), [header, *rows])
     return header, rows
 
 

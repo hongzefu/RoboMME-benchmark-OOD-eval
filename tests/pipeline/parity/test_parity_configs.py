@@ -1,4 +1,4 @@
-"""C15 对拍容差文件 ``scripts/configs/hard-parity-tolerances.json`` 自洽（只读）。
+"""C15 对拍容差文件 ``dev-scripts/parity/configs/hard-parity-tolerances.json`` 自洽（只读）。
 
 文件由 ``hard_parity.py compare --pair O:P --calibrate`` 写入：阈值 = 原始最大值 × 1.5（帧数向上取整）与下界取大。
 这里不复刻该公式，而是把文件里记录的 ``raw_max`` 当作一批「校准对」重新喂真实 ``calibrate``，要求它产出的
@@ -13,7 +13,7 @@ import pytest
 
 import parity_fixtures as F
 
-PATH = F.REPO / "scripts" / "configs" / "hard-parity-tolerances.json"
+PATH = F.CONFIGS / "hard-parity-tolerances.json"
 
 
 @pytest.fixture(scope="module")

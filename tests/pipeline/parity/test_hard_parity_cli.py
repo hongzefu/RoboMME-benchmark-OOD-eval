@@ -124,7 +124,7 @@ def test_generate_native_records_every_identity(hp, tmp_path, monkeypatch, capsy
 
 
 def test_generate_h_side_xhard0_and_missing_episode_fails(hp, tmp_path, monkeypatch, capsys):
-    """H 侧：--force-mirror、ROBOMME_ENV_PACKAGE=robomme_hard、xhard0 加 ood 路由；漏一局 → GENERATE=FAIL。"""
+    """H 侧：--force-mirror、ROBOMME_ENV_PACKAGE=robomme_hard、xhard0 按数据集名走 hard-verify 路由；漏一局 → GENERATE=FAIL。"""
     rows = [dict(r, tier="hard") for r in ROWS]
     fake = FakeSub(runner=_runner_writes(skip={7001}, module="robomme_hard.robomme_env.PickXtimes"))
     monkeypatch.setattr(hp, "subprocess", fake)
@@ -137,7 +137,7 @@ def test_generate_h_side_xhard0_and_missing_episode_fails(hp, tmp_path, monkeypa
     assert kw["env"]["ROBOMME_ENV_PACKAGE"] == "robomme_hard"
     for flag in ("--force-mirror", "--identity-source", "--xhard0-manifest", "--builder-route"):
         assert flag in cmd
-    assert cmd[cmd.index("--builder-route") + 1] == "ood"
+    assert cmd[cmd.index("--builder-route") + 1] == "hard-verify"
 
 
 def test_generate_smoke_and_dev_smoke_labels(hp, tmp_path, monkeypatch, capsys):
@@ -674,7 +674,7 @@ def test_hard_specs_light_loads_file_without_package(hp, monkeypatch):
     if pkg is not None:
         assert hp.hard_specs_light() is pkg
         monkeypatch.delitem(sys.modules, name)
-    monkeypatch.setattr(hp, "_HARD_SPECS_LIGHT", None)
+    monkeypatch.setattr(hp._common, "_HARD_SPECS_LIGHT", None)
     light = hp.hard_specs_light()
     assert light is not pkg and light.__name__ == "_hard_specs_light"
     assert name not in sys.modules and hp.hard_specs_light() is light
@@ -704,17 +704,18 @@ def test_side_lines_fill_robomme_module(hp, tmp_path):
 
 
 def test_export_xhard0_manifest_cross_checks_builder(hp, tmp_path, monkeypatch, capsys):
-    rows, _ = hp.xhard0_records(F.REPO)
+    bench = F.bench_root()
+    rows, _ = hp.xhard0_records(bench)
     builder = [{"task": r["task"], "episode": r["episode"], "seed": r["seed"]} for r in rows]
     monkeypatch.setattr(hp, "_builder_xhard0_rows", lambda: builder)
     out = tmp_path / "x0.json"
-    assert hp.main(["export-xhard0-manifest", "--src-root", str(F.REPO), "--out", str(out)]) == 0
+    assert hp.main(["export-xhard0-manifest", "--src-root", str(bench), "--out", str(out)]) == 0
     f = fields(capsys.readouterr().out.strip())
     assert (f["XHARD0_IDENTITY"], f["identities"], f["missing"], f["extra"]) == ("PASS", str(len(rows)), "0", "0")
     m = json.loads(out.read_text())
     assert m["rows_total"] == len(rows) and sum(m["recovery_config_counts"].values()) == len(rows)
     # builder 少一条：交叉核对 FAIL
     monkeypatch.setattr(hp, "_builder_xhard0_rows", lambda: builder[1:])
-    assert hp.main(["export-xhard0-manifest", "--src-root", str(F.REPO), "--out", str(out)]) == 1
+    assert hp.main(["export-xhard0-manifest", "--src-root", str(bench), "--out", str(out)]) == 1
     f = fields(capsys.readouterr().out.strip().split(" problems=")[0])
     assert (f["XHARD0_IDENTITY"], f["missing"], f["extra"]) == ("FAIL", "1", "0")

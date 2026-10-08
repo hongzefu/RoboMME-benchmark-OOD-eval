@@ -1883,8 +1883,8 @@
     }
    ],
    "identities": {
-    "file": "scripts/configs/gate-set-v9-129.json",
-    "sha256": "e7f39e9be98c40bbd44b7ceeb432a91295196c862cad234e7c71702f93370ea4"
+    "file": "dev-scripts/parity/configs/gate-set-v9-129.json",
+    "sha256": "47396ed189e9696407f84b91054cba6938e523b3d82b808b9b4b60b0c16dc10a"
    },
    "n": 129,
    "records_checked": 516,
@@ -2598,7 +2598,7 @@
     }
    ],
    "identities": {
-    "file": "scripts/configs/gate-set-xhard0-48.json",
+    "file": "dev-scripts/parity/configs/gate-set-xhard0-48.json",
     "sha256": "c8fcc9628d3837101e7110c26a356281655061465253e24bfb90254f3f5409c5"
    },
    "n": 48,
@@ -2633,5 +2633,5 @@
    ]
   }
  },
- "sha256": "90c0ea527dd7a1cc6a01be153298f612cf52140b34d068d0935985656ccd2e41"
+ "sha256": "0a28570545222bffa155e45f28c2ebdfc0bb3812e25de71b82045a61f0479962"
 }
