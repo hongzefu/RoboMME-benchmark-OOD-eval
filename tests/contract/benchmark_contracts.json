@@ -3957,6 +3957,10 @@
   "dev-scripts/checks/bench_gates.py": {
    "category": "仓级闸门脚本（只供实跑）",
    "reason": "对 benchmark 仓（RoboMME-benchmark-OOD）的一个提交逐项输出 BENCH_* 判定行，需真实 benchmark 仓检出、其 .venv 与 git 历史（含官方 016ac1c4 与旧仓 SRC），不在 CPU 门禁内读取；S1／S6 实跑原始输出留档在 docs/validation/split-accept-20261008-01。"
+  },
+  "dev-scripts/gl/ckpt_paths.sh": {
+   "category": "冻结配置（只供实跑）",
+   "reason": "只在 dev：三个模型的本机／NFS ckpt 原路径（搬自已删除的 src DEFAULT_CKPTS），run_eval_gl.sh 以子进程取值后显式传 --ckpt；补参与透传逻辑由 run_eval_gl.sh 所属契约覆盖，本文件只是路径常量。"
   }
  },
  "file_notes": {
