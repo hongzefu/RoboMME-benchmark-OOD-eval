@@ -92,3 +92,12 @@ GL 首跑被拦（RUN_INPUTS／mme_vla_dirty）与 Astra 首跑 load 失败均�
 ## ⑨ 归档文件清单
 
 `launch.md`（锚点、JobID、tmux 清单、GL 副本与环境、S3／S4 判定行）、本文件。原始日志与产物在本机 `artifacts/split-accept-20261008-01/`（`logs/`、`eval-episode/`、`parity-gen/`、`xhard0-reset/`、`astra/`、`expert_demos_ep0/`、`gl-rerender/`、`s1/`、`s3/`）与 NFS `RoboMME-benchmark-OOD-eval/artifacts/split-accept-20261008-01/`（`gl/`、`budget-ledger.jsonl`、`gl-identities.jsonl`、启动与补渲脚本；已整份 rsync 回本机 `artifacts/split-accept-20261008-01/gl-nfs/`）。
+
+## ⑩ S7 收尾
+
+- 规则同步：`sync_rules.py check --repo benchmark-ood`／`--repo eval-ood` → `SYNC_SUMMARY=PASS pass=3 fail=0 missing=0`（正本 `29a4050`）。
+- 旧仓：`docs/plans/1008-split-benchmark-eval-repos-plan.html`（`git mv` 自根目录，12.562），归档 tag `archive-newtask-v9-20261008` → `5f4f2f9`（已推送）。
+- worktree：benchmark 仓 H1～H3、评估仓 E1～E6 与 MERGE-1、旧仓只读快照 `split-old-src` 共 11 个已 `git worktree remove`，`sub/*` 分支 `git branch -d`；删前删后清单差集恰为这 11 个，旧仓原有 4 个 worktree 未动。
+- tmux：本轮 `split-*` 会话均已随命令结束，`tmux ls` 无会话，无需清理。
+- GL 占位 job `63431430～63431433`：用户 2026-10-08 选「保留给后续工作」，不取消。
+- `CLEANUP=PASS worktrees=11 tmux=0 jobs=0（4 个占位 job 按用户决定保留）`
