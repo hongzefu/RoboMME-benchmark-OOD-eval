@@ -1121,6 +1121,31 @@ class SeatRunner:
                   f"dataset={ident['dataset']} budget_reason={getattr(e, 'reason', None)} detail={e}", flush=True)
             raise SeatStop(EXIT_BUDGET, "budget") from e
 
+    def _reclaim_locked(self, ident: dict, st: "QueueState") -> str:
+        """（须在身份锁内）回收最后一次未收尾的领取（过期或本席位旧进程留下）：领取文件记收尾，其共享账本 rid 按基础设施
+        中断结算（commit 幂等，已结算的不重复记）。返回中断分类。"""
+        q = self.queue
+        n_last, doc = st.last
+        interrupt = "expired" if st.expired else "infra"
+        q.end_claim(q.claim_path(ident, n_last), "reclaimed", reclaimed_by=self.seat, reclaim_reason=interrupt)
+        with contextlib.suppress(Exception):
+            self._settle_shared(doc.get("rid"), status="fail", infra=True)
+        print(f"QUEUE_RECLAIM key={key_of(ident)} dataset={ident['dataset']} attempt={n_last} "
+              f"reason={'expired' if st.expired else 'stale_same_seat'} seat={self.seat}", flush=True)
+        return interrupt
+
+    def reclaim_stale(self, rows: list[dict]) -> int:
+        """开跑前扫一遍：过期或本席位旧进程留下的未收尾领取一律回收（即便该身份已无尝试名额，也要收尾并结算 rid）。"""
+        n = 0
+        for ident in rows:
+            with self.queue.lock(ident):
+                st = self.queue.state(ident)
+                if st.accepted is None and st.last is not None and not st.last[1].get("ended") \
+                        and (st.expired or st.stale_mine):
+                    self._reclaim_locked(ident, st)
+                    n += 1
+        return n
+
     def claim(self, ident: dict) -> Claim | str:
         """在身份锁下：判可领 →（重试时领重试名额）→ 预约共享账本 → O_EXCL 建领取文件。返回 ``Claim`` 或跳过原因
         （``accepted``／``live``／``exhausted``／``retry_denied``／``lost``）。"""
@@ -1140,11 +1165,7 @@ class SeatRunner:
                 interrupt = (self.ledger.retry_interrupt(key_of(ident)) if self.ledger.starts.get(key_of(ident))
                              else doc.get("reclaim_reason") or "infra")
                 if not doc.get("ended"):  # 过期或本席位旧进程留下：回收（计一次尝试）
-                    interrupt = "expired" if st.expired else "infra"
-                    q.end_claim(q.claim_path(ident, n_last), "reclaimed", reclaimed_by=self.seat,
-                                reclaim_reason=interrupt)
-                    print(f"QUEUE_RECLAIM key={key_of(ident)} dataset={ident['dataset']} attempt={n_last} "
-                          f"reason={'expired' if st.expired else 'stale_same_seat'} seat={self.seat}", flush=True)
+                    interrupt = self._reclaim_locked(ident, st)
                 if n_last >= q.max_attempts:
                     return "exhausted"
             n = 1 if last is None else last[0] + 1
@@ -1163,6 +1184,12 @@ class SeatRunner:
     # ── 心跳 ────────────────────────────────────────────────────────────
     def _heartbeat_loop(self) -> None:
         while not self._hb_stop.wait(self.heartbeat_s):
+            self.heartbeat_once()
+
+    def heartbeat_once(self) -> None:
+        """在 ``self._lock`` 内重读当前领取再写心跳：与结算（``_end``／``_hard_exit`` 同样持锁写收尾或作废）互斥，
+        不会把已收尾的领取文件写回在跑状态；``DynamicQueue.heartbeat`` 自身也对 ended／已删除不写。"""
+        with self._lock:
             cur = self._current
             if cur is not None:
                 with contextlib.suppress(Exception):
@@ -1310,10 +1337,7 @@ class SeatRunner:
                 acc += 1
             elif st.live:
                 live += 1
-            elif st.last is not None and st.last[0] >= self.queue.max_attempts:
-                missing += 1
-                miss_keys.append(f"{ident['dataset']}:{key_of(ident)}")
-            else:
+            else:  # 无 accepted、也无人在跑（尝试用满，或被额度／阻塞挡下未再领）
                 missing += 1
                 miss_keys.append(f"{ident['dataset']}:{key_of(ident)}")
         print(f"RUN_SUMMARY policy={self.args.policy} label={self.label} seat={self.seat} total={len(rows)} "
@@ -1333,6 +1357,7 @@ class SeatRunner:
             self._check_route()
             self.recover_dangling()
             self.recover_crash_window()
+            self.reclaim_stale(rows)
             todo = [r for r in rows if self.queue.claimable(r)]
             print(f"RUN_PLAN policy={self.args.policy} label={self.label} seat={self.seat} total={len(rows)} "
                   f"claimable={len(todo)} max_attempts={self.queue.max_attempts} route={self.route} "

@@ -66,8 +66,9 @@ _seat_media_transcode() {  # [--keep-raw] $1 = 每局目录。就地转码为 ep
   "$(seat_media_py)" - "$1" "$keep" <<'PY'
 """两种原始帧：
 - 新侧（recorder.py）：front.mkv／wrist.mkv（FFV1，同一流里重复帧只编码一份）+ frames-<stream>.jsonl（idx→enc）。
-  按 idx 展开回逐帧原图（同 dev-scripts/site/eval_transcode.py），期望帧数 = 记录行数；meta.json 记
-  raw_codec=av1-yuv444p 的局（拆仓后的永久 AV1 原始帧）不转码、不删，result=permanent_raw；
+  按 idx 展开回逐帧原图（同 dev-scripts/site/eval_transcode.py），期望帧数 = 记录行数；只有 meta.json 明确是旧
+  FFV1（raw_codec=ffv1，或无 raw_codec 而 codec=ffv1）才转码并删原始帧；AV1 等其他编码不转码、不删，result=permanent_raw；
+  meta.json 读不出来一律拒绝删除，result=refused_unreadable_meta；
 - 原侧（pp_official_runner.py／official_hard_runner.py）：frames/{front,wrist}.rgb24 + frames/frames.json
   （pix_fmt=rgb24、各流 width/height/count），期望帧数 = count。
 两路左右拼接（高度不同则下方补黑），libx264 -preset veryfast -crf 23 -pix_fmt yuv420p -movflags +faststart，30 fps。
@@ -144,11 +145,18 @@ def main():
     kind = "new" if any((d / f"{s}.mkv").exists() for s in STREAMS) else \
         "orig" if any((d / "frames" / f"{s}.rgb24").exists() for s in STREAMS) else "none"
     if kind == "new":
+        # 只有明确是旧 FFV1 产物（meta.json 可读，raw_codec=ffv1，或旧录制器没有 raw_codec 字段但 codec=ffv1）才走旧的
+        # 「转码后删原始帧」分支；meta.json 读不出来一律拒绝删除，AV1 等其他编码按永久原始帧保留
         try:
-            raw_codec = json.loads((d / "meta.json").read_text(encoding="utf-8")).get("raw_codec")
+            meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+            if not isinstance(meta, dict):
+                raise ValueError("meta.json 不是对象")
         except (OSError, ValueError):
-            raw_codec = None
-        if raw_codec == "av1-yuv444p":  # 永久 AV1 原始帧：不进旧的「转码后删原始帧」分支
+            print(f"REC_TRANSCODE dir={d.name} kind=new result=refused_unreadable_meta", flush=True)
+            return 0
+        raw_codec = meta.get("raw_codec")
+        legacy_ffv1 = raw_codec == "ffv1" or (raw_codec is None and meta.get("codec") == "ffv1")
+        if not legacy_ffv1:  # 永久 AV1 原始帧（或未知编码）：不进旧的「转码后删原始帧」分支
             print(f"REC_TRANSCODE dir={d.name} kind=new result=permanent_raw raw_codec={raw_codec}", flush=True)
             return 0
     if kind == "none":

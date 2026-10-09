@@ -336,6 +336,7 @@ def _raw_episode(d: Path) -> None:
             "".join(json.dumps({"idx": idx, "enc": enc, "sha256": f"{stream}-{enc}"}) + "\n"
                     for idx, enc in enumerate((0, 1, 1, 2))), encoding="utf-8")
     (d / "summary.json").write_text('{"RECORDER_VERIFY": "PASS"}', encoding="utf-8")
+    (d / "meta.json").write_text('{"codec": "ffv1", "level": 0}', encoding="utf-8")  # 旧录制器：无 raw_codec 字段
 
 
 def _trace_dir(td: Path, key: str = KEY0, attempt: int = 1) -> None:
@@ -481,6 +482,31 @@ def test_transcode_keeps_permanent_av1_raw(tmp_path):
                        env=dict(os.environ, TOOL_PY=sys.executable), capture_output=True, text=True)
     assert "result=permanent_raw" in p.stdout and "RC=0" in p.stdout, p.stdout + p.stderr
     assert _raw_fingerprint(d) == before and not (d / "episode.mp4").exists()
+
+
+@pytest.mark.parametrize("meta", [None, "{坏 json", '{"raw_codec": "h265"}', '{"raw_codec": "ffv1"}'],
+                         ids=["missing", "unreadable", "unknown_codec", "explicit_ffv1"])
+def test_transcode_deletes_raw_only_for_explicit_ffv1(tmp_path, meta):
+    """kind=new：meta.json 缺失或读不出 → refused_unreadable_meta、原始帧不动；未知编码 → permanent_raw 不动；只有明确
+    FFV1 才转码并删原始帧。"""
+    repo = _media_repo(tmp_path / "repo")
+    d = tmp_path / "ep" / f"{KEY0}.a1"
+    _raw_episode(d)
+    if meta is None:
+        (d / "meta.json").unlink()
+    else:
+        (d / "meta.json").write_text(meta, encoding="utf-8")
+    before = _raw_fingerprint(d)
+    lib = repo / "dev-scripts" / "gl" / "seat_media_lib.sh"
+    p = subprocess.run(["bash", "-c", 'source "$1"; transcode_episode_dir "$2"; echo "RC=$?"', "_", str(lib), str(d)],
+                       env=dict(os.environ, TOOL_PY=sys.executable), capture_output=True, text=True)
+    assert "RC=0" in p.stdout, p.stdout + p.stderr
+    if meta == '{"raw_codec": "ffv1"}':
+        assert "result=ok" in p.stdout and not list(d.glob("*.mkv")) and _mp4_frames(d / "episode.mp4") == 4
+    else:
+        want = "permanent_raw" if meta == '{"raw_codec": "h265"}' else "refused_unreadable_meta"
+        assert f"result={want}" in p.stdout, p.stdout
+        assert _raw_fingerprint(d) == before and not (d / "episode.mp4").exists()
 
 
 def test_orig_seat_lib_refuses_direct_execution(tmp_path):

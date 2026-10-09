@@ -541,7 +541,7 @@ def seat_args(out: Path, policy: str, *, seat: str = "s00", reset_budget: int | 
 
 
 def make_runner(stage: Path, policy: str, policy_obj, world: World, *, seat_dir: str = "s00",
-                budget_ledger=None, recorder_factory=None, **kw):
+                budget_ledger=None, recorder_factory=None, now=None, hard_exit=None, **kw):
     """新席位：产物根 ``<stage>``（其下 rollouts/、queue/、seats/）；builder 换成 ``HybridBuilder``，录制器换成
     ``FakeRecorder``，不出网站视频。``budget_ledger``：路径或已打开的账本对象（共享模式），None 即关闭。"""
     ec, E = env_client(), episode_mod()
@@ -554,7 +554,8 @@ def make_runner(stage: Path, policy: str, policy_obj, world: World, *, seat_dir:
     runner = ec.SeatRunner(args, policy_factory=lambda model, seed, **cfg: pol,
                            episode_kwargs={"recorder_factory": recorder_factory
                                            or (lambda raw, meta: FakeRecorder(raw, meta, world)), "render": False},
-                           hard_exit=lambda code: None, shared=shared)
+                           hard_exit=hard_exit or (lambda code: None), shared=shared,
+                           **({"now": now} if now is not None else {}))
     runner._fake_restore = prev
     runner.fake_policy = pol
     return runner
