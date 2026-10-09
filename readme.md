@@ -20,13 +20,16 @@ Linux x86_64 with an NVIDIA GPU and Vulkan (for ManiSkill / SAPIEN rendering), [
 and `ffmpeg`/`ffprobe` on `PATH`.
 
 ```bash
-git clone --recurse-submodules https://github.com/hongzefu/RoboMME-benchmark-OOD-eval.git
+git clone https://github.com/hongzefu/RoboMME-benchmark-OOD-eval.git
 cd RoboMME-benchmark-OOD-eval
+git submodule update --init  # first level only; do NOT use --recursive / --recurse-submodules
 uv sync --extra dev          # main environment: benchmark, simulator, evaluation package, pytest
 ```
 
-`--recurse-submodules` is required: `uv.lock` installs the benchmark and the OpenPI client as editable path
-dependencies from the submodules. Do not recurse further into the submodules' own submodules.
+The submodules are required: `uv.lock` installs the benchmark and the OpenPI client as editable path dependencies
+from them. Initialize only the first level: `third_party/mme-vla` and `third_party/Astra-on-RoboMME` carry their own
+copy of the benchmark as a nested submodule, which must stay empty (the FrameSamp+Modulation / GroundSG server preflight refuses to start otherwise), so
+`git clone --recurse-submodules` is not suitable.
 
 Model servers run in their own interpreters, so the main environment never imports model code:
 
