@@ -1,8 +1,10 @@
-"""随机动作 dummy 模型（冒烟与单测用；动作口径照官方 ``scripts/evaluation.py::DummyModel``）。
+"""Random-action dummy model (for smoke runs and unit tests; actions follow the official
+``scripts/evaluation.py::DummyModel``).
 
-无服务端：``load`` 不做事；``reset(spec)`` 只按 ``policy_seed`` 重设本局随机数（不碰环境）；``play`` 用
-``session.reset()``／``session.step()`` 跑到环境终止或步数上限，同时写本局 ``trace.jsonl``（路线 ``dummy/new``），
-供官方版式重绘与产物核对使用。
+No server: ``load`` does nothing; ``reset(spec)`` only reseeds this episode's RNG from ``policy_seed`` (it never
+touches the environment); ``play`` drives ``session.reset()`` / ``session.step()`` until the environment terminates
+or the step cap is hit, and writes this episode's ``trace.jsonl`` (route ``dummy/new``) for official-layout
+re-rendering and output checks.
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ import numpy as np
 from robomme_ood_eval.policy import Policy
 from robomme_ood_eval.record.trace_writer import TraceWriter
 
-#: 官方 DummyModel 的基准关节动作（7 关节 + 夹爪）
+#: base joint action of the official DummyModel (7 joints + gripper)
 BASE_ACTION = np.array([0.0, 0.0, 0.0, -np.pi / 2, 0.0, np.pi / 2, np.pi / 4, 1.0], dtype=np.float32)
 NOISE_STD = 0.01
 
@@ -32,13 +34,14 @@ class DummyPolicy(Policy):
         self._rng = np.random.default_rng(self.policy_seed)
 
     def reset(self, spec) -> None:
-        """局前：只重设本局随机数（同一 policy_seed 下每局动作序列相同），不碰环境、无服务端消息。"""
+        """Before the episode: only reseed the RNG (same action sequence every episode for one policy_seed); never
+        touches the environment and sends no server message."""
         super().reset(spec)
         self._rng = np.random.default_rng(self.policy_seed)
 
     def predict(self) -> np.ndarray:
         noise = self._rng.normal(0.0, NOISE_STD, BASE_ACTION.shape)
-        noise[..., -1:] = 0.0  # 夹爪不加噪
+        noise[..., -1:] = 0.0  # no noise on the gripper
         return BASE_ACTION + noise
 
     def play(self, session, spec, recorder) -> dict:

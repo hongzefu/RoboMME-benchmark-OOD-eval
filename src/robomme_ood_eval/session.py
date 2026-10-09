@@ -1,18 +1,22 @@
-"""外层交给 ``Policy.play`` 的环境会话 ``EnvSession``（抽自 ``dev-scripts/gl/seat.py::EnvSession``，拆分方案 §三）。
+"""``EnvSession``: the environment session the outer loop hands to ``Policy.play``.
 
-一局一个实例，由 ``episode.run_episode`` 建、``build()``、交给模型的 ``play``、最后由外层 ``close()``：
+One instance per episode. ``episode.run_episode`` creates it, calls ``build()``, passes it to the model's ``play``
+and finally calls ``close()`` itself:
 
-* ``build()``：``builder.make_env_for_episode(builder_episode)``，计 1 次 reset 预算；
-* ``reset()``：原样返回 ``env.reset()`` 的 ``(obs, info)``，计 1 次 reset 预算；返回后把演示段帧、状态与事件写进录制器；
-* ``step(action)``：action 原样交给 ``env.step``，记录实际交出去的数组（``exec_action``）与返回的当前帧、状态、终态；
-  ``strict_cap`` 时第 ``max_steps+1`` 次调用不进环境，置 ``cap_hit`` 并抛 ``StepCapReached``；
-* ``close()``：只由外层调用（模型侧不得关环境），幂等。
+* ``build()``: ``builder.make_env_for_episode(builder_episode)``; consumes one unit of reset budget;
+* ``reset()``: returns ``env.reset()``'s ``(obs, info)`` unchanged; consumes one unit of reset budget; afterwards
+  writes the demo-segment frames, states and events to the recorder;
+* ``step(action)``: passes the action unchanged to ``env.step`` and records the array actually sent
+  (``exec_action``) plus the returned current frame, state and terminal flags; with ``strict_cap`` the
+  ``max_steps+1``-th call does not reach the environment, sets ``cap_hit`` and raises ``StepCapReached``;
+* ``close()``: called only by the outer loop (the model side must never close the environment); idempotent.
 
-预算：``ledger``（任意带 ``claim(what)`` 方法的对象，超额抛 ``ResetBudgetExhausted`` 或带 ``budget_exhausted``
-属性的异常）与 ``claim_reset(what)``（GL 席位的持久账本回调）在每次实际 build／reset 之前各领一次；两者都不给时不计额度，
-只计 ``reset_calls``。只读属性：``env``、``info``、``steps``、``cap_hit``、``reset_calls``、``recorder``。
-钩子：``first_step_cb``（本局第一次 ``step`` 调用时触发一次，结束首推理计时）、``progress_cb(steps)``（每
-``progress_every`` 步一次）。
+Budget: ``ledger`` (any object with a ``claim(what)`` method that raises ``ResetBudgetExhausted``, or an exception
+carrying a ``budget_exhausted`` attribute, when over budget) and ``claim_reset(what)`` (a persistent-ledger callback)
+are each claimed once before every actual build / reset; if neither is given no budget is charged and only
+``reset_calls`` is counted. Read-only properties: ``env``, ``info``, ``steps``, ``cap_hit``, ``reset_calls``,
+``recorder``. Hooks: ``first_step_cb`` (fired once on the episode's first ``step`` call; ends first-inference
+timing) and ``progress_cb(steps)`` (once every ``progress_every`` steps).
 """
 from __future__ import annotations
 
@@ -20,22 +24,24 @@ import hashlib
 import time
 from typing import Any, Callable
 
-#: 两个评估数据集
+#: the two evaluation datasets
 OOD = "ood"
 HARD_VERIFY = "hard-verify"
 DATASETS = (OOD, HARD_VERIFY)
 
 
 class RecorderError(RuntimeError):
-    """录制器（含磁盘写满）出错：归为基础设施故障（infra=True），不当成环境错误。"""
+    """Recorder failure (including a full disk): classified as an infrastructure failure (infra=True), not an
+    environment error."""
 
 
 class StepCapReached(RuntimeError):
-    """``strict_cap``：已执行 ``max_steps`` 步仍未结束，第 ``max_steps+1`` 次 ``step`` 不进入环境（外层收为 timeout）。"""
+    """``strict_cap``: ``max_steps`` steps were executed without the episode ending; the ``max_steps+1``-th ``step``
+    does not reach the environment (the outer loop records it as a timeout)."""
 
 
 class ResetBudgetExhausted(RuntimeError):
-    """reset 额度（build 与 reset 各算一次）已用尽。"""
+    """The reset budget (build and reset count one each) is used up."""
 
     budget_exhausted = True
 
@@ -47,7 +53,7 @@ def sha(arr: Any) -> str:
 
 
 def state8(joint, gripper):
-    """与旧官方 ``pack_state`` 同式的 8 维状态（7 关节 + 夹爪第一维，float32）。"""
+    """8-d state in the same form as the old official ``pack_state`` (7 joints + first gripper dim, float32)."""
     import numpy as np
 
     return np.concatenate([np.asarray(joint), np.asarray(gripper)[:1]], axis=0, dtype=np.float32)
@@ -61,7 +67,7 @@ def _scalar(x):
 
 
 class _GuardedRecorder:
-    """录制器代理：任何录制调用抛出的异常都转成 RecorderError（保留原因）。"""
+    """Recorder proxy: any exception raised by a recording call is converted to RecorderError (cause kept)."""
 
     def __init__(self, inner):
         self._inner = inner
@@ -83,7 +89,7 @@ class _GuardedRecorder:
 
 
 class NullRecorder:
-    """不录制时的空录制器（接口同 ``record.recorder.EpisodeRecorder``）。"""
+    """No-op recorder used when recording is off (same interface as ``record.recorder.EpisodeRecorder``)."""
 
     def set_phase(self, phase):
         pass
@@ -102,7 +108,8 @@ class NullRecorder:
 
 
 class EnvSession:
-    """一局环境。``builder`` 由外层按 ``(task, dataset)`` 缓存后传入（与官方「每任务一个 builder」一致）。"""
+    """One episode's environment. ``builder`` is cached by the outer loop per ``(task, dataset)`` and passed in
+    (matching the official "one builder per task")."""
 
     def __init__(self, task: str, builder_episode: int, *, dataset: str = OOD, max_steps: int | None = None,
                  recorder=None, builder=None, progress_cb: Callable[[int], None] | None = None,
@@ -110,11 +117,12 @@ class EnvSession:
                  claim_reset: Callable[[str], None] | None = None, budget_claim: Callable[[str], None] | None = None,
                  first_step_cb: Callable[[], None] | None = None):
         if dataset not in DATASETS:
-            raise ValueError(f"dataset={dataset!r} 不是 {DATASETS} 之一")
+            raise ValueError(f"dataset={dataset!r} is not one of {DATASETS}")
         self.task = task
         self.dataset = dataset
         self.builder_episode = int(builder_episode)
-        # max_steps 只在需要自建 builder 时用（构造参数）；不逐局传给 make_env_for_episode
+        # max_steps is only used when building our own builder (constructor argument); never passed per episode
+        # to make_env_for_episode
         self.max_steps = None if max_steps is None else int(max_steps)
         self.step_cap = None if step_cap is None else int(step_cap)
         self.ledger = ledger
@@ -124,7 +132,8 @@ class EnvSession:
         self.progress_cb = progress_cb
         self.progress_every = max(1, int(progress_every))
         self.recorder = recorder if recorder is not None else NullRecorder()
-        # 内部录制一律经代理；对外仍暴露原录制器（SimpleMemVLA 客户端靠 ``session.recorder is recorder`` 判断）
+        # internal recording always goes through the proxy; the original recorder is still exposed (the
+        # SimpleMemVLA client checks ``session.recorder is recorder``)
         self._rec = _GuardedRecorder(self.recorder)
         self._builder = builder
         self._env = None
@@ -139,14 +148,15 @@ class EnvSession:
         self._rec_s = 0.0
         self.task_goal = None
 
-    # ── 只读属性 ─────────────────────────────────────────────────────
+    # -- read-only properties ------------------------------------------------
     @property
     def env(self):
         return self._env
 
     @property
     def info(self):
-        """最近一次 reset／step 返回的 info（GroundSG Oracle 每步读其中的 ``grounded_subgoal_online``）。"""
+        """The info returned by the latest reset / step (GroundSG Oracle reads ``grounded_subgoal_online`` from it
+        every step)."""
         return self._info
 
     @property
@@ -167,22 +177,24 @@ class EnvSession:
             from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
 
             if self.max_steps is None:
-                raise ValueError("EnvSession 自建 builder 必须给 max_steps（步数上限由入口按数据集给出）")
+                raise ValueError("EnvSession needs max_steps to build its own builder (the step cap is set by the "
+                                 "entry point per dataset)")
             t0 = time.perf_counter()
             self._builder = BenchmarkEnvBuilder(env_id=self.task, dataset=self.dataset, action_space="joint_angle",
                                                 max_steps=self.max_steps)
             self.timing["builder_init_s"] = time.perf_counter() - t0
         return self._builder
 
-    # ── 预算 ─────────────────────────────────────────────────────────
+    # -- budget ----------------------------------------------------------------
     def _claim(self, what: str) -> None:
-        """每次实际 build／reset 前领一次额度，领到后才计入 reset_calls。"""
+        """Claim budget once before every actual build / reset; reset_calls is incremented only after a successful
+        claim."""
         try:
             if self.ledger is not None:
                 self.ledger.claim(what)
             if self.claim_reset is not None:
                 self.claim_reset(what)
-        except Exception as e:  # noqa: BLE001 额度耗尽（可能来自另一份模块副本，按属性识别）
+        except Exception as e:  # noqa: BLE001 budget exhausted (may come from another copy of the module, so match by attribute)
             if isinstance(e, ResetBudgetExhausted) or getattr(e, "budget_exhausted", False):
                 self.budget_exhausted = True
             raise
@@ -190,13 +202,14 @@ class EnvSession:
             self.budget_claim(what)
         self._reset_calls += 1
 
-    # ── 环境 ─────────────────────────────────────────────────────────
+    # -- environment -----------------------------------------------------------
     def build(self) -> None:
-        """``make_env_for_episode(builder_episode)``：步数上限由 builder 构造参数 ``max_steps`` 决定（与官方相同）。"""
+        """``make_env_for_episode(builder_episode)``: the step cap comes from the builder constructor argument
+        ``max_steps`` (same as official)."""
         if self._env is not None:
             return
         if self._closed:
-            raise RuntimeError("EnvSession 已 close，不能再 build")
+            raise RuntimeError("EnvSession is already closed; cannot build again")
         self._claim("build")
         self._rec.set_phase("reset")
         t0 = time.perf_counter()
@@ -204,7 +217,8 @@ class EnvSession:
         self.timing["env_build_s"] = time.perf_counter() - t0
 
     def reset(self):
-        """原样返回 ``env.reset()`` 的 ``(obs, info)``；返回后记录演示段帧与数组（录制器此时仍在 reset 阶段，只入队）。"""
+        """Return ``env.reset()``'s ``(obs, info)`` unchanged; afterwards record the demo-segment frames and arrays
+        (the recorder is still in the reset phase, so they are only queued)."""
         import numpy as np
 
         self.build()
@@ -237,7 +251,8 @@ class EnvSession:
         return obs, info
 
     def step(self, action):
-        """action 原样交给 ``env.step``；记录交出去的数组与返回的当前帧、状态、终态。"""
+        """Pass the action unchanged to ``env.step``; record the array sent and the returned current frame, state
+        and terminal flags."""
         import numpy as np
 
         if self.first_step_cb is not None:
@@ -289,7 +304,7 @@ class EnvSession:
         return out
 
     def close(self) -> None:
-        """关环境并汇总逐步计时；只由外层调用，幂等。"""
+        """Close the environment and summarize per-step timing; called only by the outer loop; idempotent."""
         import numpy as np
 
         if self._closed:

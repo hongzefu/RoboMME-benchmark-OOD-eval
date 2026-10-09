@@ -95,13 +95,13 @@ def test_validate_trace_reports_structure_problems():
             {"kind": "step", "step": 1}, {"kind": "step", "step": 2}, {"kind": "end", "exec_steps": 2}]
     assert t.validate_trace(good) == []
     gap = [*good[:2], {"kind": "step", "step": 1}, {"kind": "step", "step": 3}, {"kind": "end", "exec_steps": 3}]
-    assert "step 不是从 1 连续递增" in t.validate_trace(gap)
+    assert "steps are not contiguous from 1" in t.validate_trace(gap)
     noend = good[:-1]
-    assert "end 不是唯一末行" in t.validate_trace(noend)
+    assert "end is not the unique last line" in t.validate_trace(noend)
     bad_exec = [*good[:-1], {"kind": "end", "exec_steps": 5}]
-    assert "end.exec_steps 与最后一步不符" in t.validate_trace(bad_exec)
-    assert t.validate_trace([]) == ["空轨迹"]
-    assert "demo 不在首个 step 之前" in t.validate_trace([good[0], good[2], good[1], good[3], good[4]])
+    assert "end.exec_steps does not match the last step" in t.validate_trace(bad_exec)
+    assert t.validate_trace([]) == ["empty trace"]
+    assert "demo is not before the first step" in t.validate_trace([good[0], good[2], good[1], good[3], good[4]])
     # GroundSG 官方循环先 reset 策略再取初始观测：request 先于 demo 合规（12.454）
     assert t.validate_trace([good[0], {"kind": "request", "step": 0}, good[1], *good[2:]]) == []
     assert json.dumps(good)  # 夹具本身可序列化

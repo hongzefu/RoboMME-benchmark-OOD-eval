@@ -1,39 +1,53 @@
 #!/usr/bin/env python3
-"""从官方源码按名摘取定义（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.3）。
+"""Extract definitions by name from the official source.
 
-官方 MME-VLA 客户端 ``third_party/mme-vla/examples/robomme/eval.py`` 经 ``subgoal_predictor.py`` 无条件导入 gemini
-（``google.generativeai``）与 memer 模块，评估环境里都没装，所以 GroundSG 的新侧（``groundsg_client.py``）与原侧
-（``official_hard_runner.py``）都**不整模块 import** 官方文件，而是用 ``extract_defs`` 从源文件里取出指定顶层
-函数、类、单目标赋值的**原文**并执行；模块其余部分（import 行、模块级副作用）不执行，依赖由调用方经 ``extra``
-注入。返回的命名空间就是这些定义的 globals，之后往里补名字（如延迟导入的 ``PtEngine``）对已取出的函数同样生效。
+The official MME-VLA client ``third_party/mme-vla/examples/robomme/eval.py`` unconditionally imports gemini
+(``google.generativeai``) and memer modules via ``subgoal_predictor.py``, none of which are installed in the
+evaluation environment. So neither the GroundSG new side (``groundsg_client.py``) nor the original side
+(``official_hard_runner.py``) **imports the official files as whole modules**; instead ``extract_defs`` takes the
+**verbatim source** of the requested top-level functions, classes and single-target assignments from the source
+file and executes it; the rest of the module (import lines, module-level side effects) is not executed, and
+dependencies are injected by the caller via ``extra``. The returned namespace is the globals of these definitions, so
+names added to it later (e.g. a lazily imported ``PtEngine``) also take effect for the extracted functions.
 
-官方模块头部有三项环境设置（``eval.py`` 与 ``subgoal_prediction/qwenvl/api.py`` 顶部），摘取时不会被带走，由
-``apply_official_env`` 负责；QwenVL 的离线运行约束由 ``apply_qwen_runtime_env`` 负责。
+The official module headers contain three environment settings (at the top of ``eval.py`` and
+``subgoal_prediction/qwenvl/api.py``) that extraction does not carry over; ``apply_official_env`` applies them. The
+QwenVL offline runtime constraints are applied by ``apply_qwen_runtime_env``.
 
-``load_groundsg`` 是两侧共用的装配：按变体只取需要的类（Oracle 不读 qwenvl/api.py、不导入 swift；QwenVL 只取
-``QwenVLSubgoalPredictor`` 与 ``Qwen3VLModel``，不取 Gemini／MemER；MemER 只取 ``MemERSubgoalPredictor`` 与
-``qwenvl/api_memer.py::Qwen3VLModelMemER``，不取 Gemini／QwenVL）。
+``load_groundsg`` is the assembly shared by both sides: per variant it only extracts the classes it needs (Oracle
+does not read qwenvl/api.py and does not import swift; QwenVL only takes ``QwenVLSubgoalPredictor`` and
+``Qwen3VLModel``, not Gemini / MemER; MemER only takes ``MemERSubgoalPredictor`` and
+``qwenvl/api_memer.py::Qwen3VLModelMemER``, not Gemini / QwenVL).
 
-MemER 兼容层（1006-rename-official-names-and-stage3-eval-plan.md 第二部分八.3「MemER 兼容层」；用户 2026-10-06
-「同意兼容层」）：摘出 ``Qwen3VLModelMemER`` 原文后在 **AST 上**打补丁（只动摘出来的副本，``third_party`` 与 gitlink
-不动）——官方的 ``merge_key_frame_paths``／``_get_current_execution_frame_paths``／``update_history_subgoals``／
-``call`` 原样改名为 ``_official_<名>``（``official_method_name``）留在类里，再拼入 ``MEMER_COMPAT_SOURCE`` 里的同名方法：
+MemER compatibility layer: after extracting the verbatim ``Qwen3VLModelMemER``, patch it **at the AST level** (only
+the extracted copy is touched; ``third_party`` and the gitlink are not) -- the official ``merge_key_frame_paths`` /
+``_get_current_execution_frame_paths`` / ``update_history_subgoals`` / ``call`` are renamed unchanged to
+``_official_<name>`` (``official_method_name``) and kept in the class, and the same-named methods from
+``MEMER_COMPAT_SOURCE`` are appended:
 
-1. ``merge_key_frame_paths``：记忆为空直接返回，非空调官方原函数（逐字节同）；
-2. ``call``：每次合法解析把换算后交给动作模型的子目标存进 ``self.subgoals``；解析失败最多重问两次（共三次），第二、三
-   次 user prompt 末尾追加 ``MEMER_RETRY_NOTE``、``RequestConfig(max_tokens=128, temperature=0.7)``，请求与回复带
-   ``retry=<n>`` 追加进 ``ep*_MemER_log.jsonl``；三次都坏有上一次合法子目标即沿用（``fallback=last_valid``），否则抛
-   ``MemERResponseError``（客户端记 ``error_kind=model_response_error``，不重跑）；
-3. ``_get_current_execution_frame_paths``：从末帧起隔一张取一张、数到第 1 张之前即停（不足 15 张有几张取几张），
-   1 张或 ≥15 张时调官方原函数；
-4. ``update_history_subgoals``：原子校验——先在临时副本上核 JSON 结构、非空字符串子任务、整数关键帧位置（拒 bool、
-   拒 0 与负数、拒超范围）、坐标换算与候选记忆合并，全部通过才一次提交；坏回复不改关键帧、历史与执行帧。
+1. ``merge_key_frame_paths``: return immediately when memory is empty; otherwise call the official original function
+   (byte-identical);
+2. ``call``: every valid parse stores the converted subgoal handed to the action model in ``self.subgoals``; on a
+   parse failure re-ask at most twice (three times in total); the second and third user prompts get
+   ``MEMER_RETRY_NOTE`` appended and use ``RequestConfig(max_tokens=128, temperature=0.7)``, with request and reply
+   appended to ``ep*_MemER_log.jsonl`` with ``retry=<n>``; if all three fail and there is a previous valid subgoal it
+   is reused (``fallback=last_valid``), otherwise ``MemERResponseError`` is raised (the client records
+   ``error_kind=model_response_error`` and does not rerun);
+3. ``_get_current_execution_frame_paths``: starting from the last frame take every other frame, stopping before
+   frame 1 (with fewer than 15 frames take as many as there are); with 1 or >= 15 frames call the official original
+   function;
+4. ``update_history_subgoals``: atomic validation -- first check on a temporary copy the JSON structure, non-empty
+   string subtask, integer key-frame positions (rejecting bool, 0, negatives and out-of-range values), coordinate
+   conversion and candidate memory merge, and commit once only if everything passes; a bad reply changes neither
+   key frames, history nor execution frames.
 
-补丁源文本的 sha256 即实现指纹 ``MEMER_COMPAT_SHA256``（写进判定行、结果行与媒体 provenance）。提问模板、system
-prompt、``prepare_infer_request``、关键帧挑选与（非空时）合并规则一字不改。
+The sha256 of the patch source text is the implementation fingerprint ``MEMER_COMPAT_SHA256`` (written into verdict
+lines, result rows and media provenance). The question template, system prompt, ``prepare_infer_request``, key-frame
+selection and (when non-empty) merge rules are unchanged word for word.
 
-官方源码位置：环境变量 ``SGEVAL_THIRD_PARTY``（指向某个检出的 ``third_party``；worktree 里子模块目录为空时测试
-用它只读引用主检出），否则取本仓库 ``third_party``。
+Location of the official source: environment variable ``SGEVAL_THIRD_PARTY`` (pointing at some checkout's
+``third_party``; e.g. tests use it to reference a populated checkout read-only when the submodule directories are
+empty), otherwise this repo's ``third_party``.
 """
 from __future__ import annotations
 
@@ -56,40 +70,43 @@ from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
-#: 评估仓根（本文件在 src/robomme_ood_eval/models/ 下）
+#: evaluation repo root (this file lives in src/robomme_ood_eval/models/)
 REPO = Path(__file__).resolve().parents[3]
-#: 三个变体（接口冻结说明 2.3；env_client.GROUNDSG_VARIANTS 由 R3 同步放行 MemER）
+#: the three variants
 VARIANT_ORACLE = "ground-sg-oracle"
 VARIANT_QWENVL = "ground-sg-qwenvl"
 VARIANT_MEMER = "ground-sg-memer"
 VARIANTS = (VARIANT_ORACLE, VARIANT_QWENVL, VARIANT_MEMER)
 _SEQ = 0
-#: 官方模块头部的三项环境设置（eval.py 与 qwenvl/api.py 顶部原样）
+#: the three environment settings at the top of the official modules (verbatim from the top of eval.py and qwenvl/api.py)
 OFFICIAL_ENV = {"IMAGE_MAX_TOKEN_NUM": "256", "VIDEO_MAX_TOKEN_NUM": "64", "FPS_MAX_FRAMES": "10"}
-#: QwenVL 运行约束（ms-swift 默认走 ModelScope；本计划一律离线走 HF 缓存）
+#: QwenVL runtime constraints (ms-swift defaults to ModelScope; here everything runs offline from the HF cache)
 QWEN_RUNTIME_ENV = {"USE_HF": "1", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
 
-# ── 官方名与旧名兼容（1006-rename-official-names-and-stage3-eval-plan.md 第二部分八.2；全仓别名表只此一份）──
-# 写出一律用官方名，CLI 只接受官方名；只有读历史逐局行、预算账本、trace 头、v7.5eval 留档时经 canonical_* 映射。
-#: 策略标签（官方名）：FrameSamp+Modulation 与 GroundSG
+# -- official names and legacy-name compatibility (the only alias table in the repo) --
+# Output always uses official names and the CLI only accepts official names; canonical_* mappings are only used when
+# reading historical per-episode rows, budget ledgers, trace headers and archived records.
+#: policy labels (official names): FrameSamp+Modulation and GroundSG
 POLICY_FRAMESAMP_MODUL = "perceptual-framesamp-modul"
 POLICY_GROUNDSG = "groundsg"
-#: 数据集接口（官方名）：第三阶段 OOD（原 V9）与第二阶段 hard-verify（官方 hard 12 局）
+#: dataset interfaces (official names): OOD and hard-verify (the 12 official hard episodes)
 DATASET_OOD = "ood"
 DATASET_HARD_VERIFY = "hard-verify"
-# >>> LEGACY_NAMES（OFFICIAL_NAMES 残留检查只豁免本段）
-#: 旧策略标签 → 官方标签（v7.5eval／第二阶段留档里的 policy、route 首段、目录名）
+# >>> LEGACY_NAMES (the OFFICIAL_NAMES leftover check exempts only this block)
+#: legacy policy label -> official label (policy, first route segment and directory names in archived records)
 LEGACY_POLICY_ALIASES = {"mme": POLICY_FRAMESAMP_MODUL, "mmevla": POLICY_FRAMESAMP_MODUL, "mmesg": POLICY_GROUNDSG}
-#: 旧数据集名 → 官方数据集名
+#: legacy dataset name -> official dataset name
 LEGACY_DATASET_ALIASES = {"test-hard": DATASET_OOD, "test-hard0": DATASET_HARD_VERIFY}
-#: 改名前检出（如回放闸门的 base 侧）的客户端模块名与配置键 → 官方名（client_replay_eq.py 驱动旧检出时用）
+#: client module names and config keys of a pre-rename checkout (e.g. the base side of the replay gate) -> official
+#: names (used by client_replay_eq.py when driving an old checkout)
 LEGACY_MODULE_ALIASES = {"mme_client": "framesamp_modul_client", "mmesg_client": "groundsg_client"}
 LEGACY_CONFIG_KEY_ALIASES = {"mme_variant": "groundsg_variant"}
 # <<< LEGACY_NAMES
 
 
 def canonical_policy(name: Any) -> Any:
-    """策略标签：旧名映射到官方名；带变体的标签（旧 GroundSG 前缀 + ``-<variant>``）同样换前缀；其余原样返回。"""
+    """Policy label: map legacy names to official names; labels with a variant (legacy GroundSG prefix +
+    ``-<variant>``) get their prefix replaced too; everything else is returned unchanged."""
     if not isinstance(name, str):
         return name
     if name in LEGACY_POLICY_ALIASES:
@@ -101,27 +118,28 @@ def canonical_policy(name: Any) -> Any:
 
 
 def canonical_dataset(name: Any) -> Any:
-    """数据集名：旧名映射到官方名，其余原样返回。"""
+    """Dataset name: map legacy names to official names; everything else is returned unchanged."""
     return LEGACY_DATASET_ALIASES.get(name, name) if isinstance(name, str) else name
 
 
 def canonical_route(route: Any) -> Any:
-    """路线／媒体键这类以 ``/`` 分段的串：逐段按策略标签与数据集名映射（如旧 GroundSG 路线
-    ``<旧名>/<variant>/orig`` → ``groundsg/<variant>/orig``）。"""
+    """Strings segmented by ``/`` such as routes / media keys: map each segment by policy label and dataset name
+    (e.g. a legacy GroundSG route ``<legacy>/<variant>/orig`` -> ``groundsg/<variant>/orig``)."""
     if not isinstance(route, str) or not route:
         return route
     return "/".join(canonical_dataset(canonical_policy(seg)) for seg in route.split("/"))
 
 
-#: canonical_row 映射的字段
+#: fields mapped by canonical_row
 _POLICY_FIELDS = ("policy", "label", "policy_label")
 _DATASET_FIELDS = ("dataset",)
 _ROUTE_FIELDS = ("route",)
 
 
 def canonical_row(row: Any) -> Any:
-    """逐局行／账本行／trace 头：``policy``／``label``、``dataset``、``route`` 按旧名映射，``identity`` 内的
-    ``dataset`` 一并映射；返回新字典，不改入参。非字典原样返回。"""
+    """Per-episode rows / ledger rows / trace headers: map ``policy`` / ``label``, ``dataset`` and ``route`` by
+    legacy name, and ``dataset`` inside ``identity`` as well; returns a new dict without modifying the input.
+    Non-dicts are returned unchanged."""
     if not isinstance(row, dict):
         return row
     out = dict(row)
@@ -140,7 +158,8 @@ def canonical_row(row: Any) -> Any:
 
 
 def legacy_labels(label: str) -> list[str]:
-    """官方标签对应的旧标签（读历史目录用；不含官方标签自身），如 ``groundsg-<variant>`` → 旧 GroundSG 前缀版本。"""
+    """Legacy labels corresponding to an official label (for reading historical directories; excluding the official
+    label itself), e.g. ``groundsg-<variant>`` -> the legacy GroundSG-prefixed version."""
     out = []
     for old, new in LEGACY_POLICY_ALIASES.items():
         if label == new:
@@ -151,16 +170,17 @@ def legacy_labels(label: str) -> list[str]:
 
 
 def third_party_root() -> Path:
-    """官方第三方源码根：``SGEVAL_THIRD_PARTY`` 优先，否则本仓库 ``third_party``。"""
+    """Official third-party source root: ``SGEVAL_THIRD_PARTY`` first, otherwise this repo's ``third_party``."""
     env = os.environ.get("SGEVAL_THIRD_PARTY")
     return Path(env).resolve() if env else REPO / "third_party"
 
 
 def official_robomme_dir() -> Path:
-    """官方 ``examples/robomme`` 目录；缺 ``eval.py`` 即报错（不静默跳过）。"""
+    """The official ``examples/robomme`` directory; raises if ``eval.py`` is missing (never skips silently)."""
     d = third_party_root() / "mme-vla" / "examples" / "robomme"
     if not (d / "eval.py").is_file():
-        raise FileNotFoundError(f"官方 MME-VLA 源码不在：{d}/eval.py（子模块未初始化？可设 SGEVAL_THIRD_PARTY）")
+        raise FileNotFoundError(f"official MME-VLA source not found: {d}/eval.py (submodule not initialized? you can "
+                                f"set SGEVAL_THIRD_PARTY)")
     return d
 
 
@@ -170,15 +190,19 @@ def file_sha256(path: str | Path) -> str:
 
 def extract_defs(path: str | Path, names: list[str], extra: dict | None = None, *,
                  transform: dict | None = None) -> dict:
-    """从源文件用 ast 取出指定顶层函数／类／单目标赋值的原文并执行，返回命名空间。
+    """Extract the verbatim source of the given top-level functions / classes / single-target assignments from a
+    source file with ast, execute it, and return the namespace.
 
-    * 只取 ``names`` 里列出的顶层 ``def``／``async def``／``class``（含装饰器）与单目标赋值 ``X = ...``；
-      同名多次定义按源码顺序全部取出（与整模块执行时最后一个生效相同）；
-    * 名字找不到抛 ``KeyError``；
-    * 不执行模块其余部分（import 行、模块级副作用），依赖由 ``extra`` 注入（基础名 ``np``、``Any`` 等已预置）；
-    * 命名空间记 ``__source_path__``、``__source_sha256__``（整文件字节的 sha256）；
-    * ``transform``：``{名字: f(ast 节点) -> ast 节点}``，在执行前对取出的该定义做 AST 级改写（只用于 MemER 兼容层，
-      ``__source_sha256__`` 仍是官方原文件的 sha256，改写内容另记指纹）。
+    * only the top-level ``def`` / ``async def`` / ``class`` (with decorators) and single-target assignments
+      ``X = ...`` listed in ``names`` are taken; a name defined several times is taken every time in source order
+      (the last one wins, as when executing the whole module);
+    * a name that cannot be found raises ``KeyError``;
+    * the rest of the module (import lines, module-level side effects) is not executed; dependencies are injected via
+      ``extra`` (basic names such as ``np`` and ``Any`` are preset);
+    * the namespace records ``__source_path__`` and ``__source_sha256__`` (sha256 of the whole file's bytes);
+    * ``transform``: ``{name: f(ast node) -> ast node}``, an AST-level rewrite of that extracted definition before
+      execution (only used for the MemER compatibility layer; ``__source_sha256__`` is still the sha256 of the
+      official original file, and the rewrite has its own fingerprint).
     """
     path = Path(path)
     raw = path.read_bytes()
@@ -200,14 +224,15 @@ def extract_defs(path: str | Path, names: list[str], extra: dict | None = None, 
                 found.add(node.target.id)
     missing = sorted(set(names) - found)
     if missing:
-        raise KeyError(f"{path} 里找不到 {missing}")
+        raise KeyError(f"{path} does not contain {missing}")
     if transform:
         for i, node in enumerate(body):
             name = node.name if hasattr(node, "name") else None
             if name in transform:
                 body[i] = transform[name](node)
-    # 命名空间挂在一个独立的模块对象上并登记进 sys.modules（dataclass 等按 __module__ 回查模块）；
-    # 模块名带 _official_ 前缀与序号，不与真实模块（eval、utils 等）同名
+    # the namespace lives on a separate module object registered in sys.modules (dataclass etc. look the module up
+    # via __module__); the module name has an _official_ prefix and a sequence number so it never clashes with real
+    # modules (eval, utils, ...)
     global _SEQ
     _SEQ += 1
     mod = types.ModuleType(f"_official_{path.stem}_{_SEQ}")
@@ -221,28 +246,31 @@ def extract_defs(path: str | Path, names: list[str], extra: dict | None = None, 
         "dataclasses": dataclasses, "pprint": pprint,
     })
     ns.update(extra or {})
-    exec(compile(ast.fix_missing_locations(ast.Module(body=body, type_ignores=[])), str(path), "exec"), ns)  # noqa: S102 只执行官方定义原文
+    exec(compile(ast.fix_missing_locations(ast.Module(body=body, type_ignores=[])), str(path), "exec"), ns)  # noqa: S102 only executes the verbatim official definitions
     ns["__source_path__"] = str(path)
     ns["__source_sha256__"] = hashlib.sha256(raw).hexdigest()
     return ns
 
 
 def apply_official_env() -> dict:
-    """官方 eval.py／qwenvl/api.py 头部的三项环境设置（原样覆盖写）。返回写入的键值。"""
+    """The three environment settings at the top of the official eval.py / qwenvl/api.py (overwritten verbatim).
+    Returns the keys and values written."""
     for k, v in OFFICIAL_ENV.items():
         os.environ[k] = v
     return dict(OFFICIAL_ENV)
 
 
 def apply_qwen_runtime_env() -> dict:
-    """QwenVL 运行约束：``USE_HF=1``、``HF_HUB_OFFLINE=1``、``TRANSFORMERS_OFFLINE=1``（导入 swift 之前调用）。"""
+    """QwenVL runtime constraints: ``USE_HF=1``, ``HF_HUB_OFFLINE=1``, ``TRANSFORMERS_OFFLINE=1`` (call before
+    importing swift)."""
     for k, v in QWEN_RUNTIME_ENV.items():
         os.environ[k] = v
     return dict(QWEN_RUNTIME_ENV)
 
 
 def import_swift_names() -> dict:
-    """真实的 ``swift.llm`` 三个名字（只在 QwenVL／MemER 变体构造预测器时调用；先设运行约束再导入）。"""
+    """The three real ``swift.llm`` names (only called when building the predictor for the QwenVL / MemER variants;
+    sets the runtime constraints before importing)."""
     apply_qwen_runtime_env()
     apply_official_env()
     from swift.llm import InferRequest, PtEngine, RequestConfig
@@ -251,12 +279,13 @@ def import_swift_names() -> dict:
 
 
 def seed_everything(seed: int) -> dict:
-    """模型种子（接口冻结说明 2.2）：``random``、``numpy``、``torch``（可导入时）三处一起设。
+    """Model seed: set ``random``, ``numpy`` and ``torch`` (when importable) together.
 
-    QwenVL／MemER 预测器构造前调用（``build_predictor``）；只调 ``torch.manual_seed``（它对 CUDA 是惰性登记，不在
-    这里初始化 GPU）。返回实际设过的随机源，供结果与测试核对。"""
+    Called before building the QwenVL / MemER predictor (``build_predictor``); only calls ``torch.manual_seed`` (which
+    registers lazily for CUDA and does not initialize the GPU here). Returns the random sources actually seeded, for
+    results and tests to check."""
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
-        raise ValueError(f"policy_seed={seed!r} 须为非负整数")
+        raise ValueError(f"policy_seed={seed!r} must be a non-negative integer")
     random.seed(seed)
     np.random.seed(seed)
     out = {"seed": int(seed), "random": True, "numpy": True, "torch": False}
@@ -270,21 +299,22 @@ def seed_everything(seed: int) -> dict:
 
 
 def check_policy_seed(value: Any) -> int:
-    """``policy_seed`` 取值核对：非负整数（拒 bool、拒 None、拒负数）；字符串形式的十进制整数也收。"""
+    """Check a ``policy_seed`` value: a non-negative integer (rejecting bool, None and negatives); decimal integers
+    in string form are accepted too."""
     if isinstance(value, bool) or value is None:
-        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r}（必填，非负整数）")
+        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r} (required, non-negative integer)")
     try:
         n = int(str(value).strip()) if isinstance(value, str) else int(value)
     except (TypeError, ValueError):
-        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r}（必填，非负整数）") from None
+        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r} (required, non-negative integer)") from None
     if isinstance(value, float) and value != n:
-        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r}（必填，非负整数）")
+        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r} (required, non-negative integer)")
     if n < 0:
-        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r}（必填，非负整数）")
+        raise ValueError(f"RUN_BLOCKED reason=policy_seed value={value!r} (required, non-negative integer)")
     return n
 
 
-#: 各官方文件要摘取的名字
+#: names to extract from each official file
 UTILS_NAMES = ["TASK_WITH_VIDEO_DEMO", "TASK_NAME_LIST", "SUBGOAL_TYPES", "pack_buffer", "check_args", "EpisodeState",
                "RolloutRecorder"]
 ENV_RUNNER_NAMES = ["pack_state", "EnvRunner"]
@@ -294,45 +324,49 @@ PREDICTOR_NAMES = {
     VARIANT_QWENVL: ["SubgoalPredictorBase", "QwenVLSubgoalPredictor", "build_subgoal_predictor"],
     VARIANT_MEMER: ["SubgoalPredictorBase", "MemERSubgoalPredictor", "build_subgoal_predictor"],
 }
-#: 各变体的子目标模型源文件（相对 examples/robomme）与类名；Oracle 无
+#: subgoal model source file (relative to examples/robomme) and class name per variant; none for Oracle
 SUBGOAL_MODEL_SOURCES = {
     VARIANT_QWENVL: ("subgoal_prediction/qwenvl/api.py", "Qwen3VLModel"),
     VARIANT_MEMER: ("subgoal_prediction/qwenvl/api_memer.py", "Qwen3VLModelMemER"),
 }
 
 
-# ── MemER 兼容层（八.3「MemER 兼容层」改法 1～4） ───────────────────────────────
+# -- MemER compatibility layer (changes 1-4) -------------------------------------------
 
 
 class MemERResponseError(RuntimeError):
-    """MemER 三次提问的回复都不合法、且本局此前没有任何合法子目标（情形 D）：客户端记
-    ``status=error, terminal_reason=error, error_kind=model_response_error``，不伪造子目标、不重跑。"""
+    """All three MemER replies were invalid and the episode has no earlier valid subgoal (case D): the client
+    records ``status=error, terminal_reason=error, error_kind=model_response_error``, never fabricates a subgoal and
+    never reruns."""
 
     error_kind = "model_response_error"
 
 
-#: 第二、三次重问在 user prompt 末尾追加的提醒句（用户 2026-10-06「2的A和b都用」）
+#: reminder appended to the end of the user prompt on the second and third asks
 MEMER_RETRY_NOTE = "Your previous reply was not valid JSON. Reply with the JSON object only."
-#: 提问总次数（首问 + 两次重问）与重问的采样温度
+#: total number of asks (first ask + two re-asks) and the sampling temperature of re-asks
 MEMER_MAX_TRIES = 3
 MEMER_RETRY_TEMPERATURE = 0.7
-#: 兼容层改动的官方方法（原文改名为 ``_official_<名>`` 保留在类里）
+#: official methods changed by the compatibility layer (the verbatim originals are kept in the class renamed to
+#: ``_official_<name>``)
 MEMER_PATCHED_METHODS = ("merge_key_frame_paths", "_get_current_execution_frame_paths", "update_history_subgoals",
                          "call")
 
-#: 补丁源文本：拼进摘出来的 ``Qwen3VLModelMemER`` 类体；其 UTF-8 字节的 sha256 即实现指纹 ``MEMER_COMPAT_SHA256``。
-#: 依赖名（``json``、``re``、``copy``、``RequestConfig``、``InferRequest``、``MemERResponseError``、``MEMER_*``）由
-#: ``load_groundsg`` 注入摘取命名空间。改这段文字 = 换指纹，须同步计划与成绩表注明。
+#: patch source text: appended to the body of the extracted ``Qwen3VLModelMemER`` class; the sha256 of its UTF-8 bytes
+#: is the implementation fingerprint ``MEMER_COMPAT_SHA256``.
+#: Dependency names (``json``, ``re``, ``copy``, ``RequestConfig``, ``InferRequest``, ``MemERResponseError``,
+#: ``MEMER_*``) are injected into the extraction namespace by ``load_groundsg``. Changing this text changes the
+#: fingerprint, which must be noted wherever results are compared.
 MEMER_COMPAT_SOURCE = '''\
 def merge_key_frame_paths(self, dist: int = 8):
-    # 兼容 1：关键帧记忆为空时直接返回（官方原文 cur = [nums[0]] 越界）；非空时调官方原函数，逐字节相同
+    # compat 1: return immediately when the key-frame memory is empty (the official cur = [nums[0]] would index out of range); otherwise call the official original function, byte-identical
     if not self.key_frame_paths:
         return
     return self._official_merge_key_frame_paths(dist)
 
 
 def _get_current_execution_frame_paths(self) -> list:
-    # 兼容 3：从末帧起隔一张取一张、最多 8 张，数到第 1 张之前即停；1 张或 >=15 张时调官方原函数（逐字相同）
+    # compat 3: starting from the last frame take every other frame, at most 8, stopping before frame 1; with 1 or >=15 frames call the official original function (verbatim)
     n = len(self.execution_frame_paths)
     if n == 1 or n >= 15:
         return self._official_get_current_execution_frame_paths()
@@ -345,7 +379,7 @@ def _get_current_execution_frame_paths(self) -> list:
 
 
 def _memer_validate(self, subgoal: str):
-    # 兼容 4：原子校验——全部在临时对象上做完，不改 self 的任何状态；任一项不合法即抛异常
+    # compat 4: atomic validation -- everything is done on temporary objects without changing any state of self; any invalid item raises
     response = json.loads(subgoal)
     if not isinstance(response, dict):
         raise ValueError("reply is not a JSON object")
@@ -378,14 +412,14 @@ def _memer_validate(self, subgoal: str):
 
 
 def update_history_subgoals(self, subgoal: str):
-    # 兼容 4：校验全过才一次提交关键帧记忆（返回值与官方相同：原始 current_subtask）
+    # compat 4: commit the key-frame memory once, only after all checks pass (return value same as official: the raw current_subtask)
     current_subtask, _vla, merged, _pos = self._memer_validate(subgoal)
     self.key_frame_paths = merged
     return current_subtask
 
 
 def _memer_request_fields(self, infer_request):
-    # 首问请求的字段副本（发送前取，重问在其上只改 user prompt 末尾）
+    # copy of the first ask's request fields (taken before sending; re-asks only change the end of the user prompt on top of it)
     fields = {"messages": copy.deepcopy(list(infer_request.messages)), "images": list(infer_request.images)}
     videos = getattr(infer_request, "videos", None)
     if videos:
@@ -400,8 +434,9 @@ def _memer_log(self, row):
 
 
 def call(self) -> str:
-    # 兼容 2：合法子目标存进 self.subgoals；坏回复最多重问两次（追加提醒句 + temperature=0.7）；三次都坏沿用上一次
-    # 合法子目标，没有则抛 MemERResponseError。首问的请求与回复日志行与官方逐字相同，重问行带 retry
+    # compat 2: valid subgoals are stored in self.subgoals; a bad reply is re-asked at most twice (reminder appended +
+    # temperature=0.7); if all three are bad reuse the previous valid subgoal, otherwise raise MemERResponseError.
+    # The request and reply log lines of the first ask are verbatim official; re-ask lines carry retry
     infer_request = self.prepare_infer_request()
     base_fields = self._memer_request_fields(infer_request)
     self._memer_fallback = None
@@ -448,17 +483,19 @@ MEMER_COMPAT_SHA256 = hashlib.sha256(MEMER_COMPAT_SOURCE.encode("utf-8")).hexdig
 
 
 def official_method_name(name: str) -> str:
-    """被补官方方法改名后的名字：``call`` → ``_official_call``，``_get_x`` → ``_official_get_x``。"""
+    """Name of a patched official method after renaming: ``call`` -> ``_official_call``, ``_get_x`` ->
+    ``_official_get_x``."""
     return "_official" + ("" if name.startswith("_") else "_") + name
 
 
 def patch_memer_class(cls_node: ast.ClassDef) -> ast.ClassDef:
-    """AST 补丁：官方 ``MEMER_PATCHED_METHODS`` 改名为 ``_official_<名>``（函数体一字不动），再在类体末尾拼入
-    ``MEMER_COMPAT_SOURCE`` 的方法。官方类里缺任一被补方法即 ``KeyError``（上游变了，不静默套用）。"""
+    """AST patch: rename the official ``MEMER_PATCHED_METHODS`` to ``_official_<name>`` (function bodies untouched),
+    then append the methods of ``MEMER_COMPAT_SOURCE`` at the end of the class body. A missing patched method in the
+    official class raises ``KeyError`` (upstream changed; never applied silently)."""
     have = {n.name for n in cls_node.body if isinstance(n, ast.FunctionDef)}
     missing = sorted(set(MEMER_PATCHED_METHODS) - have)
     if missing:
-        raise KeyError(f"Qwen3VLModelMemER 缺 {missing}，兼容层不适用")
+        raise KeyError(f"Qwen3VLModelMemER is missing {missing}; the compatibility layer does not apply")
     for n in cls_node.body:
         if isinstance(n, ast.FunctionDef) and n.name in MEMER_PATCHED_METHODS:
             n.name = official_method_name(n.name)
@@ -468,7 +505,7 @@ def patch_memer_class(cls_node: ast.ClassDef) -> ast.ClassDef:
 
 
 def memer_compat_extra(swift_names: dict | None) -> dict:
-    """兼容层方法用到的名字（注入摘取命名空间）。"""
+    """Names used by the compatibility-layer methods (injected into the extraction namespace)."""
     extra = {"copy": copy, "MemERResponseError": MemERResponseError, "MEMER_RETRY_NOTE": MEMER_RETRY_NOTE,
              "MEMER_MAX_TRIES": MEMER_MAX_TRIES, "MEMER_RETRY_TEMPERATURE": MEMER_RETRY_TEMPERATURE,
              "MEMER_COMPAT_SHA256": MEMER_COMPAT_SHA256}
@@ -477,8 +514,10 @@ def memer_compat_extra(swift_names: dict | None) -> dict:
 
 
 def load_memer_model(d: str | Path | None = None, *, swift_names: dict | None = None, compat: bool = True) -> dict:
-    """摘 ``subgoal_prediction/qwenvl/api_memer.py::Qwen3VLModelMemER``；``compat=True``（默认、两侧唯一用法）套
-    兼容层，``compat=False`` 只供测试拿官方原文做回归对照。落实官方模块头部的三项环境变量（与 ``api.py`` 相同）。"""
+    """Extract ``subgoal_prediction/qwenvl/api_memer.py::Qwen3VLModelMemER``; ``compat=True`` (the default and the
+    only use on both sides) applies the compatibility layer, ``compat=False`` is only for tests to get the verbatim
+    official class for regression comparison. Applies the three environment variables from the official module
+    header (same as ``api.py``)."""
     d = Path(d) if d is not None else official_robomme_dir()
     apply_official_env()
     import imageio
@@ -492,20 +531,25 @@ def load_memer_model(d: str | Path | None = None, *, swift_names: dict | None = 
 
 def load_groundsg(variant: str, *, env_runner_extra: dict | None = None, ws_module: Any = None,
                   qwen_extra: dict | None = None, with_env_runner: bool = True) -> dict:
-    """两侧共用的官方定义装配，返回 ``{"utils","env_runner","predictor","qwen","eval","sha256","EnvRunner",...}``。
+    """Assembly of official definitions shared by both sides; returns
+    ``{"utils","env_runner","predictor","qwen","eval","sha256","EnvRunner",...}``.
 
-    * ``env_runner_extra``：给 ``env_runner.py`` 的依赖（原侧传真实 ``BenchmarkEnvBuilder``；测试传替身）。
-      ``with_env_runner=False`` 时不取 ``EnvRunner``（新侧不用它，只取 ``pack_state``），子目标预测器与评估器
-      里的 ``EnvRunner`` 注解以占位类代替（注解在定义时求值，不影响行为）。
-    * ``ws_module``：注入为 ``eval.py`` 的 ``_websocket_client_policy``（须有 ``MMEVLAWebsocketClientPolicy``）；
-      ``None`` 时用真实 ``openpi_client.websocket_client_policy``。
-    * ``qwen_extra``：QwenVL／MemER 变体时注入子目标模型源文件的 ``PtEngine``／``InferRequest``／``RequestConfig``；
-      ``None`` 时不注入，构造预测器前须由调用方补（``import_swift_names``）。Oracle 变体不读两个 qwenvl 源文件。
-    * MemER：``qwen`` 键是套了兼容层的 ``Qwen3VLModelMemER`` 命名空间，``memer_compat_sha256`` 为实现指纹；
-      ``sha256`` 记官方 ``api_memer.py`` 整文件 sha256。
+    * ``env_runner_extra``: dependencies for ``env_runner.py`` (the original side passes the real
+      ``BenchmarkEnvBuilder``; tests pass stand-ins). With ``with_env_runner=False`` ``EnvRunner`` is not extracted
+      (the new side does not use it and only takes ``pack_state``), and ``EnvRunner`` annotations in the subgoal
+      predictor and evaluator are replaced by a placeholder class (annotations are evaluated at definition time and
+      do not affect behavior).
+    * ``ws_module``: injected as ``eval.py``'s ``_websocket_client_policy`` (must have
+      ``MMEVLAWebsocketClientPolicy``); ``None`` uses the real ``openpi_client.websocket_client_policy``.
+    * ``qwen_extra``: for the QwenVL / MemER variants, injects ``PtEngine`` / ``InferRequest`` / ``RequestConfig`` of
+      the subgoal model source file; with ``None`` nothing is injected and the caller must add them before building
+      the predictor (``import_swift_names``). The Oracle variant does not read the two qwenvl source files.
+    * MemER: the ``qwen`` key is the ``Qwen3VLModelMemER`` namespace with the compatibility layer applied,
+      ``memer_compat_sha256`` is the implementation fingerprint; ``sha256`` records the whole-file sha256 of the
+      official ``api_memer.py``.
     """
     if variant not in VARIANTS:
-        raise ValueError(f"variant={variant!r} 不是 {VARIANTS} 之一")
+        raise ValueError(f"variant={variant!r} is not one of {VARIANTS}")
     d = official_robomme_dir()
     apply_official_env()
     import cv2
@@ -516,7 +560,7 @@ def load_groundsg(variant: str, *, env_runner_extra: dict | None = None, ws_modu
     er_extra = {"TASK_NAME_LIST": utils["TASK_NAME_LIST"]}
     er_extra.update(env_runner_extra or {})
     env_runner = extract_defs(d / "env_runner.py", er_names, er_extra)
-    runner_cls = env_runner.get("EnvRunner") or type("EnvRunner", (), {"__doc__": "注解占位（新侧不用官方 EnvRunner）"})
+    runner_cls = env_runner.get("EnvRunner") or type("EnvRunner", (), {"__doc__": "annotation placeholder (the new side does not use the official EnvRunner)"})
     qwen = None
     pred_extra: dict[str, Any] = {"EnvRunner": runner_cls, "EpisodeState": utils["EpisodeState"],
                                   "SUBGOAL_TYPES": utils["SUBGOAL_TYPES"],
@@ -530,7 +574,7 @@ def load_groundsg(variant: str, *, env_runner_extra: dict | None = None, ws_modu
         pred_extra["Qwen3VLModelMemER"] = qwen["Qwen3VLModelMemER"]
     predictor = extract_defs(d / "subgoal_predictor.py", PREDICTOR_NAMES[variant], pred_extra)
     if ws_module is None:
-        from openpi_client import websocket_client_policy as ws_module  # noqa: N813 与官方同名
+        from openpi_client import websocket_client_policy as ws_module  # noqa: N813 same name as official
     ev = extract_defs(d / "eval.py", EVAL_NAMES, {
         "_websocket_client_policy": ws_module, "pack_buffer": utils["pack_buffer"], "check_args": utils["check_args"],
         "TASK_NAME_LIST": utils["TASK_NAME_LIST"], "TASK_WITH_VIDEO_DEMO": utils["TASK_WITH_VIDEO_DEMO"],
@@ -552,20 +596,22 @@ def load_groundsg(variant: str, *, env_runner_extra: dict | None = None, ws_modu
 def make_args(defs: dict, *, variant: str, host: str, port: int, max_steps: int, model_seed: Any,
               adapter_path: str | None = None, memer_adapter_path: str | None = None,
               save_dir: str = "runs/evaluation") -> Any:
-    """按变体构造官方 ``Args``：``subgoal_type="grounded_subgoal"``，``use_oracle``／``use_qwenvl``／``use_memer``
-    恰一个为真（构造后断言；官方 ``build_subgoal_predictor`` 多开时静默取高优先级，这里不允许），``model_seed`` 必给
-    且显式写进 ``Args.model_seed``（不沿用官方默认 42），再过官方 ``check_args``。
+    """Build the official ``Args`` per variant: ``subgoal_type="grounded_subgoal"``, exactly one of ``use_oracle`` /
+    ``use_qwenvl`` / ``use_memer`` true (asserted after construction; the official ``build_subgoal_predictor``
+    silently takes the highest priority when several are on, which is not allowed here), ``model_seed`` required and
+    written explicitly into ``Args.model_seed`` (not the official default 42), then passed through the official
+    ``check_args``.
 
-    adapter 配对（接口冻结说明 2.3）：QwenVL 必须且只能给 ``adapter_path``，MemER 必须且只能给
-    ``memer_adapter_path``，Oracle 两个都不许给；配错抛 ``ValueError``。"""
+    Adapter pairing: QwenVL must give exactly ``adapter_path``, MemER must give exactly ``memer_adapter_path``,
+    Oracle must give neither; a wrong pairing raises ``ValueError``."""
     if variant not in VARIANTS:
-        raise ValueError(f"variant={variant!r} 不是 {VARIANTS} 之一")
+        raise ValueError(f"variant={variant!r} is not one of {VARIANTS}")
     seed = check_policy_seed(model_seed)
     want_q, want_m = variant == VARIANT_QWENVL, variant == VARIANT_MEMER
     if bool(adapter_path) != want_q:
-        raise ValueError(f"{variant}：qwenvl_groundSG_adapter_path 仅且必须与 ground-sg-qwenvl 同用（给了 {adapter_path!r}）")
+        raise ValueError(f"{variant}: qwenvl_groundSG_adapter_path must be used with, and only with, ground-sg-qwenvl (got {adapter_path!r})")
     if bool(memer_adapter_path) != want_m:
-        raise ValueError(f"{variant}：memer_adapter_path 仅且必须与 ground-sg-memer 同用（给了 {memer_adapter_path!r}）")
+        raise ValueError(f"{variant}: memer_adapter_path must be used with, and only with, ground-sg-memer (got {memer_adapter_path!r})")
     kw: dict[str, Any] = dict(host=host, port=int(port), max_steps=int(max_steps), save_dir=save_dir,
                               subgoal_type="grounded_subgoal", use_oracle=variant == VARIANT_ORACLE,
                               use_qwenvl=want_q, use_memer=want_m, model_seed=seed)
@@ -580,18 +626,19 @@ def make_args(defs: dict, *, variant: str, host: str, port: int, max_steps: int,
 
 
 def assert_one_predictor(args: Any) -> None:
-    """``use_oracle``／``use_qwenvl``／``use_memer`` 恰有一个为真，且 ``use_gemini`` 为假。"""
+    """Exactly one of ``use_oracle`` / ``use_qwenvl`` / ``use_memer`` is true, and ``use_gemini`` is false."""
     flags = (bool(args.use_oracle), bool(args.use_qwenvl), bool(getattr(args, "use_memer", False)))
     if sum(flags) != 1 or getattr(args, "use_gemini", False):
         raise AssertionError(f"use_oracle={args.use_oracle} use_qwenvl={args.use_qwenvl} "
                              f"use_memer={getattr(args, 'use_memer', None)} use_gemini={getattr(args, 'use_gemini', None)}"
-                             "：必须恰有 oracle／qwenvl／memer 之一")
+                             ": exactly one of oracle / qwenvl / memer is required")
 
 
 def build_predictor(defs: dict, args: Any, save_dir: str | Path) -> Any:
-    """官方 ``build_subgoal_predictor``（构造前再断言一次互斥）。QwenVL／MemER 先设离线运行约束、按 ``Args.model_seed``
-    调 ``seed_everything``，未注入 swift 名字时此处导入真实 swift；``attn_impl='flash_attention_2'`` 等引擎参数一律取
-    官方原文，不改。"""
+    """The official ``build_subgoal_predictor`` (asserting mutual exclusion once more before construction). QwenVL /
+    MemER first set the offline runtime constraints and call ``seed_everything`` with ``Args.model_seed``; the real
+    swift is imported here if swift names were not injected; engine parameters such as
+    ``attn_impl='flash_attention_2'`` are always taken verbatim from the official source, unchanged."""
     assert_one_predictor(args)
     if args.use_qwenvl or getattr(args, "use_memer", False):
         apply_qwen_runtime_env()
@@ -602,7 +649,8 @@ def build_predictor(defs: dict, args: Any, save_dir: str | Path) -> Any:
 
 
 def canonical_bytes(obj: Any) -> bytes:
-    """请求的规范化字节（两侧同一函数）：dict 按键排序；数组记 dtype、shape 与 C 连续字节；字符串 UTF-8。"""
+    """Normalized bytes of a request (same function on both sides): dicts sorted by key; arrays record dtype, shape
+    and C-contiguous bytes; strings as UTF-8."""
     out = bytearray()
 
     def put(x: Any) -> None:
@@ -636,5 +684,6 @@ def canonical_bytes(obj: Any) -> bytes:
 
 
 def ws_shim(factory) -> Any:
-    """``eval.py`` 里 ``_websocket_client_policy`` 的替身模块：``MMEVLAWebsocketClientPolicy(host, port)`` → ``factory``。"""
+    """Stand-in for ``_websocket_client_policy`` in ``eval.py``: ``MMEVLAWebsocketClientPolicy(host, port)`` ->
+    ``factory``."""
     return types.SimpleNamespace(MMEVLAWebsocketClientPolicy=factory)

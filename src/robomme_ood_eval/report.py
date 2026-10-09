@@ -1,8 +1,10 @@
-"""``results.jsonl`` → ``log.json``（拆分方案 §四；汇总口径参照 ``dev-scripts/gl/eval_report.py``）。
+"""``results.jsonl`` -> ``log.json``.
 
-``log.json``：每个出现过的任务各自 ``success_rate``（该任务成功局数 ／ 计入局数），``total_success_rate`` 为各任务
-成功率的平均（不是总局数加权）。计入局 = 非基础设施局（``infra`` 为假）；基础设施局单列 ``infra``、不进分母。
-同一 ``key`` 有多行时取最后一行（续跑补写）。计数字段一律显式写 0（P4）。
+``log.json`` holds a ``success_rate`` per task that appears (successful episodes / counted episodes of that task);
+``total_success_rate`` is the mean of the per-task rates (not weighted by episode count). Counted episodes are the
+non-infrastructure ones (``infra`` false); infrastructure episodes are reported separately as ``infra`` and are not
+in the denominator. When one ``key`` has several rows the last one wins (resumed runs append). Count fields are
+always written explicitly, including zeros.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ SCHEMA = "robomme-ood-eval-log/1"
 
 
 def read_results(path: str | Path) -> list[dict]:
-    """读逐局结果行（跳过崩溃留下的半行）。"""
+    """Read per-episode result rows (skipping a half-written last line left by a crash)."""
     rows = []
     p = Path(path)
     if not p.exists():
@@ -42,7 +44,7 @@ def _latest_by_key(rows: Iterable[dict]) -> list[dict]:
 
 
 def summarize_rows(rows: Iterable[dict]) -> dict:
-    """按任务汇总；返回 ``log.json`` 内容。"""
+    """Aggregate per task; returns the ``log.json`` content."""
     rows = _latest_by_key(rows)
     per: dict[str, dict] = {}
     for r in rows:
@@ -88,7 +90,7 @@ def summarize_rows(rows: Iterable[dict]) -> dict:
 
 
 def summarize(results: str | Path) -> dict:
-    """``results`` 可以是 ``results.jsonl`` 或其所在目录；在同目录写 ``log.json`` 并返回内容。"""
+    """``results`` may be ``results.jsonl`` or its directory; writes ``log.json`` next to it and returns the content."""
     p = Path(results)
     if p.is_dir():
         p = p / "results.jsonl"

@@ -1,13 +1,17 @@
-"""模型侧 4 个方法的基类 ``Policy``、外层工厂 ``load_policy`` 与服务端子进程管理 ``ServerProcess``（拆分方案 §三）。
+"""The ``Policy`` base class for the four model-side methods, the outer factory ``load_policy``, and server
+subprocess management ``ServerProcess``.
 
-调用频率：``load`` 与 ``close`` 进程寿命内各一次，``reset`` 与 ``play`` 每局各一次；``run_episode`` 只编排一局、
-绝不调 ``load()``。基类对四个方法各带一个调用计数器 ``calls``（子类覆写的方法同样计数，``super()`` 回调不重复计），
-供 ``EVAL_EPISODE`` 判定行核 loads／resets／closes。
+Call frequency: ``load`` and ``close`` once each per process lifetime, ``reset`` and ``play`` once each per episode;
+``run_episode`` orchestrates a single episode and never calls ``load()``. The base class keeps a call counter
+``calls`` for each of the four methods (overridden methods are counted too; ``super()`` calls are not counted twice),
+which the ``EVAL_EPISODE`` verdict line uses to check loads / resets / closes.
 
-``ServerProcess`` 抽自旧 ``run_seat.sh`` 的 ``build_server_cmd``／``start_server``／``stop_server``／``kill_group``／
-``pick_port``／``server_ready``：``setsid`` 起进程组、写 ``server-metadata-<port>.json``、三种就绪探测、``attach()``
-四项核对（M3）、``stop()`` 先 TERM 进程组等 60 s 再 KILL、可选核显存释放；``stop_by_metadata(path)`` 供
-``scripts/evaluate.py --stop-server`` 只按元数据停掉看门狗退出后留下的服务端（S2）。
+``ServerProcess`` is extracted from the legacy ``run_seat.sh`` functions ``build_server_cmd`` / ``start_server`` /
+``stop_server`` / ``kill_group`` / ``pick_port`` / ``server_ready``: start a process group with ``setsid``, write
+``server-metadata-<port>.json``, three readiness probes, a four-item check in ``attach()``, ``stop()`` that sends
+TERM to the process group, waits 60 s and then KILLs, and an optional GPU-memory-release check;
+``stop_by_metadata(path)`` lets ``scripts/evaluate.py --stop-server`` stop a server left behind after a watchdog exit
+using only its metadata.
 """
 from __future__ import annotations
 
@@ -25,36 +29,40 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Iterable
 
-#: 服务端起进程时一律去掉的代理变量（GL 计算节点有 HTTP 代理，本机回环连接会被拒 403）
+#: proxy variables always removed when starting a server (cluster compute nodes may set an HTTP proxy, which
+#: rejects local loopback connections with 403)
 PROXY_VARS = ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY")
-#: 缺省就绪等待（秒）
+#: default readiness wait (seconds)
 DEFAULT_READY_TIMEOUT_S = 1800.0
-#: stop() 发 TERM 后等待进程组退出的秒数，超时再 KILL
+#: seconds stop() waits for the process group to exit after TERM before sending KILL
 STOP_GRACE_S = 60.0
 METHODS = ("load", "reset", "play", "close")
 
 
 class ServerDead(RuntimeError):
-    """服务端进程已死（``reset()`` 探活或就绪等待期间发现）。本轮重起次数为 0：直接停下交用户。"""
+    """The server process is dead (found by the ``reset()`` liveness probe or while waiting for readiness). No
+    automatic restart: stop and hand over to the user."""
 
 
 class AstraStop(RuntimeError):
-    """Astra 报停或费用守卫拒发：整批停，账本保留。"""
+    """Astra signalled stop or the cost guard refused a request: stop the whole batch and keep the ledger."""
 
 
 class ServerMismatch(RuntimeError):
-    """``attach()`` 到的服务端与本次配置不符（M3：``RUN_BLOCKED reason=server_mismatch``）。"""
+    """The server reached by ``attach()`` does not match this run's configuration
+    (``RUN_BLOCKED reason=server_mismatch``)."""
 
 
 class ServerNotReady(RuntimeError):
-    """就绪等待超时。"""
+    """Timed out waiting for readiness."""
 
 
-# ── Policy 基类 ──────────────────────────────────────────────────────────────
+# -- Policy base class ---------------------------------------------------------------
 
 
 def _counted(name: str, fn):
-    """包一层调用计数：同一实例同一方法只在最外层调用计一次（子类 ``super().reset(spec)`` 不重复计）。"""
+    """Wrap with a call counter: per instance and method only the outermost call counts (a subclass's
+    ``super().reset(spec)`` is not counted again)."""
 
     @functools.wraps(fn)
     def wrapper(self, *a, **k):
@@ -73,20 +81,24 @@ def _counted(name: str, fn):
 
 
 class Policy:
-    """五个模型 + dummy 的共同基类。子类覆写 ``load``／``reset``／``play``／``close`` 四个方法。
+    """Common base class of the five models + dummy. Subclasses override ``load`` / ``reset`` / ``play`` / ``close``.
 
-    ``reset(spec)`` 契约（S1，单测钉死）：**不向服务端发任何消息、不碰环境**；只清客户端状态、按本局身份准备会话
-    标识、探一次服务端健康（死了抛 ``ServerDead``）、做局前拒绝（如 Astra 的局数登记与 STOP 检查，抛 ``AstraStop``）。
-    服务端的 reset／start_episode 消息由 ``play`` 在每局新连接上发。
+    ``reset(spec)`` contract (pinned by unit tests):
+    **send no message to the server, never touch the environment**; only clear client state, prepare session
+    identifiers from the episode identity, probe server health once (raise ``ServerDead`` if dead), and apply
+    pre-episode refusals (e.g. Astra's episode registration and STOP check, raising ``AstraStop``). The server's reset / start_episode message is sent by ``play`` on a fresh
+    connection for each episode.
 
-    ``play(session, spec, recorder) -> dict`` 返回 ``PlayOutput``：必有 ``status``（success／fail／timeout／error）、
-    ``task_success``（0/1）、``steps``、``error``、``infra``、``infra_reason``；可有 ``decisions``、``timing`` 与模型专属
-    字段。环境只经 ``session.reset()``／``session.step()`` 碰，不得调 ``session.close()``。
+    ``play(session, spec, recorder) -> dict`` returns a ``PlayOutput``: always ``status`` (success / fail / timeout /
+    error), ``task_success`` (0/1), ``steps``, ``error``, ``infra``, ``infra_reason``; optionally ``decisions``,
+    ``timing`` and model-specific fields. The environment is touched only via ``session.reset()`` /
+    ``session.step()``; ``session.close()`` must not be called.
 
-    属性：``model``（注册名）、``label``（产物树里的模型目录名，缺省等于 ``model``；GroundSG 可带变体）、
-    ``policy_seed``、``cfg``（``load_policy`` 收到的模型专属参数）、``server``（``ServerProcess`` 或 None）、
-    ``episode_wall_s``（单局墙钟缺省，None 时按 ``episode.DEFAULT_WALL_S`` 取）、``calls``（四方法调用计数）、
-    ``episodes_run``（本进程已跑局数，外层维护，首局放宽墙钟用）。
+    Attributes: ``model`` (registered name), ``label`` (model directory name in the output tree, defaults to
+    ``model``; GroundSG may include its variant), ``policy_seed``, ``cfg`` (model-specific arguments received by
+    ``load_policy``), ``server`` (``ServerProcess`` or None), ``episode_wall_s`` (default per-episode wall clock;
+    None means ``episode.DEFAULT_WALL_S``), ``calls`` (call counts of the four methods), ``episodes_run`` (episodes run
+    in this process, maintained by the outer loop, used to relax the wall clock for the first episode).
     """
 
     model: str = "base"
@@ -118,28 +130,31 @@ class Policy:
 
     label: str | None = None
 
-    # 四个方法（基类缺省实现）
+    # the four methods (base-class defaults)
     def load(self) -> None:
-        """进程级一次：起服务端（或 attach 已在跑的那个）、加载客户端侧模型、编译缓存、预热。基类什么都不做。"""
+        """Once per process: start the server (or attach to a running one), load the client-side model, compile
+        caches, warm up. The base class does nothing."""
 
     def reset(self, spec) -> None:
-        """每局第一句：基类只探一次服务端健康（有服务端时）。"""
+        """First statement of every episode: the base class only probes server health once (when there is a
+        server)."""
         self.check_server()
 
     def play(self, session, spec, recorder) -> dict:
-        raise NotImplementedError(f"{type(self).__name__}.play 未实现")
+        raise NotImplementedError(f"{type(self).__name__}.play is not implemented")
 
     def close(self) -> None:
-        """进程级一次：停服务端进程组。幂等。"""
+        """Once per process: stop the server process group. Idempotent."""
         if self.closed:
             return
         self.closed = True
         for srv in self.servers():
             srv.stop()
 
-    # 辅助
+    # helpers
     def servers(self) -> list["ServerProcess"]:
-        """本 Policy 持有的服务端（看门狗退出前打印 ``SERVER_LEFT`` 用）；子类有多个时覆写。"""
+        """Servers held by this Policy (used to print ``SERVER_LEFT`` before a watchdog exit); override when a
+        subclass has several."""
         return [self.server] if self.server is not None else []
 
     def check_server(self) -> None:
@@ -147,7 +162,8 @@ class Policy:
             srv.check()
 
     def server_seed(self) -> int | None:
-        """结果行 ``server_seed``：服务端元数据里的 ``policy_seed``；没有服务端为 None（不伪造）。"""
+        """``server_seed`` for the result row: ``policy_seed`` from the server metadata; None without a server (never
+        fabricated)."""
         for srv in self.servers():
             v = (srv.metadata or {}).get("policy_seed")
             if isinstance(v, int) and not isinstance(v, bool):
@@ -166,9 +182,11 @@ for _m in METHODS:
 
 
 def load_policy(model: str, policy_seed: int, **cfg: Any) -> Policy:
-    """按 ``models`` 注册表构造子类并调 ``load()``（进程级一次）。可作上下文管理器，``with`` 退出即 ``close()``。
+    """Construct the subclass from the ``models`` registry and call ``load()`` (once per process). Usable as a
+    context manager: leaving the ``with`` block calls ``close()``.
 
-    ``load()`` 抛异常时先 ``close()``（停掉可能已起的服务端）再原样上抛。"""
+    If ``load()`` raises, ``close()`` is called first (stopping any server already started) and the exception is
+    re-raised unchanged."""
     from robomme_ood_eval import models
 
     cls = models.resolve(model)
@@ -184,11 +202,12 @@ def load_policy(model: str, policy_seed: int, **cfg: Any) -> Policy:
     return policy
 
 
-# ── 端口与就绪探测 ───────────────────────────────────────────────────────────
+# -- ports and readiness probes ------------------------------------------------------
 
 
 def port_busy(port: int, host: str = "127.0.0.1") -> bool:
-    """端口是否已有进程在听（与旧 ``run_seat.sh::port_busy`` 同义：能连上即占用）。"""
+    """Whether a process is already listening on the port (same meaning as the legacy ``run_seat.sh::port_busy``:
+    busy if a connection succeeds)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.5)
         try:
@@ -199,8 +218,9 @@ def port_busy(port: int, host: str = "127.0.0.1") -> bool:
 
 
 def pick_port(base: int | None = None, *, span: int = 2, tries: int = 5) -> int:
-    """取一个服务端端口：``base`` 给出时从它起每次加 ``span``，要求该端口与其 +1（中继）都空闲，至多试 ``tries`` 次；
-    ``base`` 为 None 时向系统要一个临时空闲端口。都失败抛 RuntimeError。"""
+    """Pick a server port: with ``base``, start there and add ``span`` each time, requiring both the port and +1
+    (relay) to be free, for at most ``tries`` attempts; with ``base`` None, ask the OS for an ephemeral free port.
+    Raises RuntimeError if everything fails."""
     if base is None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 0))
@@ -210,11 +230,11 @@ def pick_port(base: int | None = None, *, span: int = 2, tries: int = 5) -> int:
         if not port_busy(p) and not port_busy(p + 1):
             return p
         p += int(span)
-    raise RuntimeError(f"从 {base} 起 {tries} 次都没有空闲端口")
+    raise RuntimeError(f"starting from {base}, all {tries} tries found no free port")
 
 
 def http_health(port: int, path: str = "/health", host: str = "127.0.0.1", timeout: float = 2.0) -> bool:
-    """``GET http://host:port/path`` 返回 200 即健康（不走代理）。"""
+    """Healthy if ``GET http://host:port/path`` returns 200 (bypassing proxies)."""
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(f"http://{host}:{int(port)}{path}", timeout=timeout) as r:
@@ -225,17 +245,18 @@ def http_health(port: int, path: str = "/health", host: str = "127.0.0.1", timeo
 
 @dataclasses.dataclass(frozen=True)
 class Ready:
-    """就绪判据一条：``port``（端口在听）、``health``（``GET value`` 返回 200，value 缺省 ``/health``）、
-    ``log``（服务日志含 value 字符串）。``ServerProcess`` 要求全部判据同时成立。"""
+    """One readiness criterion: ``port`` (the port is listening), ``health`` (``GET value`` returns 200; value
+    defaults to ``/health``), ``log`` (the server log contains the string value). ``ServerProcess`` requires all
+    criteria to hold at once."""
 
     kind: str
     value: str | None = None
 
     def __post_init__(self):
         if self.kind not in ("port", "health", "log"):
-            raise ValueError(f"Ready.kind 只能是 port／health／log：{self.kind!r}")
+            raise ValueError(f"Ready.kind must be port / health / log: {self.kind!r}")
         if self.kind == "log" and not self.value:
-            raise ValueError("Ready('log') 必须给要匹配的字符串")
+            raise ValueError("Ready('log') requires the string to match")
 
     @classmethod
     def port(cls) -> "Ready":
@@ -250,11 +271,11 @@ class Ready:
         return cls("log", text)
 
 
-# ── 进程工具 ─────────────────────────────────────────────────────────────────
+# -- process utilities ---------------------------------------------------------------
 
 
 def pid_alive(pid: int | None) -> bool:
-    """进程存在且不是僵尸。"""
+    """The process exists and is not a zombie."""
     if not pid:
         return False
     try:
@@ -279,7 +300,8 @@ def proc_cmdline(pid: int) -> list[str] | None:
 
 
 def _group_alive(pgid: int) -> bool:
-    """进程组里还有非僵尸进程（僵尸已退出、只等父进程回收，不算活着）。"""
+    """The process group still has a non-zombie process (zombies have exited and only await reaping, so they do
+    not count as alive)."""
     try:
         os.killpg(int(pgid), 0)
     except ProcessLookupError:
@@ -287,7 +309,7 @@ def _group_alive(pgid: int) -> bool:
     except PermissionError:
         return True
     proc = Path("/proc")
-    if not proc.is_dir():  # pragma: no cover 非 Linux
+    if not proc.is_dir():  # pragma: no cover non-Linux
         return True
     for d in proc.iterdir():
         if not d.name.isdigit():
@@ -303,7 +325,7 @@ def _group_alive(pgid: int) -> bool:
 
 def kill_group(pgid: int, *, grace_s: float = STOP_GRACE_S, child: subprocess.Popen | None = None,
                poll_s: float = 0.2) -> str:
-    """先 TERM 进程组，等 ``grace_s`` 秒，仍在再 KILL；返回 ``term``／``kill``／``gone``。"""
+    """TERM the process group, wait ``grace_s`` seconds, KILL if still alive; returns ``term`` / ``kill`` / ``gone``."""
     try:
         os.killpg(int(pgid), signal.SIGTERM)
     except ProcessLookupError:
@@ -314,7 +336,7 @@ def kill_group(pgid: int, *, grace_s: float = STOP_GRACE_S, child: subprocess.Po
     how = "term"
     while True:
         if child is not None:
-            child.poll()  # 回收自己的子进程，避免僵尸让判定恒真
+            child.poll()  # reap our own child so a zombie does not keep the check true forever
         leader_alive = pid_alive(pgid) if child is None else child.returncode is None
         if not leader_alive and not _group_alive(pgid):
             break
@@ -335,7 +357,8 @@ def kill_group(pgid: int, *, grace_s: float = STOP_GRACE_S, child: subprocess.Po
 
 
 def wait_gpu_free(pid: int, *, timeout_s: float = 30.0, poll_s: float = 1.0) -> bool:
-    """轮询 ``nvidia-smi`` 计算进程列表直到 ``pid`` 不在其中（显存已释放）；nvidia-smi 不可用时返回 True。"""
+    """Poll the ``nvidia-smi`` compute-process list until ``pid`` is gone (GPU memory released); returns True when
+    nvidia-smi is unavailable."""
     deadline = time.monotonic() + timeout_s
     while True:
         try:
@@ -354,12 +377,14 @@ def wait_gpu_free(pid: int, *, timeout_s: float = 30.0, poll_s: float = 1.0) -> 
 
 
 class ServerProcess:
-    """一个服务端子进程（在模型自己的 venv 里跑）。
+    """A server subprocess (running in the model's own venv).
 
-    ``argv``：完整命令（照抄旧 ``run_seat.sh::build_server_cmd`` 对应分支）；``env``：在当前环境基础上追加／覆盖的
-    变量（代理变量一律去掉）；``cwd``；``gpu``：设 ``CUDA_VISIBLE_DEVICES``（None 不动）；``ready``：``Ready`` 判据
-    列表（全部成立才算就绪）；``port``：服务端口（元数据文件名与端口探测都用它）；``metadata_dir``：写
-    ``server-metadata-<port>.json`` 的目录；``policy_seed``、``ckpt``：写进元数据，``attach()`` 逐项核对。
+    ``argv``: full command (copied from the matching branch of the legacy ``run_seat.sh::build_server_cmd``);
+    ``env``: variables added / overridden on top of the current environment (proxy variables are always removed);
+    ``cwd``; ``gpu``: sets ``CUDA_VISIBLE_DEVICES`` (None leaves it unchanged); ``ready``: list of ``Ready`` criteria
+    (ready only when all hold); ``port``: server port (used for the metadata file name and the port probe);
+    ``metadata_dir``: directory for ``server-metadata-<port>.json``; ``policy_seed``, ``ckpt``: written to the
+    metadata and checked one by one by ``attach()``.
     """
 
     def __init__(self, argv: list[str], env: dict | None = None, cwd: str | Path | None = None,
@@ -393,7 +418,7 @@ class ServerProcess:
     def metadata_path(self) -> Path:
         return self.metadata_dir / f"server-metadata-{self.port}.json"
 
-    # 启动
+    # startup
     def _child_env(self) -> dict:
         env = {k: v for k, v in os.environ.items() if k not in PROXY_VARS}
         env.update(self.env)
@@ -405,7 +430,8 @@ class ServerProcess:
         return env
 
     def start(self) -> "ServerProcess":
-        """有本端口元数据且进程还活着 → ``attach()``（不符即拒接）；否则 setsid 新起、写元数据、等就绪。"""
+        """If metadata for this port exists and the process is alive -> ``attach()`` (refuse on mismatch);
+        otherwise start fresh with setsid, write the metadata and wait until ready."""
         if self.metadata_path.is_file():
             if self.attach():
                 return self
@@ -449,14 +475,15 @@ class ServerProcess:
             return ""
 
     def wait_ready(self, timeout_s: float | None = None) -> float:
-        """轮询就绪判据；期间服务端死了抛 ``ServerDead``（附日志尾），超时停服务端并抛 ``ServerNotReady``。"""
+        """Poll the readiness criteria; if the server dies meanwhile raise ``ServerDead`` (with the log tail); on
+        timeout stop the server and raise ``ServerNotReady``."""
         limit = self.ready_timeout_s if timeout_s is None else float(timeout_s)
         t0 = time.monotonic()
         while True:
             if not self.alive():
                 tail = self.log_tail()
                 print(f"SERVER_DIED_BEFORE_READY name={self.name} port={self.port}\n{tail}", flush=True)
-                raise ServerDead(f"{self.name} 服务端就绪前退出 port={self.port}：{tail[-800:]}")
+                raise ServerDead(f"{self.name} server exited before becoming ready port={self.port}: {tail[-800:]}")
             if self._ready_now():
                 dt = time.monotonic() - t0
                 print(f"SERVER_READY name={self.name} port={self.port} ready_s={dt:.1f}", flush=True)
@@ -464,14 +491,15 @@ class ServerProcess:
             if time.monotonic() - t0 > limit:
                 print(f"SERVER_READY_TIMEOUT name={self.name} port={self.port} limit_s={limit:.0f}", flush=True)
                 self.stop()
-                raise ServerNotReady(f"{self.name} 就绪等待超过 {limit:.0f} s")
+                raise ServerNotReady(f"{self.name} readiness wait exceeded {limit:.0f} s")
             time.sleep(self.ready_poll_s)
 
-    # attach（M3）
+    # attach
     def attach(self) -> bool:
-        """读 ``server-metadata-<port>.json``：进程已不在 → 返回 False（调用方新起）；进程在则核四项——元数据的
-        ``policy_seed``、``argv``、``port``、``ckpt`` 与本次一致，且 ``/proc/<pid>/cmdline`` 恰为该 argv。任一不符打印
-        ``RUN_BLOCKED reason=server_mismatch`` 并抛 ``ServerMismatch``（拒接）。"""
+        """Read ``server-metadata-<port>.json``: if the process is gone return False (the caller starts a new one);
+        if alive, check four items -- the metadata's ``policy_seed``, ``argv``, ``port`` and ``ckpt`` match this run,
+        and ``/proc/<pid>/cmdline`` is exactly that argv. Any mismatch prints ``RUN_BLOCKED reason=server_mismatch``
+        and raises ``ServerMismatch`` (refuse)."""
         try:
             meta = json.loads(self.metadata_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -486,7 +514,7 @@ class ServerProcess:
                 bad.append(f"{key} metadata={meta.get(key)!r} want={want!r}")
         cmd = proc_cmdline(pid)
         if cmd != meta.get("argv"):
-            bad.append(f"cmdline pid={pid} 实际={cmd!r} 与元数据 argv 不符")
+            bad.append(f"cmdline pid={pid} actual={cmd!r} does not match metadata argv")
         if bad:
             detail = "; ".join(bad)
             print(f"RUN_BLOCKED reason=server_mismatch port={self.port} metadata={self.metadata_path} detail={detail}",
@@ -498,19 +526,20 @@ class ServerProcess:
             self.wait_ready()
         return True
 
-    # 状态与停止
+    # state and stopping
     def alive(self) -> bool:
         if self.proc is not None:
             return self.proc.poll() is None
         return pid_alive(self.pid)
 
     def check(self) -> None:
-        """探活：死了抛 ``ServerDead``。"""
+        """Liveness probe: raise ``ServerDead`` if dead."""
         if not self.alive():
-            raise ServerDead(f"{self.name} 服务端已退出 port={self.port} pid={self.pid}：{self.log_tail()[-800:]}")
+            raise ServerDead(f"{self.name} server has exited port={self.port} pid={self.pid}: {self.log_tail()[-800:]}")
 
     def stop(self, *, grace_s: float = STOP_GRACE_S, check_gpu: bool = True) -> str:
-        """TERM 进程组，等 ``grace_s`` 秒，再 KILL；``check_gpu`` 时轮询 nvidia-smi 核显存释放；删元数据。"""
+        """TERM the process group, wait ``grace_s`` seconds, then KILL; with ``check_gpu`` poll nvidia-smi until GPU
+        memory is released; delete the metadata."""
         if self.pid is None:
             return "none"
         pgid = int((self.metadata or {}).get("pgid") or self.pid)
@@ -527,14 +556,15 @@ class ServerProcess:
         return how
 
     def left_line(self) -> str:
-        """看门狗硬退出前打印的一行（S2）。"""
+        """The line printed right before a hard watchdog exit."""
         return (f"SERVER_LEFT pid={self.pid} port={self.port} metadata={self.metadata_path} "
                 f"stop=\"scripts/evaluate.py --stop-server {self.metadata_path}\"")
 
     @staticmethod
     def stop_by_metadata(path: str | Path, *, grace_s: float = STOP_GRACE_S, check_gpu: bool = True) -> str:
-        """只按元数据文件停服务端：进程还在且 ``/proc/<pid>/cmdline`` 与元数据 argv 一致才停（防止 pid 复用误杀），
-        停后删元数据。返回 ``term``／``kill``／``gone``／``mismatch``。"""
+        """Stop a server using only its metadata file: stop it only if the process is alive and
+        ``/proc/<pid>/cmdline`` matches the metadata argv (guards against pid reuse), then delete the metadata.
+        Returns ``term`` / ``kill`` / ``gone`` / ``mismatch``."""
         path = Path(path)
         meta = json.loads(path.read_text(encoding="utf-8"))
         pid = meta.get("pid")
@@ -543,7 +573,8 @@ class ServerProcess:
             path.unlink(missing_ok=True)
             return "gone"
         if proc_cmdline(pid) != meta.get("argv"):
-            print(f"SERVER_STOP_BY_METADATA result=mismatch pid={pid} metadata={path}（cmdline 与元数据不符，不动）",
+            print(f"SERVER_STOP_BY_METADATA result=mismatch pid={pid} metadata={path} (cmdline does not match "
+                  f"metadata; left untouched)",
                   flush=True)
             return "mismatch"
         how = kill_group(int(meta.get("pgid") or pid), grace_s=grace_s)
@@ -555,7 +586,7 @@ class ServerProcess:
 
 
 def import_attr(module: str, attr: str):
-    """按模块路径与属性名惰性取对象（注册表用）。"""
+    """Lazily fetch an object by module path and attribute name (used by the registry)."""
     return getattr(importlib.import_module(module), attr)
 
 
@@ -564,4 +595,4 @@ __all__ = ["Policy", "load_policy", "ServerProcess", "Ready", "ServerDead", "Ast
            "wait_gpu_free", "METHODS"]
 
 if sys.version_info < (3, 10):  # pragma: no cover
-    raise RuntimeError("robomme_ood_eval.policy 需要 Python ≥ 3.10")
+    raise RuntimeError("robomme_ood_eval.policy requires Python >= 3.10")

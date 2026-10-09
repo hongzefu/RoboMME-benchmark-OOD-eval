@@ -254,9 +254,9 @@ def test_handler_dispatch_and_req_sha():
 
 
 @pytest.mark.parametrize("msgs,needle", [
-    ([{"bogus": {}}], "未知消息键 ['bogus']"),
-    ([{"observe": {"frames": []}}], "observe 之前未 reset"),
-    ([{"infer": {"instruction": "x", "state": np.zeros(8, np.float32)}}], "infer 之前未 reset"),
+    ([{"bogus": {}}], "unknown message keys ['bogus']"),
+    ([{"observe": {"frames": []}}], "observe before reset"),
+    ([{"infer": {"instruction": "x", "state": np.zeros(8, np.float32)}}], "infer before reset"),
     ([{"reset": {"episode_key": "k"}}, {"infer": {"instruction": "x", "state": np.zeros(8, np.float32)}}],
      "RuntimeError: 替身推理失败"),
 ])
@@ -296,7 +296,7 @@ def test_main_refuses_without_fixed_env(monkeypatch):
     srv = F.smvla_server()
     for k in srv._FIXED_ENV:
         monkeypatch.delenv(k, raising=False)
-    with pytest.raises(RuntimeError, match="固定环境变量未生效"):
+    with pytest.raises(RuntimeError, match="fixed environment variables not in effect"):
         srv.main(["serve", "--port", "1"])
 
 
@@ -306,15 +306,18 @@ def test_main_parses_serve_args(monkeypatch):
         monkeypatch.setenv(k, v)
     got = {}
     monkeypatch.setattr(srv, "cmd_serve", lambda a: got.setdefault("a", a) and 7)
-    assert srv.main(["serve", "--port", "4321", "--warmup", "--det", "--policy-seed", "42"]) == 7
+    assert srv.main(["serve", "--port", "4321", "--warmup", "--det", "--policy-seed", "42", "--ckpt", "/ckpt/x"]) == 7
     a = got["a"]
     assert (a.port, a.host, a.warmup, a.det, a.expect_config_sha, a.metadata_out, a.policy_seed) == \
         (4321, "127.0.0.1", True, True, None, None, 42)
-    assert a.ckpt == str(srv.DEFAULT_CKPT)
+    assert a.ckpt == "/ckpt/x"
+    with pytest.raises(SystemExit) as ei:  # --ckpt is required (no default checkpoint)
+        srv.main(["serve", "--port", "4321", "--policy-seed", "42"])
+    assert ei.value.code == 2
     with pytest.raises(SystemExit):  # --port 必填
-        srv.main(["serve", "--policy-seed", "7"])
+        srv.main(["serve", "--policy-seed", "7", "--ckpt", "/ckpt/x"])
     with pytest.raises(SystemExit):  # 第三阶段：--policy-seed 必填，不回落旧常量 0
-        srv.main(["serve", "--port", "4321"])
+        srv.main(["serve", "--port", "4321", "--ckpt", "/ckpt/x"])
 
 
 class _HostStub:

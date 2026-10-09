@@ -161,10 +161,10 @@ def test_server_inference_error_is_infra_server_error(served):
     assert "替身推理失败" in res["error"] and sess.env.n == 0
 
 
-@pytest.mark.parametrize("msg,needle", [({"bogus": {}}, "未知消息键"),
+@pytest.mark.parametrize("msg,needle", [({"bogus": {}}, "unknown message keys"),
                                          ({"infer": {"instruction": "x", "state": np.zeros(8, np.float32)}},
-                                          "infer 之前未 reset"),
-                                         ({"observe": {"frames": []}}, "observe 之前未 reset")])
+                                          "infer before reset"),
+                                         ({"observe": {"frames": []}}, "observe before reset")])
 def test_protocol_violations_get_error_reply(served, msg, needle):
     sm = F.smvla_client()
     port = served(_host())

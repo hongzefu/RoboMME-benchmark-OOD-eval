@@ -1,4 +1,6 @@
-"""逐局记录：``recorder``（原始帧 AV1 4:4:4 + 数组）、``trace_writer``（trace.jsonl）、``official_render``（官方版式渲染）。
+"""Per-episode recording: ``recorder`` (raw AV1 4:4:4 frames + arrays), ``trace_writer`` (trace.jsonl),
+``official_render`` (official-layout rendering).
 
-两个原有模块不合并（十几处调用方按模块名或文件路径加载）；本文件不做任何导入，保持按路径加载时的行为不变。
+The modules are deliberately kept separate (a dozen callers load them by module name or file path); this file
+imports nothing so that loading by path behaves exactly as before.
 """

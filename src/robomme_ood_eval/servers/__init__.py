@@ -1,21 +1,29 @@
-"""四个普通模型（FrameSamp+Modulation、GroundSG、SimpleMemVLA、PonderPounce）在客户端侧起服务端的共用件。
+"""Shared helpers for the four regular models (FrameSamp+Modulation, GroundSG, SimpleMemVLA, PonderPounce) that
+start a policy server from the client side.
 
-本包里的 ``policy_server_wrap.py``、``smvla_server.py``、``pp_server_wrap.py`` 由各模型自己 venv 的解释器**按文件路径**
-运行（不经过本 ``__init__``）；本文件只给客户端进程里的 Policy 子类用，内容抽自旧 ``run_seat.sh``：
+``policy_server_wrap.py``, ``smvla_server.py`` and ``pp_server_wrap.py`` in this package are run **by file path** with
+each model's own venv interpreter (not through this ``__init__``); this module is only used by the Policy subclasses
+in the client process. Its contents come from the legacy ``run_seat.sh`` launcher:
 
-* 路径与缺省值：评估仓根 ``repo_root``、各服务端解释器 ``interpreter``、ckpt check ``require_ckpt`` (no default
-  checkpoint; ``--ckpt`` is mandatory)、缺省端口基数（``DEFAULT_PORT_BASE``，照旧 ``run_policy`` 的 ``18000 + 10 × 策略号``）；
-* ``CleanServerProcess``：在 ``ServerProcess`` 之上先去掉影响确定性／编译缓存的变量（旧 ``CLEAN_ENV``），再加本模型要的；
-* 起服务前的闸门（旧同名 shell 函数的 Python 版，失败抛 ``PreflightError``，文字以 ``RUN_BLOCKED reason=`` 开头）：
-  ``tokenizer_gate``、``preflight_mme_vla``、``preflight_pp``、``variant_pairing``；
-* 起服务后的核对：``check_server_log``（MME-VLA 服务日志须含 ``history_config='<yaml>'``）、``check_wrap_metadata``
-  （服务外壳自写的元数据里 ``policy_seed`` 须等于本次种子）；
-* ``ckpt_fingerprint``：逐文件 sha256 汇成一个指纹（旧 ``ckpt_fingerprint``，后台线程跑、只写一行文本）；
-* ``ServedPolicy``：四个 Policy 子类的共同基类（选端口、起或 attach 服务端、拼旧 ``conn_info``、整理 ``PlayOutput``）；
-  ``SessionNoClose``：交给旧客户端循环的会话代理，挡掉模型侧的 ``session.close()``（环境只由外层关）。
+* paths and defaults: evaluation repo root ``repo_root``, per-server interpreter ``interpreter``, checkpoint check
+  ``require_ckpt`` (no default checkpoint; ``--ckpt`` is mandatory), default port bases (``DEFAULT_PORT_BASE``, as in
+  the legacy ``run_policy``: ``18000 + 10 x policy index``);
+* ``CleanServerProcess``: on top of ``ServerProcess``, first drops variables that affect determinism / compile caches
+  (the legacy ``CLEAN_ENV``), then adds what the model needs;
+* pre-launch gates (Python versions of the legacy shell functions of the same names; failures raise
+  ``PreflightError`` whose text starts with ``RUN_BLOCKED reason=``): ``tokenizer_gate``, ``preflight_mme_vla``,
+  ``preflight_pp``, ``variant_pairing``;
+* post-launch checks: ``check_server_log`` (the MME-VLA server log must contain ``history_config='<yaml>'``) and
+  ``check_wrap_metadata`` (``policy_seed`` in the metadata written by the server wrapper must equal this run's seed);
+* ``ckpt_fingerprint``: per-file sha256 combined into one fingerprint (legacy ``ckpt_fingerprint``; runs in a
+  background thread and writes a single line of text);
+* ``ServedPolicy``: common base class of the four Policy subclasses (pick a port, start or attach the server, build
+  the legacy ``conn_info``, normalize ``PlayOutput``); ``SessionNoClose``: session proxy handed to the legacy client
+  loops that blocks a model-side ``session.close()`` (only the outer loop closes the environment).
 
-服务外壳自写的元数据一律落 ``<server_dir>/server-wrap-metadata-<port>.json``，与 ``ServerProcess`` 自己的
-``server-metadata-<port>.json``（attach 与 ``--stop-server`` 用）分开，互不覆盖。
+Metadata written by the server wrappers always goes to ``<server_dir>/server-wrap-metadata-<port>.json``, separate
+from ``ServerProcess``'s own ``server-metadata-<port>.json`` (used for attach and ``--stop-server``), so neither
+overwrites the other.
 """
 from __future__ import annotations
 
@@ -31,27 +39,29 @@ from typing import Any
 
 from robomme_ood_eval.policy import Policy, ServerMismatch, ServerProcess, pick_port
 
-#: 本目录（三个服务外壳脚本所在处）
+#: this directory (where the three server wrapper scripts live)
 SERVERS_DIR = Path(__file__).resolve().parent
-#: 评估仓根（本文件在 src/robomme_ood_eval/servers/ 下）
+#: evaluation repo root (this file lives in src/robomme_ood_eval/servers/)
 REPO = Path(__file__).resolve().parents[3]
-#: 起服务端前一律去掉的变量（旧 run_seat.sh 的 CLEAN_ENV）
+#: variables always removed before starting a server (CLEAN_ENV of the legacy run_seat.sh)
 CLEAN_ENV = ("XLA_FLAGS", "JAX_COMPILATION_CACHE_DIR", "JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES",
              "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "CUBLAS_WORKSPACE_CONFIG")
-#: mme-vla 子模块须钉在的提交（旧 MME_VLA_COMMIT）
+#: commit the mme-vla submodule must be pinned to (legacy MME_VLA_COMMIT)
 MME_VLA_COMMIT = "ecf086c3be7c2223167d9bb2f6ef1f0a6e24353b"
-#: tokenizer 在 OPENPI_DATA_HOME 下的相对路径（旧 TOKENIZER_REL）
+#: tokenizer path relative to OPENPI_DATA_HOME (legacy TOKENIZER_REL)
 TOKENIZER_REL = "big_vision/paligemma_tokenizer.model"
-#: 各模型服务日志里必须出现的 history_config（旧 *_YAML_EXPECT）
+#: history_config that must appear in each model's server log (legacy *_YAML_EXPECT)
 YAML_EXPECT = {"perceptual-framesamp-modul": "perceptual-framesamp-modul.yaml",
                "groundsg": "symbolic-grounded-subgoal.yaml"}
-#: 缺省端口基数（旧 run_policy：18000 + 10 × 策略号，smvla=0、perceptual-framesamp-modul=1、groundsg=2、pp=3）
+#: default port bases (legacy run_policy: 18000 + 10 x policy index; smvla=0, perceptual-framesamp-modul=1,
+#: groundsg=2, pp=3)
 DEFAULT_PORT_BASE = {"smvla": 18000, "perceptual-framesamp-modul": 18010, "groundsg": 18020, "pp": 18030}
-#: 旧缺省：服务端就绪等待上限（秒）
+#: legacy default: server readiness timeout (seconds)
 DEFAULT_READY_TIMEOUT_S = 1200.0
-#: MME-VLA 服务端 XLA 显存占比缺省（旧 SEAT_XLA_MEM_FRACTION）
+#: default XLA memory fraction for the MME-VLA server (legacy SEAT_XLA_MEM_FRACTION)
 DEFAULT_XLA_MEM_FRACTION = "0.75"
-#: GroundSG 三个变体（与 models/_official_defs.VARIANTS 相同，这里不导入以免拖进官方摘取逻辑）
+#: the three GroundSG variants (same as models/_official_defs.VARIANTS; not imported here to avoid pulling in the
+#: official extraction logic)
 GROUNDSG_VARIANTS = ("ground-sg-oracle", "ground-sg-qwenvl", "ground-sg-memer")
 
 
@@ -64,26 +74,30 @@ def require_ckpt(cfg: dict, model: str) -> Path:
 
 
 class PreflightError(RuntimeError):
-    """起服务前的闸门不过（文字以 ``RUN_BLOCKED reason=`` 开头）；``load()`` 抛出即整批停。"""
+    """A pre-launch gate failed (text starts with ``RUN_BLOCKED reason=``); raised from ``load()``, it stops the
+    whole batch."""
 
 
-# ── 路径与参数 ───────────────────────────────────────────────────────────────
+# -- paths and parameters ----------------------------------------------------------
 
 
 def repo_root(cfg: dict) -> Path:
-    """评估仓根：``cfg["repo_root"]`` → 环境变量 ``ROBOMME_EVAL_ROOT`` → 本包所在仓。"""
+    """Evaluation repo root: ``cfg["repo_root"]`` -> env var ``ROBOMME_EVAL_ROOT`` -> the repo containing this
+    package."""
     v = cfg.get("repo_root") or os.environ.get("ROBOMME_EVAL_ROOT")
     return Path(v).resolve() if v else REPO
 
 
 def interpreter(cfg: dict, key: str, env_name: str, default: Path) -> Path:
-    """服务端解释器：``cfg[key]`` → 环境变量 ``env_name`` → 缺省路径（与旧 run_seat.sh 取法相同）。"""
+    """Server interpreter: ``cfg[key]`` -> env var ``env_name`` -> default path (same lookup as the legacy
+    run_seat.sh)."""
     v = cfg.get(key) or os.environ.get(env_name)
     return Path(v) if v else Path(default)
 
 
 def server_dir(cfg: dict) -> Path:
-    """服务元数据与服务日志目录：``cfg["server_dir"]`` → ``<work_dir>/servers`` → 系统临时目录下按用户分的目录。"""
+    """Directory for server metadata and server logs: ``cfg["server_dir"]`` -> ``<work_dir>/servers`` -> a per-user
+    directory under the system temp dir."""
     if cfg.get("server_dir"):
         return Path(cfg["server_dir"])
     if cfg.get("work_dir"):
@@ -92,8 +106,8 @@ def server_dir(cfg: dict) -> Path:
 
 
 def gpu_of(cfg: dict) -> str | None:
-    """服务端所在 GPU：``cfg["gpus"]`` 的第一张（``--gpus 0,1``）→ ``cfg["gpu"]`` → None（沿用调用方的
-    ``CUDA_VISIBLE_DEVICES``，GL 席位由 srun 设好）。"""
+    """GPU for the server: the first of ``cfg["gpus"]`` (``--gpus 0,1``) -> ``cfg["gpu"]`` -> None (inherit the
+    caller's ``CUDA_VISIBLE_DEVICES``, e.g. as set by srun on a cluster)."""
     gpus = cfg.get("gpus")
     if isinstance(gpus, (list, tuple)) and gpus:
         return str(gpus[0])
@@ -104,9 +118,10 @@ def gpu_of(cfg: dict) -> str | None:
 
 
 def choose_port(cfg: dict, model: str, metadata_dir: Path) -> int:
-    """服务端口：``cfg["port"]`` 显式给出即用它；否则从 ``cfg["port_base"]``（缺省 ``DEFAULT_PORT_BASE``）起——
-    该端口已有元数据文件（上一轮看门狗退出留下的服务端）就沿用它，交给 ``ServerProcess.start`` 去 attach／拒接；
-    否则按 ``pick_port`` 找本端口与 +1 都空闲的端口。"""
+    """Server port: an explicit ``cfg["port"]`` is used as is; otherwise start from ``cfg["port_base"]`` (default
+    ``DEFAULT_PORT_BASE``). If a metadata file already exists for that port (a server left behind when a previous
+    watchdog exited), keep it and let ``ServerProcess.start`` attach / refuse; otherwise use ``pick_port`` to find a
+    port where both it and +1 are free."""
     if cfg.get("port") is not None:
         return int(cfg["port"])
     base = int(cfg.get("port_base") or DEFAULT_PORT_BASE[model])
@@ -116,14 +131,14 @@ def choose_port(cfg: dict, model: str, metadata_dir: Path) -> int:
 
 
 def flag_on(v: Any) -> bool:
-    """开关参数（``on``／``1``／``true``／``yes`` 或真值）。"""
+    """Switch argument (``on`` / ``1`` / ``true`` / ``yes`` or a truthy value)."""
     if isinstance(v, str):
         return v.strip().lower() in ("on", "1", "true", "yes")
     return bool(v)
 
 
 def gpu_slug(gpu: str | None) -> str:
-    """GPU 型号做目录名（旧 gpu_slug）：``nvidia-smi`` 不可用时为 ``unknown``。"""
+    """GPU model name as a directory name (legacy gpu_slug); ``unknown`` when ``nvidia-smi`` is unavailable."""
     cmd = ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"] + (["-i", str(gpu)] if gpu is not None else [])
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.strip().splitlines()
@@ -132,11 +147,12 @@ def gpu_slug(gpu: str | None) -> str:
     return (out[0].strip().replace(" ", "_").replace("/", "_") if out else "") or "unknown"
 
 
-# ── 服务端进程 ───────────────────────────────────────────────────────────────
+# -- server process ------------------------------------------------------------------
 
 
 class CleanServerProcess(ServerProcess):
-    """``ServerProcess``：子进程环境先去掉 ``CLEAN_ENV``（旧 ``env -u …``），再叠加本模型要的变量。"""
+    """``ServerProcess`` whose child environment first drops ``CLEAN_ENV`` (legacy ``env -u ...``) and then adds
+    the model's own variables."""
 
     unset_vars = CLEAN_ENV
 
@@ -149,8 +165,10 @@ class CleanServerProcess(ServerProcess):
 
 
 def check_server_log(srv: Any, expect_yaml: str, *, grace_s: float = 30.0, poll_s: float = 0.5) -> str:
-    """MME-VLA 服务就绪后核日志含 ``history_config='<expect_yaml>'``（旧 start_server 的 SERVER_CONFIG 核对）。
-    配置日志在加载权重时打印、早于端口监听，这里只给 ``grace_s`` 秒容错；不含即停服务并抛 ``PreflightError``。"""
+    """Once the MME-VLA server is ready, check its log contains ``history_config='<expect_yaml>'`` (the legacy
+    start_server SERVER_CONFIG check). The config line is printed while loading weights, before the port starts
+    listening, so only ``grace_s`` seconds of slack are allowed; if missing, stop the server and raise
+    ``PreflightError``."""
     needle = f"history_config='{expect_yaml}'"
     deadline = time.monotonic() + float(grace_s)
     while True:
@@ -164,35 +182,38 @@ def check_server_log(srv: Any, expect_yaml: str, *, grace_s: float = 30.0, poll_
             return line
         if time.monotonic() >= deadline:
             srv.stop()
-            raise PreflightError(f"RUN_BLOCKED reason=server_config（服务日志里没有 {needle}）log={srv.log_path}")
+            raise PreflightError(f"RUN_BLOCKED reason=server_config (server log lacks {needle}) log={srv.log_path}")
         time.sleep(poll_s)
 
 
 def check_wrap_metadata(path: Path, policy_seed: int) -> dict | None:
-    """服务外壳自写的元数据（``--sgeval-metadata-out`` 或 ``--metadata_out``）里 ``policy_seed`` 必须等于本次种子；
-    文件不存在（attach 到旧服务、或外壳关）返回 None，不符抛 ``ServerMismatch``。"""
+    """``policy_seed`` in the metadata written by the server wrapper (``--sgeval-metadata-out`` or
+    ``--metadata_out``) must equal this run's seed. A missing file (attached to an existing server, or wrapper
+    disabled) returns None; a mismatch raises ``ServerMismatch``."""
     p = Path(path)
     if not p.is_file():
         return None
     try:
         doc = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        raise ServerMismatch(f"服务外壳元数据读不出：{p}：{e}") from e
+        raise ServerMismatch(f"cannot read server wrapper metadata: {p}: {e}") from e
     if doc.get("policy_seed") != int(policy_seed):
         print(f"RUN_BLOCKED reason=server_mismatch detail=wrap_metadata policy_seed={doc.get('policy_seed')!r} "
               f"want={int(policy_seed)} metadata={p}", flush=True)
-        raise ServerMismatch(f"服务外壳元数据 policy_seed={doc.get('policy_seed')!r} 与本次 {int(policy_seed)} 不符：{p}")
+        raise ServerMismatch(f"server wrapper metadata policy_seed={doc.get('policy_seed')!r} does not match this run's "
+                             f"{int(policy_seed)}: {p}")
     return doc
 
 
-# ── 起服务前的闸门 ───────────────────────────────────────────────────────────
+# -- pre-launch gates ----------------------------------------------------------------
 
 
 def tokenizer_gate(openpi_home: Any, expected_sha: Any) -> str:
-    """MME-VLA 服务起之前核 ``OPENPI_DATA_HOME`` 下 tokenizer 的 sha256（不现场下载顶替）。"""
+    """Before starting the MME-VLA server, verify the sha256 of the tokenizer under ``OPENPI_DATA_HOME`` (never
+    downloads a substitute on the spot)."""
     if not openpi_home or not expected_sha:
-        raise PreflightError("RUN_BLOCKED reason=tokenizer_sha detail=missing_args（须给 openpi_data_home 与 "
-                             "tokenizer_sha256）")
+        raise PreflightError("RUN_BLOCKED reason=tokenizer_sha detail=missing_args (openpi_data_home and "
+                             "tokenizer_sha256 are required)")
     f = Path(openpi_home) / TOKENIZER_REL
     if not f.is_file():
         raise PreflightError(f"RUN_BLOCKED reason=tokenizer_sha detail=file_missing file={f}")
@@ -210,8 +231,9 @@ def _git(sub: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def preflight_mme_vla(root: Path, model: str, ckpt: Path, py: Path, *, commit: str = MME_VLA_COMMIT) -> str:
-    """旧 ``preflight_mme_vla``：子模块提交与干净、嵌套子模块为空、ckpt 旁 ``history_config.txt`` 等于期望 yaml、
-    yaml 存在、ckpt 有 ``params``／``assets``、解释器可执行、服务外壳存在。"""
+    """Legacy ``preflight_mme_vla``: submodule commit pinned and clean, nested submodule empty, ``history_config.txt``
+    next to the ckpt equals the expected yaml, the yaml exists, the ckpt has ``params`` / ``assets``, the interpreter
+    is executable, and the server wrapper exists."""
     sub = Path(root) / "third_party" / "mme-vla"
     expect = YAML_EXPECT[model]
     head = _git(sub, "rev-parse", "HEAD").stdout.strip()
@@ -245,7 +267,8 @@ def preflight_mme_vla(root: Path, model: str, ckpt: Path, py: Path, *, commit: s
 
 
 def preflight_pp(root: Path, ckpt: Any, py: Path, *, server_wrap: bool, seed: int) -> str:
-    """旧 ``preflight_pp``：子模块目录在、解释器可执行、ckpt 目录在且有 ``norm_stats.json``、外壳打开时外壳在。"""
+    """Legacy ``preflight_pp``: submodule directory present, interpreter executable, ckpt directory present with
+    ``norm_stats.json``, and the wrapper present when it is enabled."""
     sub = Path(root) / "third_party" / "PonderPounce"
     if not sub.is_dir():
         raise PreflightError(f"RUN_BLOCKED reason=pp_submodule_missing dir={sub}")
@@ -254,7 +277,7 @@ def preflight_pp(root: Path, ckpt: Any, py: Path, *, server_wrap: bool, seed: in
     if not ckpt or not Path(ckpt).is_dir():
         raise PreflightError(f"RUN_BLOCKED reason=pp_ckpt_missing ckpt={ckpt or 'unset'}")
     if not (Path(ckpt) / "norm_stats.json").is_file():
-        raise PreflightError(f"RUN_BLOCKED reason=pp_ckpt_layout ckpt={ckpt}（缺 norm_stats.json）")
+        raise PreflightError(f"RUN_BLOCKED reason=pp_ckpt_layout ckpt={ckpt} (missing norm_stats.json)")
     wrap = SERVERS_DIR / "pp_server_wrap.py"
     if server_wrap and not wrap.is_file():
         raise PreflightError(f"RUN_BLOCKED reason=pp_server_wrap_missing path={wrap}")
@@ -265,7 +288,7 @@ def preflight_pp(root: Path, ckpt: Any, py: Path, *, server_wrap: bool, seed: in
 
 
 def variant_pairing(variant: Any, qwenvl_adapter: Any, memer_adapter: Any) -> str:
-    """旧 ``variant_pairing``（只看 groundsg）：变体与 QwenVL／MemER adapter 的配对。"""
+    """Legacy ``variant_pairing`` (groundsg only): pairing of the variant with the QwenVL / MemER adapters."""
     why = None
     if variant == "ground-sg-oracle":
         if qwenvl_adapter:
@@ -298,7 +321,7 @@ def variant_pairing(variant: Any, qwenvl_adapter: Any, memer_adapter: Any) -> st
     return line
 
 
-# ── ckpt 指纹 ────────────────────────────────────────────────────────────────
+# -- ckpt fingerprint ----------------------------------------------------------------
 
 
 def file_sha256(path: Path) -> str:
@@ -310,7 +333,8 @@ def file_sha256(path: Path) -> str:
 
 
 def ckpt_fingerprint(root: Any) -> str:
-    """旧 ``ckpt_fingerprint``：逐文件「相对路径 \\t 字节数 \\t sha256」汇成一个 sha256，返回一行判定文本。"""
+    """Legacy ``ckpt_fingerprint``: combine per-file "relative path \\t bytes \\t sha256" lines into one sha256 and
+    return a one-line verdict text."""
     t0 = time.time()
     root = Path(root).resolve()
     h = hashlib.sha256()
@@ -324,14 +348,15 @@ def ckpt_fingerprint(root: Any) -> str:
 
 
 def start_ckpt_fingerprint(root: Any, out: Path) -> threading.Thread | None:
-    """后台线程算 ckpt 指纹并写到 ``out``（与旧 run_seat.sh 一样不阻塞起服务；失败只写原因）。"""
+    """Compute the ckpt fingerprint in a background thread and write it to ``out`` (like the legacy run_seat.sh,
+    this does not block server start; failures only write the reason)."""
     if not root or not Path(root).is_dir():
         return None
 
     def work():
         try:
             line = ckpt_fingerprint(root)
-        except Exception as e:  # noqa: BLE001 指纹失败不影响评估
+        except Exception as e:  # noqa: BLE001 a fingerprint failure must not affect evaluation
             line = f"CKPT_FINGERPRINT=ERROR dir={root} {type(e).__name__}: {e}"
         try:
             Path(out).parent.mkdir(parents=True, exist_ok=True)
@@ -344,18 +369,20 @@ def start_ckpt_fingerprint(root: Any, out: Path) -> threading.Thread | None:
     return t
 
 
-# ── 四个普通模型 Policy 的共同基类 ─────────────────────────────────────────
+# -- common base class of the four regular model Policies ---------------------------
 
 
 class ServedPolicy(Policy):
-    """带一个本机服务端的 Policy 基类（四个普通模型共用；Astra 不用）。
+    """Policy base class with one local server (shared by the four regular models; Astra does not use it).
 
-    子类在 ``load()`` 里拼好命令后调 ``_launch``（起或 attach 服务端），在 ``play()`` 里用 ``_conn_info(spec)`` 拼出
-    旧 ``conn_info``（服务地址、步数上限、身份、轨迹落点）交给模型模块原有的 ``run_episode``，再经 ``_finish_play``
-    整理成 ``PlayOutput``。服务端的停止由基类 ``Policy.close()`` 统一做。
+    In ``load()`` a subclass builds its command and calls ``_launch`` (start or attach the server); in ``play()`` it
+    uses ``_conn_info(spec)`` to build the legacy ``conn_info`` (server address, step cap, identity, trace location),
+    passes it to the model module's existing ``run_episode``, and normalizes the result into ``PlayOutput`` via
+    ``_finish_play``. Stopping the server is handled uniformly by the base ``Policy.close()``.
 
-    公共 cfg：``repo_root``、``server_dir``／``work_dir``、``port``／``port_base``、``gpus``／``gpu``、
-    ``ready_timeout_s``（缺省 1200）、``preflight``（缺省开；单测关）、``ckpt_fingerprint``（缺省开，后台线程）。"""
+    Common cfg: ``repo_root``, ``server_dir`` / ``work_dir``, ``port`` / ``port_base``, ``gpus`` / ``gpu``,
+    ``ready_timeout_s`` (default 1200), ``preflight`` (default on; off in unit tests), ``ckpt_fingerprint`` (default
+    on, background thread)."""
 
     model = "served"
     host = "127.0.0.1"
@@ -363,7 +390,8 @@ class ServedPolicy(Policy):
     def __init__(self, policy_seed: int, **cfg: Any):
         super().__init__(policy_seed, **cfg)
         if self.policy_seed < 0:
-            raise PreflightError(f"RUN_BLOCKED reason=policy_seed detail=policy_seed 须为非负整数（现为 {policy_seed!r}）")
+            raise PreflightError(f"RUN_BLOCKED reason=policy_seed detail=policy_seed must be a non-negative integer "
+                                 f"(got {policy_seed!r})")
         self.root = repo_root(self.cfg)
         self.metadata_dir = server_dir(self.cfg)
         self.port: int | None = None
@@ -371,7 +399,7 @@ class ServedPolicy(Policy):
         self.load_info: dict[str, Any] = {}
         self._load_reported = False
 
-    # 起服务端
+    # server startup
     @property
     def preflight(self) -> bool:
         return flag_on(self.cfg.get("preflight", True))
@@ -382,13 +410,14 @@ class ServedPolicy(Policy):
         return self.port
 
     def _launch(self, argv: list, env: dict, cwd: Path, ready, ckpt: Any) -> ServerProcess:
-        """建 ``CleanServerProcess`` 并 ``start()``（有本端口元数据且进程在 → attach／拒接；否则新起、等就绪）。"""
+        """Create a ``CleanServerProcess`` and ``start()`` it (metadata for this port and a live process -> attach /
+        refuse; otherwise start fresh and wait until ready)."""
         srv = CleanServerProcess(argv, env, cwd, gpu_of(self.cfg), ready, port=int(self.port),
                                  metadata_dir=self.metadata_dir, policy_seed=self.policy_seed,
                                  ckpt=None if ckpt is None else str(ckpt), name=str(self.label),
                                  ready_timeout_s=float(self.cfg.get("ready_timeout_s", DEFAULT_READY_TIMEOUT_S)))
         if self.wrap_meta is not None and not srv.metadata_path.is_file():
-            self.wrap_meta.unlink(missing_ok=True)  # 新起：先删上一轮外壳元数据，免得读到旧种子
+            self.wrap_meta.unlink(missing_ok=True)  # fresh start: delete the previous wrapper metadata so a stale seed is never read
         self.server = srv
         t0 = time.monotonic()
         srv.start()
@@ -404,11 +433,13 @@ class ServedPolicy(Policy):
             start_ckpt_fingerprint(ckpt, out)
             self.load_info["ckpt_fingerprint_file"] = str(out)
 
-    # 每局
+    # per episode
     def _conn_info(self, spec) -> dict:
-        """旧 ``env_client`` 交给模型 ``run_episode`` 的 ``conn_info``，改由 ``EpisodeSpec`` 与实例属性拼出。
+        """The ``conn_info`` the legacy ``env_client`` passed to the model's ``run_episode``, now built from the
+        ``EpisodeSpec`` and instance attributes.
 
-        轨迹落点固定为本局 raw 目录下的 ``trace.jsonl``（``trace_path``）；``episode_tag`` 为 ``<key>.a<attempt>``。"""
+        The trace always goes to ``trace.jsonl`` in this episode's raw directory (``trace_path``); ``episode_tag`` is
+        ``<key>.a<attempt>``."""
         return {"host": self.host, "port": int(self.port), "max_steps": int(spec.max_steps), "policy": self.model,
                 "dataset": spec.dataset, "strict_cap": bool(spec.strict_cap), "policy_seed": int(self.policy_seed),
                 "effective_cap": int(spec.max_steps) if spec.strict_cap else None,
@@ -417,8 +448,9 @@ class ServedPolicy(Policy):
                 "rec_dir": str(spec.out_dir)}
 
     def _finish_play(self, res: dict) -> dict:
-        """模型 ``run_episode`` 的返回 → ``PlayOutput``：``task_success`` 改 0/1、必有字段补齐；进程内第一局的
-        ``timing`` 另带 ``policy_load``（服务端就绪、预热耗时）。"""
+        """Model ``run_episode`` result -> ``PlayOutput``: ``task_success`` becomes 0/1 and required fields are
+        filled in; the first episode in the process also carries ``policy_load`` in ``timing`` (server readiness and
+        warm-up time)."""
         out = dict(res)
         status = out.get("status", "error")
         out["status"] = status
@@ -436,9 +468,11 @@ class ServedPolicy(Policy):
 
 
 class SessionNoClose:
-    """交给旧客户端循环的会话代理：``close()`` 不关环境（环境只由外层关，S1），其余属性与方法原样转发。
+    """Session proxy handed to the legacy client loops: ``close()`` does not close the environment (only the outer
+    loop does); every other attribute and method is forwarded unchanged.
 
-    SimpleMemVLA 照抄旧官方 ``SimEnvService.reset`` 在 reset 失败后 ``env.close()``；新接口下环境归外层管，故挡掉。"""
+    SimpleMemVLA copies the old official ``SimEnvService.reset``, which calls ``env.close()`` after a failed reset;
+    under the new interface the environment belongs to the outer loop, so that call is blocked."""
 
     def __init__(self, session: Any):
         object.__setattr__(self, "_session", session)

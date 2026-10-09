@@ -73,7 +73,7 @@ def test_load_starts_guard_and_vla_once_and_close_stops(tmp_path, monkeypatch):
     ({"astra_cap_usd": 5.01}, "ASTRA_COST_BLOCKED"),
     ({"astra_ledger": None}, "--astra-ledger"),
     ({"astra_prices": None}, "--astra-prices"),
-    ({"ckpt": None}, "--ckpt 或 --astra-vla-checkpoint"),
+    ({"ckpt": None}, "--ckpt or --astra-vla-checkpoint"),
     ({"astra_monitor_adapter": None}, "--astra-monitor-adapter"),
     ({"astra_group_dir": "elsewhere"}, "layout"),
     ({"_no_key": True}, "astra_key"),
@@ -124,7 +124,7 @@ def test_pin_visible_gpu_refuses_after_cuda_init(monkeypatch):
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
         fake_torch = type("T", (), {"cuda": type("C", (), {"is_initialized": staticmethod(lambda: True)})})
         monkeypatch.setitem(sys.modules, "torch", fake_torch)
-        with pytest.raises(RuntimeError, match="CUDA 已在本进程初始化"):
+        with pytest.raises(RuntimeError, match="CUDA is already initialized in this process"):
             mod.pin_visible_gpu(1)
         assert mod.pin_visible_gpu(0) == "0"
         monkeypatch.setitem(sys.modules, "torch", type("T", (), {"cuda": type("C", (), {

@@ -1,27 +1,33 @@
-"""外层每局一次的 ``run_episode`` 与它的两个数据结构 ``EpisodeSpec``、``EpisodeResult``（拆分方案 §三、§四）。
+"""The outer once-per-episode ``run_episode`` and its two data structures ``EpisodeSpec`` and ``EpisodeResult``.
 
-``run_episode(policy, dataset, task, episode, out_dir, expect=None) -> EpisodeResult`` 的顺序（单测逐步钉死）：
+Order of ``run_episode(policy, dataset, task, episode, out_dir, expect=None) -> EpisodeResult`` (each step pinned by
+unit tests):
 
-1. 造 ``EpisodeSpec`` 并核身份：``BenchmarkEnvBuilder.resolve_identity(episode)``（builder 按 ``(task, dataset)``
-   进程内缓存）；给了 ``expect``（队列里的身份行）就按 ``check_identity`` 逐键比 tier／seed／candidate／
-   spec_sha256／source_episode，不符写 ``error=IDENTITY_MISMATCH`` 的结果并抛 ``IdentityMismatch``（M1）；
-2. ``policy.reset(spec)``：抛 ``ServerDead``／``AstraStop`` 时不写结果、原样上抛（局还没开始，续跑会重做这一局）；
-3. 建录制器与 ``EnvSession``，先 ``session.build()``，失败记 ``infra=True infra_reason=env_build``、不进 play（M2）；
-   挂单局看门狗（墙钟、首推理期限、媒体收尾期限）；
-4. ``policy.play(session, spec, recorder)``；
-5. ``finally``：``session.close()`` → ``recorder.close()`` →（有 trace 时）出官方版式网站视频 → 写 ``result.json``
-   并追加 ``results.jsonl``。**绝不调 ``policy.load()``。**
+1. Build the ``EpisodeSpec`` and check the identity: ``BenchmarkEnvBuilder.resolve_identity(episode)`` (builders are
+   cached in-process per ``(task, dataset)``); when ``expect`` (the identity row from the queue) is given, compare
+   tier / seed / candidate / spec_sha256 / source_episode key by key via ``check_identity``; on mismatch write a
+   result with ``error=IDENTITY_MISMATCH`` and raise ``IdentityMismatch``;
+2. ``policy.reset(spec)``: if it raises ``ServerDead`` / ``AstraStop``, write no result and re-raise unchanged (the
+   episode has not started; a resumed run will redo it);
+3. Create the recorder and the ``EnvSession`` and call ``session.build()`` first; on failure record
+   ``infra=True infra_reason=env_build`` and skip play. Arm the per-episode watchdog (wall clock, first-inference
+   deadline, media-finalize deadline);
+4. ``policy.play(session, spec, recorder)``;
+5. ``finally``: ``session.close()`` -> ``recorder.close()`` -> (when there is a trace) render the official-layout
+   site video -> write ``result.json`` and append to ``results.jsonl``. **Never calls ``policy.load()``.**
 
-终态（已定口径第 5 条）：``error`` 并入 ``fail``、原值进 ``error_kind``；``StepCapReached`` 与 ``session.cap_hit``
-改记 ``timeout``；计数字段一律显式写 0（P4）。看门狗到点时先写 ``INFRA_TIMEOUT`` 结果、打印
-``SERVER_LEFT pid=… port=… metadata=… stop="scripts/evaluate.py --stop-server …"``，再 ``os._exit(75)``——只杀客户端，
-服务端子进程不动（S2）。
+Terminal status: ``error`` is folded into ``fail`` with the original value kept in ``error_kind``;
+``StepCapReached`` and ``session.cap_hit`` are recorded as ``timeout``; count fields are always written explicitly,
+including zeros. When the watchdog fires it first writes an ``INFRA_TIMEOUT`` result, prints
+``SERVER_LEFT pid=... port=... metadata=... stop="scripts/evaluate.py --stop-server ..."``, then calls
+``os._exit(75)`` -- only the client is killed; the server subprocess is left alone.
 
-产物树（§四）：``<out>/rollouts/<模型>/<数据集>/seed<policy_seed>/`` 下 ``results.jsonl``、``log.json``（``report``
-写）、``progress.json``、``videos/<Task>_ep<N>_<success|fail|timeout>_<task_goal>_<tier>.mp4``、
-``raw/<Task>_ep<N>_<tier>/``（录制器的 ``front.mkv``／``wrist.mkv``／``arrays.npz``／``meta.json``／``events.jsonl``／
-``frames-*.jsonl``，模型写的 ``trace.jsonl``，以及 ``result.json``）。``ep<N>``：ood 用 builder 局号 0～49，
-hard-verify 用官方原 episode 号（``source_episode``）。
+Output tree: under ``<out>/rollouts/<model>/<dataset>/seed<policy_seed>/`` there are ``results.jsonl``,
+``log.json`` (written by ``report``), ``progress.json``,
+``videos/<Task>_ep<N>_<success|fail|timeout>_<task_goal>_<tier>.mp4`` and ``raw/<Task>_ep<N>_<tier>/`` (the
+recorder's ``front.mkv`` / ``wrist.mkv`` / ``arrays.npz`` / ``meta.json`` / ``events.jsonl`` / ``frames-*.jsonl``,
+the model's ``trace.jsonl``, and ``result.json``). ``ep<N>``: ood uses the builder episode index 0-49, hard-verify
+uses the original official episode number (``source_episode``).
 """
 from __future__ import annotations
 
@@ -38,51 +44,53 @@ from typing import Any, Callable
 from robomme_ood_eval.session import (DATASETS, HARD_VERIFY, OOD, EnvSession, RecorderError, ResetBudgetExhausted,
                                        StepCapReached)
 
-#: 每个数据集的步数上限（已定口径第 3 条）；ood 严格截断（第 1801 步不进环境）
+#: step cap per dataset; ood truncates strictly (step 1801 never reaches the environment)
 DATASET_MAX_STEPS = {HARD_VERIFY: 1300, OOD: 1800}
 XHARD0 = "xhard0"
-#: 官方 16 任务（顺序同官方 ``TASK_NAME_LIST``）
+#: the 16 official tasks (same order as the official ``TASK_NAME_LIST``)
 TASKS = ("BinFill", "StopCube", "PickXtimes", "SwingXtimes", "ButtonUnmask", "VideoUnmask", "VideoUnmaskSwap",
          "ButtonUnmaskSwap", "PickHighlight", "VideoRepick", "VideoPlaceButton", "VideoPlaceOrder", "MoveCube",
          "InsertPeg", "PatternLock", "RouteStick")
-#: 单局墙钟缺省（秒）：按模型取，其余 1800；进程内第一局另加 FIRST_EPISODE_EXTRA_S
+#: default per-episode wall clock (seconds): per model, 1800 otherwise; the first episode in a process gets an
+#: extra FIRST_EPISODE_EXTRA_S
 DEFAULT_WALL_S = {"smvla": 900.0, "perceptual-framesamp-modul": 1200.0}
 FALLBACK_WALL_S = 1800.0
 FIRST_EPISODE_EXTRA_S = 600.0
 FIRST_INFER_DEADLINE_S = 1800.0
 MEDIA_DEADLINE_S = 1200.0
 EXIT_WALL = 75
-#: play 可返回的终态；落盘终态只有前三个
+#: terminal statuses play may return; only the first three are persisted
 PLAY_STATUSES = ("success", "fail", "timeout", "error")
 TERMINAL_STATUSES = ("success", "fail", "timeout")
-#: PlayOutput 必有字段
+#: required PlayOutput fields
 PLAY_REQUIRED = ("status", "task_success", "steps", "error", "infra", "infra_reason")
-#: 看门狗阶段 → infra_reason
+#: watchdog phase -> infra_reason
 WATCH_REASONS = {"episode_wall": "episode_wall", "first_infer": "deadline_first_infer",
                  "media_finalize": "deadline_media_finalize"}
-#: 硬退出函数（生产为 os._exit；单测替换成不退出的记录函数）
+#: hard-exit function (os._exit in production; unit tests replace it with a non-exiting recorder)
 HARD_EXIT: Callable[[int], Any] = os._exit
 
 
 class IdentityMismatch(RuntimeError):
-    """builder 解析出的身份与队列身份行不符（M1）：结果已写，调用方整批停。"""
+    """The identity resolved by the builder does not match the queue identity row: the result has been written and
+    the caller stops the whole batch."""
 
 
 class PlayContractError(ValueError):
-    """``play`` 返回值不满足 ``PlayOutput`` 契约。"""
+    """The value returned by ``play`` violates the ``PlayOutput`` contract."""
 
 
-# ── builder 缓存 ─────────────────────────────────────────────────────────────
+# -- builder cache -------------------------------------------------------------------
 
-#: 单测可替换：``(task, dataset, max_steps) -> builder``；None 时建真实 ``BenchmarkEnvBuilder``
+#: replaceable in unit tests: ``(task, dataset, max_steps) -> builder``; None builds a real ``BenchmarkEnvBuilder``
 BUILDER_FACTORY: Callable[[str, str, int], Any] | None = None
 _BUILDERS: dict[tuple[str, str], Any] = {}
 
 
 def builder_for(task: str, dataset: str):
-    """按 ``(task, dataset)`` 进程内缓存 builder（步数上限取 ``DATASET_MAX_STEPS[dataset]``）。"""
+    """Cache builders in-process per ``(task, dataset)`` (step cap from ``DATASET_MAX_STEPS[dataset]``)."""
     if dataset not in DATASET_MAX_STEPS:
-        raise ValueError(f"dataset={dataset!r} 不是 {tuple(DATASET_MAX_STEPS)} 之一")
+        raise ValueError(f"dataset={dataset!r} is not one of {tuple(DATASET_MAX_STEPS)}")
     ck = (task, dataset)
     if ck not in _BUILDERS:
         ms = DATASET_MAX_STEPS[dataset]
@@ -100,7 +108,7 @@ def clear_builders() -> None:
     _BUILDERS.clear()
 
 
-# ── 身份核对（抽自 seat.py::check_identity） ───────────────────────────────
+# -- identity check (extracted from seat.py::check_identity) -------------------------
 
 
 def _is_int(v: Any) -> bool:
@@ -112,23 +120,24 @@ def _same_int_or_null(a: Any, b: Any) -> bool:
 
 
 def check_identity(resolved: dict, want: dict, *, dataset: str = OOD) -> str | None:
-    """builder 解析出的身份必须与队列身份行一致；不一致返回说明。
+    """The identity resolved by the builder must match the queue identity row; returns a description on mismatch.
 
-    ood：tier／seed／candidate／spec_sha256 逐键严格相等（candidate 可空）；若身份行给了 source_episode 也须相等。
-    hard-verify：两边 tier 都是 xhard0，seed 与 source_episode 同为整数且相等，candidate 与 spec_sha256 两边都为 null。"""
+    ood: tier / seed / candidate / spec_sha256 strictly equal key by key (candidate may be empty); if the identity
+    row gives source_episode it must match too. hard-verify: tier is xhard0 on both sides, seed and source_episode
+    are equal integers, and candidate and spec_sha256 are null on both sides."""
     bad = []
     if resolved.get("tier") != want.get("tier"):
         bad.append(f"tier builder={resolved.get('tier')} want={want.get('tier')}")
     if dataset == HARD_VERIFY:
         if want.get("tier") != XHARD0:
-            bad.append(f"tier want={want.get('tier')} 不是 {XHARD0}")
+            bad.append(f"tier want={want.get('tier')} is not {XHARD0}")
         for k in ("seed", "source_episode"):
             rv, wv = resolved.get(k), want.get(k)
             if not (_is_int(rv) and _is_int(wv) and rv == wv):
                 bad.append(f"{k} builder={rv!r} want={wv!r}")
         for k in ("candidate", "spec_sha256"):
             if resolved.get(k) is not None or want.get(k) is not None:
-                bad.append(f"{k} builder={resolved.get(k)!r} want={want.get(k)!r} 须都为 null")
+                bad.append(f"{k} builder={resolved.get(k)!r} want={want.get(k)!r} must both be null")
         return "; ".join(bad) or None
     for k in ("seed", "candidate"):
         rv, wv = resolved.get(k), want.get(k)
@@ -141,16 +150,17 @@ def check_identity(resolved: dict, want: dict, *, dataset: str = OOD) -> str | N
     return "; ".join(bad) or None
 
 
-# ── 数据结构 ─────────────────────────────────────────────────────────────────
+# -- data structures -----------------------------------------------------------------
 
 
 @dataclasses.dataclass(frozen=True)
 class EpisodeSpec:
-    """一局的身份（不可变，外层造；来自 ``BenchmarkEnvBuilder.resolve_identity``）。
+    """One episode's identity (immutable, built by the outer loop; from ``BenchmarkEnvBuilder.resolve_identity``).
 
-    ``episode``：builder 局号（ood 0～49、hard-verify 0～11）；``source_episode``：xhard0 局的官方原号（新值档为
-    None）；``key``：``<Task>_<tier>_<seed>``；``max_steps``：1300／1800；``strict_cap``：ood 为真；``out_dir``：本局原始
-    产物目录 ``raw/<Task>_ep<N>_<tier>/``（模型的 ``trace.jsonl`` 写在这里）。"""
+    ``episode``: builder episode index (ood 0-49, hard-verify 0-11); ``source_episode``: original official number of
+    an xhard0 episode (None for new-value tiers); ``key``: ``<Task>_<tier>_<seed>``; ``max_steps``: 1300 / 1800;
+    ``strict_cap``: true for ood; ``out_dir``: this episode's raw output directory ``raw/<Task>_ep<N>_<tier>/``
+    (where the model writes ``trace.jsonl``)."""
 
     dataset: str
     task: str
@@ -169,14 +179,15 @@ class EpisodeSpec:
 
     def __post_init__(self):
         if self.dataset not in DATASET_MAX_STEPS:
-            raise ValueError(f"dataset={self.dataset!r} 不是 {tuple(DATASET_MAX_STEPS)} 之一")
+            raise ValueError(f"dataset={self.dataset!r} is not one of {tuple(DATASET_MAX_STEPS)}")
 
     @property
     def ep_label(self) -> int:
-        """文件名里的 ``ep<N>``：ood 用 builder 局号，hard-verify 用官方原 episode 号。"""
+        """``ep<N>`` in file names: ood uses the builder episode index, hard-verify the original official episode
+        number."""
         if self.dataset == HARD_VERIFY:
             if self.source_episode is None:
-                raise ValueError("hard-verify 局缺 source_episode")
+                raise ValueError("hard-verify episode is missing source_episode")
             return int(self.source_episode)
         return int(self.episode)
 
@@ -185,7 +196,7 @@ class EpisodeSpec:
         return f"{self.task}_ep{self.ep_label}_{self.tier}"
 
     def identity(self) -> dict:
-        """写进结果行与 trace header 的身份字段。"""
+        """Identity fields written to the result row and the trace header."""
         return {"dataset": self.dataset, "task": self.task, "episode": self.episode, "builder_episode": self.episode,
                 "source_episode": self.source_episode, "tier": self.tier, "seed": self.seed,
                 "candidate": self.candidate, "spec_sha256": self.spec_sha256, "key": self.key,
@@ -195,11 +206,12 @@ class EpisodeSpec:
 
 @dataclasses.dataclass
 class EpisodeResult:
-    """``run_episode`` 返回并落 ``result.json`` 的结果（字段即契约）。
+    """Result returned by ``run_episode`` and written to ``result.json`` (the fields are the contract).
 
-    ``status`` 只取 success／fail／timeout；``error_kind`` 记被并入 fail 的原终态（``error``），其余为 None；
-    计数字段 ``task_success``／``steps``／``exec_steps``／``reset_calls``／``decisions``／``demo_frames`` 一律显式写数；
-    ``extra`` 里的模型专属字段（如 PonderPounce 的 ``pp_sid_use_index``）在 ``to_dict`` 时平铺到顶层。"""
+    ``status`` is one of success / fail / timeout; ``error_kind`` records the original terminal status folded into
+    fail (``error``), None otherwise; the count fields ``task_success`` / ``steps`` / ``exec_steps`` /
+    ``reset_calls`` / ``decisions`` / ``demo_frames`` are always written explicitly; model-specific fields in
+    ``extra`` (e.g. PonderPounce's ``pp_sid_use_index``) are flattened to the top level by ``to_dict``."""
 
     dataset: str
     task: str
@@ -264,22 +276,23 @@ class EpisodeResult:
 
 
 def normalize_play_output(out: Any) -> dict:
-    """核 ``PlayOutput`` 契约：dict、必有字段齐全、status 合法；不满足抛 ``PlayContractError``。"""
+    """Check the ``PlayOutput`` contract: a dict with all required fields and a valid status; otherwise raise
+    ``PlayContractError``."""
     if not isinstance(out, dict):
-        raise PlayContractError(f"play 必须返回 dict，得到 {type(out).__name__}")
+        raise PlayContractError(f"play must return a dict, got {type(out).__name__}")
     missing = [k for k in PLAY_REQUIRED if k not in out]
     if missing:
-        raise PlayContractError(f"PlayOutput 缺必有字段 {missing}")
+        raise PlayContractError(f"PlayOutput is missing required fields {missing}")
     if out["status"] not in PLAY_STATUSES:
-        raise PlayContractError(f"PlayOutput.status={out['status']!r} 不在 {PLAY_STATUSES}")
+        raise PlayContractError(f"PlayOutput.status={out['status']!r} is not in {PLAY_STATUSES}")
     return dict(out)
 
 
-# ── 路径 ─────────────────────────────────────────────────────────────────────
+# -- paths ---------------------------------------------------------------------------
 
 
 def run_dir(out_dir: str | Path, policy_label: str, dataset: str, policy_seed: int) -> Path:
-    """``<out>/rollouts/<模型>/<数据集>/seed<policy_seed>/``。"""
+    """``<out>/rollouts/<model>/<dataset>/seed<policy_seed>/``."""
     return Path(out_dir) / "rollouts" / str(policy_label) / dataset / f"seed{int(policy_seed)}"
 
 
@@ -289,9 +302,10 @@ def _label(policy) -> str:
 
 def make_spec(policy, dataset: str, task: str, episode: int, out_dir: str | Path, *, attempt: int = 1
               ) -> tuple[EpisodeSpec, dict]:
-    """解析身份并造 ``EpisodeSpec``；返回 ``(spec, resolved)``。dataset 不是两者之一直接 ``ValueError``。"""
+    """Resolve the identity and build the ``EpisodeSpec``; returns ``(spec, resolved)``. A dataset that is neither
+    of the two raises ``ValueError`` directly."""
     if dataset not in DATASET_MAX_STEPS:
-        raise ValueError(f"dataset={dataset!r} 不是 {tuple(DATASET_MAX_STEPS)} 之一")
+        raise ValueError(f"dataset={dataset!r} is not one of {tuple(DATASET_MAX_STEPS)}")
     resolved = dict(builder_for(task, dataset).resolve_identity(int(episode)))
     tier, seed = resolved["tier"], int(resolved["seed"])
     src = resolved.get("source_episode")
@@ -307,12 +321,13 @@ def make_spec(policy, dataset: str, task: str, episode: int, out_dir: str | Path
 
 
 def result_path(policy, dataset: str, task: str, episode: int, out_dir: str | Path) -> Path:
-    """该局 ``result.json`` 的路径（续跑跳过用；只解析身份，不碰环境与模型）。"""
+    """Path of this episode's ``result.json`` (used to skip on resume; only resolves the identity, never touches the
+    environment or the model)."""
     spec, _ = make_spec(policy, dataset, task, episode, out_dir)
     return Path(spec.out_dir) / "result.json"
 
 
-# ── 写盘 ─────────────────────────────────────────────────────────────────────
+# -- writing -------------------------------------------------------------------------
 
 
 def dumps(obj: Any) -> str:
@@ -333,7 +348,7 @@ def _json_default(o: Any):
 
 
 def append_jsonl(path: Path, row: dict) -> None:
-    """追加一行并 fsync；前一行是崩溃留下的半行时先补换行。"""
+    """Append one line and fsync; if the previous line is a half line left by a crash, add a newline first."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "ab+") as f:
         f.seek(0, os.SEEK_END)
@@ -372,12 +387,12 @@ def _progress(spec: EpisodeSpec, phase: str, step: int = 0) -> None:
         pass
 
 
-# ── 看门狗 ───────────────────────────────────────────────────────────────────
+# -- watchdog ------------------------------------------------------------------------
 
 
 class _Watchdog:
-    """单局看门狗：每个阶段一个绝对期限计时器；到点由计时器线程写 ``INFRA_TIMEOUT`` 结果、打印 ``SERVER_LEFT``，再
-    ``HARD_EXIT(75)``（只杀客户端）。"""
+    """Per-episode watchdog: one absolute-deadline timer per phase; when it fires, the timer thread writes an
+    ``INFRA_TIMEOUT`` result, prints ``SERVER_LEFT``, then calls ``HARD_EXIT(75)`` (only the client is killed)."""
 
     def __init__(self, policy, spec: EpisodeSpec, result: EpisodeResult, state: dict):
         self.policy, self.spec, self.result, self.state = policy, spec, result, state
@@ -452,7 +467,8 @@ def _default_recorder(raw: Path, meta: dict):
 
 
 def _render(spec: EpisodeSpec, result: EpisodeResult, official_root: str | Path | None) -> None:
-    """有 ``trace.jsonl`` 时出官方版式网站视频到 ``videos/``；失败只记 ``video_error``，不改终态。"""
+    """When ``trace.jsonl`` exists, render the official-layout site video into ``videos/``; failures only record
+    ``video_error`` and never change the terminal status."""
     raw = Path(spec.out_dir)
     if not (raw / "trace.jsonl").is_file():
         result.video_error = "no_trace"
@@ -474,11 +490,13 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
                 render: bool = True, official_root: str | Path | None = None, wall_s: float | None = None,
                 first_infer_s: float | None = FIRST_INFER_DEADLINE_S,
                 media_s: float | None = MEDIA_DEADLINE_S) -> EpisodeResult:
-    """跑一局（顺序见模块说明）。``out_dir`` 是产物根（其下 ``rollouts/<模型>/<数据集>/seed<n>/``）。
+    """Run one episode (order described in the module docstring). ``out_dir`` is the output root (containing
+    ``rollouts/<model>/<dataset>/seed<n>/``).
 
-    关键字参数只供 GL 席位与单测：``attempt``（尝试号）、``ledger``（带 ``claim(what)`` 的 reset 预算账本）、
-    ``recorder_factory(raw_dir, meta)``（缺省真实 ``EpisodeRecorder``）、``render``（是否出网站视频）、
-    ``official_root``（官方 ``RolloutRecorder`` 所在仓根）、三个看门狗期限（None 或 0 不挂）。"""
+    Keyword arguments are only for the cluster seat runner and unit tests: ``attempt`` (attempt number), ``ledger``
+    (reset-budget ledger with ``claim(what)``), ``recorder_factory(raw_dir, meta)`` (default: the real
+    ``EpisodeRecorder``), ``render`` (whether to render site videos), ``official_root`` (repo root holding the
+    official ``RolloutRecorder``), and the three watchdog deadlines (None or 0 disables one)."""
     t_start = time.time()
     spec, resolved = make_spec(policy, dataset, task, episode, out_dir, attempt=attempt)
     raw = Path(spec.out_dir)
@@ -486,7 +504,7 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
     result.t_start = t_start
     result.raw_dir = str(raw.relative_to(raw.parent.parent))
     result.server_seed = policy.server_seed() if callable(getattr(policy, "server_seed", None)) else None
-    # ① 身份
+    # (1) identity
     if expect is not None:
         bad = check_identity(resolved, expect, dataset=dataset)
         if bad:
@@ -497,10 +515,11 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
             _write_result(result, spec)
             print(f"RUN_BLOCKED reason=identity key={spec.key} dataset={dataset} detail={bad}", flush=True)
             raise IdentityMismatch(bad)
-    # ② 局前：客户端状态、会话标识、探活、局前拒绝（ServerDead／AstraStop 原样上抛，不写结果）
+    # (2) pre-episode: client state, session identifiers, liveness probe, pre-episode refusals (ServerDead /
+    # AstraStop are re-raised unchanged and no result is written)
     _progress(spec, "reset")
     policy.reset(spec)
-    # ③ 录制器 + EnvSession + 看门狗
+    # (3) recorder + EnvSession + watchdog
     state: dict[str, Any] = {}
     dog = _Watchdog(policy, spec, result, state)
     first = int(getattr(policy, "episodes_run", 0) or 0) == 0
@@ -508,7 +527,7 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
             "resolved_identity": resolved}
     try:
         recorder = (recorder_factory or _default_recorder)(raw, meta)
-    except Exception as e:  # noqa: BLE001 录制器建不起来（如磁盘满）= 基础设施故障
+    except Exception as e:  # noqa: BLE001 recorder cannot be created (e.g. disk full) = infrastructure failure
         result.status, result.error_kind, result.infra, result.infra_reason = "fail", "error", True, "recorder"
         result.error = f"RecorderError: init: {type(e).__name__}: {e}"[:800]
         result.t_end = time.time()
@@ -533,7 +552,7 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
     try:
         try:
             session.build()
-        except Exception as e:  # noqa: BLE001 构建失败（如 Vulkan）按基础设施故障记，不进 play（M2）
+        except Exception as e:  # noqa: BLE001 build failure (e.g. Vulkan) is an infrastructure failure; skip play
             if session.budget_exhausted:
                 budget_exc = e
                 out = {"status": "error", "error": f"{type(e).__name__}: {e}"[:800], "infra": False,
@@ -550,13 +569,13 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
             except RecorderError as e:
                 out = {"status": "error", "error": f"RecorderError: {e}"[:800], "infra": True,
                        "infra_reason": "recorder"}
-            except Exception as e:  # noqa: BLE001 模型侧普通异常：记 error，照样收尾，Policy 继续下一局
+            except Exception as e:  # noqa: BLE001 ordinary model-side exception: record error, still finalize; the Policy moves on to the next episode
                 if session.budget_exhausted:
                     budget_exc = e
                 out = {"status": "error", "error": f"{type(e).__name__}: {e}"[:800], "infra": False,
                        "infra_reason": None, "traceback": traceback.format_exc()[-4000:]}
     except BaseException:
-        # KeyboardInterrupt／SystemExit：只收尾不写结果
+        # KeyboardInterrupt / SystemExit: finalize only, write no result
         dog.disarm_all()
         _safe(session.close)
         _safe(lambda: recorder.close({"status": "interrupted", "steps": session.steps}))
@@ -567,7 +586,7 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
     if state.get("fired"):
         return state["timeout_result"]
     wall = time.perf_counter() - t0
-    # ⑤ 收尾：session.close → recorder.close → 视频 → result.json
+    # (5) finalize: session.close -> recorder.close -> video -> result.json
     close_error = None
     try:
         session.close()
@@ -579,7 +598,7 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
     try:
         rsum = recorder.close({"status": out.get("status"), "steps": out.get("steps"), "exec_steps": session.steps,
                                "cap_hit": session.cap_hit})
-    except Exception as e:  # noqa: BLE001 收尾失败（如磁盘满）= 基础设施故障
+    except Exception as e:  # noqa: BLE001 finalize failure (e.g. disk full) = infrastructure failure
         rsum = {"RECORDER_VERIFY": "ERROR", "error": f"{type(e).__name__}: {e}"[:800]}
         out.update(infra=True, infra_reason="recorder_close")
     _classify(result, out, session)
@@ -614,7 +633,8 @@ def _safe(fn) -> None:
 
 
 def _classify(result: EpisodeResult, out: dict, session: EnvSession) -> None:
-    """执行段计数以环境侧为准；额度耗尽与步数到顶的分类覆盖模型自报；error 并入 fail。"""
+    """Execution counts follow the environment side; budget exhaustion and step-cap classification override what
+    the model reports; error is folded into fail."""
     status = out.get("status", "error")
     result.steps = int(out.get("steps") or 0)
     result.exec_steps = int(session.steps)
@@ -638,7 +658,7 @@ def _classify(result: EpisodeResult, out: dict, session: EnvSession) -> None:
         if status != "timeout":
             result.extra["client_status"] = status
         status = "timeout"
-        result.error = result.error or f"STEP_CAP exec_steps={session.steps} cap={session.step_cap} 未成功，按 timeout 计"
+        result.error = result.error or f"STEP_CAP exec_steps={session.steps} cap={session.step_cap} not successful, counted as timeout"
     if status == "error":
         result.status, result.error_kind = "fail", "error"
     else:

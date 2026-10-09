@@ -163,7 +163,7 @@ def test_official_render_reads_by_raw_codec(tmp_path, monkeypatch):
     (raw / "meta.json").write_text(json.dumps(meta))
     legacy = official_render.select_source(raw, "raw")
     assert legacy.raw_codec == "ffv1"
-    with pytest.raises(ValueError, match="有损降级"):
+    with pytest.raises(ValueError, match="lossy degradation"):
         official_render.decode_raw_new(recorder.find_ffmpeg(), raw, legacy, trace)
 
 

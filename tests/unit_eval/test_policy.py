@@ -71,7 +71,7 @@ def test_counters_count_outermost_call_only():
 
 def test_reset_contract_in_docstring():
     doc = Policy.__doc__ + (Policy.reset.__doc__ or "")
-    assert "不向服务端发任何消息" in doc and "不碰环境" in doc and "ServerDead" in doc
+    assert "send no message to the server" in doc and "never touch the environment" in doc and "ServerDead" in doc
 
 
 def test_load_policy_calls_load_once_and_context_closes():

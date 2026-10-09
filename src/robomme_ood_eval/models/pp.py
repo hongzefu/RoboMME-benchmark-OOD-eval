@@ -1,76 +1,96 @@
 #!/usr/bin/env python3
-"""PonderPounce 新侧客户端（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.4、1.7；子任务 S4）。
+"""PonderPounce new-side client.
 
-``run_episode(session, identity, conn_info, recorder) -> dict`` 由 ``env_client.SeatRunner.run_one`` 调用
-（``--policy pp`` 时按 ``load_sibling("pp_client")`` 加载）。环境侧是本仓库 ``EnvSession``（``robomme_hard``），
-模型侧是 vla-eval 0.7.0 协议的 PonderPounce 服务（``python -m ponderpounce.eval.robomme_server``）。
+``run_episode(session, identity, conn_info, recorder) -> dict`` is called by the seat runner's ``run_one`` (loaded
+via ``load_sibling("pp_client")`` for ``--policy pp``). The environment side is this repo's ``EnvSession``
+(``robomme_hard``); the model side is a PonderPounce server speaking the vla-eval 0.7.0 protocol
+(``python -m ponderpounce.eval.robomme_server``).
 
-逐项照 vla-eval 0.7.0 源码复刻（``runners/sync_runner.py::SyncEpisodeRunner.run_episode``、
-``benchmarks/robomme/benchmark.py::RoboMMEBenchmark``、``benchmarks/base.py::StepBenchmark``）：
+Reproduced item by item from the vla-eval 0.7.0 source (``runners/sync_runner.py::SyncEpisodeRunner.run_episode``,
+``benchmarks/robomme/benchmark.py::RoboMMEBenchmark``, ``benchmarks/base.py::StepBenchmark``):
 
-1. 连接：``vla_eval.connection.Connection(url, timeout=300.0)``，``connect(benchmark=PP_BENCHMARK)`` 完成 HELLO 握手
-   （PonderPounce 官方 ``configs/robomme.yaml`` 的 ``server.timeout`` 即 300.0）。
-2. ``session.reset()`` → 首条观测（``make_obs`` 同式：``images.agentview``／``images.wrist``、``task_description``、
-   ``states``（7 关节 float64 + 夹爪第 1 维，拼接后转 float32），首条另带 ``video_history = front_rgb_list[:-1]``、
-   ``wrist_video_history = wrist_rgb_list[:-1]``、``episode_restart=True``）。
-3. ``EPISODE_START``（服务端成功时不回复）：``{"task": {"name","env_id","episode_idx"},
-   "recording": {"sid","eid","eval_id": "","db_path": ""}}``；``sid`` 固定（见 ``fixed_sid``），``eid`` 与 ``sid`` 相同。
-4. ``for step in range(max_steps)``：``act(obs)`` → 动作 ``actions`` 展平为 Python float 列表、取前 8 维交给
-   ``session.step`` → ``terminated or truncated or info["status"] == "error"`` 即 ``break``（最后一帧不再发送）
-   → 否则按 ``make_obs`` 打包下一帧。上限恰好 ``max_steps`` 个动作（xhard0 为 1300；V9 由 session 的 strict cap 管，
-   循环上限与之相等）。
-5. 正常走完循环才发 ``EPISODE_END``：``{"metrics": {"success": status=="success"}, "steps": step+1,
-   "elapsed_sec": ...}``；中途异常不发（与 SyncEpisodeRunner 异常上抛时一致），连接一律关闭。
+1. Connect: ``vla_eval.connection.Connection(url, timeout=300.0)``, ``connect(benchmark=PP_BENCHMARK)`` completes the
+   HELLO handshake (``server.timeout`` in PonderPounce's official ``configs/robomme.yaml`` is 300.0).
+2. ``session.reset()`` -> first observation (same as ``make_obs``: ``images.agentview`` / ``images.wrist``,
+   ``task_description``, ``states`` (7 joints float64 + gripper dim 1, concatenated and cast to float32); the first
+   one additionally carries ``video_history = front_rgb_list[:-1]``, ``wrist_video_history = wrist_rgb_list[:-1]``,
+   ``episode_restart=True``).
+3. ``EPISODE_START`` (no reply when the server succeeds): ``{"task": {"name","env_id","episode_idx"},
+   "recording": {"sid","eid","eval_id": "","db_path": ""}}``; ``sid`` is fixed (see ``fixed_sid``), ``eid`` equals
+   ``sid``.
+4. ``for step in range(max_steps)``: ``act(obs)`` -> the action ``actions`` is flattened to a list of Python floats
+   and its first 8 dims are given to ``session.step`` -> ``terminated or truncated or info["status"] == "error"``
+   means ``break`` (the last frame is not sent) -> otherwise the next frame is packed with ``make_obs``. At most
+   exactly ``max_steps`` actions (1300 for xhard0; for the OOD dataset the session's strict cap applies and the loop
+   bound equals it).
+5. ``EPISODE_END`` is sent only when the loop completes normally: ``{"metrics": {"success": status=="success"},
+   "steps": step+1, "elapsed_sec": ...}``; not sent on an exception midway (consistent with SyncEpisodeRunner
+   re-raising), and the connection is always closed.
 
-固定 sid（计划 1.4「固定 sid」行）：xhard0 为 ``<task>|<source_episode>|<seed>``，V9 为 ``<task>|<tier>|<seed>``。
-PonderPounce 的噪声种子是 ``crc32(f"{seed}:{sid}:{n}")``，两侧各起自己的服务进程、同一 sid 在一个进程内只用一次，
-保证 ``n=0``。基础设施重试由席位脚本「重启服务再重发同一 sid」完成；本驱动内的 ``reconnect`` 只用于同一局内
-``ConnectionClosed`` 断线（至多 ``conn_info["pp_max_reconnects"]`` 次，缺省 1），**不重发 EPISODE_START**——
-注意 vla-eval 服务端对新连接分配新的会话 id，PonderPounce 收到无 EPISODE_START 的观测会回 ERROR，
-本局随之记 ``error``（``infra=True``），由席位脚本按基础设施故障处理。
+Fixed sid: ``<task>|<source_episode>|<seed>`` for xhard0, ``<task>|<tier>|<seed>`` for OOD tiers. PonderPounce's
+noise seed is ``crc32(f"{seed}:{sid}:{n}")``; each side starts its own server process and a sid is used only once
+per process, guaranteeing ``n=0``. Infrastructure retries are done by the seat runner "restarting the server and
+resending the same sid"; the ``reconnect`` in this driver is only for a ``ConnectionClosed`` within the same episode
+(at most ``conn_info["pp_max_reconnects"]`` times, default 1) and **does not resend EPISODE_START** -- note that the
+vla-eval server assigns a new session id to a new connection, and PonderPounce replies ERROR to observations without
+EPISODE_START, so the episode then records ``error`` (``infra=True``) and the seat runner handles it as an
+infrastructure failure.
 
-轨迹（计划 1.7）：每局一个 ``trace.jsonl``（``trace_writer.TraceWriter``，route ``pp-new``）。``request`` 行为每个
-局内协议帧（EPISODE_START／OBSERVATION／EPISODE_END，不含连接级 HELLO）的规范化字节 sha256（``canonical_frame_bytes``：
-键排序的 msgpack、数组按原始 dtype/shape 的原始字节、EPISODE_END 去掉墙钟字段 ``elapsed_sec``）；``response`` 行为
-服务返回的完整动作块；``step`` 行为执行后的画面、状态、交给环境的 8 维动作与终态。原侧 ``pp_official_runner.py``
-用本模块同一批辅助函数写轨迹，两侧字段口径一致。
+Trace: one ``trace.jsonl`` per episode (``trace_writer.TraceWriter``, route ``pp-new``). ``request`` lines are the
+sha256 of the normalized bytes of every in-episode protocol frame (EPISODE_START / OBSERVATION / EPISODE_END, not the
+connection-level HELLO) (``canonical_frame_bytes``: key-sorted msgpack, arrays as raw bytes in original dtype/shape,
+EPISODE_END without the wall-clock field ``elapsed_sec``); ``response`` lines are the full action chunk returned by the
+server; ``step`` lines are the post-step images, state, the 8-d action given to the environment and terminal flags.
+The original side ``pp_official_runner.py`` writes its trace with the same helpers from this module, so the fields
+match on both sides.
 
-``conn_info`` 读取的键：``host``（缺省 127.0.0.1）、``port``（必需）、``max_steps``（必需）、``dataset``（可选，
-``hard-verify`` 时要求 ``tier == "xhard0"``）、``trace_path``／``trace_dir``（可选；``trace_dir`` 为每局目录，
-见 ``resolve_trace_path``）、
-``pp_max_reconnects``（可选，缺省 1）、``pp_phase2``（可选，见下）、``attempt``／``episode_tag``（可选，第二阶段身份用）。
+Keys read from ``conn_info``: ``host`` (default 127.0.0.1), ``port`` (required), ``max_steps`` (required),
+``dataset`` (optional; ``hard-verify`` requires ``tier == "xhard0"``), ``trace_path`` / ``trace_dir`` (optional;
+``trace_dir`` is the per-episode directory, see ``resolve_trace_path``), ``pp_max_reconnects`` (optional, default 1),
+``pp_phase2`` (optional, see below), ``attempt`` / ``episode_tag`` (optional, for identity).
 
-第二阶段新侧（1005-eval-video-phase2-all-models-rerun-plan.md 第二部分一节「S5」、〇节 R2 与 C1～C11）：
-新行为一律由开关打开，默认（开关关）写出的协议帧与 ``trace.jsonl`` 与 ``BASE`` 逐字节相同。开关取
-``conn_info["pp_phase2"]``（显式给出时以它为准），否则环境变量 ``SGEVAL_PP_SERVER_WRAP=1``（席位脚本以外壳
-``pp_server_wrap.py`` 起服务时同时置位）。打开后：
+Extended new-side behavior (shared contracts C1-C11): all new behavior is turned on by a switch; by default (switch
+off) the protocol frames and ``trace.jsonl`` written are byte-identical to ``BASE``. The switch is
+``conn_info["pp_phase2"]`` (authoritative when given explicitly), otherwise the environment variable
+``SGEVAL_PP_SERVER_WRAP=1`` (set by the seat runner when starting the server with the ``pp_server_wrap.py``
+wrapper). When on:
 
-- 服务端外壳在每个 ACTION 回包里带 ``"subgoal"``（模型自己的子目标文本，等待中为 ``None``）；
-  ``TracedConnection.act`` 存进 ``last_subgoal``；回包缺这个键即判外壳未生效，本局记 ``error``
-  （``infra_reason=pp_subgoal_missing``），不拿环境标准答案冒充。
-- 逐步 ``subgoal`` 写模型子目标经 ``pp_subgoal_to_official`` 换算坐标后的文本（原文另记 ``subgoal_raw``）；
-  环境标准答案 ``info["simple_subgoal_online"]`` 改记同步号的 ``history`` 行，``note=oracle_simple_subgoal:<文本>``。
-- C1 route ``pp/new``；C2 演示段记全部 reset 帧（含初始帧），``end.demo_frames`` 为不含初始帧的演示帧数；
-  C3 ``terminal_reason`` 与 ``status`` 同取 ``success``／``fail``／``timeout``／``error``（旧口径的退出原因另记
-  ``exit_reason``），reset 之前就失败的局记 ``no_frame=true``；C4 交给环境的 float64 动作原值与观测步状态由
-  ``TraceWriter`` 收集，收尾经 ``trace_writer.merge_write_npz`` 写同目录 ``arrays.npz``（``exec_action__%05d``／
-  ``exec_state__%05d``；与同目录录像器的同名键同值合并，先后任意都不覆盖；第三阶段起本模块不再直接 ``np.savez``）；
-  C6 identity 加 ``attempt``；C8 ``end`` 写 ``steps_attempted``／``steps_observed``／``frames_recorded``，
-  环境异常步与空观测步用 ``log_missing_step`` 保留步号与动作。
+- the server wrapper attaches ``"subgoal"`` to every ACTION reply (the model's own subgoal text, ``None`` while
+  waiting); ``TracedConnection.act`` stores it in ``last_subgoal``; a reply without this key means the wrapper is not
+  in effect, and the episode records ``error`` (``infra_reason=pp_subgoal_missing``) instead of passing off the
+  environment's ground truth as the subgoal.
+- per-step ``subgoal`` records the model subgoal text after coordinate conversion by ``pp_subgoal_to_official`` (the
+  raw text is recorded as ``subgoal_raw``); the environment ground truth ``info["simple_subgoal_online"]`` is recorded
+  instead as a ``history`` line with the same step number, ``note=oracle_simple_subgoal:<text>``.
+- C1 route ``pp/new``; C2 the demo segment records all reset frames (including the initial frame), and
+  ``end.demo_frames`` is the demo frame count without the initial frame; C3 ``terminal_reason`` and ``status`` both
+  take ``success`` / ``fail`` / ``timeout`` / ``error`` (the old exit reason is recorded separately as
+  ``exit_reason``), and episodes that fail before reset record ``no_frame=true``; C4 the original float64 actions
+  given to the environment and the states of observed steps are collected by ``TraceWriter`` and at finalization
+  written via ``trace_writer.merge_write_npz`` to ``arrays.npz`` in the same directory (``exec_action__%05d`` /
+  ``exec_state__%05d``; merged with same-named keys of a recorder in the same directory with equal values, neither
+  overwriting the other in any order; this module no longer calls ``np.savez`` directly); C6 identity adds
+  ``attempt``; C8 ``end`` writes ``steps_attempted`` / ``steps_observed`` / ``frames_recorded``, and environment
+  exception steps and empty-observation steps keep their step number and action via ``log_missing_step``.
 
-第三阶段语言账本（冻结说明第五节；只在第二阶段开关打开且有轨迹落点时记，轨迹同目录 ``language.jsonl``）：
-每个观测一个 ``action_model`` 调用（发送前写 ``in``：``role=fields`` 的 ``task_description`` + 当前前视／腕部帧引用；
-回包后 pop 掉 ``_sgeval_audit``，逐通道写分词消息，``close_call`` 记 ``server_final_text``）；审计块带
-``pp_generation`` 时另开 ``subgoal_model`` 调用记 S2 完整生成块（见 ``TracedConnection._log_generation``；块带外壳
-解码的 S2 输入 ``input_text`` 时先记 ``in`` 消息与附图引用，回包后写，属第五节同类例外）。执行步
-``source_call_id`` 指向本步动作来自的 ``action_model`` 调用、``chunk_index=0``。审计键在动作交给环境之前一律 pop 掉，
-不改动作、RNG 与请求字节。
+Language ledger (only recorded with the switch on and a trace location; ``language.jsonl`` next to the trace): one
+``action_model`` call per observation (``in`` written before sending: ``role=fields`` ``task_description`` +
+references to the current front / wrist frames; after the reply ``_sgeval_audit`` is popped, per-channel tokenization
+messages are written, and ``close_call`` records ``server_final_text``); when the audit block carries
+``pp_generation`` a ``subgoal_model`` call is opened to record the full S2 generation block (see
+``TracedConnection._log_generation``; when the block carries the S2 input ``input_text`` decoded by the wrapper, the
+``in`` message and image references are written first -- written after the reply, the same kind of exception as
+other tokenization channel messages). Executed steps point via ``source_call_id`` to the ``action_model`` call their
+action came from, with ``chunk_index=0``. The audit key is always popped before actions reach the environment and
+never changes actions, RNG or request bytes.
 
-原侧 ``pp_official_runner.py``（R1 零改动）只调用本模块的默认路径：``TRACE_SCHEMA_ROUTE_ORIG`` 仍为 ``pp-orig``、
-``trace_reset``／``trace_step`` 不传新参数，原侧序列化输出与 ``BASE`` 逐字节相同。
+The original side ``pp_official_runner.py`` (unchanged) only calls the default paths of this module:
+``TRACE_SCHEMA_ROUTE_ORIG`` is still ``pp-orig`` and ``trace_reset`` / ``trace_step`` get no new arguments, so the
+original side's serialized output is byte-identical to ``BASE``.
 
-导入期只依赖标准库与 numpy；``vla_eval``（客户端扩展环境 client-env 内）、``anyio``、``msgpack``、``websockets``
-都在用到时才导入。单测通过 ``run_episode(..., connection_factory=...)`` 注入替身连接。
+At import time this only depends on the standard library and numpy; ``vla_eval`` (in the client extension
+environment client-env), ``anyio``, ``msgpack`` and ``websockets`` are imported only when used. Unit tests inject
+stand-in connections via ``run_episode(..., connection_factory=...)``.
 """
 from __future__ import annotations
 
@@ -84,55 +104,59 @@ from typing import Any, Callable
 
 import numpy as np
 
-#: HELLO 握手里带的 benchmark 名，与 PonderPounce 官方 configs/robomme.yaml 的 ``benchmark`` 相同
+#: benchmark name sent in the HELLO handshake, same as ``benchmark`` in PonderPounce's official configs/robomme.yaml
 PP_BENCHMARK = "vla_eval.benchmarks.robomme.benchmark:RoboMMEBenchmark"
-#: 每次 recv 的超时（秒），与官方 configs/robomme.yaml 的 ``server.timeout`` 相同
+#: timeout of each recv (seconds), same as ``server.timeout`` in the official configs/robomme.yaml
 PP_TIMEOUT_S = 300.0
-#: 交给环境的动作维数（7 关节 + 1 夹爪）
+#: action dims given to the environment (7 joints + 1 gripper)
 PP_ACTION_DIMS = 8
-#: 同一局内 ConnectionClosed 后的重连次数上限（缺省）
+#: default upper bound on reconnects after ConnectionClosed within one episode
 PP_MAX_RECONNECTS = 1
 XHARD0 = "xhard0"
 HARD_VERIFY = "hard-verify"
 TRACE_SCHEMA_ROUTE_NEW = "pp-new"
-#: 原侧 route；``pp_official_runner.py``（R1 零改动）引用本常量，保持旧值使原侧输出与 BASE 逐字节相同
+#: original-side route; referenced by ``pp_official_runner.py`` (unchanged), keeping the old value so the original
+#: side's output stays byte-identical to BASE
 TRACE_SCHEMA_ROUTE_ORIG = "pp-orig"
-#: 第二阶段新侧 route（C1）
+#: extended new-side route (C1)
 TRACE_ROUTE_NEW_C1 = "pp/new"
-#: 第二阶段开关的环境变量（与席位脚本起外壳服务的开关同名）
+#: environment variable of the extended-behavior switch (same name as the seat runner's switch for starting the
+#: wrapper server)
 PHASE2_ENV = "SGEVAL_PP_SERVER_WRAP"
-#: 服务端外壳回包里子目标的键（与 pp_server_wrap.SUBGOAL_KEY 相同）
+#: subgoal key in server wrapper replies (same as pp_server_wrap.SUBGOAL_KEY)
 SUBGOAL_KEY = "subgoal"
-#: 服务外壳回包审计键（冻结说明第五节；与 trace_writer.AUDIT_KEY 相同），交给环境前 pop 掉
+#: server wrapper reply audit key (same as trace_writer.AUDIT_KEY), popped before reaching the environment
 AUDIT_KEY = "_sgeval_audit"
-#: 环境标准答案在 history 行 note 里的前缀
+#: prefix of the environment ground truth in the note of history lines
 ORACLE_NOTE_PREFIX = "oracle_simple_subgoal:"
-#: 协议帧类型（与 vla_eval.protocol.messages.MessageType 的取值相同）
+#: protocol frame types (same values as vla_eval.protocol.messages.MessageType)
 HELLO, OBSERVATION, ACTION, EPISODE_START, EPISODE_END, ERROR = (
     "hello", "observation", "action", "episode_start", "episode_end", "error")
 
 
 def load_trace_writer():
-    """评估包的 ``record.trace_writer`` 模块（包内 import，已导入则复用；单测可整体替换本函数）。"""
+    """The evaluation package's ``record.trace_writer`` module (package import, reused if already imported; unit tests
+    may replace this function entirely)."""
     from robomme_ood_eval.record import trace_writer
 
     return trace_writer
 
 
-#: 「未提供」哨兵（R2／C7）：即 ``trace_writer.UNSET``，与 ``None``（模型等待中）区分
+#: "not provided" sentinel (C7): i.e. ``trace_writer.UNSET``, distinct from ``None`` (model is waiting)
 UNSET = load_trace_writer().UNSET
 
 
 def _is_unset(x: Any) -> bool:
-    """``UNSET`` 判定（按类名，兼容测试里按路径另载的 trace_writer 副本）。"""
+    """``UNSET`` check (by class name, compatible with trace_writer copies loaded by path in tests)."""
     return x is UNSET or type(x).__name__ == "_Unset"
 
 
-# ── 第二阶段：开关、子目标坐标换算 ─────────────────────────────────────────────
+# -- extended behavior: switch, subgoal coordinate conversion --------------------------
 
 
 def phase2_enabled(conn_info: dict) -> bool:
-    """第二阶段新侧开关：``conn_info["pp_phase2"]`` 显式给出时以它为准，否则看环境变量 ``SGEVAL_PP_SERVER_WRAP``。"""
+    """Extended new-side switch: ``conn_info["pp_phase2"]`` when given explicitly, otherwise the environment variable
+    ``SGEVAL_PP_SERVER_WRAP``."""
     if conn_info.get("pp_phase2") is not None:
         return bool(conn_info["pp_phase2"])
     return os.environ.get(PHASE2_ENV, "") == "1"
@@ -142,22 +166,25 @@ _AT_POINT = re.compile(r"\bat\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s
 
 
 def _to_255(v: str | float) -> int:
-    """0～1000 → 0～255：``v*255/1000`` 四舍五入（0.5 进位，不用银行家舍入），再夹到 0～255。"""
+    """0-1000 -> 0-255: ``v*255/1000`` rounded half up (no banker's rounding), then clamped to 0-255."""
     return max(0, min(255, int(math.floor(float(v) * 255.0 / 1000.0 + 0.5))))
 
 
 def pp_subgoal_to_official(text: str | None) -> str | None:
-    """PonderPounce 子目标里的每组 ``at [x, y]``（0～1000，先 x 后 y）换成官方版式 ``at <y', x'>``（0～255，先行后列）。
+    """Convert every ``at [x, y]`` (0-1000, x first) in a PonderPounce subgoal into the official layout ``at <y', x'>``
+    (0-255, row first).
 
-    ``y' = round(y*255/1000)``、``x' = round(x*255/1000)``，夹到 0～255；其余文字原样保留；``None`` 原样返回
-    （C7 等待中）。例：``"pick up the cube at [612, 247]"`` → ``"pick up the cube at <63, 156>"``。"""
+    ``y' = round(y*255/1000)``, ``x' = round(x*255/1000)``, clamped to 0-255; other text is kept unchanged; ``None``
+    is returned unchanged (C7 waiting). Example: ``"pick up the cube at [612, 247]"`` ->
+    ``"pick up the cube at <63, 156>"``."""
     if text is None:
         return None
     return _AT_POINT.sub(lambda m: f"at <{_to_255(m.group(2))}, {_to_255(m.group(1))}>", str(text))
 
 
 def attempt_of(identity: dict, conn_info: dict, trace_path: Path | None) -> int | None:
-    """C6 尝试号：``conn_info["attempt"]`` → ``episode_tag``（``<key>.a<N>``）→ 轨迹所在目录名 → ``identity["attempt"]``。"""
+    """C6 attempt number: ``conn_info["attempt"]`` -> ``episode_tag`` (``<key>.a<N>``) -> name of the trace's
+    directory -> ``identity["attempt"]``."""
     if conn_info.get("attempt") is not None:
         return int(conn_info["attempt"])
     for name in (conn_info.get("episode_tag"), trace_path.parent.name if trace_path is not None else None):
@@ -169,31 +196,34 @@ def attempt_of(identity: dict, conn_info: dict, trace_path: Path | None) -> int 
 
 
 class SubgoalMissing(RuntimeError):
-    """第二阶段开着，但 ACTION 回包没有 ``subgoal`` 键（服务端外壳未生效）。"""
+    """The extended switch is on, but the ACTION reply has no ``subgoal`` key (the server wrapper is not in
+    effect)."""
 
 
-# ── 身份与协议载荷 ──────────────────────────────────────────────────────────
+# -- identity and protocol payloads ----------------------------------------------------
 
 
 def fixed_sid(identity: dict, dataset: str | None = None) -> str:
-    """固定 sid：xhard0 ``<task>|<source_episode>|<seed>``；V9 ``<task>|<tier>|<seed>``。
+    """Fixed sid: xhard0 ``<task>|<source_episode>|<seed>``; OOD tiers ``<task>|<tier>|<seed>``.
 
-    ``dataset == "hard-verify"`` 时身份必须是 xhard0，否则 ``ValueError``（防止 V9 身份混进 hard0 分片）。"""
+    With ``dataset == "hard-verify"`` the identity must be xhard0, otherwise ``ValueError`` (prevents OOD identities
+    from mixing into hard-verify shards)."""
     task, tier, seed = identity["task"], identity.get("tier"), identity["seed"]
     if dataset == HARD_VERIFY and tier != XHARD0:
-        raise ValueError(f"dataset={dataset} 但身份 tier={tier!r}，不是 {XHARD0}")
+        raise ValueError(f"dataset={dataset} but identity tier={tier!r} is not {XHARD0}")
     if tier == XHARD0:
         src = identity["source_episode"]
         if not isinstance(src, int) or isinstance(src, bool):
-            raise ValueError(f"xhard0 身份的 source_episode 必须是整数：{src!r}")
+            raise ValueError(f"source_episode of an xhard0 identity must be an integer: {src!r}")
         return f"{task}|{int(src)}|{int(seed)}"
     if not tier:
-        raise ValueError(f"身份缺 tier：{identity!r}")
+        raise ValueError(f"identity is missing tier: {identity!r}")
     return f"{task}|{tier}|{int(seed)}"
 
 
 def episode_idx_of(identity: dict) -> int:
-    """EPISODE_START 的 ``task.episode_idx``：取官方局号 ``source_episode``（两侧一致）；没有时退回 ``builder_episode``。"""
+    """``task.episode_idx`` of EPISODE_START: the official episode number ``source_episode`` (same on both sides);
+    falls back to ``builder_episode``."""
     src = identity.get("source_episode")
     if isinstance(src, int) and not isinstance(src, bool):
         return int(src)
@@ -201,7 +231,7 @@ def episode_idx_of(identity: dict) -> int:
 
 
 def episode_start_payload(task: str, episode_idx: int, sid: str, eid: str) -> dict:
-    """与 ``SyncEpisodeRunner`` 在「记录器 is_active」时发出的 EPISODE_START 载荷同构。"""
+    """Same structure as the EPISODE_START payload ``SyncEpisodeRunner`` sends when "the recorder is_active"."""
     return {"task": {"name": task, "env_id": task, "episode_idx": int(episode_idx)},
             "recording": {"sid": sid, "eid": eid, "eval_id": "", "db_path": ""}}
 
@@ -211,21 +241,22 @@ def episode_end_payload(success: bool, steps: int, elapsed_sec: float) -> dict:
 
 
 def task_description_of(info: dict) -> str:
-    """``RoboMMEBenchmark.reset`` 同式：``info["task_goal"]`` 为列表取第 0 个，否则 ``str``。"""
+    """Same as ``RoboMMEBenchmark.reset``: take element 0 when ``info["task_goal"]`` is a list, otherwise ``str``."""
     goal = info["task_goal"]
     return goal[0] if isinstance(goal, list) else str(goal)
 
 
 def state8(joint: Any, gripper: Any) -> np.ndarray:
-    """``make_obs`` 同式的 8 维状态：float64 的 7 关节 + 夹爪第 1 维，拼接后转 float32。"""
+    """8-d state as in ``make_obs``: float64 7 joints + gripper dim 1, concatenated and cast to float32."""
     j = np.asarray(joint, dtype=np.float64)
     g = np.asarray(gripper, dtype=np.float64)[:1]
     return np.concatenate([j, g]).astype(np.float32)
 
 
 class ObsPacker:
-    """逐局一个，复刻 ``RoboMMEBenchmark.make_obs``（send_wrist_image／send_state／send_video_history 均为缺省 True，
-    send_subgoal 为缺省 False）。演示视频只随第一条非空观测发送一次，之后清空。"""
+    """One per episode, reproducing ``RoboMMEBenchmark.make_obs`` (send_wrist_image / send_state /
+    send_video_history all default True, send_subgoal default False). The demo video is sent only once with the
+    first non-empty observation and cleared afterwards."""
 
     def __init__(self) -> None:
         self.task_description = ""
@@ -263,8 +294,9 @@ class ObsPacker:
 
 
 def exec_action8(action_payload: dict) -> list[float]:
-    """``RoboMMEBenchmark.step`` 同式取 ``actions``（缺则 ``action``）并展平为 Python float 列表，再取前 8 维
-    （计划 1.4：``actions[0][:8]``；``(1, D)`` 展平后的前 8 个即第 0 行前 8 维）。"""
+    """Same as ``RoboMMEBenchmark.step``: take ``actions`` (or ``action`` if missing), flatten to a list of Python
+    floats, then take the first 8 dims (``actions[0][:8]``; the first 8 after flattening ``(1, D)`` are the first 8
+    dims of row 0)."""
     raw = action_payload.get("actions", action_payload.get("action"))
     if raw is None:
         raise ValueError("Action dict must contain 'actions' or 'action' key")
@@ -278,13 +310,14 @@ def exec_action8(action_payload: dict) -> list[float]:
 
 
 def step_done(terminated: Any, truncated: Any, info: dict) -> bool:
-    """``RoboMMEBenchmark.step`` 的 done 判据。"""
+    """The done criterion of ``RoboMMEBenchmark.step``."""
     return bool(terminated) or bool(truncated) or (isinstance(info, dict) and info.get("status") == "error")
 
 
 def terminal_status(done: bool, truncated: bool, info: dict | None) -> tuple[str, str | None]:
-    """局末状态映射：``success``／``fail``／``timeout`` 原样；环境 ``error`` 记 error；被截断且无明确状态记 timeout；
-    循环跑满 ``max_steps`` 仍未结束记 timeout；其余（``ongoing``／``unknown`` 等）记 error + ``success_flag=<值>``。"""
+    """End-of-episode status mapping: ``success`` / ``fail`` / ``timeout`` unchanged; environment ``error`` records
+    error; truncated without an explicit status records timeout; a loop that ran all ``max_steps`` without ending
+    records timeout; anything else (``ongoing`` / ``unknown`` etc.) records error + ``success_flag=<value>``."""
     st = (info or {}).get("status") if isinstance(info, dict) else None
     if not done:
         return "timeout", None
@@ -297,11 +330,12 @@ def terminal_status(done: bool, truncated: bool, info: dict | None) -> tuple[str
     return "error", f"success_flag={st}"
 
 
-# ── 规范化字节与轨迹 ──────────────────────────────────────────────────────
+# -- normalized bytes and trace --------------------------------------------------------
 
 
 def _normalize(obj: Any) -> Any:
-    """键排序、数组转「dtype/shape/原始字节」字典、numpy 标量转 Python 标量（不经 PNG，保证确定）。"""
+    """Sort keys, turn arrays into "dtype/shape/raw bytes" dicts, numpy scalars into Python scalars (no PNG, so it is
+    deterministic)."""
     if isinstance(obj, dict):
         return {str(k): _normalize(obj[k]) for k in sorted(obj, key=str)}
     if isinstance(obj, (list, tuple)):
@@ -315,8 +349,8 @@ def _normalize(obj: Any) -> Any:
 
 
 def canonical_frame_bytes(msg_type: str, payload: Any) -> bytes:
-    """一个协议帧的规范化字节（轨迹 request 行的哈希来源）。EPISODE_END 去掉墙钟 ``elapsed_sec``；
-    帧头的 ``seq``／``timestamp`` 不计入。"""
+    """Normalized bytes of one protocol frame (the hash source of trace request lines). EPISODE_END drops the
+    wall-clock ``elapsed_sec``; the frame header's ``seq`` / ``timestamp`` are not included."""
     import msgpack
 
     if msg_type == EPISODE_END and isinstance(payload, dict):
@@ -325,7 +359,7 @@ def canonical_frame_bytes(msg_type: str, payload: Any) -> bytes:
 
 
 class NullTrace:
-    """不写轨迹时的空实现（接口同 trace_writer.TraceWriter）。"""
+    """No-op implementation when no trace is written (same interface as trace_writer.TraceWriter)."""
 
     exec_steps = 0
 
@@ -339,11 +373,13 @@ class NullTrace:
 
 
 def trace_reset(trace, raw_obs: dict, task_description: str, *, include_initial: bool = False) -> int:
-    """演示行：``video_history``（= ``front_rgb_list[:-1]``）逐帧画面哈希、腕部同位帧、逐帧 8 维状态与指令文本。
-    返回演示帧数（不含初始帧）。
+    """Demo line: per-frame image hashes of ``video_history`` (= ``front_rgb_list[:-1]``), wrist frames at the same
+    positions, per-frame 8-d states and the instruction text. Returns the demo frame count (excluding the initial
+    frame).
 
-    ``include_initial=True``（第二阶段新侧，C2）：演示行记 reset 返回的全部帧（含最后一帧初始画面），
-    ``frames == len(states) ==`` 返回值 ``+ 1``。缺省 False 与 BASE 逐字节相同（原侧不传）。"""
+    ``include_initial=True`` (extended new side, C2): the demo line records all frames returned by reset (including
+    the final initial frame), ``frames == len(states) ==`` return value ``+ 1``. The default False is byte-identical
+    to BASE (the original side does not pass it)."""
     if include_initial:
         fronts = list(raw_obs["front_rgb_list"])
         wrists = list(raw_obs.get("wrist_rgb_list", []))
@@ -363,12 +399,15 @@ def trace_reset(trace, raw_obs: dict, task_description: str, *, include_initial:
 
 def trace_step(trace, step_no: int, out: tuple, action8: list[float], subgoal: Any = UNSET,
                link: dict | None = None) -> bool:
-    """执行完第 ``step_no`` 步（从 1 计）的一行；``out`` 为环境 ``step`` 的五元组。返回本步是否有完整观测。
+    """One line after executing step ``step_no`` (from 1); ``out`` is the 5-tuple of the environment ``step``. Returns
+    whether this step has a complete observation.
 
-    ``subgoal`` 缺省（``UNSET``）：逐步 ``subgoal`` 记环境标准答案 ``info["simple_subgoal_online"]``，写出与 BASE
-    逐字节相同（原侧只走这条路）。显式传入模型子目标（文本，或 ``None``＝模型等待中）：``subgoal`` 记
-    ``pp_subgoal_to_official`` 换算后的文本、``subgoal_raw`` 记原文；标准答案改记同步号 ``history`` 行
-    （``note=oracle_simple_subgoal:<文本>``，标准答案为空的步不记）；没有完整观测的步改用 ``log_missing_step``（C8）。"""
+    ``subgoal`` default (``UNSET``): per-step ``subgoal`` records the environment ground truth
+    ``info["simple_subgoal_online"]``, byte-identical to BASE (the original side only takes this path). With an
+    explicit model subgoal (text, or ``None`` = model is waiting): ``subgoal`` records the text converted by
+    ``pp_subgoal_to_official`` and ``subgoal_raw`` the raw text; the ground truth is recorded instead as a ``history``
+    line with the same step number (``note=oracle_simple_subgoal:<text>``, not recorded for steps with an empty ground
+    truth); steps without a complete observation use ``log_missing_step`` instead (C8)."""
     obs, _reward, terminated, truncated, info = out
     info = info if isinstance(info, dict) else {}
     front = wrist = state = None
@@ -388,7 +427,7 @@ def trace_step(trace, step_no: int, out: tuple, action8: list[float], subgoal: A
     raw = None if subgoal is None else str(subgoal)
     official = pp_subgoal_to_official(raw)
     action = np.asarray(action8, dtype=np.float64)
-    link = {k: v for k, v in (link or {}).items() if v is not None}  # 第三阶段 source_call_id／chunk_index
+    link = {k: v for k, v in (link or {}).items() if v is not None}  # source_call_id / chunk_index
     if observed:
         trace.log_step(step=step_no, front=front, wrist=wrist, state=state, action=action, subgoal=official,
                        terminated=bool(terminated), truncated=bool(truncated), status=info.get("status"),
@@ -402,12 +441,15 @@ def trace_step(trace, step_no: int, out: tuple, action8: list[float], subgoal: A
 
 
 class TracedConnection:
-    """包住 vla-eval ``Connection``：局内每个协议帧写轨迹 request／response 行并计数；其余属性透传。
+    """Wraps the vla-eval ``Connection``: every in-episode protocol frame writes trace request / response lines and
+    is counted; other attributes pass through.
 
-    ``SyncEpisodeRunner`` 只调用 ``start_episode``／``act``／``end_episode``，原侧把本包装直接交给它。
+    ``SyncEpisodeRunner`` only calls ``start_episode`` / ``act`` / ``end_episode``; the original side hands this
+    wrapper to it directly.
 
-    ``last_subgoal``：最近一次 ACTION 回包里 ``"subgoal"`` 的值（服务端外壳 ``pp_server_wrap.py`` 才有；文本或
-    ``None``＝模型等待中）；回包没有这个键时为 ``UNSET``。只读记录，不影响轨迹与返回值。"""
+    ``last_subgoal``: the ``"subgoal"`` value of the most recent ACTION reply (only present with the server wrapper
+    ``pp_server_wrap.py``; text or ``None`` = model is waiting); ``UNSET`` when the reply lacks the key. A read-only
+    record that does not affect the trace or return values."""
 
     def __init__(self, conn: Any, trace=None, lang=None) -> None:
         self._conn = conn
@@ -415,12 +457,12 @@ class TracedConnection:
         self.frames_sent = 0
         self.actions_received = 0
         self.last_subgoal: Any = UNSET
-        # 第三阶段语言账本（冻结说明第五节；None 时不记，原侧与第二阶段开关关时都不传）
+        # language ledger (None means nothing is recorded; not passed on the original side or with the switch off)
         self.lang = lang
         self.lang_errors = 0
-        self.last_call_id: str | None = None  # 最近一次成功回包的 action_model 调用（执行步的 source_call_id）
-        self.last_audit: Any = None           # 最近一次回包里 pop 出的 ``_sgeval_audit``
-        self.demo_index: int | None = None    # 演示段末帧（初始画面）在 trace demo 行里的下标
+        self.last_call_id: str | None = None  # action_model call of the most recent successful reply (source_call_id of executed steps)
+        self.last_audit: Any = None           # ``_sgeval_audit`` popped from the most recent reply
+        self.demo_index: int | None = None    # index of the last demo frame (initial image) in the trace demo line
         self._failed_step: int | None = None
         self._transport_attempt = 0
 
@@ -432,7 +474,7 @@ class TracedConnection:
         self.frames_sent += 1
         await self._conn.start_episode(config)
 
-    # -- 语言账本辅助：一律吞异常、计 lang_errors，不改请求、动作与控制流 --
+    # -- language ledger helpers: always swallow exceptions and count lang_errors, never changing requests, actions or control flow --
     def _lang(self, fn: str, *a, **k) -> Any:
         if self.lang is None:
             return None
@@ -457,16 +499,20 @@ class TracedConnection:
         return refs or None
 
     def _log_generation(self, step: int, gen: Any, obs: Any = None) -> None:
-        """S2 完整生成块记成一个 ``subgoal_model`` 调用（服务端内部推理，事后记账）。
+        """Record a full S2 generation block as one ``subgoal_model`` call (server-internal inference, recorded after
+        the fact).
 
-        读取的键（R3 外壳写入，缺键记 None）：``context``／``prompt``（S2 输入全文，含回灌历史）、``images``（附图引用）、
-        ``text``（完整生成块原文）、``reasoning``、``subgoal_raw``（``at [x, y]`` 原文）、``kind``（``transition``／
-        ``nontransition``）、``committed``（提交或回滚）。``parsed`` 记换算后子目标与整块原样；nontransition 显式记
-        ``text_output=False``、``out`` 文字为 None。
+        Keys read (written by the wrapper; None when missing): ``context`` / ``prompt`` (full S2 input text,
+        including fed-back history), ``images`` (image references), ``text`` (raw full generation block),
+        ``reasoning``, ``subgoal_raw`` (raw ``at [x, y]`` text), ``kind`` (``transition`` / ``nontransition``),
+        ``committed`` (committed or rolled back). ``parsed`` records the converted subgoal and the whole block
+        unchanged; nontransition explicitly records ``text_output=False`` and the ``out`` text as None.
 
-        FIX-3：块带 ``input_text``（外壳从 S2 上下文 token 解码的输入文字）时，先写 ``dir=in role=user`` 消息（附图按
-        ``input_images`` 解析成帧引用，见 ``_s2_input_images``），``parsed`` 另记 ``input_decoded_from_tokens=True`` 与
-        ``input_image_check``，``parsed.generation`` 去掉 ``input_text``（不重复存）；没有该键时与之前逐字节相同。"""
+        When the block carries ``input_text`` (input text decoded by the wrapper from S2 context tokens), a
+        ``dir=in role=user`` message is written first (images resolved into frame references from ``input_images``,
+        see ``_s2_input_images``), ``parsed`` additionally records ``input_decoded_from_tokens=True`` and
+        ``input_image_check``, and ``parsed.generation`` drops ``input_text`` (not stored twice); without the key the
+        output is byte-identical to before."""
         if not isinstance(gen, dict):
             return
         cid = self._lang("open_call", "subgoal_model", step, params=gen.get("params"))
@@ -475,12 +521,14 @@ class TracedConnection:
         decoded = isinstance(gen.get("input_text"), str)
         check = None
         if decoded:
-            # FIX-3：S2 输入是服务外壳从上下文 token 解码出的文字（本次 fire 前新增的段：首次含任务前缀与演示图，之后含
-            # 回灌的上一子目标与 cognition 占位、本次观测图）。它来自回包，只能在回包后写——与冻结说明第五节已登记的
-            # 「带 channel 的分词通道消息」同类的「发送前落盘」例外；仍记 dir=in（描述的是进模型的内容）。
+            # the S2 input is text decoded by the server wrapper from context tokens (segments added before this
+            # fire: the first one includes the task prefix and demo images, later ones the fed-back previous subgoal,
+            # cognition placeholders and this observation image). It comes from the reply, so it can only be written
+            # after the reply -- the same kind of exception to "persist before sending" as the tokenization channel
+            # messages; it is still recorded as dir=in (it describes what went into the model).
             try:
                 imgs, demo_video, check = self._s2_input_images(gen.get("input_images"), obs, step)
-            except Exception as e:  # noqa: BLE001 账本辅助一律不影响控制流
+            except Exception as e:  # noqa: BLE001 ledger helpers never affect control flow
                 self.lang_errors += 1
                 print(f"TRACE_HOOK_ERROR route=pp/new where=language.s2_images {type(e).__name__}: {e}"[:600],
                       flush=True)
@@ -499,22 +547,24 @@ class TracedConnection:
         parsed = {"subgoal": pp_subgoal_to_official(None if raw is None else str(raw)), "subgoal_raw": raw,
                   "reasoning": gen.get("reasoning"), "kind": kind, "committed": gen.get("committed"),
                   "text_output": not nontransition and text is not None, "generation": gen}
-        if decoded:  # 行 schema 冻结：标志与图核对结果落在 parsed；输入原文已在 in 消息里，generation 不再重复
+        if decoded:  # the line schema is frozen: flags and the image check go into parsed; the raw input is already in the in message, so generation does not repeat it
             parsed["generation"] = {k: v for k, v in gen.items() if k != "input_text"}
             parsed["input_decoded_from_tokens"] = True
             parsed["input_image_check"] = check
         self._lang("close_call", cid, status="reply", parsed=parsed)
 
     def _s2_input_images(self, descs: Any, obs: Any, step: int) -> tuple[list | None, str | None, dict]:
-        """S2 输入第 k 个 ``<image:k>`` → 冻结说明的 images 元素（slot=k）。
+        """The k-th ``<image:k>`` of the S2 input -> an images element (slot=k).
 
-        - ``source=obs``：本次观测（S2 fire 发生在处理这条观测时，生成块随它的回包返回），帧号与 ``_image_refs`` 同口径
-          （step 0 为 demo 段末帧 ``demo_index``，k≥1 为执行第 k 步后），``raw_sha256`` 用客户端对发出原始帧的哈希
-          （即 trace 帧哈希），与外壳的 ``pixel_sha256`` 核对；
-        - ``source=demo``：S2 前缀里的演示图（服务端按 demo_fps 抽帧）；在本次观测的 ``video_history``（= trace demo
-          行前 N 帧）里按像素哈希顺序匹配出帧号，``ref=keyframe``、``cam=front``；匹配不上时帧号 None、``raw_sha256``
-          取外壳哈希（检查器会如实报 unresolved）。
-        返回 ``(images, demo_video, check)``；check = ``{"n", "sha_mismatch", "demo_unmatched"}``。"""
+        - ``source=obs``: this observation (S2 fires while processing this observation and the generation block comes
+          back with its reply); the frame number follows ``_image_refs`` (step 0 is the last demo frame
+          ``demo_index``, k>=1 is after executing step k), and ``raw_sha256`` uses the client's hash of the raw frame
+          it sent (i.e. the trace frame hash), checked against the wrapper's ``pixel_sha256``;
+        - ``source=demo``: demo images in the S2 prefix (sampled by the server at demo_fps); the frame number is
+          matched in order by pixel hash within this observation's ``video_history`` (= the first N frames of the
+          trace demo line), with ``ref=keyframe``, ``cam=front``; when unmatched the frame number is None and
+          ``raw_sha256`` takes the wrapper hash (the checker reports it as unresolved).
+        Returns ``(images, demo_video, check)``; check = ``{"n", "sha_mismatch", "demo_unmatched"}``."""
         check = {"n": 0, "sha_mismatch": 0, "demo_unmatched": 0}
         if not isinstance(descs, list) or not descs:
             return None, None, check
@@ -560,7 +610,7 @@ class TracedConnection:
         self.trace.log_request(OBSERVATION, canonical_frame_bytes(OBSERVATION, obs), step=step)
         self.frames_sent += 1
         cid = None
-        if self.lang is not None:  # 发送前落盘：每个观测一个 action_model 调用
+        if self.lang is not None:  # persist before sending: one action_model call per observation
             self._transport_attempt = self._transport_attempt + 1 if self._failed_step == step else 0
             cid = self._lang("open_call", "action_model", step, transport_attempt=self._transport_attempt)
             if cid is not None:
@@ -574,7 +624,7 @@ class TracedConnection:
             self._failed_step = step
             raise
         self._failed_step = None
-        # 第三阶段：服务外壳审计键在动作交给环境之前 pop 掉（只进语言账本）
+        # pop the server wrapper audit key before actions reach the environment (it only goes to the language ledger)
         self.last_audit = action.pop(AUDIT_KEY, None) if isinstance(action, dict) else None
         self.actions_received += 1
         if isinstance(action, dict) and SUBGOAL_KEY in action:
@@ -594,8 +644,9 @@ class TracedConnection:
                     self.lang_errors += 1
                     print(f"TRACE_HOOK_ERROR route=pp/new where=language.audit {type(e).__name__}: {e}"[:600],
                           flush=True)
-            # 服务外壳标了 text_reconstructed 的通道（S1 prompt 原文是重拼的，token_ids／mask 才是真实截获）：message 行
-            # schema 冻结、没有自由字段，标志落在本调用 call_close.parsed（无标志时 parsed 仍为 None，与之前相同）
+            # channels the server wrapper marked text_reconstructed (the S1 raw prompt is rebuilt; only token_ids /
+            # mask are truly captured): the message line schema is frozen with no free fields, so the flag goes into
+            # this call's call_close.parsed (without the flag parsed stays None, as before)
             chans = self.last_audit.get("channels") if isinstance(self.last_audit, dict) else None
             recon = sorted({str(c.get("channel")) for c in (chans or [])
                             if isinstance(c, dict) and c.get("text_reconstructed")})
@@ -615,9 +666,10 @@ class TracedConnection:
 
 
 def resolve_trace_path(identity: dict, conn_info: dict, recorder: Any) -> Path | None:
-    """轨迹文件位置：``conn_info["trace_path"]``；否则 ``conn_info["trace_dir"]``（env_client 给的**每局目录**
-    ``<trace-root>/<key>.a<attempt>``，SeatRunner 不预先建，由 TraceWriter 建父目录；未给 ``--trace-root`` 时为
-    None）下的 ``trace.jsonl``；否则录像器目录下 ``trace.jsonl``；都没有则不写轨迹。"""
+    """Trace file location: ``conn_info["trace_path"]``; otherwise ``trace.jsonl`` under ``conn_info["trace_dir"]``
+    (the **per-episode directory** ``<trace-root>/<key>.a<attempt>`` given by the seat runner, not created in advance;
+    TraceWriter creates the parent; None when ``--trace-root`` is not given); otherwise ``trace.jsonl`` in the
+    recorder directory; if none applies no trace is written."""
     if conn_info.get("trace_path"):
         return Path(conn_info["trace_path"])
     if conn_info.get("trace_dir"):
@@ -637,7 +689,8 @@ def is_connection_closed(exc: BaseException) -> bool:
 
 
 def classify_exception(exc: BaseException) -> tuple[str, str | None, bool]:
-    """``(status, infra_reason, infra)``：连接／服务类为基础设施故障，``StepCapReached`` 记 timeout，其余记 error。"""
+    """``(status, infra_reason, infra)``: connection / server errors are infrastructure failures, ``StepCapReached``
+    records timeout, everything else records error."""
     name = type(exc).__name__
     if name == "StepCapReached":
         return "timeout", None, False
@@ -657,17 +710,18 @@ def classify_exception(exc: BaseException) -> tuple[str, str | None, bool]:
 
 
 def default_connection_factory(url: str, timeout: float) -> Any:
-    """运行时才导入 vla-eval（客户端扩展环境 client-env 内）。"""
+    """Import vla-eval only at runtime (in the client extension environment client-env)."""
     from vla_eval.connection import Connection
 
     return Connection(url, timeout=timeout)
 
 
-# ── 新侧一局 ───────────────────────────────────────────────────────────────
+# -- one new-side episode ----------------------------------------------------------------
 
 
 class _EnvError(Exception):
-    """包住 ``session.step``／``session.reset`` 里环境侧抛出的异常，与连接异常区分。"""
+    """Wraps exceptions raised on the environment side in ``session.step`` / ``session.reset``, to tell them apart
+    from connection exceptions."""
 
     def __init__(self, inner: BaseException):
         super().__init__(f"{type(inner).__name__}: {inner}")
@@ -676,7 +730,8 @@ class _EnvError(Exception):
 
 def run_episode(session, identity: dict, conn_info: dict, recorder, *,
                 connection_factory: Callable[[str, float], Any] | None = None) -> dict:
-    """env_client 调用入口：一局 PonderPounce。``session`` 为已 build 的 EnvSession（或同接口替身）。"""
+    """Entry point called by the seat runner: one PonderPounce episode. ``session`` is an already built EnvSession
+    (or a stand-in with the same interface)."""
     import anyio
 
     return anyio.run(_run_episode_async, session, identity, conn_info, recorder,
@@ -702,12 +757,12 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
                    "builder_episode": identity.get("builder_episode"),
                    "key": identity.get("key"), "dataset": dataset, "sid": sid,
                    "episode_idx": ep_idx, "side": "new"}
-        # 开关关（旧口径）时不收集完整数组：局目录只有 trace.jsonl、end 行无 arrays 摘要，与 BASE 逐字节相同
+        # with the switch off (old behavior) full arrays are not collected: the episode directory only has trace.jsonl and the end line has no arrays summary, byte-identical to BASE
         tw_kw: dict[str, Any] = {"collect_arrays": phase2}
-        if phase2:  # C6：加尝试号（开关关时 identity 与 BASE 逐字节相同）
+        if phase2:  # C6: add the attempt number (with the switch off identity is byte-identical to BASE)
             ident_t["attempt"] = attempt_of(identity, conn_info, trace_path)
             seed = conn_info.get("policy_seed", identity.get("policy_seed"))
-            if seed is not None:  # 冻结说明四.1：identity／header 记 policy_seed；未给时不写
+            if seed is not None:  # identity / header record policy_seed; not written when absent
                 ident_t["policy_seed"] = int(seed)
                 tw_kw["policy_seed"] = int(seed)
             if conn_info.get("effective_cap") is not None:
@@ -717,7 +772,7 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
     else:
         trace = NullTrace()
     lang = None
-    if phase2 and trace_path is not None:  # 第三阶段语言账本：轨迹同目录 language.jsonl
+    if phase2 and trace_path is not None:  # language ledger: language.jsonl next to the trace
         try:
             LanguageLog = getattr(load_trace_writer(), "LanguageLog", None)
             lang = LanguageLog(trace_path.parent / "language.jsonl") if LanguageLog is not None else None
@@ -732,9 +787,9 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
     tconn = TracedConnection(conn, trace, lang=lang)
     status, error, infra, infra_reason, env_exc = "error", None, False, None, None
     executed = 0
-    attempted = observed = 0  # C8（只在第二阶段写进 end）
-    # C4：交给环境的动作原值由 TraceWriter 逐步收集，收尾经 merge_write_npz 写 arrays.npz（第三阶段，不再直接 np.savez）
-    model_subgoal: Any = UNSET  # 第二阶段：本步回包里的模型子目标
+    attempted = observed = 0  # C8 (only written into end with the switch on)
+    # C4: original actions given to the environment are collected per step by TraceWriter and written to arrays.npz via merge_write_npz at finalization (no direct np.savez)
+    model_subgoal: Any = UNSET  # the model subgoal in this step's reply
     trace_reason = None
     t_start = time.perf_counter()
     try:
@@ -742,14 +797,14 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
         await conn.connect(benchmark=PP_BENCHMARK)
         timing["connect_s"] = time.perf_counter() - t0
 
-        bench_t0 = time.monotonic()  # StepBenchmark.start_episode 在 reset 之前取 _t0
+        bench_t0 = time.monotonic()  # StepBenchmark.start_episode takes _t0 before reset
         try:
             raw_obs, info = session.reset()
         except Exception as e:  # noqa: BLE001
             raise _EnvError(e) from e
         packer.on_reset(raw_obs, info)
         result["demo_frames"] = trace_reset(trace, raw_obs, packer.task_description, include_initial=phase2)
-        tconn.demo_index = result["demo_frames"]  # include_initial 时初始画面在 demo 行的下标 = 演示帧数
+        tconn.demo_index = result["demo_frames"]  # with include_initial the initial image's index in the demo line = demo frame count
         obs = packer.make(raw_obs)
         start = episode_start_payload(task, ep_idx, sid, eid)
         await tconn.start_episode(start)
@@ -767,15 +822,15 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
             a8 = exec_action8(action)
             if phase2:
                 if _is_unset(tconn.last_subgoal):
-                    raise SubgoalMissing(f"第二阶段开着但第 {step + 1} 个 ACTION 回包没有 {SUBGOAL_KEY!r} 键"
-                                         "（服务端外壳 pp_server_wrap.py 未生效）")
+                    raise SubgoalMissing(f"extended switch is on but ACTION reply {step + 1} has no {SUBGOAL_KEY!r} key"
+                                         " (the server wrapper pp_server_wrap.py is not in effect)")
                 model_subgoal = tconn.last_subgoal
             link = {"source_call_id": tconn.last_call_id, "chunk_index": 0} \
                 if tconn.last_call_id is not None else {}
             try:
                 out = session.step(a8)
             except Exception as e:  # noqa: BLE001
-                if phase2 and type(e).__name__ != "StepCapReached":  # 已进入环境的异常步（C8：含异常步）
+                if phase2 and type(e).__name__ != "StepCapReached":  # an exception step that reached the environment (C8: includes exception steps)
                     attempted += 1
                     trace.log_missing_step(step=attempted, action=np.asarray(a8, dtype=np.float64),
                                            reason=f"env_exception:{type(e).__name__}",
@@ -805,7 +860,7 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
         error = None if status == "timeout" else f"{type(inner).__name__}: {inner}"[:800]
         env_exc = f"{type(inner).__name__}: {inner}"[:800]
         trace_reason = "step_cap" if status == "timeout" else "env_exception"
-    except Exception as e:  # noqa: BLE001 连接、服务或其他异常
+    except Exception as e:  # noqa: BLE001 connection, server or other exceptions
         status, infra_reason, infra = classify_exception(e)
         error = f"{type(e).__name__}: {e}"[:800]
         trace_reason = f"exception:{type(e).__name__}"
@@ -822,7 +877,7 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
         trace.close(status=status, terminal_reason=trace_reason, sid=sid, frames_sent=tconn.frames_sent,
                     reconnects=result["reconnects"])
     else:
-        no_frame = result["demo_frames"] is None  # reset 之前就失败：没有任何画面（C3）
+        no_frame = result["demo_frames"] is None  # failed before reset: no image at all (C3)
         demo = 0 if no_frame else int(result["demo_frames"])
         end_extra: dict[str, Any] = {
             "sid": sid, "frames_sent": tconn.frames_sent, "reconnects": result["reconnects"], "side": "new",
@@ -830,15 +885,16 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
             "steps_observed": observed, "frames_recorded": 0 if no_frame else demo + 1 + observed}
         if no_frame:
             end_extra["no_frame"] = True
-        if lang is not None:  # 先关语言账本（悬空调用补 cancelled）
+        if lang is not None:  # close the language ledger first (dangling calls get cancelled)
             try:
                 lang.close()
             except Exception as e:  # noqa: BLE001
                 tconn.lang_errors += 1
                 print(f"TRACE_HOOK_ERROR route=pp/new where=language.close {type(e).__name__}: {e}"[:600], flush=True)
             end_extra["language_hook_errors"] = tconn.lang_errors
-        # arrays.npz：TraceWriter.close 经 merge_write_npz 写（同目录录像器的同名键同值合并、分目录各写各的），
-        # 写盘失败记 end.arrays.error，由 TRACE_ARRAYS 检查器判失败
+        # arrays.npz: written by TraceWriter.close via merge_write_npz (same-named keys of a recorder in the same
+        # directory merge with equal values; separate directories each write their own); a write failure is recorded
+        # in end.arrays.error and judged as a failure by the TRACE_ARRAYS checker
         trace.close(status=status, terminal_reason=status, **end_extra)
     _rec_event(recorder, {"kind": "pp_episode_end", "sid": sid, "status": status, "steps": executed,
                           "frames_sent": tconn.frames_sent, "reconnects": result["reconnects"], "error": error})
@@ -847,7 +903,8 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
 
 async def _act_with_reconnect(tconn: TracedConnection, conn: Any, obs: dict, result: dict, max_reconnects: int,
                               recorder) -> dict:
-    """同一局内 ConnectionClosed：``reconnect()``（含 HELLO）后重发同一条观测，不重发 EPISODE_START。"""
+    """ConnectionClosed within one episode: ``reconnect()`` (including HELLO), then resend the same observation,
+    without resending EPISODE_START."""
     while True:
         try:
             return await tconn.act(obs)
@@ -861,7 +918,8 @@ async def _act_with_reconnect(tconn: TracedConnection, conn: Any, obs: dict, res
 
 
 def _same_dir(a: Any, b: Any) -> bool:
-    """两个目录是否同一路径（``b`` 为空时 False）；用于判断轨迹是否就写在录像器目录里。"""
+    """Whether two directories are the same path (False when ``b`` is empty); used to tell whether the trace is
+    written in the recorder directory."""
     if not a or not b:
         return False
     try:
@@ -880,18 +938,20 @@ def _rec_array(recorder, name: str, arr: np.ndarray, step: int) -> None:
         recorder.add_array(name, arr, step=step)
 
 
-# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+# -- new interface: the four model-side methods --------------------------------------
 
 from robomme_ood_eval import servers as _servers  # noqa: E402
 from robomme_ood_eval.policy import Ready  # noqa: E402
 
 
 def pp_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
-    """PonderPounce 服务端的命令、环境与 cwd，照抄旧 ``run_seat.sh::build_server_cmd`` 的 pp 分支：cwd 为
-    ``third_party/PonderPounce``，HF 离线（``HF_HOME`` 沿用调用方环境）；外壳打开（缺省，旧 GL 启动器
-    ``SGEVAL_PP_SERVER_WRAP=1``）时以绝对路径起本包 ``servers/pp_server_wrap.py``，否则 ``-m
-    ponderpounce.eval.robomme_server``；其后 ``--args.checkpoint_path --args.seed --args.device cuda:0 --port``。
-    解释器取 ``cfg["pp_py"]`` → 环境变量 ``PP_PY`` → ``third_party/PonderPounce/.venv/bin/python``。"""
+    """Command, environment and cwd of the PonderPounce server, copied from the pp branch of the legacy
+    ``run_seat.sh::build_server_cmd``: cwd is ``third_party/PonderPounce``, HF offline (``HF_HOME`` inherited from the
+    caller's environment); with the wrapper on (default; the legacy launcher's ``SGEVAL_PP_SERVER_WRAP=1``) this
+    package's ``servers/pp_server_wrap.py`` is started by absolute path, otherwise ``-m
+    ponderpounce.eval.robomme_server``; followed by ``--args.checkpoint_path --args.seed --args.device cuda:0
+    --port``. The interpreter comes from ``cfg["pp_py"]`` -> env var ``PP_PY`` ->
+    ``third_party/PonderPounce/.venv/bin/python``."""
     S = _servers
     cfg = policy.cfg
     sub = policy.root / "third_party" / "PonderPounce"
@@ -910,19 +970,23 @@ def pp_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
 
 
 class PPPolicy(_servers.ServedPolicy):
-    """PonderPounce（``pp``）。
+    """PonderPounce (``pp``).
 
-    * ``load``：预检（子模块、解释器、ckpt 与 ``norm_stats.json``、外壳）→ 起（或 attach）服务端，就绪 =
-      ``GET /health`` 返回 200；不加预热；核本进程能导入 ``vla_eval``（客户端须在 ``envs/client-env`` 里跑）；
-    * ``reset(spec)``：不发消息、不碰环境——探活后算本局 sid ``<task>|<source_episode 或 tier>|<seed>``；本服务进程
-      已用过它（只会在同一身份重跑、``spec.attempt > 1`` 时出现）才重起服务端（S3），保证服务端按
-      ``crc32(f"{seed}:{sid}:{n}")`` 取噪声时 ``n`` 从 0 开始；
-    * ``play``：原样调本模块 ``run_episode``（每局照旧发 ``EPISODE_START``，断线只在本局内重连一次），结果另记
-      ``pp_sid`` 与 ``pp_sid_use_index``（该 sid 在本服务进程里的使用序号）；
-    * ``close``：停服务端进程组（基类）。
+    * ``load``: preflight (submodule, interpreter, ckpt with ``norm_stats.json``, wrapper) -> start (or attach) the
+      server, ready = ``GET /health`` returns 200; no warm-up; checks this process can import ``vla_eval`` (the
+      client must run in ``envs/client-env``);
+    * ``reset(spec)``: sends no message and never touches the environment -- after the liveness probe computes this
+      episode's sid ``<task>|<source_episode or tier>|<seed>``; only if this server process has already used it (which
+      only happens when rerunning the same identity, ``spec.attempt > 1``) is the server restarted, guaranteeing
+      ``n`` starts at 0 when the server derives noise from ``crc32(f"{seed}:{sid}:{n}")``;
+    * ``play``: calls this module's ``run_episode`` unchanged (``EPISODE_START`` is still sent every episode, and a
+      dropped connection is reconnected only once within the episode); the result additionally records ``pp_sid``
+      and ``pp_sid_use_index`` (the use index of that sid in this server process);
+    * ``close``: stop the server process group (base class).
 
-    必填 cfg：``ckpt``（PonderPounce 没有缺省 ckpt）。可选 ``pp_py``、``pp_server_wrap``（缺省开）、
-    ``pp_max_reconnects``（缺省 1）、``hf_hub_offline``、``transformers_offline``；``connection_factory`` 只供单测注入。"""
+    Required cfg: ``ckpt`` (PonderPounce has no default ckpt). Optional ``pp_py``, ``pp_server_wrap`` (on by
+    default), ``pp_max_reconnects`` (default 1), ``hf_hub_offline``, ``transformers_offline``;
+    ``connection_factory`` is only for unit test injection."""
 
     model = "pp"
     requires_ckpt = True
@@ -931,7 +995,7 @@ class PPPolicy(_servers.ServedPolicy):
         super().__init__(policy_seed, **cfg)
         self.server_wrap = _servers.flag_on(self.cfg.get("pp_server_wrap", True))
         self.ckpt = self.cfg.get("ckpt")  # no default checkpoint; load() rejects a missing one
-        self.sid_uses: dict[str, int] = {}   # 本服务进程里每个 sid 已发过 EPISODE_START 的次数
+        self.sid_uses: dict[str, int] = {}   # how many times each sid has sent EPISODE_START in this server process
         self.server_restarts = 0
         self.current_sid: str | None = None
         self._spec_argv: tuple | None = None
@@ -939,7 +1003,7 @@ class PPPolicy(_servers.ServedPolicy):
     def load(self) -> None:
         S = _servers
         if not self.ckpt:
-            raise S.PreflightError("RUN_BLOCKED reason=pp_ckpt_missing ckpt=unset（PonderPounce 须显式给 ckpt）")
+            raise S.PreflightError("RUN_BLOCKED reason=pp_ckpt_missing ckpt=unset (PonderPounce requires an explicit ckpt)")
         self._pick_port()
         argv, env, cwd = pp_server_spec(self, self.ckpt)
         if self.preflight:
@@ -947,14 +1011,15 @@ class PPPolicy(_servers.ServedPolicy):
             import importlib.util
 
             if self.cfg.get("connection_factory") is None and importlib.util.find_spec("vla_eval") is None:
-                raise S.PreflightError("RUN_BLOCKED reason=client_env detail=本进程导入不了 vla_eval（PonderPounce 客户端须用 "
-                                       "envs/client-env/.venv 的解释器跑）")
+                raise S.PreflightError("RUN_BLOCKED reason=client_env detail=this process cannot import vla_eval (the "
+                                       "PonderPounce client must run with the envs/client-env/.venv interpreter)")
         self._spec_argv = (argv, env, cwd)
         self._launch(argv, env, cwd, [Ready.health()], self.ckpt)
         self._fingerprint(self.ckpt)
 
     def _restart_server(self, why: str) -> None:
-        """重起服务端（同端口、同命令）：停旧进程组、新起并等 ``/health``，清空本进程 sid 使用表。"""
+        """Restart the server (same port, same command): stop the old process group, start a new one and wait for
+        ``/health``, and clear this process's sid usage table."""
         argv, env, cwd = self._spec_argv
         print(f"PP_SERVER_RESTART reason={why} port={self.port}", flush=True)
         if self.server is not None:
@@ -980,6 +1045,6 @@ class PPPolicy(_servers.ServedPolicy):
             res = run_episode(session, spec.identity(), conn, recorder,
                               connection_factory=self.cfg.get("connection_factory"))
         finally:
-            self.sid_uses[sid] = use_index + 1  # 保守计：本局可能已发出 EPISODE_START
+            self.sid_uses[sid] = use_index + 1  # counted conservatively: this episode may already have sent EPISODE_START
         res.update(pp_sid=sid, pp_sid_use_index=use_index, pp_server_restarts=self.server_restarts)
         return self._finish_play(res)

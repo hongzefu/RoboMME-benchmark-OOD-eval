@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"--dataset must be one of {', '.join(E.DATASET_MAX_STEPS)} (got {args.dataset!r})")
     tasks = [t.strip() for t in args.tasks.split(",")] if args.tasks else list(E.TASKS)
     cfg = make_cfg(args, parse_extra(rest))
-    if args.model in MODELS_REQUIRING_CKPT and "ckpt" not in cfg:
+    if args.model in MODELS_REQUIRING_CKPT and not cfg.get("ckpt"):
         parser.error(f"--ckpt is required for model {args.model}")
     code = 0
     done = skipped = 0
