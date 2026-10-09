@@ -124,7 +124,7 @@ def test_session_builder_adapter():
                                   close=lambda: events.append("session.close"), steps=0, step_cap=None)
         real = SimpleNamespace(resolve_episode=lambda ep: ("seed", ep))
         b = mod.SessionBuilder(session, real, 3)
-        with pytest.raises(ValueError, match="只交本局环境"):
+        with pytest.raises(ValueError, match="only hands out this episode's environment"):
             b.make_env_for_episode(2)
         env = b.make_env_for_episode(3)
         env.reset()
@@ -132,7 +132,7 @@ def test_session_builder_adapter():
         env.close()
         assert events == ["reset", "step"] and env.close_calls == 1, "close 置空，不得调 session.close"
         assert env.steps == 0 and b.resolve_episode(3) == ("seed", 3)
-        with pytest.raises(RuntimeError, match="只交一次"):
+        with pytest.raises(RuntimeError, match="only once per episode"):
             b.make_env_for_episode(3)
 
 
@@ -194,7 +194,7 @@ def test_existing_astra_ep_dir_refused_keeps_evidence(tmp_path, monkeypatch):
         r1 = h.run("hard-verify", "BinFill", 0)
         r2 = h.run("hard-verify", "VideoUnmask", 0)
         policy.close()
-    assert r1.status == "fail" and r1.error_kind == "error" and "局目录已存在" in r1.error
+    assert r1.status == "fail" and r1.error_kind == "error" and "episode directory already exists" in r1.error
     assert (old / "marker.txt").read_text() == "上一尝试" and sorted(p.name for p in old.iterdir()) == ["marker.txt"]
     assert r2.status == "success" and h.responder.calls == 1
 

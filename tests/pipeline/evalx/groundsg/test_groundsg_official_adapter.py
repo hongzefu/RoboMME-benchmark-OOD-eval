@@ -352,7 +352,7 @@ def test_failure_before_init_episode_is_none(tmp_path):
     side.server.handle = boom
     res = side.run(F.identity())
     assert res["status"] == "error" and res["official_source"] == "none" and res["official_videos"] == []
-    assert "一帧未录" in res["official_save_error"]
+    assert "no frame recorded" in res["official_save_error"]
     tdir = Path(res["trace_path"]).parent
     assert not (tdir / "official").exists() and not (tdir / "official-video").exists()
     end = F.read_trace(res["trace_path"])[-1]
@@ -389,7 +389,7 @@ def test_init_episode_midway_failure_is_partial(tmp_path, monkeypatch):
     monkeypatch.setitem(g, "RolloutRecorder", BrokenRecorder)
     res = side.run(F.identity())
     assert res["status"] == "error" and res["official_source"] == "partial" and res["official_videos"] == []
-    assert "init_episode 中途失败" in res["official_save_error"]
+    assert "init_episode failed midway" in res["official_save_error"]
     tdir = Path(res["trace_path"]).parent
     assert not (tdir / "official").exists()
     end = F.read_trace(res["trace_path"])[-1]
@@ -459,7 +459,7 @@ def test_rejected_official_video_keeps_raw_and_records_error(tmp_path, monkeypat
     side, _ = _side(tmp_path, F.Plan(success_at=20))
     res = side.run(F.identity())
     assert res["status"] == "success" and res["official_source"] == "none" and res["official_videos"] == []
-    assert res["official_save_error"].startswith("OfficialVideoRejected: 帧数不符")
+    assert res["official_save_error"].startswith("OfficialVideoRejected: frame count mismatch")
     tdir = Path(res["trace_path"]).parent
     assert not (tdir / "official").exists() and not (tdir / "official-video").exists()
 

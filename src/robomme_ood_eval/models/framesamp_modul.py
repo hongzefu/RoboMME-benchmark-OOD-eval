@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
-"""v7.5eval 新接口的 MME-VLA 客户端（0929-v7.5eval-restructure-plan.md §2.2、§3.2 第 1 步 3、第 3 步）。
+"""MME-VLA client for the new interface.
 
-逐行照抄旧官方客户端（MME-VLA ``ecf086c`` ``examples/robomme/{utils.py,env_runner.py,eval.py}`` 与官方历史成绩
-客户端 ``927c56d`` ``eval.py::evaluate_manifest``）的循环语义，不 import 子模块的 ``examples/``：
+Copies line by line the loop semantics of the old official client (MME-VLA ``ecf086c``
+``examples/robomme/{utils.py,env_runner.py,eval.py}`` and the official historical-score client ``927c56d``
+``eval.py::evaluate_manifest``) without importing the submodule's ``examples/``:
 
-* 每局新建 websocket（``openpi_client`` 的 ``MMEVLAWebsocketClientPolicy``），开局 ``client.reset()``；
-* reset 返回的全部演示帧 + 初始帧进缓存，``exec_start_idx = len(image_buffer) - 1``；
-* 动作计划为空 → ``add_buffer(pack_buffer(front 缓存, state 缓存, exec_start_idx))`` → ``infer`` → 取前 16 个 →
-  清缓存；每执行一步 ``count += 1``，``count > 1300`` 即 timeout（步数 1301），且这一判断先于终态判断；
-* 终态映射：``success/fail/timeout`` 原样，其他（如 ``ongoing``/``unknown``）记 ``error`` + ``success_flag=<值>``；
-  整局任何异常记 ``error`` + ``<异常类>: <消息>``，步数取异常前最后一次 ``count``。
-  ``env.step`` 抛异常时照 ``EnvRunner.step`` 返回 ``(None,)*3, True, "error"``，随后 ``add_observation`` 对 None
-  调 ``.copy()`` 抛 ``AttributeError``——旧官方就是这样落成 error 的，这里原样保留；``env.step`` 不抛异常但返回
-  ``obs=None`` 时，旧官方在 try 之外 ``obs["front_rgb_list"]`` 抛 ``TypeError``、``count`` 不加，这里也原样保留。
+* a new websocket per episode (``MMEVLAWebsocketClientPolicy`` from ``openpi_client``), ``client.reset()`` at the
+  start;
+* all demo frames + the initial frame returned by reset go into the buffer, ``exec_start_idx = len(image_buffer) - 1``;
+* empty action plan -> ``add_buffer(pack_buffer(front buffer, state buffer, exec_start_idx))`` -> ``infer`` -> take
+  the first 16 -> clear the buffer; each executed step does ``count += 1``, and ``count > 1300`` means timeout
+  (1301 steps), with this check coming before the terminal-status check;
+* terminal mapping: ``success/fail/timeout`` unchanged, anything else (e.g. ``ongoing``/``unknown``) records
+  ``error`` + ``success_flag=<value>``; any exception during the episode records ``error`` +
+  ``<exception class>: <message>``, with steps taken from the last ``count`` before the exception.
+  When ``env.step`` raises, ``EnvRunner.step`` returns ``(None,)*3, True, "error"`` and the subsequent
+  ``add_observation`` calls ``.copy()`` on None and raises ``AttributeError`` -- that is how the old official code
+  ended up with error, and it is kept unchanged here; when ``env.step`` does not raise but returns ``obs=None``, the
+  old official code raises ``TypeError`` at ``obs["front_rgb_list"]`` outside the try without incrementing
+  ``count``, which is also kept unchanged.
 
-纯函数层（``pack_state``、``pack_buffer``、``EpisodeState``、``pre_traj_from_reset``、``EnvRunnerShim``、
-``run_loop``、``evaluate_one``）不碰网络与仿真，单测用合成观测直接断言消息序列。
+The pure-function layer (``pack_state``, ``pack_buffer``, ``EpisodeState``, ``pre_traj_from_reset``,
+``EnvRunnerShim``, ``run_loop``, ``evaluate_one``) touches neither network nor simulation; unit tests assert message
+sequences directly with synthetic observations.
 
-另有两个子命令（只在跑通核对时用）：``relay`` 起一个逐消息透明的 websocket 中继并记每条消息 sha256；
-``transport-check`` 比对客户端事件与中继日志，输出 ``TRANSPORT=PASS frames=<n> mismatch=0``。
+Two extra subcommands (only for end-to-end checks): ``relay`` starts a per-message transparent websocket relay that
+records the sha256 of every message; ``transport-check`` compares client events with the relay log and prints
+``TRANSPORT=PASS frames=<n> mismatch=0``.
 """
 from __future__ import annotations
 
@@ -36,7 +44,7 @@ import numpy as np
 
 MAX_STEPS = 1300
 OBS_HORIZON = 16
-#: 服务外壳回包审计键（冻结说明第五节；与 trace_writer.AUDIT_KEY 相同）
+#: server wrapper reply audit key (same as trace_writer.AUDIT_KEY)
 AUDIT_KEY = "_sgeval_audit"
 NORMAL = ("success", "fail", "timeout")
 INFRA_MARKERS = ("RecorderError", "svulkan2", "EXCLUSIVE", "Vulkan", "vk::", "out of memory", "RESOURCE_EXHAUSTED",
@@ -44,7 +52,7 @@ INFRA_MARKERS = ("RecorderError", "svulkan2", "EXCLUSIVE", "Vulkan", "vk::", "ou
 
 
 def sha(arr: Any) -> str:
-    """数组字节的 sha256（C 连续）；bytes/str 直接取。"""
+    """sha256 of array bytes (C-contiguous); bytes/str are taken directly."""
     if isinstance(arr, (bytes, bytearray, memoryview)):
         return hashlib.sha256(bytes(arr)).hexdigest()
     if isinstance(arr, str):
@@ -52,16 +60,16 @@ def sha(arr: Any) -> str:
     return hashlib.sha256(np.ascontiguousarray(arr).tobytes()).hexdigest()
 
 
-# ── 照抄 examples/robomme/env_runner.py ────────────────────────────────────
+# -- copied from examples/robomme/env_runner.py --------------------------------------
 
 
 def pack_state(joint_state: np.ndarray, gripper_state: np.ndarray) -> np.ndarray:
-    # pack into 8-dim state, same as the joint action space（照抄 env_runner.pack_state）
+    # pack into 8-dim state, same as the joint action space (copied from env_runner.pack_state)
     return np.concatenate([joint_state, gripper_state[:1]], axis=0, dtype=np.float32)
 
 
 def pre_traj_from_reset(obs: dict, info: dict) -> dict[str, Any]:
-    """照抄 ``EnvRunner.get_init_obs`` 的 reset 之后部分（reset 本身由 EnvSession 做）。"""
+    """Copied from the post-reset part of ``EnvRunner.get_init_obs`` (the reset itself is done by EnvSession)."""
     if isinstance(info["task_goal"], list):
         task_goal = info["task_goal"][0]
     else:
@@ -74,7 +82,8 @@ def pre_traj_from_reset(obs: dict, info: dict) -> dict[str, Any]:
 
 
 class EnvRunnerShim:
-    """照抄 ``EnvRunner.step``：``self.env.step`` 换成 ``step_fn``（EnvSession.step），其余逐行相同。"""
+    """Copied from ``EnvRunner.step``: ``self.env.step`` is replaced by ``step_fn`` (EnvSession.step); everything
+    else is identical line by line."""
 
     def __init__(self, step_fn: Callable[[Any], tuple]):
         self._step_fn = step_fn
@@ -85,7 +94,7 @@ class EnvRunnerShim:
         try:
             obs, _, terminated, truncated, self.info = self._step_fn(action)
         except Exception as e:
-            if type(e).__name__ == "RecorderError":  # 录制器故障不是环境错误：上抛，整局记 error + infra（新接口专有）
+            if type(e).__name__ == "RecorderError":  # a recorder failure is not an environment error: re-raise, the episode records error + infra (new interface only)
                 raise
             print(f"Error: {e}")
             self.last_exception = e
@@ -103,7 +112,7 @@ class EnvRunnerShim:
         return (img, wrist_img, state), stop, outcome
 
 
-# ── 照抄 examples/robomme/utils.py ────────────────────────────────────────
+# -- copied from examples/robomme/utils.py -------------------------------------------
 
 
 def pack_buffer(image_buffer, state_buffer, exec_start_idx=0):
@@ -141,11 +150,11 @@ class EpisodeState:
         return self.image_buffer[-1], self.wrist_image_buffer[-1], self.state_buffer[-1]
 
 
-# ── 照抄 eval.py::EpisodeEvaluator（去掉子目标预测与视频，官方评估时它们都是空操作）─────────
+# -- copied from eval.py::EpisodeEvaluator (without subgoal prediction and video, both no-ops in official evaluation) --
 
 
 class _Progress:
-    """记录 ``last_steps``（旧官方 ``self.last_steps``），供异常时取步数。"""
+    """Records ``last_steps`` (the old official ``self.last_steps``) so the step count is available on exceptions."""
 
     def __init__(self):
         self.last_steps = 0
@@ -155,10 +164,11 @@ class _Progress:
 def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progress: _Progress, *,
              max_steps: int = MAX_STEPS, obs_horizon: int = OBS_HORIZON,
              on_decision: Callable[[int, np.ndarray], None] | None = None) -> str:
-    """``eval_each_episode`` 的循环：返回 success_flag（异常直接上抛，由 ``evaluate_one`` 映射）。
+    """The ``eval_each_episode`` loop: returns success_flag (exceptions propagate and are mapped by
+    ``evaluate_one``).
 
-    ``reset_fn`` 在 ``client.reset()`` 之后调用（与旧官方「先连 server、reset 策略，再 reset 环境」同序），
-    返回 ``pre_traj``。"""
+    ``reset_fn`` is called after ``client.reset()`` (same order as the old official "connect to the server and reset
+    the policy, then reset the environment") and returns ``pre_traj``."""
     resp = client.reset()
     while not resp.get("reset_finished", False):
         time.sleep(0.1)
@@ -218,7 +228,8 @@ def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progre
 
 
 def classify_infra(error: str | None, runner: EnvRunnerShim | None) -> str | None:
-    """判断 error 是否属于基础设施故障（可重试原身份，计入重试额度）；只影响 ``infra`` 标记，不改 status。"""
+    """Whether the error is an infrastructure failure (the same identity may be retried, counting toward the retry
+    budget); only affects the ``infra`` flag, never status."""
     texts = [error or ""]
     if runner is not None and runner.last_exception is not None:
         texts.append(f"{type(runner.last_exception).__name__}: {runner.last_exception}")
@@ -232,7 +243,8 @@ def classify_infra(error: str | None, runner: EnvRunnerShim | None) -> str | Non
 def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tuple], reset_fn: Callable[[], dict], *,
                  max_steps: int = MAX_STEPS, obs_horizon: int = OBS_HORIZON,
                  on_decision: Callable[[int, np.ndarray], None] | None = None) -> dict:
-    """照抄 ``evaluate_manifest`` 单局部分的终态映射。client 连接也在 try 里（旧官方同样）。"""
+    """Copied from the per-episode terminal mapping of ``evaluate_manifest``. The client connection is inside the try
+    too (as in the old official code)."""
     progress = _Progress()
     runner = EnvRunnerShim(step_fn)
     error = None
@@ -241,7 +253,7 @@ def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tup
         client = client_factory()
         success_flag = run_loop(client, runner, reset_fn, progress, max_steps=max_steps, obs_horizon=obs_horizon,
                                 on_decision=on_decision)
-    except Exception as e:  # noqa: BLE001 与旧官方同样整局兜底
+    except Exception as e:  # noqa: BLE001 episode-level catch-all, same as the old official code
         print(f"Error evaluating episode: {e}")
         success_flag, error = "error", f"{type(e).__name__}: {e}"
     finally:
@@ -260,11 +272,11 @@ def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tup
             "env_exception": None if env_exc is None else f"{type(env_exc).__name__}: {env_exc}"[:800]}
 
 
-# ── 带记录与测速的 websocket 客户端 ────────────────────────────────────────
+# -- websocket client with recording and timing ----------------------------------------
 
 
 def payload_digest(obj: dict) -> dict:
-    """出站消息里的逐帧／逐数组 sha256（客户端与中继两侧用同一函数）。"""
+    """Per-frame / per-array sha256 of an outgoing message (the client and the relay use the same function)."""
     out: dict[str, Any] = {}
     if obj.get("reset", False):
         out["kind"] = "reset"
@@ -285,7 +297,7 @@ def payload_digest(obj: dict) -> dict:
 
 
 def response_digest(obj: Any) -> dict:
-    """入站消息摘要：infer 回复记 actions 的 sha256、dtype、shape。"""
+    """Incoming message digest: infer replies record the sha256, dtype and shape of actions."""
     if not isinstance(obj, dict):
         return {"kind": "other"}
     if "actions" in obj:
@@ -300,8 +312,9 @@ def response_digest(obj: Any) -> dict:
 
 
 def make_recording_client(host: str, port: int, recorder, timing: dict):
-    """``MMEVLAWebsocketClientPolicy`` 的子类：收发逻辑与父类逐行相同（pack→send→recv→str 即报错→unpackb），
-    只在两侧加 sha256 记录与计时。连接参数与父类 ``_wait_for_server`` 相同。"""
+    """Subclass of ``MMEVLAWebsocketClientPolicy``: send/receive logic identical to the parent line by line
+    (pack -> send -> recv -> error on str -> unpackb), only adding sha256 recording and timing on both sides.
+    Connection parameters are the same as the parent's ``_wait_for_server``."""
     import websockets.sync.client
     from openpi_client import msgpack_numpy
     from openpi_client.websocket_client_policy import MMEVLAWebsocketClientPolicy
@@ -309,9 +322,9 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
     class RecordingClient(MMEVLAWebsocketClientPolicy):
         def __init__(self):
             self._seq = 0
-            # S4：可选的原始字节观察钩子 raw_hook(obj, sent_bytes, recv_bytes)，每次往返成功后调用（只读，异常吞掉）
+            # optional raw-byte observer hook raw_hook(obj, sent_bytes, recv_bytes), called after each successful round trip (read-only, exceptions swallowed)
             self._raw_hook = None
-            self._last_audit = None  # 第三阶段：最近一次回包里 pop 出的服务外壳审计块
+            self._last_audit = None  # server wrapper audit block popped from the most recent reply
             super().__init__(host, port)
 
         def _wait_for_server(self):
@@ -346,7 +359,7 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
                 self._event({"kind": "ws_recv", "seq": self._seq, "msg": "error_text", "sha": sha(response)})
                 raise RuntimeError(f"Error in inference server:\n{response}")
             out = msgpack_numpy.unpackb(response)
-            # 第三阶段：服务外壳审计键在回包交给官方循环（进而交给环境）之前 pop 掉，另存给语言账本
+            # pop the server wrapper audit key before the reply reaches the official loop (and thus the environment); keep it for the language ledger
             self._last_audit = out.pop(AUDIT_KEY, None) if isinstance(out, dict) else None
             t3 = time.perf_counter()
             dig = payload_digest(obj)
@@ -363,7 +376,7 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
             if hook is not None:
                 try:
                     hook(obj, data, response)
-                except Exception:  # noqa: BLE001 观察钩子不得影响收发
+                except Exception:  # noqa: BLE001 observer hooks must not affect send/receive
                     pass
             return out
 
@@ -380,7 +393,8 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
 
 
 def summarize_timing(timing: dict) -> dict:
-    """把逐消息计时汇总成 首次/第 2、3 次/稳态均值/P95（推理只算 infer 消息）。"""
+    """Summarize per-message timing into first / 2nd, 3rd / steady-state mean / P95 (inference only counts infer
+    messages)."""
     per = timing.pop("per_msg", [])
     out = {k: v for k, v in timing.items()}
     for kind in ("reset", "add_buffer", "infer"):
@@ -406,7 +420,7 @@ def summarize_timing(timing: dict) -> dict:
     return out
 
 
-#: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
+#: legacy sibling module name -> module in the evaluation package (no longer loaded from each other by file path)
 SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
             "groundsg_client": "robomme_ood_eval.models.groundsg",
             "framesamp_modul_client": "robomme_ood_eval.models.framesamp_modul",
@@ -415,18 +429,21 @@ SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
 
 
 def _load_sibling(name: str):
-    """取旧仓同目录模块在评估包里的对应模块（包内 import，已导入则复用）。"""
+    """Return the evaluation-package module corresponding to a legacy sibling module (package import; reused if
+    already imported)."""
     if name not in SIBLINGS:
-        raise ModuleNotFoundError(f"未登记的同伴模块 {name!r}，可选：{', '.join(SIBLINGS)}")
+        raise ModuleNotFoundError(f"unknown sibling module {name!r}; choices: {', '.join(SIBLINGS)}")
     return importlib.import_module(SIBLINGS[name])
 
 
 class TracedClient:
-    """S4：包住 MME-VLA websocket 客户端（或替身）的 ``reset``／``add_buffer``／``infer``，原样转发后记请求与回包（C10）。
+    """Wraps ``reset`` / ``add_buffer`` / ``infer`` of the MME-VLA websocket client (or a stand-in), forwarding them
+    unchanged and then recording requests and replies (C10).
 
-    请求记原始 msgpack 帧字节的 sha256（经 ``RecordingClient._raw_hook`` 拿到实际发出的字节；替身没有该钩子时退回
-    ``canonical_bytes``）；``add_buffer`` 另记历史边界行（覆盖的步号区间）；``infer`` 回包记完整动作块。转发的对象与
-    返回值不做任何改动，请求失败（抛异常）时不记该行。"""
+    Requests record the sha256 of the raw msgpack frame bytes (the bytes actually sent, obtained via
+    ``RecordingClient._raw_hook``; stand-ins without the hook fall back to ``canonical_bytes``); ``add_buffer`` also
+    records a history-boundary line (the covered step range); ``infer`` replies record the full action chunk. The
+    forwarded objects and return values are never modified, and a request that fails (raises) is not recorded."""
 
     def __init__(self, inner: Any, trace: Any):
         self._inner = inner
@@ -467,7 +484,8 @@ class TracedClient:
         return out
 
     def _image_refs(self, obs: Any) -> list | None:
-        """当前前视、腕部两张帧的引用（``raw_sha256`` 与 trace 同算法，可在 demo 末帧或上一步 step 行里找到）。"""
+        """References to the current front and wrist frames (``raw_sha256`` uses the same algorithm as the trace and
+        can be found in the last demo frame or the previous step line)."""
         if not isinstance(obs, dict):
             return None
         tr = self._trace
@@ -476,9 +494,11 @@ class TracedClient:
         return [r for r in refs if r is not None] or None
 
     def infer(self, obs):
-        """第三阶段语言账本：每个推理步一个 ``action_model`` 调用。发送前写 ``in``（``role=fields``：结构化字段原文 +
-        两张当前帧引用）；回包后 pop 掉 ``_sgeval_audit``（真实客户端已在 ``_roundtrip`` 里 pop 并存进
-        ``_last_audit``），逐通道写分词消息，``close_call`` 记 ``server_final_text``；之后执行的步关联到本调用。"""
+        """Language ledger: one ``action_model`` call per inference step. Before sending write ``in``
+        (``role=fields``: raw structured fields + references to the two current frames); after the reply pop
+        ``_sgeval_audit`` (the real client already popped it in ``_roundtrip`` and stored it in ``_last_audit``),
+        write per-channel tokenization messages, and ``close_call`` records ``server_final_text``; steps executed
+        afterwards are linked to this call."""
         self._raw = None
         tr = self._trace
         cid = tr.lang_open("action_model")
@@ -506,11 +526,14 @@ class TracedClient:
 
 
 def traced_step_fn(session: Any, trace: Any) -> Callable[[Any], tuple]:
-    """S4：包一层 ``session.step`` 拿完整五元组记逐步轨迹；动作对象原样交给环境，返回值与异常原样透出。
+    """Wrap ``session.step`` to get the full 5-tuple and record the per-step trace; the action object goes to the
+    environment unchanged, and return values and exceptions pass through unchanged.
 
-    有观测：最后一帧前视、腕部画面与 ``pack_state`` 状态（与 ``EnvRunnerShim.step`` 同算法），子目标 ``None``（C7）；
-    ``obs is None``：缺观测步；抛异常：按会话 ``steps`` 增量记缺观测步（即 ``EnvRunnerShim`` 返回 ``(None,)*3`` 的步），
-    ``StepCapReached`` 不进环境、不计步、只标 ``cap_hit``。"""
+    With an observation: front and wrist images of the last frame and the ``pack_state`` state (same algorithm as
+    ``EnvRunnerShim.step``), subgoal ``None`` (C7); ``obs is None``: step without observation; on an exception: add
+    steps without observation according to the increase of the session's ``steps`` (i.e. the steps for which
+    ``EnvRunnerShim`` returns ``(None,)*3``); ``StepCapReached`` never reaches the environment, is not counted and
+    only sets ``cap_hit``."""
 
     def step(action):
         before = getattr(session, "steps", None)
@@ -529,7 +552,7 @@ def traced_step_fn(session: Any, trace: Any) -> Callable[[Any], tuple]:
                     img = obs["front_rgb_list"][-1]
                     wrist = obs["wrist_rgb_list"][-1]
                     state = pack_state(obs["joint_state_list"][-1], obs["gripper_state_list"][-1])
-                except Exception as e:  # noqa: BLE001 观测不可读：照常透出，由官方循环自己报错
+                except Exception as e:  # noqa: BLE001 unreadable observation: pass through as usual and let the official loop report it
                     trace._err("step.obs", e)
                     trace.missing(action, f"obs_unreadable: {type(e).__name__}: {e}")
                 else:
@@ -543,14 +566,16 @@ def traced_step_fn(session: Any, trace: Any) -> Callable[[Any], tuple]:
 
 
 def run_episode(session, identity: dict, conn_info: dict, recorder) -> dict:
-    """env_client 调用入口：一局 FrameSamp+Modulation。``session`` 为已 build 的 EnvSession。
+    """Entry point called by the outer loop: one FrameSamp+Modulation episode. ``session`` is an already built
+    EnvSession.
 
-    S4：有轨迹落点（``groundsg_client.trace_location``）时写 ``trace.jsonl``（route ``perceptual-framesamp-modul/new``）：``reset_fn`` 外包一层记
-    演示（C2），``session.step`` 外包一层记逐步（C4、C8），客户端外包一层记请求与回包（C10），收尾按 C2、C3、C8。
-    无落点时三层都不包，与 BASE 行为相同。"""
+    With a trace location (``groundsg_client.trace_location``), writes ``trace.jsonl`` (route
+    ``perceptual-framesamp-modul/new``): ``reset_fn`` is wrapped to record the demo (C2), ``session.step`` is wrapped
+    to record per step (C4, C8), the client is wrapped to record requests and replies (C10), and finalization follows
+    C2, C3, C8. Without a location none of the three wrappers is applied and behavior is unchanged."""
     timing: dict[str, Any] = {}
     max_steps = int(conn_info.get("max_steps", MAX_STEPS))
-    sm = _load_sibling("smvla_client")  # 共用的 PolicyTrace
+    sm = _load_sibling("smvla_client")  # the shared PolicyTrace
     trace = sm.PolicyTrace("perceptual-framesamp-modul/new", identity, conn_info, recorder, max_steps=max_steps,
                            recorder_has_actions=sm.recorder_writes_arrays(recorder) and
                            getattr(session, "recorder", None) is recorder,
@@ -588,12 +613,13 @@ def run_episode(session, identity: dict, conn_info: dict, recorder) -> dict:
     return res
 
 
-# ── 中继与传输核对（跑通核对用）──────────────────────────────────────────
+# -- relay and transport check (for end-to-end checks) --------------------------------
 
 
 def cmd_relay(args) -> int:
-    """逐消息透明中继：客户端连 listen 端口，中继连 upstream；每条消息原样转发（不开压缩、max_size=None），
-    日志记方向、序号、sha256、长度与解包后的逐帧摘要。"""
+    """Per-message transparent relay: the client connects to the listen port and the relay connects upstream; every
+    message is forwarded unchanged (no compression, max_size=None), and the log records direction, sequence number,
+    sha256, length and the per-frame digest after unpacking."""
     import asyncio
 
     import websockets
@@ -646,7 +672,8 @@ def cmd_relay(args) -> int:
 
 
 def transport_check(events: list[dict], relay: list[dict]) -> dict:
-    """客户端事件 vs 中继日志：逐消息 sha 相同、顺序相同；env 帧／状态 == 出站载荷；回复动作 == 执行动作。"""
+    """Client events vs relay log: same sha per message, same order; env frames / states == outgoing payload; reply
+    actions == executed actions."""
     mismatch, frames, notes = 0, 0, []
     sends = [e for e in events if e.get("kind") == "ws_send"]
     recvs = [e for e in events if e.get("kind") == "ws_recv"]
@@ -663,7 +690,7 @@ def transport_check(events: list[dict], relay: list[dict]) -> dict:
         if a["sha"] != b["sha"]:
             mismatch += 1
             notes.append(f"s2c seq={a['seq']}")
-    # env 帧与出站载荷逐帧比：add_buffer 的 frames 必须等于上一次决策以来 env 交出的 front 帧序列
+    # compare env frames with the outgoing payload frame by frame: add_buffer's frames must equal the sequence of front frames handed out by env since the previous decision
     env_front: list[str] = []
     env_wrist: list[str] = []
     env_state: list[str] = []
@@ -724,7 +751,7 @@ def cmd_transport_check(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="v7.5eval FrameSamp+Modulation 客户端辅助子命令")
+    ap = argparse.ArgumentParser(description="FrameSamp+Modulation client helper subcommands")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("relay")
     p.add_argument("--listen", type=int, required=True)
@@ -740,22 +767,26 @@ def main(argv: list[str] | None = None) -> int:
     return args.func(args)
 
 
-# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+# -- new interface: the four model-side methods --------------------------------------
 
 from robomme_ood_eval import servers as _servers  # noqa: E402
 from robomme_ood_eval.policy import Ready  # noqa: E402
 
-#: 预热用的合成画面尺寸（RoboMME 两路相机都是 256×256）与帧数（稳态每次 add_buffer 交 16 帧）
+#: synthetic image size for warm-up (both RoboMME cameras are 256x256) and frame count (steady state passes 16 frames
+#: per add_buffer)
 WARMUP_HW = (256, 256)
 WARMUP_FRAMES = OBS_HORIZON
 
 
 def warmup_server(host: str, port: int, *, frames: int = WARMUP_FRAMES, hw: tuple[int, int] = WARMUP_HW,
                   subgoal: str | None = None, prompt: str = "warm up", client_factory: Callable | None = None) -> dict:
-    """进程级预热（FrameSamp+Modulation 与 GroundSG 新增）：合成观测走一遍 ``reset → add_buffer → infer``，让服务端
-    在正式局之前把首个输入形状编译好。正式局开头的 ``reset`` 消息会让服务端重建记忆缓冲并重设随机数（官方
-    ``Policy.reset`` 执行 ``self._rng = jax.random.key(self._seed)``），预热不带进正式局。返回逐消息计时汇总与总耗时；
-    预热只证明首个形状已编译，不宣称之后零编译。``client_factory`` 只供单测注入替身。"""
+    """Process-level warm-up (added for FrameSamp+Modulation and GroundSG): run synthetic observations through
+    ``reset -> add_buffer -> infer`` so the server compiles the first input shape before the real episodes. The
+    ``reset`` message at the start of a real episode makes the server rebuild the memory buffer and reset its random
+    numbers (the official ``Policy.reset`` executes ``self._rng = jax.random.key(self._seed)``), so nothing carries
+    over from warm-up. Returns the per-message timing summary and total time; warm-up only proves the first shape is
+    compiled and does not claim zero compilation afterwards. ``client_factory`` is only for unit tests to inject a
+    stand-in."""
     timing: dict[str, Any] = {}
     t0 = time.perf_counter()
     factory = client_factory or (lambda: make_recording_client(host, int(port), None, timing))
@@ -773,7 +804,7 @@ def warmup_server(host: str, port: int, *, frames: int = WARMUP_FRAMES, hw: tupl
             time.sleep(0.1)
         element = {"observation/image": imgs[-1], "observation/wrist_image": imgs[-1],
                    "observation/state": states[-1], "prompt": prompt}
-        if subgoal is not None:  # 与官方 get_action_chunk 同：两个子目标键同值
+        if subgoal is not None:  # same as the official get_action_chunk: both subgoal keys get the same value
             element["simple_subgoal"] = subgoal
             element["grounded_subgoal"] = subgoal
         actions = np.asarray(client.infer(element)["actions"])
@@ -790,12 +821,14 @@ def warmup_server(host: str, port: int, *, frames: int = WARMUP_FRAMES, hw: tupl
 
 
 def mme_vla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
-    """MME-VLA 动作服务（FrameSamp+Modulation 与 GroundSG 共用）的命令、环境与 cwd，照抄旧
-    ``run_seat.sh::build_server_cmd`` 的 ``perceptual-framesamp-modul|groundsg`` 分支（外壳改为本包
-    ``servers/policy_server_wrap.py``；外壳元数据另写 ``server-wrap-metadata-<port>.json``，不与 ``ServerProcess`` 自己的
-    ``server-metadata-<port>.json`` 互相覆盖）。cfg：``mme_vla_py``（缺省 ``third_party/mme-vla/.venv/bin/python``，
-    环境变量 ``MME_VLA_PY`` 可覆盖）、``openpi_data_home``、``xla_mem_fraction``（缺省 0.75）、``compile_cache``、
-    ``jax_cache_root``（缺省 ``<仓根>/artifacts/jax-cache``，其下按 GPU 型号分目录）、``det``。"""
+    """Command, environment and cwd of the MME-VLA action server (shared by FrameSamp+Modulation and GroundSG),
+    copied from the ``perceptual-framesamp-modul|groundsg`` branch of the legacy ``run_seat.sh::build_server_cmd``
+    (the wrapper is now this package's ``servers/policy_server_wrap.py``; wrapper metadata goes to a separate
+    ``server-wrap-metadata-<port>.json`` so it never overwrites ``ServerProcess``'s own
+    ``server-metadata-<port>.json``). cfg: ``mme_vla_py`` (default ``third_party/mme-vla/.venv/bin/python``,
+    overridable by env var ``MME_VLA_PY``), ``openpi_data_home``, ``xla_mem_fraction`` (default 0.75),
+    ``compile_cache``, ``jax_cache_root`` (default ``<repo root>/artifacts/jax-cache``, with one subdirectory per GPU
+    model), ``det``."""
     S = _servers
     cfg = policy.cfg
     sub = policy.root / "third_party" / "mme-vla"
@@ -816,8 +849,9 @@ def mme_vla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
 
 
 def load_mme_vla_server(policy, model: str) -> Path:
-    """FrameSamp+Modulation／GroundSG 的 ``load()`` 公共段：tokenizer 闸门 → MME-VLA 预检 → 起（或 attach）服务端
-    （就绪 = 端口在听 + 服务日志含 ``history_config='<yaml>'``）→ 后台 ckpt 指纹。返回所用 ckpt。"""
+    """Shared ``load()`` part of FrameSamp+Modulation / GroundSG: tokenizer gate -> MME-VLA preflight -> start (or
+    attach) the server (ready = port listening + server log contains ``history_config='<yaml>'``) -> background
+    ckpt fingerprint. Returns the ckpt used."""
     S = _servers
     cfg = policy.cfg
     ckpt = S.require_ckpt(cfg, model)
@@ -834,16 +868,18 @@ def load_mme_vla_server(policy, model: str) -> Path:
 
 
 class FrameSampModulPolicy(_servers.ServedPolicy):
-    """FrameSamp+Modulation（``perceptual-framesamp-modul``）。
+    """FrameSamp+Modulation (``perceptual-framesamp-modul``).
 
-    * ``load``：``load_mme_vla_server``（cwd ``third_party/mme-vla``、``XLA_PYTHON_CLIENT_MEM_FRACTION=0.75``）+ 新增预热
-      ``warmup_server``（``cfg["warmup"]`` 缺省开）；
-    * ``reset(spec)``：不发消息、不碰环境——只探活并记下本局身份（客户端缓冲与动作计划在 ``run_episode`` 里每局新建）；
-    * ``play``：原样调本模块 ``run_episode``：每局新 websocket，先发服务端 ``reset`` 再 ``session.reset()``（旧次序）；
-    * ``close``：停服务端进程组（基类）。
+    * ``load``: ``load_mme_vla_server`` (cwd ``third_party/mme-vla``, ``XLA_PYTHON_CLIENT_MEM_FRACTION=0.75``) + the
+      added warm-up ``warmup_server`` (``cfg["warmup"]``, on by default);
+    * ``reset(spec)``: sends no message and never touches the environment -- only probes liveness and records this
+      episode's identity (the client buffer and action plan are recreated per episode in ``run_episode``);
+    * ``play``: calls this module's ``run_episode`` unchanged: a new websocket per episode, sending the server
+      ``reset`` first and then ``session.reset()`` (the old order);
+    * ``close``: stop the server process group (base class).
 
-    必填 cfg：``openpi_data_home``、``tokenizer_sha256``（预检打开时）；可选 ``ckpt``（缺省旧 run_seat.sh 路径）、
-    ``mme_vla_py``、``compile_cache``、``det``、``xla_mem_fraction``、``warmup``、``warmup_frames``。"""
+    Required cfg: ``ckpt`` (no default), ``openpi_data_home``, ``tokenizer_sha256`` (when preflight is on);
+    optional ``mme_vla_py``, ``compile_cache``, ``det``, ``xla_mem_fraction``, ``warmup``, ``warmup_frames``."""
 
     model = "perceptual-framesamp-modul"
     requires_ckpt = True

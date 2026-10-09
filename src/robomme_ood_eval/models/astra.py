@@ -1,50 +1,68 @@
-"""Astra 模型：把 Astra-on-RoboMME 的单局循环 ``runner.episode`` 接到评估仓「模型侧 4 个方法」上（拆分方案 §三 Astra 行）。
+"""Astra model: connects Astra-on-RoboMME's per-episode loop ``runner.episode`` to the evaluation repo's four
+model-side methods.
 
-``AstraPolicy`` 的四个方法（外层 ``load_policy``／``run_episode`` 调用，接口见 ``robomme_ood_eval.policy``）：
+The four methods of ``AstraPolicy`` (called by the outer ``load_policy`` / ``run_episode``; interface in
+``robomme_ood_eval.policy``):
 
-- ``load()``（进程级一次）：核模型种子与两张卡；``bootstrap`` 子模块 ``examples/champ``；断言环境源是
-  ``third_party/robomme_benchmark/src``；``validate_checkpoints``；查 ``group_*/STOP.json``（已停即拒，账本保留）；
-  用 ``ServerProcess`` 起**费用守卫** ``servers/astra_cost_guard.py --cap <astra_cap_usd≤5>``（账本 ``astra_ledger``、
-  单价 ``astra_prices``，就绪 = 守卫心跳状态新鲜）与 **Astra VLA 服务端**（子模块 ``scripts/serve_policy.py``，
-  ``--seed=<policy_seed>``，``CUDA_VISIBLE_DEVICES=gpus[0]``，就绪 = 端口在听）；本进程钉到 ``gpus[1]`` 加载
-  ``runner.Monitor``；建一个 ``GuardedResponsesClient``（20 秒发送间隔靠同一实例维持）与一个 ``core.Planner``。
-- ``reset(spec)``（每局第一句；不向服务端发消息、不碰环境）：探两个服务端存活；上一局留下的停机条件、
-  ``group_*/STOP.json`` 任一成立即抛 ``AstraStop``；``CostGate.register_episode`` 跨进程登记局数（第 3 局即拒）。
-- ``play(session, spec, recorder)``：经 ``SessionBuilder`` 把外层 ``EnvSession`` 交给子模块
-  ``runner.episode(args, task, ep, builder, monitor, planner, client)``，外面套 ``Traced*`` 记录包装写本局
-  ``trace.jsonl``／``language.jsonl``；``args.max_steps`` 随每局 ``spec.max_steps`` 传入（同一 Policy 可先后跑 1300、
-  1800 两档）。返回后按上游 ``main()`` 的停机规则记下停机条件，由下一局 ``reset`` 抛出。
-- ``close()``：先停 VLA 服务端进程组、再停守卫（守卫收 TERM 后写 ``exited=true``），释放监视模型。
+- ``load()`` (once per process): check the model seed and the two GPUs; ``bootstrap`` the submodule's
+  ``examples/champ``; assert the environment source is ``third_party/robomme_benchmark/src``;
+  ``validate_checkpoints``; check ``group_*/STOP.json`` (refuse if already stopped; the ledger is kept); start via
+  ``ServerProcess`` the **cost guard** ``servers/astra_cost_guard.py --cap <astra_cap_usd<=5>`` (ledger
+  ``astra_ledger``, unit prices ``astra_prices``, ready = guard heartbeat state is fresh) and the **Astra VLA server**
+  (the submodule's ``scripts/serve_policy.py``, ``--seed=<policy_seed>``, ``CUDA_VISIBLE_DEVICES=gpus[0]``, ready =
+  port listening); pin this process to ``gpus[1]`` and load ``runner.Monitor``; build one ``GuardedResponsesClient``
+  (the 20-second send interval is kept by the same instance) and one ``core.Planner``.
+- ``reset(spec)`` (first statement of each episode; sends no server message and never touches the environment):
+  probe that both servers are alive; raise ``AstraStop`` if a stop condition left by the previous episode or
+  ``group_*/STOP.json`` holds; ``CostGate.register_episode`` registers the episode count across processes (the third
+  episode is refused).
+- ``play(session, spec, recorder)``: hand the outer ``EnvSession`` via ``SessionBuilder`` to the submodule's
+  ``runner.episode(args, task, ep, builder, monitor, planner, client)``, wrapped in ``Traced*`` recorders that write
+  this episode's ``trace.jsonl`` / ``language.jsonl``; ``args.max_steps`` follows each episode's ``spec.max_steps``
+  (one Policy can run both the 1300 and 1800 caps in turn). Afterwards the stop condition is recorded per the
+  upstream ``main()`` stop rules and raised by the next episode's ``reset``.
+- ``close()``: stop the VLA server process group first, then the guard (which writes ``exited=true`` after
+  receiving TERM), and release the monitor model.
 
-停机规则（从旧 ``run_cases`` 搬进 Policy；play 返回后判定，下一局 ``reset`` 抛 ``AstraStop``，外层整批停）：
-① 错误信息以 ``PLANNER_STOP_PREFIXES`` 开头的局单次即停；② ``status=="error"`` 且不是规划输出不合模板
-（``core.is_planner_failure``）的局连续累计 3 次即停（正常结局清零）；③ 已登记局数到 ``ASTRA_MAX_EPISODES`` 即停；
-另 ④ ``group_*/STOP.json``（守卫到线或人工写）在每局 ``reset`` 与每次发送前都查。
+Stop rules (moved from the old ``run_cases`` into the Policy; judged after play returns, the next episode's
+``reset`` raises ``AstraStop`` and the outer loop stops the whole batch):
+(1) an episode whose error message starts with one of ``PLANNER_STOP_PREFIXES`` stops immediately; (2) 3 consecutive
+episodes with ``status=="error"`` that are not a planner output template mismatch (``core.is_planner_failure``) stop
+(a normal outcome resets the count); (3) stop when the registered episode count reaches ``ASTRA_MAX_EPISODES``;
+and (4) ``group_*/STOP.json`` (written by the guard at the limit, or manually) is checked at every episode ``reset``
+and before every send.
 
-产物（S4 三件）：
+Outputs:
 
-1. ``args.output`` = ``<spec.out_dir>/astra``：Astra 自写的 ``<task>/ep<NNN>/{identity.json, decisions.jsonl,
-   rollout.mp4, actions.npy, result.json, monitor_inputs/}`` 留在那里，不与外层产物树冲突；
-2. 尝试目录名用 ``spec.attempt``：``<task>/ep<NNN>/<key>.a<attempt>/provenance.json``（不再写死 ``a1``）；
-3. 停机规则如上。
+1. ``args.output`` = ``<spec.out_dir>/astra``: Astra's own ``<task>/ep<NNN>/{identity.json, decisions.jsonl,
+   rollout.mp4, actions.npy, result.json, monitor_inputs/}`` stays there, without clashing with the outer output
+   tree;
+2. the attempt directory name uses ``spec.attempt``: ``<task>/ep<NNN>/<key>.a<attempt>/provenance.json`` (no longer
+   hard-coded to ``a1``);
+3. stop rules as above.
 
-``trace.jsonl``、``language.jsonl``、``arrays.npz`` 写在 ``spec.out_dir``（外层出官方版式视频读这里的 trace；
-``arrays.npz`` 经 ``trace_writer.merge_write_npz`` 与外层录制器的同名键逐项核对合并）。原始帧、逐步数组、事件由外层
-``EnvSession`` 写进外层录制器，本模块不再自建录制器。
+``trace.jsonl``, ``language.jsonl`` and ``arrays.npz`` are written in ``spec.out_dir`` (the outer loop renders the
+official-layout video from the trace here; ``arrays.npz`` is merged via ``trace_writer.merge_write_npz`` with
+same-named keys of the outer recorder, checked item by item). Raw frames, per-step arrays and events are written by
+the outer ``EnvSession`` into the outer recorder; this module no longer creates its own recorder.
 
-费用口径（用户：Astra 独立费用账本、5 美元硬上限）：守卫 ``--cap`` 默认且最大 5 美元（``HARD_CAP_USD``），
-``GuardedResponsesClient`` 每次真正发送前同步读守卫状态、原子预留单次最坏费用，守卫失联（心跳超过 10 秒）、STOP、
-预留失败任一即拒发；局数硬上限 2，跨进程登记在守卫预留文件里。账本、预留文件与 ``STOP.json`` 都在
-``astra_ledger`` 所在目录下长期保留，绝不为绕额度新建账本。
+Cost policy (Astra has its own cost ledger with a hard 5 USD limit): the guard's ``--cap`` defaults to and is at most
+5 USD (``HARD_CAP_USD``); ``GuardedResponsesClient`` synchronously reads the guard state before every real send and
+atomically reserves the single-request worst-case cost, refusing to send when the guard is lost (heartbeat older
+than 10 seconds), STOP is set, or the reservation fails; the hard episode limit is 2, registered across processes in
+the guard reservation file. The ledger, reservation file and ``STOP.json`` all live long-term in the directory of
+``astra_ledger``; a new ledger is never created to get around the limit.
 
-密钥只从环境变量 ``OPENAI_API_KEY`` 读，交给 ``GuardedResponsesClient``；本模块不读密钥文件、不打印密钥；VLA 服务端
-进程的环境里去掉这个变量（与上游 ``run.sh`` 的 ``env -u OPENAI_API_KEY`` 同义）。
+The API key is read only from the environment variable ``OPENAI_API_KEY`` and handed to ``GuardedResponsesClient``;
+this module never reads key files or prints the key; the variable is removed from the VLA server process
+environment (same as the upstream ``run.sh`` ``env -u OPENAI_API_KEY``).
 
-模型 seed：``policy_seed`` 作为 VLA 服务 ``--seed``（替代上游固定 42）；云端 planner／monitor 无 seed 接口，只在
-trace、``result.json``、来源清单里记 ``policy_seed`` 与 ``cloud_seed=null``，不伪造。
+Model seed: ``policy_seed`` becomes the VLA server ``--seed`` (replacing upstream's fixed 42); the cloud planner /
+monitor have no seed interface, so trace, ``result.json`` and the provenance manifest only record ``policy_seed`` and
+``cloud_seed=null``, never fabricated.
 
-步数：``ood ↔ 1800``（strict：外层 ``EnvSession`` 与 ``TracedEnv`` 都在第 1801 次 ``step`` 进环境之前拒绝，本局按
-``timeout`` 收尾）、``hard-verify ↔ 1300``（非 strict）。
+Steps: ``ood <-> 1800`` (strict: both the outer ``EnvSession`` and ``TracedEnv`` refuse the 1801st ``step`` before it
+reaches the environment, and the episode finalizes as ``timeout``), ``hard-verify <-> 1300`` (not strict).
 """
 from __future__ import annotations
 
@@ -61,53 +79,59 @@ from robomme_ood_eval.policy import AstraStop as _PolicyAstraStop
 from robomme_ood_eval.policy import Policy, Ready, ServerProcess, pick_port
 
 HERE = Path(__file__).resolve().parent
-#: 评估仓根（``src/robomme_ood_eval/models`` 往上三层）
+#: evaluation repo root (three levels above ``src/robomme_ood_eval/models``)
 REPO_ROOT = HERE.parents[2]
 
-#: 新侧只接受这两个数据集；与每局 ``spec.max_steps`` 做配对一致性检查
+#: the new side only accepts these two datasets; consistency-checked against each episode's ``spec.max_steps``
 DATASET_STEP_PAIRING = {"hard-verify": 1300, "ood": 1800}
-#: ood 为 strict（第 1801 次 step 在进入真实环境前被拒），hard-verify 不变（截断靠底层环境）
+#: ood is strict (the 1801st step is refused before reaching the real environment); hard-verify is unchanged
+#: (truncation by the underlying environment)
 DATASET_STRICT_CAP = {"hard-verify": False, "ood": True}
-#: 上游 ``api_client.ResponsesClient`` 请求体里固定的输出上限（规划与复审共用；只用于语言账本 params）
+#: fixed output limit in the request body of upstream ``api_client.ResponsesClient`` (shared by planning and review;
+#: only used for language ledger params)
 PLANNER_MAX_OUTPUT_TOKENS = 2048
-#: 上游 ``runner.Monitor`` 的 ``RequestConfig(max_tokens=8, temperature=0)``（只用于语言账本 params）
+#: ``RequestConfig(max_tokens=8, temperature=0)`` of upstream ``runner.Monitor`` (only used for language ledger params)
 MONITOR_PARAMS = {"temperature": 0, "max_tokens": 8}
-#: 来源清单 provenance.json 的文件名（尝试目录 ``<key>.a<attempt>/`` 下）
+#: file name of the provenance manifest (under the attempt directory ``<key>.a<attempt>/``)
 PROVENANCE_FILE = "provenance.json"
-#: 上游 ``main()`` 第⑤项：错误信息以这三个前缀开头的局，单次即停
+#: upstream ``main()`` item 5: an episode whose error message starts with one of these three prefixes stops at once
 PLANNER_STOP_PREFIXES = ("Planner API", "Pilot planner-call", "Planner bridge failed")
-#: 上游 ``main()`` 第④项：非规划类 error 连续累计到此数即停
+#: upstream ``main()`` item 4: stop when non-planner errors accumulate consecutively to this count
 INFRA_ERROR_LIMIT = 3
-#: ``ResponsesClient._send`` 只认这两个目录名下的 STOP.json
+#: ``ResponsesClient._send`` only honors STOP.json under these two directory names
 GROUP_DIR_NAMES = ("group_0", "group_1")
-#: 启动时打印 sha256 的 Astra 源文件（留档用）
+#: Astra source files whose sha256 is printed at startup (for the record)
 ASTRA_SOURCE_FILES = ("runner.py", "core.py", "api_client.py", "input_contract.py", "release_utils.py",
                       "train_entry.py", "weights.json")
-#: 新侧路线名
+#: new-side route name
 ROUTE = "astra/new"
-#: Astra 自写产物在本局 raw 目录下的子目录名（S4 第①件）
+#: subdirectory name of Astra's own outputs under this episode's raw directory
 ASTRA_SUBDIR = "astra"
-#: 终态
+#: terminal statuses
 TERMINALS = ("success", "fail", "timeout", "error")
-#: 守卫心跳超时（秒）：超过即视为守卫失联、拒发（与 astra_cost_guard.HEARTBEAT_TIMEOUT_S 相同，由测试核对）
+#: guard heartbeat timeout (seconds): beyond it the guard is considered lost and sends are refused (same as
+#: astra_cost_guard.HEARTBEAT_TIMEOUT_S, checked by tests)
 GUARD_HEARTBEAT_TIMEOUT_S = 10.0
-#: 第三方 ResponsesClient 两次发送之间的固定间隔（秒；上游 _send 里的 20）
+#: fixed interval between two sends of the third-party ResponsesClient (seconds; the 20 in upstream _send)
 SEND_INTERVAL_S = 20
-#: VLA 服务端口缺省基数（与上游 run.sh 的 18762 相同）
+#: default VLA server port base (same as 18762 in upstream run.sh)
 DEFAULT_PORT_BASE = 18762
-#: 上游 ``runner.episode`` 的单局规划次数上限缺省（上游 main() 的 ``--max-planner-calls`` 默认 24）
+#: default per-episode planning call limit of upstream ``runner.episode`` (upstream main()'s ``--max-planner-calls``
+#: defaults to 24)
 DEFAULT_MAX_PLANNER_CALLS = 24
-#: VLA 服务就绪等待上限（秒；旧 run_astra.sh 为 15 分钟）
+#: VLA server readiness timeout (seconds; the old launcher used 15 minutes)
 VLA_READY_TIMEOUT_S = 900.0
-#: 守卫就绪等待上限（秒）
+#: guard readiness timeout (seconds)
 GUARD_READY_TIMEOUT_S = 60.0
-#: Astra 单局墙钟（秒）：20 秒发送间隔 × 至多 24 次规划 + 监视与仿真，按 1800 缺省偏紧，放宽到 3600
+#: Astra per-episode wall clock (seconds): 20-second send interval x at most 24 planning calls + monitoring and
+#: simulation is tight against the default 1800, so it is relaxed to 3600
 ASTRA_EPISODE_WALL_S = 3600.0
 
 
 class AstraStop(_PolicyAstraStop):
-    """Astra 报停（上游 ``main()`` 那几处 ``raise RuntimeError`` 的同义异常）；``reason`` 供测试与日志判读。
-    是 ``robomme_ood_eval.policy.AstraStop`` 的子类：外层 ``scripts/evaluate.py`` 据此整批停（退出 3）。"""
+    """Astra stop (equivalent to the few ``raise RuntimeError`` in upstream ``main()``); ``reason`` is for tests and
+    log reading. A subclass of ``robomme_ood_eval.policy.AstraStop``: the outer ``scripts/evaluate.py`` stops the
+    whole batch on it (exit 3)."""
 
     def __init__(self, reason: str, message: str) -> None:
         super().__init__(message)
@@ -115,27 +139,29 @@ class AstraStop(_PolicyAstraStop):
 
 
 class StepCapReached(RuntimeError):
-    """strict cap：已执行 ``effective_cap`` 步后再调用 ``step``，不进入真实环境（与 ``session.StepCapReached`` 同义）。
-    继承 ``RuntimeError``：Astra ``runner.episode`` 的 ``except Exception`` 接住它，本模块收尾时改记 ``timeout``。"""
+    """strict cap: calling ``step`` after ``effective_cap`` steps were executed never reaches the real environment
+    (same meaning as ``session.StepCapReached``). Inherits ``RuntimeError``: Astra ``runner.episode``'s
+    ``except Exception`` catches it, and this module records ``timeout`` at finalization."""
 
 
-# ── 路径与上游模块 ─────────────────────────────────────────────────────────
+# -- paths and upstream modules ----------------------------------------------------------
 
 def third_party_root() -> Path:
-    """第三方子模块根：``SGEVAL_THIRD_PARTY``（worktree 测试只读引用主检出）> 本仓库 ``third_party``。"""
+    """Third-party submodule root: ``SGEVAL_THIRD_PARTY`` (e.g. to reference a populated checkout read-only from a
+    worktree) > this repo's ``third_party``."""
     third = os.environ.get("SGEVAL_THIRD_PARTY")
     return Path(third).resolve() if third else (REPO_ROOT / "third_party").resolve()
 
 
 def astra_root(explicit: str | None = None) -> Path:
-    """Astra 子模块根：显式参数（cfg ``astra_root``）> ``<third_party>/Astra-on-RoboMME``。"""
+    """Astra submodule root: explicit argument (cfg ``astra_root``) > ``<third_party>/Astra-on-RoboMME``."""
     if explicit:
         return Path(explicit).resolve()
     return third_party_root() / "Astra-on-RoboMME"
 
 
 def benchmark_src() -> Path:
-    """环境源唯一允许的位置：``<third_party>/robomme_benchmark/src``（benchmark 仓子模块）。"""
+    """The only allowed environment source: ``<third_party>/robomme_benchmark/src`` (the benchmark submodule)."""
     return third_party_root() / "robomme_benchmark" / "src"
 
 
@@ -148,21 +174,22 @@ def file_sha256(path: Path) -> str:
 
 
 def bootstrap(root: Path) -> SimpleNamespace:
-    """``sys.path`` 加 Astra ``examples/champ`` 与 ``packages/openpi-client/src``，导入 Astra 的四个模块并返回。
+    """Add Astra's ``examples/champ`` and ``packages/openpi-client/src`` to ``sys.path``, import Astra's four modules
+    and return them.
 
-    不再把本模块所在目录放进 ``sys.path``（评估仓里那是 ``models/``，会遮蔽同名模块）；``trace_writer`` 与守卫
-    一律按包路径导入。"""
+    This module's own directory is no longer put on ``sys.path`` (in the evaluation repo that is ``models/``, which
+    would shadow same-named modules); ``trace_writer`` and the guard are always imported by package path."""
     champ = root / "examples" / "champ"
     if not (champ / "runner.py").is_file():
-        raise FileNotFoundError(f"找不到 Astra 源码 {champ}/runner.py（子模块未初始化？）")
+        raise FileNotFoundError(f"Astra source not found: {champ}/runner.py (submodule not initialized?)")
     for entry in (str(root / "packages" / "openpi-client" / "src"), str(champ)):
         if entry in sys.path:
             sys.path.remove(entry)
         sys.path.insert(0, entry)
-    import api_client  # noqa: PLC0415  Astra 的直连 Responses API 客户端
+    import api_client  # noqa: PLC0415  Astra's direct Responses API client
     import core  # noqa: PLC0415
     import release_utils  # noqa: PLC0415
-    import runner as astra_runner  # noqa: PLC0415  Astra 的单局循环（模块级 episode 函数）
+    import runner as astra_runner  # noqa: PLC0415  Astra's per-episode loop (module-level episode function)
     return SimpleNamespace(root=root, champ=champ, runner=astra_runner, core=core,
                            release_utils=release_utils, api_client=api_client)
 
@@ -172,8 +199,8 @@ def source_digests(champ: Path) -> dict[str, str]:
 
 
 def assert_env_sources() -> dict[str, str]:
-    """环境源必须是 ``third_party/robomme_benchmark/src``：``robomme`` 与 ``robomme_hard`` 都不得来自 Astra 嵌套的
-    官方副本或别处。"""
+    """The environment source must be ``third_party/robomme_benchmark/src``: neither ``robomme`` nor ``robomme_hard``
+    may come from the official copy nested in Astra or anywhere else."""
     import robomme  # noqa: PLC0415
     import robomme_hard  # noqa: PLC0415
     want = str(benchmark_src().resolve()) + os.sep
@@ -181,7 +208,7 @@ def assert_env_sources() -> dict[str, str]:
              "robomme": str(Path(robomme.__file__).resolve())}
     for name, path in files.items():
         if not path.startswith(want):
-            raise RuntimeError(f"{name} 不是来自 third_party/robomme_benchmark/src（{want}）：{path}")
+            raise RuntimeError(f"{name} does not come from third_party/robomme_benchmark/src ({want}): {path}")
     print(f"ASTRA_ENV_SOURCE robomme_hard={files['robomme_hard']} robomme={files['robomme']}", flush=True)
     return files
 
@@ -189,30 +216,33 @@ def assert_env_sources() -> dict[str, str]:
 def check_pairing(dataset: str, max_steps: int) -> None:
     expected = DATASET_STEP_PAIRING.get(dataset)
     if expected is None:
-        raise ValueError(f"RUN_BLOCKED reason=dataset dataset={dataset!r}（只接受 {sorted(DATASET_STEP_PAIRING)}）")
+        raise ValueError(f"RUN_BLOCKED reason=dataset dataset={dataset!r} (only {sorted(DATASET_STEP_PAIRING)} are accepted)")
     if int(max_steps) != expected:
-        raise ValueError(f"RUN_BLOCKED reason=step_cap_pairing dataset={dataset} max_steps={max_steps}（应为 {expected}）")
+        raise ValueError(f"RUN_BLOCKED reason=step_cap_pairing dataset={dataset} max_steps={max_steps} (expected {expected})")
 
 
 def check_policy_seed(value) -> int:
-    """``policy_seed`` 必填、非负整数；缺失或非法即 ``RUN_BLOCKED reason=policy_seed``（不回落旧默认 42）。"""
+    """``policy_seed`` is required, a non-negative integer; missing or invalid means ``RUN_BLOCKED reason=policy_seed``
+    (no fallback to the old default 42)."""
     if value is None or isinstance(value, bool):
-        raise ValueError("RUN_BLOCKED reason=policy_seed 必须显式给模型种子（非负整数，不回落任何旧默认值）")
+        raise ValueError("RUN_BLOCKED reason=policy_seed the model seed must be given explicitly (non-negative integer, "
+                         "no fallback to any old default)")
     if isinstance(value, int):
         seed = value
     elif isinstance(value, str) and value.strip().isdigit():
         seed = int(value.strip())
     else:
-        raise ValueError(f"RUN_BLOCKED reason=policy_seed policy_seed={value!r} 须为非负整数")
+        raise ValueError(f"RUN_BLOCKED reason=policy_seed policy_seed={value!r} must be a non-negative integer")
     if seed < 0:
-        raise ValueError(f"RUN_BLOCKED reason=policy_seed policy_seed={value!r} 须为非负整数")
+        raise ValueError(f"RUN_BLOCKED reason=policy_seed policy_seed={value!r} must be a non-negative integer")
     return seed
 
 
-# ── 轨迹委托（trace_writer） ───────────────────────────────────────────────
+# -- trace delegation (trace_writer) -----------------------------------------------------
 
 def _canonical(obj: Any) -> bytes:
-    """规范化字节：数组一律换成 ``array_record``（dtype、shape、sha256），其余按 JSON 排序键序列化。"""
+    """Normalized bytes: arrays always become ``array_record`` (dtype, shape, sha256), everything else is serialized
+    as JSON with sorted keys."""
     import numpy as np  # noqa: PLC0415
     from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
 
@@ -232,15 +262,18 @@ def _canonical(obj: Any) -> bytes:
 
 
 class TraceContext:
-    """一局的共享状态：当前步号与子目标（VLA 请求里的 ``grounded_subgoal``）、C8 三分计数、原动作、录制器。
+    """Shared state of one episode: current step number and subgoal (``grounded_subgoal`` in VLA requests), the three
+    C8 counts, original actions, recorder.
 
-    ``open_recorder``：无参可调用，首次 reset 时由 ``TracedEnv`` 调用一次建录制器（评估仓的 ``run_one`` 恒传 ``None``：录制归外层 ``EnvSession``）；
-    为 ``None`` 时不录（只供只测轨迹的单元测试）。
+    ``open_recorder``: a no-argument callable invoked once by ``TracedEnv`` at the first reset to create a recorder
+    (the evaluation repo's ``run_one`` always passes ``None``: recording belongs to the outer ``EnvSession``); with
+    ``None`` nothing is recorded (only for unit tests that test the trace alone).
 
-    第三阶段：``effective_cap``／``strict_cap``（strict 时 ``TracedEnv.step`` 在计数前拒第 cap+1 步，置 ``cap_hit``）；
-    ``lang``：``trace_writer.LanguageLog`` 实例或 ``None``（不记语言账本）；``source_call_id``／``chunk_index``：
-    当前动作块来自哪次 ``action_model`` 调用、下一步是块内第几个动作；``action_params``／``monitor_params``：
-    语言账本 ``open_call`` 的 ``params``。"""
+    ``effective_cap`` / ``strict_cap`` (when strict, ``TracedEnv.step`` refuses step cap+1 before counting and sets
+    ``cap_hit``); ``lang``: a ``trace_writer.LanguageLog`` instance or ``None`` (no language ledger);
+    ``source_call_id`` / ``chunk_index``: which ``action_model`` call the current action chunk came from and the index
+    of the next action within the chunk; ``action_params`` / ``monitor_params``: ``params`` for the language ledger's
+    ``open_call``."""
 
     def __init__(self, writer, open_recorder: Callable | None = None, *, effective_cap: int | None = None,
                  strict_cap: bool = False, lang=None, action_params: dict | None = None,
@@ -248,10 +281,10 @@ class TraceContext:
         self.writer = writer
         self.t = 0
         self.subgoal: str | None = None
-        self.attempted = 0  # C8 交给环境的步数（含异常步）
-        self.observed = 0  # C8 返回有效观测的步数
-        self.demo_frames: int | None = None  # 演示帧数（不含初始帧）；None = 还没 reset
-        self.actions: list = []  # 每个执行步实际交给环境的动作（原 dtype／shape／bytes）
+        self.attempted = 0  # C8 steps given to the environment (including exception steps)
+        self.observed = 0  # C8 steps that returned a valid observation
+        self.demo_frames: int | None = None  # demo frame count (excluding the initial frame); None = not reset yet
+        self.actions: list = []  # actions actually given to the environment per executed step (original dtype / shape / bytes)
         self.recorder = None
         self._open_recorder = open_recorder
         self.effective_cap = None if effective_cap is None else int(effective_cap)
@@ -270,7 +303,8 @@ class TraceContext:
         return self.recorder
 
     def frame_sha(self, phase: str, idx: int, frames) -> str | None:
-        """Astra ``frames``／``demo`` 列表第 ``idx`` 帧的原像素 sha256（与 trace 的 ``front_sha256`` 同算法），按帧缓存。"""
+        """Raw pixel sha256 of frame ``idx`` of Astra's ``frames`` / ``demo`` list (same algorithm as the trace's
+        ``front_sha256``), cached per frame."""
         from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
         key = (phase, int(idx))
         if key not in self._sha_cache:
@@ -278,8 +312,9 @@ class TraceContext:
         return self._sha_cache[key]
 
     def step_link(self) -> dict:
-        """执行步关联（冻结说明五）：开了语言账本时给 ``log_step`` 的 ``source_call_id``／``chunk_index``，否则空
-        （不传时 step 行键集合与旧格式逐字节相同）。每取一次块内序号加一。"""
+        """Executed-step link: with the language ledger open, gives ``log_step``'s ``source_call_id`` /
+        ``chunk_index``, otherwise empty (without them the step line's key set is byte-identical to the old format).
+        Each call increments the in-chunk index."""
         if self.lang is None:
             return {}
         link = {"source_call_id": self.source_call_id, "chunk_index": self.chunk_index}
@@ -294,23 +329,28 @@ def _pack_state(obs, i: int = -1):
 
 
 def _goal_text(goal) -> str | None:
-    """与 Astra ``runner.episode`` 取任务目标同式：列表取第一个。"""
+    """Same as how Astra ``runner.episode`` takes the task goal: the first element of a list."""
     if isinstance(goal, list):
         return goal[0] if goal else None
     return goal
 
 
 class TracedEnv:
-    """包住 builder 给的环境：reset 记演示段（C2），step 记执行后的画面、状态、动作与终止标志（C4、C8）。
+    """Wraps the environment given by the builder: reset records the demo segment (C2), step records the post-step
+    image, state, action and termination flags (C4, C8).
 
-    录制器只用 ``add_frames``／``add_array``：演示段全部帧（含初始帧）与每个有效观测步的最后一帧各进一次，
-    故两路流的帧数 = ``frames_recorded`` = 演示帧数 + 1 + 有效观测步数。
+    The recorder only uses ``add_frames`` / ``add_array``: every frame of the demo segment (including the initial
+    frame) and the last frame of each valid observation step go in once each, so the frame count of both streams =
+    ``frames_recorded`` = demo frames + 1 + valid observation steps.
 
-    strict cap（ood）：守卫在计数与动作追加**之前**——已执行 ``effective_cap`` 步再调用即不进真实环境、不记录器、
-    不落 trace 行，置 ``cap_hit`` 并抛 ``StepCapReached``。内层是外层 ``EnvSession``（经 ``SessionEnv``）且它的
-    ``step_cap`` 同样到顶时，先交给它拒一次（它在进环境之前抛，并置 ``session.cap_hit``）。
+    strict cap (ood): the guard comes **before** counting and appending the action -- a call after ``effective_cap``
+    executed steps never reaches the real environment, is not recorded and writes no trace line; it sets ``cap_hit``
+    and raises ``StepCapReached``. When the inner environment is the outer ``EnvSession`` (via ``SessionEnv``) and its
+    ``step_cap`` is reached as well, it is handed to it to refuse once (it raises before reaching the environment
+    and sets ``session.cap_hit``).
 
-    评估仓里 ``ctx.recorder`` 恒为 ``None``：帧、数组、事件由外层 ``EnvSession`` 写进外层录制器，这里只写 trace。"""
+    In the evaluation repo ``ctx.recorder`` is always ``None``: frames, arrays and events are written by the outer
+    ``EnvSession`` into the outer recorder; only the trace is written here."""
 
     def __init__(self, inner, ctx: TraceContext) -> None:
         self._inner = inner
@@ -347,8 +387,8 @@ class TracedEnv:
             print(f"ASTRA_STEP_CAP exec_steps={ctx.attempted} cap={ctx.effective_cap} rejected_step={ctx.attempted + 1}",
                   flush=True)
             if _session_would_refuse(self._inner):
-                # 外层 EnvSession 自带同一上限：交给它拒（不进真实环境），它置 ``session.cap_hit`` 并记录器事件，
-                # 外层结果的 cap_hit／timeout 与本驱动一致
+                # the outer EnvSession has the same cap: let it refuse (never reaching the real environment); it sets
+                # ``session.cap_hit`` and records the event, so the outer result's cap_hit / timeout match this driver
                 try:
                     self._inner.step(action)
                 except Exception as exc:  # noqa: BLE001 EnvSession.StepCapReached
@@ -393,14 +433,16 @@ class TracedEnv:
 
 
 def _session_would_refuse(inner) -> bool:
-    """内层是带 ``step_cap`` 的外层会话、且已执行步数到顶（再调 ``step`` 会在进环境之前被它拒）。"""
+    """The inner environment is an outer session with ``step_cap`` whose executed step count is at the cap (another
+    ``step`` call would be refused by it before reaching the environment)."""
     cap = getattr(inner, "step_cap", None)
     steps = getattr(inner, "steps", None)
     return isinstance(cap, int) and isinstance(steps, int) and steps >= cap
 
 
 class TracedBuilder:
-    """只暴露 ``runner.episode`` 用到的两个方法；``make_env_for_episode`` 只传局号（评估仓里内层是 ``SessionBuilder``）。"""
+    """Only exposes the two methods ``runner.episode`` uses; ``make_env_for_episode`` only passes the episode index
+    (in the evaluation repo the inner builder is ``SessionBuilder``)."""
 
     def __init__(self, inner, ctx: TraceContext) -> None:
         self._inner = inner
@@ -413,26 +455,28 @@ class TracedBuilder:
         return self._inner.resolve_episode(episode)
 
 
-# ── 语言账本（冻结说明五；LanguageLog 由 R6 的 trace_writer 提供） ─────────────
+# -- language ledger (LanguageLog is provided by trace_writer) ----------------------------
 
-#: 附图变换描述：无损 PNG（规划／监视的单帧附件）、``core.sheets`` 拼图（JPEG q92）、websocket 原数组（VLA）
+#: image transform descriptions: lossless PNG (single-frame attachments of planning / monitoring), ``core.sheets``
+#: contact sheets (JPEG q92), raw websocket arrays (VLA)
 PNG_TRANSFORM = {"resize": None, "crop": None, "layout": None, "encode": "png"}
 SHEET_TRANSFORM = {"resize": None, "crop": None, "layout": "core.sheets 4x4 grid, 256x280 cell, frame label",
                    "encode": "jpeg q92"}
 RAW_TRANSFORM = {"resize": None, "crop": None, "layout": None, "encode": "msgpack_numpy"}
-#: Astra 拼图每页帧数（``core.sheets``）
+#: frames per page of Astra contact sheets (``core.sheets``)
 SHEET_PAGE = 16
 
 
 def language_log_cls():
-    """可选探测：``trace_writer.LanguageLog``（R6）；不存在时返回 ``None``（不记语言账本、不报错）。"""
+    """Optional probe: ``trace_writer.LanguageLog``; returns ``None`` when missing (no language ledger, no error)."""
     from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     return getattr(tw, "LanguageLog", None)
 
 
 def _image_ref(slot: int, ref: str, phase: str, frame_idx, cam: str, raw_sha: str | None, *, transform: dict,
                sources: list | None = None, encoded: Path | None = None) -> dict:
-    """附图引用（不存图片本身）：单帧的 ``sources`` 为它自己；拼图给有序来源帧列表、``frame_idx=None``。"""
+    """Image reference (the image itself is not stored): a single frame's ``sources`` is itself; a contact sheet gives
+    an ordered list of source frames and ``frame_idx=None``."""
     if sources is None:
         sources = [{"phase": phase, "frame_idx": frame_idx, "cam": cam, "raw_sha256": raw_sha}]
     enc = file_sha256(encoded) if encoded is not None and Path(encoded).is_file() else None
@@ -447,10 +491,11 @@ def _sheet_sources(ctx: TraceContext, phase: str, indices: list, frames) -> list
 
 def planner_images(ctx: TraceContext, out: Path, request: dict, frames, demo, *, wrist=None,
                    command_start: int | None = None) -> list:
-    """按 ``request.json`` 的 ``images`` 顺序给规划／复审请求的附图引用。
+    """Image references of a planning / review request, in the order of ``images`` in ``request.json``.
 
-    exec 帧号 = Astra ``frames`` 下标（0 = reset 后初始帧，即 trace demo 段末帧；k = 第 k 步执行后，即 trace step k）；
-    demo 帧号 = 演示段下标。拼图页 p 覆盖下标列表的第 ``16p`` 至 ``16p+15`` 个。"""
+    exec frame number = index into Astra ``frames`` (0 = the initial frame after reset, i.e. the last frame of the
+    trace demo segment; k = after executing step k, i.e. trace step k); demo frame number = index into the demo
+    segment. Contact sheet page p covers items ``16p`` to ``16p+15`` of the index list."""
     now = len(frames) - 1
     memory = [int(i) for i in request.get("memory_frame_ids") or []]
     demo_idx = list(range(len(demo or [])))
@@ -480,19 +525,21 @@ def planner_images(ctx: TraceContext, out: Path, request: dict, frames, demo, *,
             idx = pool[page * SHEET_PAGE:(page + 1) * SHEET_PAGE]
             images.append(_image_ref(slot, ref, phase, None, "front", None, transform=SHEET_TRANSFORM,
                                      sources=_sheet_sources(ctx, phase, idx, src_frames), encoded=path))
-        else:  # 未知附件：只记文件哈希，不猜来源
+        else:  # unknown attachment: only record the file hash, never guess the source
             images.append(_image_ref(slot, None, "exec", None, "front", None, transform=PNG_TRANSFORM, sources=[],
                                      encoded=path))
     return images
 
 
 class PlannerLanguageCall:
-    """一次规划（或第二按钮复审）请求的语言账本记录器。
+    """Language ledger recorder for one planning (or second-button review) request.
 
-    ``wrap(responder)`` 返回给 Astra ``Planner`` 用的发送方：Planner 写完 ``prompt.txt``／``request.json``／附图后调用它，
-    它**先**开调用、写 ``in`` 消息（prompt 全文 + 附图引用）落盘，再交给真实发送方；发送方若支持
-    ``transport_hook``（本文件的 ``GuardedResponsesClient``），每次传输重试（attempt ≥ 1）把上一个调用记 ``error``、
-    另开一个 ``transport_attempt=k`` 的调用并重写 ``in`` 消息。``finish`` 在 Planner 返回或抛错后写回复原文与收尾。"""
+    ``wrap(responder)`` returns the sender used by Astra's ``Planner``: the Planner calls it after writing
+    ``prompt.txt`` / ``request.json`` / images, and it **first** opens the call and persists the ``in`` message (full
+    prompt + image references) before handing over to the real sender; if the sender supports ``transport_hook``
+    (this file's ``GuardedResponsesClient``), every transport retry (attempt >= 1) records the previous call as
+    ``error``, opens another call with ``transport_attempt=k`` and rewrites the ``in`` message. ``finish`` writes the
+    raw reply and finalizes after the Planner returns or raises."""
 
     def __init__(self, ctx: TraceContext, image_fn: Callable[[Path, dict], list], kind: str) -> None:
         self.ctx = ctx
@@ -521,7 +568,7 @@ class PlannerLanguageCall:
                            "model_id": request.get("model"), "adapter_sha": None, "effort": request.get("effort"),
                            "kind": request.get("kind", self.kind), "request_id": out.name, "cloud_seed": None,
                            "policy_seed": self.ctx.action_params.get("policy_seed")}
-            self._open(0)  # 发送前落盘
+            self._open(0)  # persist before sending
             has_hook = hasattr(inner, "transport_hook")
             if has_hook:
                 previous = inner.transport_hook
@@ -534,7 +581,8 @@ class PlannerLanguageCall:
         return responder
 
     def transport(self, out, attempt: int) -> None:
-        """``GuardedResponsesClient._send`` 每次传输尝试前调用；attempt 0 即 ``wrap`` 已开的那个调用。"""
+        """Called by ``GuardedResponsesClient._send`` before each transport attempt; attempt 0 is the call already
+        opened by ``wrap``."""
         if int(attempt) == 0 or self.call_id is None:
             return
         self.ctx.lang.close_call(self.call_id, status="error")
@@ -553,14 +601,15 @@ class PlannerLanguageCall:
         replied = bool(response) and response.get("status") == "ok"
         if replied:
             lang.message(self.call_id, dir="out", role="assistant", text=response.get("text"))
-            if failed and fallback is None:  # 有回复但不合约定（如复审不是 true/false）
+            if failed and fallback is None:  # a reply that violates the convention (e.g. a review that is not true/false)
                 fallback = "model_response_error"
         lang.close_call(self.call_id, status="reply" if replied else "error", parsed=parsed, fallback=fallback)
         self.call_id = None
 
 
 def _monitor_images(ctx: TraceContext, ids, frames, command_start: int, wrist) -> list:
-    """监视器 10 张图（``input_contract.build_input`` 顺序）：最近 8 帧、本条命令起点帧、当前腕部帧。"""
+    """The monitor's 10 images (order of ``input_contract.build_input``): the latest 8 frames, the start frame of the
+    current command, and the current wrist frame."""
     from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     images = [_image_ref(slot, "recent", "exec", int(fid), "front", ctx.frame_sha("exec", int(fid), frames),
                          transform=PNG_TRANSFORM) for slot, fid in enumerate(ids or [])]
@@ -572,9 +621,10 @@ def _monitor_images(ctx: TraceContext, ids, frames, command_start: int, wrist) -
 
 
 class TracedClient:
-    """包住 VLA websocket 客户端：记每次 ``infer`` 的规范化请求与完整动作块；开了语言账本时每次 ``infer`` 记一个
-    ``action_model`` 调用（``in``：``prompt``／``grounded_subgoal``／``simple_subgoal`` 字段原文与两张当前帧引用，
-    发送前落盘；Astra 的 VLA 服务无审计回包，``server_final_text=None``）。"""
+    """Wraps the VLA websocket client: records the normalized request and full action chunk of every ``infer``; with
+    the language ledger open each ``infer`` records one ``action_model`` call (``in``: raw ``prompt`` /
+    ``grounded_subgoal`` / ``simple_subgoal`` fields and references to the two current frames, persisted before
+    sending; Astra's VLA server has no audit reply, so ``server_final_text=None``)."""
 
     def __init__(self, inner, ctx: TraceContext) -> None:
         self._inner = inner
@@ -617,7 +667,8 @@ class TracedClient:
 
 
 def _spool_payload(out: Path) -> bytes:
-    """规划请求的规范化字节：``request.json``（去掉 id／created）+ ``prompt.txt`` + 各附图字节的 sha256。"""
+    """Normalized bytes of a planning request: ``request.json`` (without id / created) + ``prompt.txt`` + the sha256 of
+    each image's bytes."""
     request = json.loads((out / "request.json").read_text())
     images = {name: file_sha256(out / name) for name in request.get("images", []) if (out / name).is_file()}
     request = {k: v for k, v in request.items() if k not in ("id", "created")}
@@ -627,8 +678,9 @@ def _spool_payload(out: Path) -> bytes:
 
 
 class TracedPlanner:
-    """包住 Astra ``Planner``：每次规划／复审请求按 spool 目录内容记一行 request；开了语言账本时临时把
-    ``Planner.responder`` 换成 ``PlannerLanguageCall.wrap`` 的发送方（调用结束即还原）。"""
+    """Wraps Astra's ``Planner``: every planning / review request records one request line from the spool directory
+    content; with the language ledger open ``Planner.responder`` is temporarily replaced by the sender from
+    ``PlannerLanguageCall.wrap`` (restored when the call ends)."""
 
     def __init__(self, inner, ctx: TraceContext) -> None:
         self._inner = inner
@@ -680,9 +732,10 @@ class TracedPlanner:
 
 
 class TracedMonitor:
-    """包住监视器：记 ``input.json``（去掉图片路径，换成各图 sha256）。开了语言账本时每次 ``predict`` 记一个
-    ``monitor`` 调用：推理**之前**按上游 ``input_contract.from_observations`` 落 system、user（10 张图引用），
-    之后写回复原文（``response.json`` 的 ``text``）与 ``parsed`` 布尔。"""
+    """Wraps the monitor: records ``input.json`` (image paths replaced by each image's sha256). With the language
+    ledger open each ``predict`` records one ``monitor`` call: **before** inference, system and user (10 image
+    references) are persisted per upstream ``input_contract.from_observations``; afterwards the raw reply
+    (``text`` of ``response.json``) and the ``parsed`` boolean are written."""
 
     def __init__(self, inner, ctx: TraceContext) -> None:
         self._inner = inner
@@ -693,10 +746,10 @@ class TracedMonitor:
         if ctx.lang is None:
             return None
         try:
-            import input_contract  # noqa: PLC0415  Astra 的监视器输入契约（与 Monitor.predict 第一行同一函数）
+            import input_contract  # noqa: PLC0415  Astra's monitor input contract (same function as the first line of Monitor.predict)
             sample, ids = input_contract.from_observations(task, goal, subgoal, frames, command_start, wrist)
             system, user = sample["messages"][0]["content"], sample["messages"][1]["content"]
-        except Exception:  # noqa: BLE001 构造失败时上游 predict 也会同样失败；仍先落一条可读的输入
+        except Exception:  # noqa: BLE001 if construction fails upstream predict fails the same way; still persist a readable input first
             ids, system = None, None
             user = json.dumps({"task": task, "goal": goal, "subgoal": subgoal, "command_start": command_start},
                               ensure_ascii=False)
@@ -745,30 +798,34 @@ class TracedMonitor:
 
 
 
-# ── 一局：runner.episode + Traced* 包装 + 收尾 ─────────────────────────────
+# -- one episode: runner.episode + Traced* wrappers + finalization -----------------------
 
 def terminal_of(result: dict | None) -> str:
-    """Astra 结果的 ``status`` 已是 success／fail／timeout／error（``runner.episode`` 把其他环境状态归为 error）；
-    循环走满 ``max_steps`` 与环境报 timeout 都是 ``timeout``；其余（含驱动异常、无结果）一律 ``error``。"""
+    """The ``status`` of an Astra result is already success / fail / timeout / error (``runner.episode`` folds other
+    environment statuses into error); a loop that ran all ``max_steps`` and an environment-reported timeout are both
+    ``timeout``; everything else (driver exceptions, no result) is ``error``."""
     status = (result or {}).get("status")
     return status if status in TERMINALS else "error"
 
 
 def episode_key(task: str, identity: dict) -> str:
-    """局 key：``<task>_<tier>_<seed>``（与 ``EpisodeSpec.key`` 同式）。"""
+    """Episode key: ``<task>_<tier>_<seed>`` (same form as ``EpisodeSpec.key``)."""
     return f"{task}_{identity['tier']}_{int(identity['seed'])}"
 
 
 def strict_cap_of(dataset: str) -> bool:
-    """ood 为 strict，hard-verify 不是；未知数据集按非 strict（配对检查早已拒绝）。"""
+    """ood is strict, hard-verify is not; unknown datasets count as not strict (the pairing check already refused
+    them)."""
     return bool(DATASET_STRICT_CAP.get(dataset, False))
 
 
 def write_exec_actions(path: Path, actions: list) -> None:
-    """每个执行步的原动作写 ``exec_action__%05d``（0 起步序号）；一旦写就每步都有键。
+    """Write the original action of each executed step as ``exec_action__%05d`` (0-based step index); once written
+    every step has a key.
 
-    ``arrays.npz`` 唯一允许的写法是 ``trace_writer.merge_write_npz``（与 ``TraceWriter.close`` 和外层录制器写的同键
-    逐项核对后合并、原子替换）；该函数不存在时保持旧的 ``np.savez``。"""
+    The only allowed way to write ``arrays.npz`` is ``trace_writer.merge_write_npz`` (merged with the same keys
+    written by ``TraceWriter.close`` and the outer recorder after checking item by item, replaced atomically); without
+    that function the old ``np.savez`` is kept."""
     import numpy as np  # noqa: PLC0415
     from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     if not actions:
@@ -782,14 +839,15 @@ def write_exec_actions(path: Path, actions: list) -> None:
 
 
 def prompt_digests(champ: Path) -> dict[str, str]:
-    """``prompts/*.md`` 与 ``prompts/index.json`` 的 sha256（键为相对 ``examples/champ`` 的路径）。"""
+    """sha256 of ``prompts/*.md`` and ``prompts/index.json`` (keys are paths relative to ``examples/champ``)."""
     prompts = Path(champ) / "prompts"
     files = sorted(prompts.glob("*.md")) + ([prompts / "index.json"] if (prompts / "index.json").is_file() else [])
     return {str(p.relative_to(champ)): file_sha256(p) for p in files}
 
 
 def write_provenance(path: Path, *, astra, args, key: str, strict_cap: bool, language: bool, attempt: int) -> dict:
-    """尝试目录来源清单：Astra 源码与 prompts 的 sha256、模型 seed（云端无 seed 接口，``cloud_seed=null``）、实际 cap。"""
+    """Attempt-directory provenance manifest: sha256 of the Astra source and prompts, model seed (the cloud has no
+    seed interface, ``cloud_seed=null``), effective cap."""
     doc = {"route": ROUTE, "key": key, "attempt": int(attempt), "dataset": args.dataset,
            "policy_seed": getattr(args, "policy_seed", None), "server_seed": getattr(args, "policy_seed", None),
            "cloud_seed": None, "cloud_seed_note": "planner/monitor cloud API has no seed interface; not fabricated",
@@ -801,15 +859,18 @@ def write_provenance(path: Path, *, astra, args, key: str, strict_cap: bool, lan
 
 
 def group_stop_file(group_dir: Path) -> Path:
-    """停机口 ``group_*/STOP.json``（费用守卫到线写；``ResponsesClient._send`` 与每局 ``reset`` 都查）。"""
+    """Stop point ``group_*/STOP.json`` (written by the cost guard at the limit; checked by ``ResponsesClient._send``
+    and every episode ``reset``)."""
     return Path(group_dir) / "STOP.json"
 
 
 def run_one(args, task, ep, identity, builder, monitor, planner, client, astra, *, attempt: int, trace_dir: Path,
             strict_cap: bool | None = None) -> dict:
-    """一局：建尝试目录 ``<args.output>/<task>/ep<NNN>/<key>.a<attempt>/`` 与 ``trace_dir/trace.jsonl``，经委托包装调
-    Astra 的 ``runner.episode``；``finally`` 里统一收尾：写 ``arrays.npz`` → 语言账本收尾 → trace ``close`` →
-    Astra ``result.json`` 追加映射。驱动异常（``runner.episode`` 自己不接的 ``BaseException``）照样收尾后再抛。"""
+    """One episode: create the attempt directory ``<args.output>/<task>/ep<NNN>/<key>.a<attempt>/`` and
+    ``trace_dir/trace.jsonl``, call Astra's ``runner.episode`` through the delegating wrappers, and finalize uniformly
+    in ``finally``: write ``arrays.npz`` -> finalize the language ledger -> trace ``close`` -> append the mapping to
+    Astra's ``result.json``. Driver exceptions (``BaseException`` not caught by ``runner.episode`` itself) are
+    re-raised after finalization."""
     from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     ep_dir = Path(args.output) / task / f"ep{ep:03d}"
     key = episode_key(task, identity)
@@ -849,7 +910,7 @@ def run_one(args, task, ep, identity, builder, monitor, planner, client, astra, 
 
 
 def _supported_kwargs(fn: Callable, **candidates) -> dict:
-    """可选探测：只把 ``fn`` 签名里显式声明的关键字传过去。"""
+    """Optional probe: only pass the keywords explicitly declared in ``fn``'s signature."""
     import inspect  # noqa: PLC0415
     try:
         params = inspect.signature(fn).parameters
@@ -861,7 +922,7 @@ def _supported_kwargs(fn: Callable, **candidates) -> dict:
 def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, attempt: int, ctx: TraceContext,
                 writer, result: dict | None, driver_error: BaseException | None) -> None:
     terminal = terminal_of(result) if driver_error is None else "error"
-    if ctx.cap_hit and driver_error is None:  # strict cap 拒第 cap+1 步：Astra 记的 error 改为 timeout
+    if ctx.cap_hit and driver_error is None:  # strict cap refused step cap+1: the error Astra recorded becomes timeout
         terminal = "timeout"
     has_demo = ctx.demo_frames is not None
     no_frame = not has_demo
@@ -869,7 +930,7 @@ def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, atte
     frames_recorded = demo_frames + 1 + ctx.observed if has_demo else 0
     write_exec_actions(trace_dir / "arrays.npz", ctx.actions)
     if ctx.lang is not None:
-        ctx.lang.close()  # 仍未关闭的调用补 cancelled
+        ctx.lang.close()  # calls still open get cancelled
     extra = {"policy_seed": getattr(args, "policy_seed", None), "cloud_seed": None, "strict_cap": ctx.strict_cap,
              "effective_cap": ctx.effective_cap, "cap_hit": ctx.cap_hit,
              "language": "language.jsonl" if ctx.lang is not None else None, "provenance": PROVENANCE_FILE}
@@ -877,7 +938,7 @@ def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, atte
         extra.update({k: result.get(k) for k in ("planner_calls", "monitor_calls", "review_calls", "error")})
     if driver_error is not None:
         extra["driver_exception"] = f"{type(driver_error).__name__}: {driver_error}"[:800]
-    if no_frame and terminal != "error":  # 理论上不会发生：没 reset 却正常结束；按 error 记，避免假终态
+    if no_frame and terminal != "error":  # should not happen in theory: ended normally without reset; record error to avoid a fake terminal status
         terminal = "error"
     writer.close(status=terminal, terminal_reason=terminal, demo_frames=demo_frames, steps_attempted=ctx.attempted,
                  steps_observed=ctx.observed, frames_recorded=frames_recorded, omitted_timeout_frames=0,
@@ -885,24 +946,25 @@ def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, atte
     if result is not None:
         rel = lambda p: os.path.relpath(p, ep_dir)  # noqa: E731
         if ctx.cap_hit and driver_error is None:
-            result["status"] = "timeout"  # 停机规则②不把 strict cap 计为基础设施错误
+            result["status"] = "timeout"  # stop rule (2) does not count a strict cap as an infrastructure error
         result.update(route=ROUTE, key=key, attempt=int(attempt), episode_dir=a_dir.name,
                       trace=rel(trace_dir / "trace.jsonl"), exec_steps=ctx.attempted, steps_observed=ctx.observed,
                       frames_recorded=frames_recorded, demo_frames=demo_frames, terminal_reason=terminal,
                       policy_seed=getattr(args, "policy_seed", None), cloud_seed=None,
                       strict_cap=ctx.strict_cap, effective_cap=ctx.effective_cap, cap_hit=ctx.cap_hit)
         if (ep_dir / "result.json").is_file():
-            from core import atomic_json  # noqa: PLC0415  Astra 的原子写（与它写 result.json 同一函数）
+            from core import atomic_json  # noqa: PLC0415  Astra's atomic write (the same function it uses for result.json)
             atomic_json(ep_dir / "result.json", result)
 
 
-# ── 费用硬上限：守卫状态同步预留 + 子类化 ResponsesClient ─────────────────────
+# -- hard cost limit: synchronous reservation against guard state + ResponsesClient subclass --
 
 _GUARD_MOD = None
 
 
 def guard_module():
-    """费用守卫模块 ``robomme_ood_eval.servers.astra_cost_guard``（预留协议、锁、文件名的唯一来源）。"""
+    """The cost guard module ``robomme_ood_eval.servers.astra_cost_guard`` (the single source of the reservation
+    protocol, locks and file names)."""
     global _GUARD_MOD
     if _GUARD_MOD is None:
         from robomme_ood_eval.servers import astra_cost_guard  # noqa: PLC0415
@@ -911,15 +973,17 @@ def guard_module():
 
 
 class GuardRefused(RuntimeError):
-    """发送前拒发（守卫失联、守卫已停、预留失败、局数到顶）。消息以 ``Planner API`` 开头：经 Planner 包成
-    ``Planner bridge failed`` 后同样触发停机规则①（``PLANNER_STOP_PREFIXES``）单次即停。"""
+    """Refused before sending (guard lost, guard stopped, reservation failed, episode limit reached). The message
+    starts with ``Planner API``: once wrapped by the Planner into ``Planner bridge failed`` it likewise triggers stop
+    rule (1) (``PLANNER_STOP_PREFIXES``) and stops at once."""
 
 
 def _image_tokens_upper(width: int, height: int) -> int:
-    """单张 ``detail=high`` 图片输入 token 的保守上界：取两种公开计价口径的较大者。
+    """Conservative upper bound of input tokens for one ``detail=high`` image: the larger of two public pricing
+    schemes.
 
-    ① 512 切块：先缩到 2048×2048 内、再把短边缩到 768，``85 + 170 × 块数``；
-    ② 32 像素小块：小块数（上限 1536）× 2.5（各型号乘数的最大值取整上浮）。"""
+    (1) 512 tiles: first fit within 2048x2048, then scale the short side to 768, ``85 + 170 x tiles``;
+    (2) 32-pixel patches: number of patches (capped at 1536) x 2.5 (the largest per-model multiplier, rounded up)."""
     import math  # noqa: PLC0415
     w, h = max(int(width), 1), max(int(height), 1)
     scale = min(1.0, 2048 / max(w, h))
@@ -932,7 +996,8 @@ def _image_tokens_upper(width: int, height: int) -> int:
 
 
 def _image_size(data_url: str) -> tuple[int, int]:
-    """从 ``data:<mime>;base64,<...>`` 解出图片尺寸；解不出按 2048×2048（最坏）计。"""
+    """Decode the image size from ``data:<mime>;base64,<...>``; if it cannot be decoded assume 2048x2048 (worst
+    case)."""
     import base64  # noqa: PLC0415
     import io  # noqa: PLC0415
     try:
@@ -945,8 +1010,9 @@ def _image_size(data_url: str) -> tuple[int, int]:
 
 
 def estimate_request(payload: dict) -> dict:
-    """按本次实际请求估输入 token 上界：文本按 UTF-8 字节数（每 token 至少 1 字节），图片按 ``_image_tokens_upper``，
-    另加 64 的格式开销；输出按请求自带的 ``max_output_tokens``。"""
+    """Estimate an upper bound on input tokens from the actual request: text by UTF-8 byte count (at least 1 byte per
+    token), images by ``_image_tokens_upper``, plus 64 for formatting overhead; output by the request's own
+    ``max_output_tokens``."""
     text_bytes, images = 0, []
     for item in payload.get("input") or []:
         for part in item.get("content") or []:
@@ -959,10 +1025,12 @@ def estimate_request(payload: dict) -> dict:
 
 
 class CostGate:
-    """runner 一侧的守卫协议：发送前同步读守卫状态、原子预留单次最坏费用；登记局数。
+    """The runner side of the guard protocol: synchronously read the guard state and atomically reserve the
+    single-request worst-case cost before sending; register episodes.
 
-    状态文件由 ``astra_cost_guard.py --state`` 每轮写；预留文件与锁由守卫模块定名。任何读不到、过期（心跳超过
-    ``GUARD_HEARTBEAT_TIMEOUT_S``）、守卫已退出或已停的情况都拒发——宁停不发。"""
+    The state file is written every round by ``astra_cost_guard.py --state``; the reservation file and lock are named
+    by the guard module. Sending is refused whenever the state cannot be read, is stale (heartbeat older than
+    ``GUARD_HEARTBEAT_TIMEOUT_S``), or the guard has exited or stopped -- better to stop than to send."""
 
     def __init__(self, state_path: str | Path, *, clock: Callable[[], float] = time.time,
                  heartbeat_timeout: float = GUARD_HEARTBEAT_TIMEOUT_S) -> None:
@@ -988,7 +1056,7 @@ class CostGate:
         return state
 
     def cap(self, state: dict) -> float:
-        """生效上限 = min(守卫的 --cap, 本轮硬上限)；守卫状态被改大也不放宽。"""
+        """Effective limit = min(the guard's --cap, the hard limit); a guard state edited upward never relaxes it."""
         return min(float(state.get("cap") or 0.0), float(self.guard.HARD_CAP_USD))
 
     def worst_usd(self, state: dict, estimate: dict) -> float:
@@ -1000,7 +1068,8 @@ class CostGate:
         return usd
 
     def reserve(self, rid: str, payload: dict) -> dict:
-        """锁内：读状态 → 已计 + 未结预留 + 本次最坏 > 上限即拒；否则记预留（同一 rid 重试不重复计，取较大者）。"""
+        """Inside the lock: read the state -> refuse if counted + outstanding reservations + this worst case > limit;
+        otherwise record the reservation (retries of the same rid are not counted twice; the larger is kept)."""
         estimate = estimate_request(payload)
         g = self.guard
         with g.locked(self.state_path):
@@ -1030,7 +1099,8 @@ class CostGate:
                 g.save_reservations(self.state_path, doc)
 
     def register_episode(self, episode_id: str) -> int:
-        """局数硬上限：同一预留文件里跨 RUN 登记；已登记的同一局不重复计；第 3 局拒绝。"""
+        """Hard episode limit: registered in the same reservation file across runs; the same episode is not counted
+        twice; the third episode is refused."""
         g = self.guard
         with g.locked(self.state_path):
             self.read_state()
@@ -1045,14 +1115,16 @@ class CostGate:
 
 
 def registered_episodes(state_path: str | Path) -> list:
-    """预留文件里已登记的局（跨进程、跨 RUN 累计；账本保留，不新建绕额度）。"""
+    """Episodes registered in the reservation file (cumulative across processes and runs; the ledger is kept and no
+    new one is created to get around the limit)."""
     g = guard_module()
     with g.locked(Path(state_path)):
         return list(g.load_reservations(Path(state_path))["episodes"])
 
 
 def check_episode_cap(state_path: str | Path) -> int:
-    """局数硬上限：已登记局数到 ``ASTRA_MAX_EPISODES`` 即抛 ``AstraStop(episode_cap)``；返回已登记局数。"""
+    """Hard episode limit: raise ``AstraStop(episode_cap)`` when the registered count reaches
+    ``ASTRA_MAX_EPISODES``; returns the registered count."""
     limit = guard_module().ASTRA_MAX_EPISODES
     used = len(registered_episodes(state_path))
     if used >= limit:
@@ -1065,19 +1137,22 @@ _GUARDED_CLASSES: dict = {}
 
 
 def guarded_client_class(api_client):
-    """返回第三方 ``api_client.ResponsesClient`` 的子类（按基类缓存）；第三方文件零改动。
+    """Return a subclass of the third-party ``api_client.ResponsesClient`` (cached per base class); the third-party
+    file is untouched.
 
-    覆写 ``_send``：每一次真正 ``urlopen`` 之前依次 ① 查 ``group_*/STOP.json``；② 同步读守卫状态并原子预留
-    本次最坏费用（同一请求的 429 重试复用同一份预留）；③ 等待第三方的 20 秒发送间隔；④ 等待后再查一次
-    STOP 与守卫状态。任一不通过即写 ``guard_refused.json``、释放预留并抛错（第三方 ``__call__`` 把它记成
-    ``status=error`` 的 ``response.json``）。其余（HTTP 错误记录、429 有界退避、脱敏）与第三方 ``_send`` 逐项同式。"""
+    Overrides ``_send``: before every real ``urlopen``, in order, (1) check ``group_*/STOP.json``; (2) synchronously
+    read the guard state and atomically reserve this request's worst-case cost (429 retries of the same request reuse
+    the same reservation); (3) wait for the third party's 20-second send interval; (4) after waiting, check STOP and
+    the guard state again. Any failure writes ``guard_refused.json``, releases the reservation and raises (the
+    third-party ``__call__`` records it as a ``status=error`` ``response.json``). Everything else (HTTP error
+    recording, bounded 429 backoff, redaction) matches the third-party ``_send`` item by item."""
     base = api_client.ResponsesClient
     if base in _GUARDED_CLASSES:
         return _GUARDED_CLASSES[base]
 
     class GuardedResponsesClient(base):
-        #: 语言账本的传输尝试回调 ``(out, attempt)``（``PlannerLanguageCall.transport``）；``None`` 时不调用。
-        #: 只记录、不改变发送与费用守卫的任何判断。
+        #: language ledger transport-attempt callback ``(out, attempt)`` (``PlannerLanguageCall.transport``); not called
+        #: when ``None``. Only records; never changes any decision of sending or the cost guard.
         transport_hook = None
 
         def __init__(self, key, gate: CostGate, *, sleep: Callable[[float], None] = time.sleep,
@@ -1095,7 +1170,7 @@ def guarded_client_class(api_client):
             api_client.atomic_json(out / guard_module().REFUSED_MARKER, {"time": time.time(), "reason": message})
             try:
                 self.gate.mark(rid, "released")
-            except Exception:  # noqa: BLE001 守卫已失联时释放也可能失败；拒发本身不受影响
+            except Exception:  # noqa: BLE001 releasing may fail too when the guard is lost; the refusal itself is unaffected
                 pass
             print(f"ASTRA_GUARD_REFUSED request={rid} reason={json.dumps(message, ensure_ascii=False)}", flush=True)
             raise RuntimeError(message)
@@ -1108,7 +1183,7 @@ def guarded_client_class(api_client):
             except GuardRefused as exc:
                 self._refuse(out, rid, str(exc))
             self._sleep(max(0, self.next_request_at - self._monotonic()))
-            if self._stop_requested(out):  # 等待间隔里 STOP 可能已到
+            if self._stop_requested(out):  # STOP may have arrived during the wait
                 self._refuse(out, rid, "Host requested stop; no new API request")
             try:
                 self.gate.read_state()
@@ -1123,7 +1198,7 @@ def guarded_client_class(api_client):
             out = Path(out)
             rid = out.name
             for attempt in range(9):
-                if self.transport_hook is not None:  # 语言账本：每次传输尝试的输入在过闸与发送之前落盘
+                if self.transport_hook is not None:  # language ledger: each transport attempt's input is persisted before the gate and the send
                     self.transport_hook(out, attempt)
                 self._gate_before_send(request, out, rid)
                 self.next_request_at = self._monotonic() + SEND_INTERVAL_S
@@ -1166,14 +1241,16 @@ def guarded_client_class(api_client):
 
 
 
-# ── 两个服务端：费用守卫与 VLA ─────────────────────────────────────────────
+# -- the two servers: cost guard and VLA -------------------------------------------------
 
 class GuardProcess(ServerProcess):
-    """费用守卫 ``servers/astra_cost_guard.py`` 的进程（不听端口）。
+    """Process of the cost guard ``servers/astra_cost_guard.py`` (does not listen on a port).
 
-    ``port`` 只是元数据文件名里的标号（取 VLA 端口 + 1，``pick_port`` 已保证该号空闲）；就绪 = 守卫的心跳状态文件
-    可读、schema 对、未退出、心跳新鲜（``CostGate.read_state`` 不抛 ``GuardRefused``；守卫已写 STOP 也算已起来）；
-    停止时不查显存（守卫不占卡）。收 TERM 后守卫写 ``exited=true``，runner 立即拒发。"""
+    ``port`` is only a label in the metadata file name (VLA port + 1, which ``pick_port`` already guarantees is free);
+    ready = the guard's heartbeat state file is readable, has the right schema, has not exited and the heartbeat is
+    fresh (``CostGate.read_state`` does not raise ``GuardRefused``; a guard that already wrote STOP also counts as
+    started); stopping does not check GPU memory (the guard uses no GPU). After TERM the guard writes
+    ``exited=true`` and the runner refuses immediately."""
 
     def __init__(self, *a, state_path: str | Path, **k) -> None:
         super().__init__(*a, **k)
@@ -1194,8 +1271,9 @@ class GuardProcess(ServerProcess):
 
 
 class VLAServerProcess(ServerProcess):
-    """Astra VLA 服务端（子模块 ``scripts/serve_policy.py``）：子进程环境里去掉 ``OPENAI_API_KEY``（VLA 不需要规划
-    接口的密钥；与上游 ``run.sh`` 的 ``env -u OPENAI_API_KEY`` 同义），其余同 ``ServerProcess``。"""
+    """Astra VLA server (the submodule's ``scripts/serve_policy.py``): ``OPENAI_API_KEY`` is removed from the child
+    environment (the VLA does not need the planning API key; same as the upstream ``run.sh`` ``env -u
+    OPENAI_API_KEY``); otherwise same as ``ServerProcess``."""
 
     DROP_ENV = ("OPENAI_API_KEY",)
 
@@ -1206,11 +1284,12 @@ class VLAServerProcess(ServerProcess):
         return env
 
 
-# ── 外层会话 → runner.episode 的 builder ────────────────────────────────────
+# -- outer session -> builder for runner.episode -----------------------------------------
 
 class SessionEnv:
-    """把外层 ``EnvSession`` 包成 ``runner.episode`` 眼里的环境：``reset``／``step`` 原样转给会话；``close()`` 置空
-    （``runner.episode`` 的 ``finally`` 会关环境，但环境归外层关，模型侧不得调 ``session.close()``）。"""
+    """Wraps the outer ``EnvSession`` as the environment ``runner.episode`` sees: ``reset`` / ``step`` are forwarded
+    unchanged to the session; ``close()`` is a no-op (``runner.episode``'s ``finally`` closes the environment, but the
+    environment belongs to the outer loop and the model side must not call ``session.close()``)."""
 
     def __init__(self, session) -> None:
         self._session = session
@@ -1223,15 +1302,16 @@ class SessionEnv:
         return self._session.step(action)
 
     def close(self) -> None:
-        self.close_calls += 1  # 置空：只计次，不关
+        self.close_calls += 1  # no-op: only count, never close
 
     def __getattr__(self, name):
         return getattr(self._session, name)
 
 
 class SessionBuilder:
-    """给 ``runner.episode`` 的 builder：``make_env_for_episode`` 返回外层会话（经 ``SessionEnv``，``close()`` 置空），
-    只认本局局号、只交一次；``resolve_episode`` 委托真 builder（``runner.episode`` 写 ``identity.json`` 用）。"""
+    """Builder for ``runner.episode``: ``make_env_for_episode`` returns the outer session (via ``SessionEnv``,
+    ``close()`` a no-op), accepting only this episode's index and handing it out only once; ``resolve_episode``
+    delegates to the real builder (used by ``runner.episode`` to write ``identity.json``)."""
 
     def __init__(self, session, real_builder, episode: int) -> None:
         self._session = session
@@ -1241,9 +1321,9 @@ class SessionBuilder:
 
     def make_env_for_episode(self, episode):
         if int(episode) != self._episode:
-            raise ValueError(f"SessionBuilder 只交本局环境：要 {episode}，本局 {self._episode}")
+            raise ValueError(f"SessionBuilder only hands out this episode's environment: requested {episode}, this episode {self._episode}")
         if self.env is not None:
-            raise RuntimeError("SessionBuilder 一局只交一次环境")
+            raise RuntimeError("SessionBuilder hands out the environment only once per episode")
         self.env = SessionEnv(self._session)
         return self.env
 
@@ -1252,8 +1332,9 @@ class SessionBuilder:
 
 
 def pin_visible_gpu(gpu) -> str:
-    """把本进程钉到一张卡（监视模型 ``device_map={'':0}`` 即这张卡；仿真渲染同卡，与旧 run_astra.sh 的
-    ``CUDA_VISIBLE_DEVICES=$MONITOR_GPU`` 同义）。CUDA 已初始化且可见卡不同时拒绝（改环境变量已不生效）。"""
+    """Pin this process to one GPU (the monitor model's ``device_map={'':0}`` is this GPU; simulation rendering uses
+    the same GPU, like the old launcher's ``CUDA_VISIBLE_DEVICES=$MONITOR_GPU``). Refuses when CUDA is already
+    initialized with a different visible GPU (changing the environment variable no longer has an effect)."""
     want = str(gpu)
     torch = sys.modules.get("torch")
     try:
@@ -1261,8 +1342,8 @@ def pin_visible_gpu(gpu) -> str:
     except Exception:  # noqa: BLE001
         inited = False
     if inited and os.environ.get("CUDA_VISIBLE_DEVICES") != want:
-        raise RuntimeError(f"CUDA 已在本进程初始化（CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')!r}），"
-                           f"无法再把监视模型钉到第 {want} 张卡")
+        raise RuntimeError(f"CUDA is already initialized in this process (CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')!r}); "
+                           f"cannot pin the monitor model to GPU {want}")
     os.environ["CUDA_VISIBLE_DEVICES"] = want
     return want
 
@@ -1270,30 +1351,34 @@ def pin_visible_gpu(gpu) -> str:
 # ── AstraPolicy ─────────────────────────────────────────────────────────────
 
 class AstraPolicy(Policy):
-    """Astra 的模型侧四方法（见模块文档串）。
+    """Astra's four model-side methods (see the module docstring).
 
-    ``cfg``（``scripts/evaluate.py`` 的模型参数，连字符换下划线后透传）：
+    ``cfg`` (model options of ``scripts/evaluate.py``, passed through with hyphens converted to underscores):
 
     ========================  ============================================================================
-    ``gpus``                  必给两张不同的卡：第一张起 VLA 服务端，第二张给本进程（监视模型与仿真）
-    ``astra_ledger``          必给：费用账本 JSON（同目录放守卫状态、预留文件、``group_0/``；长期保留）
-    ``astra_prices``          必给：单价配置 JSON（美元／百万 token，守卫 ``--prices``）
-    ``astra_cap_usd``         费用上限，缺省 5；大于 5 直接拒绝（守卫 ``HARD_CAP_USD``）
-    ``ckpt``                  必给：VLA 权重目录（``…/symbolic-grounded-subgoal/79999``）；别名 ``astra_vla_checkpoint``
-    ``astra_monitor_adapter`` 必给：监视器 LoRA（``checkpoint-2246``）
-    ``astra_monitor_base``    监视器底座（缺省上游 ``runner.BASE``）
-    ``astra_vla_python``      VLA 服务端解释器（缺省 ``third_party/mme-vla/.venv/bin/python``）
-    ``astra_root``            Astra 子模块根（缺省 ``third_party/Astra-on-RoboMME``）
-    ``astra_group_dir``       停机口目录（缺省 ``<账本目录>/group_0``；名字须为 group_0／group_1）
-    ``port_base``             VLA 端口基数（缺省 18762）
-    ``max_planner_calls``     单局规划上限（缺省 24）
-    ``astra_guard_interval``  守卫扫描间隔秒（缺省 2）
+    ``gpus``                  required, two different GPUs: the first runs the VLA server, the second this
+                              process (monitor model and simulation)
+    ``astra_ledger``          required: cost ledger JSON (guard state, reservation file and ``group_0/`` live in
+                              the same directory; kept long-term)
+    ``astra_prices``          required: unit price config JSON (USD / million tokens, guard ``--prices``)
+    ``astra_cap_usd``         cost limit, default 5; anything above 5 is refused (guard ``HARD_CAP_USD``)
+    ``ckpt``                  required: VLA weight directory (``.../symbolic-grounded-subgoal/79999``); alias
+                              ``astra_vla_checkpoint``
+    ``astra_monitor_adapter`` required: monitor LoRA (``checkpoint-2246``)
+    ``astra_monitor_base``    monitor base model (default: upstream ``runner.BASE``)
+    ``astra_vla_python``      VLA server interpreter (default ``third_party/mme-vla/.venv/bin/python``)
+    ``astra_root``            Astra submodule root (default ``third_party/Astra-on-RoboMME``)
+    ``astra_group_dir``       stop-point directory (default ``<ledger dir>/group_0``; must be named group_0 /
+                              group_1)
+    ``port_base``             VLA port base (default 18762)
+    ``max_planner_calls``     per-episode planning limit (default 24)
+    ``astra_guard_interval``  guard scan interval in seconds (default 2)
     ========================  ============================================================================
     """
 
     model = "astra"
     episode_wall_s = ASTRA_EPISODE_WALL_S
-    #: 测试替换成假服务端类
+    #: replaced by fake server classes in tests
     guard_server_cls = GuardProcess
     vla_server_cls = VLAServerProcess
 
@@ -1310,15 +1395,15 @@ class AstraPolicy(Policy):
         self._stop: AstraStop | None = None
         self.episode_results: list[dict] = []
 
-    # ── 配置 ──────────────────────────────────────────────────────────
+    # -- configuration ---------------------------------------------------------
     def _cfg_path(self, *names: str, required: bool = True) -> Path | None:
         for n in names:
             v = self.cfg.get(n)
             if v not in (None, ""):
-                return Path(os.path.abspath(Path(str(v)).expanduser()))  # 不 resolve：venv 解释器是符号链接
+                return Path(os.path.abspath(Path(str(v)).expanduser()))  # no resolve: the venv interpreter is a symlink
         if required:
-            flags = " 或 ".join("--" + n.replace("_", "-") for n in names)
-            raise ValueError(f"RUN_BLOCKED reason=astra_cfg Astra 必须给 {flags}")
+            flags = " or ".join("--" + n.replace("_", "-") for n in names)
+            raise ValueError(f"RUN_BLOCKED reason=astra_cfg Astra requires {flags}")
         return None
 
     def _parse_cfg(self) -> None:
@@ -1328,7 +1413,7 @@ class AstraPolicy(Policy):
             gpus = [int(x) for x in str(gpus).split(",") if str(x).strip()]
         gpus = [int(x) for x in (gpus or [])]
         if len(gpus) < 2 or gpus[0] == gpus[1]:
-            raise ValueError(f"RUN_BLOCKED reason=astra_gpus Astra 需要两张不同的卡（--gpus <VLA 卡>,<监视卡>），得到 {gpus}")
+            raise ValueError(f"RUN_BLOCKED reason=astra_gpus Astra needs two different GPUs (--gpus <VLA GPU>,<monitor GPU>), got {gpus}")
         self.vla_gpu, self.monitor_gpu = gpus[0], gpus[1]
         self.ledger = self._cfg_path("astra_ledger")
         self.prices = self._cfg_path("astra_prices")
@@ -1337,7 +1422,7 @@ class AstraPolicy(Policy):
         self.state_path = g.default_state_path(self.ledger)
         self.group_dir = self._cfg_path("astra_group_dir", required=False) or self.ledger.parent / "group_0"
         if self.group_dir.name not in GROUP_DIR_NAMES:
-            raise ValueError(f"RUN_BLOCKED reason=layout astra_group_dir 须叫 {GROUP_DIR_NAMES} 之一：{self.group_dir}")
+            raise ValueError(f"RUN_BLOCKED reason=layout astra_group_dir must be named one of {GROUP_DIR_NAMES}: {self.group_dir}")
         self.vla_checkpoint = self._cfg_path("ckpt", "astra_vla_checkpoint")
         self.monitor_adapter = self._cfg_path("astra_monitor_adapter")
         self.monitor_base = self.cfg.get("astra_monitor_base")
@@ -1349,7 +1434,7 @@ class AstraPolicy(Policy):
         self.guard_interval = float(self.cfg.get("astra_guard_interval") or guard_module().DEFAULT_INTERVAL_S)
         self.server_dir = self.ledger.parent / "servers"
 
-    # ── 可替换的构造（测试注入替身） ────────────────────────────────
+    # -- replaceable constructors (tests inject stand-ins) ---------------------
     def make_monitor(self, base, adapter):
         return self.astra.runner.Monitor(base, adapter)
 
@@ -1362,19 +1447,20 @@ class AstraPolicy(Policy):
     def make_responder(self, key: str, gate: "CostGate"):
         return guarded_client_class(self.astra.api_client)(key, gate)
 
-    # ── 服务端命令 ────────────────────────────────────────────────────
+    # -- server commands -------------------------------------------------------
     def guard_argv(self) -> list[str]:
         return [sys.executable, str(Path(guard_module().__file__).resolve()), "--root", str(self.group_dir),
                 "--prices", str(self.prices), "--ledger", str(self.ledger), "--state", str(self.state_path),
                 "--cap", f"{self.cap_usd:g}", "--interval", f"{self.guard_interval:g}"]
 
     def vla_argv(self, port: int) -> list[str]:
-        """照抄上游 ``run.sh``，只把 ``--seed`` 由固定 42 换成 ``policy_seed``。"""
+        """Copied from upstream ``run.sh``, only replacing the fixed ``--seed`` 42 with ``policy_seed``."""
         return [str(self.vla_python), "scripts/serve_policy.py", f"--port={port}", f"--seed={self.policy_seed}",
                 "policy:checkpoint", "--policy.config=mme_vla_suite", f"--policy.dir={self.vla_checkpoint}"]
 
     def vla_env(self) -> dict:
-        """上游 ``run.sh`` 的环境变量；PYTHONPATH 第四段（环境源）换成 ``third_party/robomme_benchmark/src``。"""
+        """Environment variables of upstream ``run.sh``; the fourth PYTHONPATH entry (environment source) is replaced
+        by ``third_party/robomme_benchmark/src``."""
         root = self.root
         return {"PYTHONPATH": os.pathsep.join([str(root / "examples" / "champ"), str(root / "src"),
                                                str(root / "packages" / "openpi-client" / "src"),
@@ -1387,17 +1473,19 @@ class AstraPolicy(Policy):
                 "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"}
 
     def _vla_port(self) -> int:
-        """有本基数的元数据（看门狗退出后留下的服务端）就沿用该端口，交 ``start()`` 去 attach；否则取空闲端口。"""
+        """If metadata for this base exists (a server left behind after a watchdog exit), keep that port and let
+        ``start()`` attach; otherwise take a free port."""
         if (self.server_dir / f"server-metadata-{self.port_base}.json").is_file():
             return self.port_base
         return pick_port(self.port_base)
 
-    # ── 四个方法 ──────────────────────────────────────────────────────
+    # -- the four methods ------------------------------------------------------
     def load(self) -> None:
         self._parse_cfg()
         key = os.environ.get("OPENAI_API_KEY", "")
         if not key:
-            raise ValueError("RUN_BLOCKED reason=astra_key 环境变量 OPENAI_API_KEY 为空（密钥只从环境变量读）")
+            raise ValueError("RUN_BLOCKED reason=astra_key environment variable OPENAI_API_KEY is empty (the key is only "
+                             "read from the environment)")
         self.astra = bootstrap(self.root)
         print("ASTRA_SOURCE root=" + str(self.root) + " " + " ".join(
             f"{k}={v}" for k, v in source_digests(self.astra.champ).items()), flush=True)
@@ -1406,15 +1494,15 @@ class AstraPolicy(Policy):
             self.monitor_base = self.astra.runner.BASE
         self.astra.release_utils.validate_checkpoints(str(self.vla_checkpoint), str(self.monitor_adapter))
         stop = group_stop_file(self.group_dir)
-        if stop.exists():  # 已停：账本保留，不新建账本绕额度
-            print(f"ASTRA_STOP reason=host_stop stop={stop}（load 前已存在）", flush=True)
-            raise AstraStop("host_stop", f"STOP.json 已存在：{stop}")
+        if stop.exists():  # already stopped: keep the ledger, never create a new one to get around the limit
+            print(f"ASTRA_STOP reason=host_stop stop={stop} (already present before load)", flush=True)
+            raise AstraStop("host_stop", f"STOP.json already exists: {stop}")
         self.group_dir.mkdir(parents=True, exist_ok=True)
         self.run_dir = self.group_dir / f"run-{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}"
         self.spool = self.run_dir / "planner_calls"
         self.run_dir.mkdir(parents=False, exist_ok=False)
         self.port = self._vla_port()
-        # ① 费用守卫（先起：之后任何付费请求都要它的心跳与预留）
+        # (1) cost guard (started first: every paid request afterwards needs its heartbeat and reservations)
         self.guard = self.guard_server_cls(self.guard_argv(), cwd=str(REPO_ROOT), port=self.port + 1,
                                            metadata_dir=self.server_dir, name="astra-guard",
                                            log_path=self.server_dir / "astra-guard.log",
@@ -1425,14 +1513,14 @@ class AstraPolicy(Policy):
         used = check_episode_cap(self.state_path)
         print(f"ASTRA_GUARD=PASS cap={self.gate.cap(state):g} committed={float(state.get('committed_usd') or 0):.4f} "
               f"episodes_used={used} ledger={self.ledger}", flush=True)
-        # ② VLA 服务端（第一张卡）
+        # (2) VLA server (first GPU)
         self.server = self.vla_server_cls(self.vla_argv(self.port), env=self.vla_env(), cwd=str(self.root),
                                           gpu=self.vla_gpu, ready=[Ready.port()], port=self.port,
                                           metadata_dir=self.server_dir, policy_seed=self.policy_seed,
                                           ckpt=str(self.vla_checkpoint), name="astra-vla",
                                           ready_timeout_s=VLA_READY_TIMEOUT_S)
         self.server.start()
-        # ③ 本进程：第二张卡加载监视模型；VLA 客户端、规划客户端（同一实例维持 20 秒间隔）与 Planner
+        # (3) this process: load the monitor model on the second GPU; VLA client, planning client (the same instance keeps the 20-second interval) and Planner
         pin_visible_gpu(self.monitor_gpu)
         self.monitor = self.make_monitor(self.monitor_base, str(self.monitor_adapter))
         self.client = self.make_client(self.port)
@@ -1446,8 +1534,9 @@ class AstraPolicy(Policy):
         return [s for s in (self.server, self.guard) if s is not None]
 
     def reset(self, spec) -> None:
-        """局前拒绝点（不发服务端消息、不碰环境）：上一局留下的停机条件 → STOP.json → 两个服务端探活 →
-        数据集与步数配对 → 跨进程登记局数（第 3 局即拒）。"""
+        """Pre-episode refusal point (no server message, no environment access): stop condition left by the previous
+        episode -> STOP.json -> liveness of both servers -> dataset / step-cap pairing -> cross-process episode
+        registration (the third episode is refused)."""
         if self._stop is not None:
             raise self._stop
         stop = group_stop_file(self.group_dir)
@@ -1460,7 +1549,8 @@ class AstraPolicy(Policy):
         self.gate.register_episode(f"{spec.dataset}:{spec.task}:{spec.episode}")
 
     def episode_args(self, spec) -> SimpleNamespace:
-        """``runner.episode`` 的 ``args``：``output`` 指到本局 raw 目录下的 ``astra/``，``max_steps`` 随本局。"""
+        """``args`` for ``runner.episode``: ``output`` points at ``astra/`` under this episode's raw directory, and
+        ``max_steps`` follows this episode."""
         return SimpleNamespace(output=str(Path(spec.out_dir) / ASTRA_SUBDIR), dataset=spec.dataset,
                                max_steps=int(spec.max_steps), max_planner_calls=self.max_planner_calls,
                                vla_checkpoint=str(self.vla_checkpoint), monitor_adapter=str(self.monitor_adapter),
@@ -1472,14 +1562,14 @@ class AstraPolicy(Policy):
         args = self.episode_args(spec)
         ep_dir = Path(args.output) / spec.task / f"ep{int(spec.episode):03d}"
         if ep_dir.exists():
-            raise RuntimeError(f"Astra 局目录已存在（保留上一尝试的证据，不覆盖）：{ep_dir}")
+            raise RuntimeError(f"Astra episode directory already exists (keeping the previous attempt's evidence, not overwriting): {ep_dir}")
         identity = {k: v for k, v in spec.identity().items() if k not in ("task", "dataset", "attempt", "key")}
         builder = SessionBuilder(session, E.builder_for(spec.task, spec.dataset), spec.episode)
         try:
             result = run_one(args, spec.task, int(spec.episode), identity, builder, self.monitor, self.planner,
                              self.client, self.astra, attempt=spec.attempt, trace_dir=Path(spec.out_dir),
                              strict_cap=spec.strict_cap)
-        except Exception as exc:  # 驱动异常：计一次非规划错误，照样原样上抛（外层记 error）
+        except Exception as exc:  # driver exception: count one non-planner error and re-raise unchanged (the outer loop records error)
             self._after_episode({"status": "error", "error": f"{type(exc).__name__}: {exc}"}, spec)
             raise
         self._after_episode(result, spec)
@@ -1497,7 +1587,8 @@ class AstraPolicy(Policy):
         return out
 
     def _after_episode(self, result: dict, spec) -> None:
-        """上游 ``main()`` 第④⑤项与局数上限：play 返回后判定，记下停机条件，下一局 ``reset`` 抛出。"""
+        """Upstream ``main()`` items 4 and 5 plus the episode limit: judged after play returns, the stop condition is
+        recorded and raised by the next episode's ``reset``."""
         self.episode_results.append(result)
         failed = result.get("status") == "error" and not self.astra.core.is_planner_failure(result)
         self._errors = self._errors + 1 if failed else 0
@@ -1514,14 +1605,15 @@ class AstraPolicy(Policy):
                 self._stop = exc
 
     def close(self) -> None:
-        """先停 VLA 服务端进程组、再停守卫（守卫写 exited=true）；释放监视模型。幂等。"""
+        """Stop the VLA server process group first, then the guard (which writes exited=true); release the monitor
+        model. Idempotent."""
         if self.closed:
             return
         self.closed = True
         for srv in self.servers():
             try:
                 srv.stop()
-            except Exception as exc:  # noqa: BLE001 一个停不掉不妨碍停另一个
+            except Exception as exc:  # noqa: BLE001 failing to stop one must not prevent stopping the other
                 print(f"ASTRA_CLOSE_WARN name={getattr(srv, 'name', '?')} error={type(exc).__name__}: {exc}", flush=True)
         self.monitor = self.client = self.planner = self.responder = None
 

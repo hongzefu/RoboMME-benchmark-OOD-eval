@@ -1,46 +1,58 @@
-"""SimpleMemVLA 新接口客户端（v7.5eval 方案 §2.3；运行在 benchmark .venv）。
+"""SimpleMemVLA client for the new interface (runs in the benchmark .venv).
 
-``run_episode(session, identity, conn_info, recorder)`` 逐行复现旧官方
-``4e0c04f robomme_sim/eval_success.py::run_group``（组大小 1、details 模式）与
-``evaluate_manifest`` 的逐局收尾，以及 ``robomme_sim/robomme_env.py::SimEnvService`` 的
-reset/step 打包语义；环境由 ``env_client.EnvSession`` 在本进程建，策略在 smvla_server 进程。
+``run_episode(session, identity, conn_info, recorder)`` reproduces line by line the old official
+``4e0c04f robomme_sim/eval_success.py::run_group`` (group size 1, details mode), the per-episode finalization of
+``evaluate_manifest``, and the reset/step packing semantics of ``robomme_sim/robomme_env.py::SimEnvService``; the
+environment is built in this process by the environment session, and the policy runs in the smvla_server process.
 
-与旧官方的对应（行号指 SimpleMemVLA-official-xhard0 @4e0c04f）：
-- reset：SimEnvService.reset（重试 reset_retries=2 次，帧/状态为空算失败，instruction 取
-  info["task_goal"][0]）→ 发 reset + observe(全部演示帧 + 初始帧)，cur_state = states[-1] (float32)。
-- 决策循环：hard_bound = ceil(max_steps/16)+2（1300 步时 84）；每次决策 infer → chunk =
-  actions[:16] → SimEnvService.step 逐行 ``np.asarray(row, float64).reshape(-1)[:8]``，遇
-  done / error / obs None 即停；返回帧一律 observe；steps += consumed。
-- 终态：环境报 done 取环境 status（error 时带 error_message）；step 抛异常记
-  ``step_exc: <e>``（steps 不加本块）；决策用尽而环境未报终态记 timeout，error 为
-  ``策略循环 hard_bound=84 用尽，环境未报终态``（steps 通常为 1344）；其余异常记 error + traceback。
+Correspondence with the old official code (line numbers refer to SimpleMemVLA-official-xhard0 @4e0c04f):
+- reset: SimEnvService.reset (reset_retries=2 retries; empty frames/states count as failure; instruction is
+  info["task_goal"][0]) -> send reset + observe(all demo frames + the initial frame), cur_state = states[-1]
+  (float32).
+- Decision loop: hard_bound = ceil(max_steps/16)+2 (84 for 1300 steps); each decision infer -> chunk =
+  actions[:16] -> SimEnvService.step row by row ``np.asarray(row, float64).reshape(-1)[:8]``, stopping on
+  done / error / obs None; returned frames are always observed; steps += consumed.
+- Terminal status: when the environment reports done, take the environment status (with error_message on error);
+  a step exception records ``step_exc: <e>`` (steps not incremented by this chunk); when decisions run out without a
+  terminal status from the environment, record timeout with error
+  ``policy loop hard_bound=84 exhausted, environment reported no terminal status`` (steps usually 1344); other
+  exceptions record error + traceback.
 
-纯函数层（encode_frames / encode_states / instruction_from_info / step_chunk / hard_bound）与
-IO 层（WSPolicyConn）分开，单测用假 session / 假连接直接驱动。
+The pure-function layer (encode_frames / encode_states / instruction_from_info / step_chunk / hard_bound) is separate
+from the IO layer (WSPolicyConn); unit tests drive them directly with fake sessions / fake connections.
 
-第二阶段 S4（1005-eval-video-phase2-all-models-rerun-plan.md 第二部分一节「S4」，契约 C1～C11 见
-``trace_writer.py`` 模块文档串）：每局另写 ``trace.jsonl``（route ``smvla/new``），落点沿用
-``groundsg_client.trace_location`` 的约定（``trace_path`` → ``<trace_dir>/trace.jsonl`` → ``<recorder.out_dir>/trace.jsonl``，
-都没有则不写）。``PolicyTrace`` 是 SimpleMemVLA／FrameSamp+Modulation 两条新侧路线共用的记录器（``framesamp_modul_client`` 按文件路径复用）：
+Trace (shared contracts C1-C11 in the ``trace_writer.py`` module docstring): each episode also writes ``trace.jsonl``
+(route ``smvla/new``), located by the ``groundsg_client.trace_location`` convention (``trace_path`` ->
+``<trace_dir>/trace.jsonl`` -> ``<recorder.out_dir>/trace.jsonl``; nothing is written if none is given).
+``PolicyTrace`` is the recorder shared by the two new-side routes SimpleMemVLA / FrameSamp+Modulation
+(``framesamp_modul_client`` reuses it by file path):
 
-- 演示段按 C2 记全部 reset 帧（含初始帧），收尾 ``demo_frames = 帧数 - 1``；
-- 每个交给环境的步一行：有观测记 ``log_step``（一步多帧取最后一帧），没有有效观测（step 抛异常且环境侧已计步、
-  ``obs is None``、``status == "error"``）记 ``log_missing_step``；``steps_attempted`` 以环境会话的 ``steps``
-  增量为准，与结果行 ``exec_steps`` 同口径（C8）；
-- 子目标：SimpleMemVLA 取决策回包 ``subtask``（``smvla_server.py`` ``infer`` 回包键），FrameSamp+Modulation 全程 ``None``（C7）；
-- 请求／响应（C10）：SimpleMemVLA 记逻辑输入（指令、状态、上次推理以来 observe 的帧哈希序列）与完整动作块
-  ``actions_full``；FrameSamp+Modulation 记原始 msgpack 帧字节的 sha256 与 ``infer`` 回包动作块；
-- strict-cap（``StepCapReached`` 或会话 ``cap_hit``）一律按 ``timeout`` 收尾（C3）；
-- 完整数值（第三阶段，冻结说明第四节）：每步动作／状态原值由 ``TraceWriter`` 收集，收尾经
-  ``trace_writer.merge_write_npz`` 写轨迹目录 ``arrays.npz``（``exec_action__%05d``／``exec_state__%05d``）；与录像器
-  同目录时与其 ``exec_action__%05d`` 同键同值合并，先后任意都不覆盖；本模块不再直接 ``np.savez``；
-- 语言账本（第三阶段，冻结说明第五节）：轨迹同目录 ``language.jsonl``。SimpleMemVLA 每次决策一个
-  ``action_model`` 调用：发送前写 ``in``（``role=fields``，任务目标），回包后写服务外壳审计块的逐通道分词与
-  ``out``（``role=assistant``，子任务原文），``close_call`` 记 ``server_final_text``（服务端模板化 prompt，缺审计块记
-  None）；执行步 ``source_call_id``／``chunk_index`` 指向该调用。回包里的 ``_sgeval_audit`` 一律先 pop 掉，不进
-  动作、不改请求字节；
-- 记录器内任何异常只计 ``observer_hook_errors`` 并打印 ``TRACE_HOOK_ERROR``，不改变发给服务的请求、交给环境的
-  动作与控制流（后续 ``CLIENT_REPLAY_EQ`` 回放比对）。
+- the demo segment records all reset frames per C2 (including the initial frame), finalizing with
+  ``demo_frames = frame count - 1``;
+- one line per step given to the environment: with an observation ``log_step`` (the last frame when one step
+  returns several), without a valid observation (step raised and the environment side counted the step,
+  ``obs is None``, ``status == "error"``) ``log_missing_step``; ``steps_attempted`` follows the increase of the
+  environment session's ``steps``, same basis as the result row ``exec_steps`` (C8);
+- subgoal: SimpleMemVLA takes ``subtask`` from the decision reply (the ``infer`` reply key of ``smvla_server.py``),
+  FrameSamp+Modulation is ``None`` throughout (C7);
+- requests / responses (C10): SimpleMemVLA records the logical input (instruction, state, sequence of hashes of the
+  frames observed since the previous inference) and the full action chunk ``actions_full``; FrameSamp+Modulation
+  records the sha256 of the raw msgpack frame bytes and the ``infer`` reply action chunk;
+- a strict-cap hit (``StepCapReached`` or the session's ``cap_hit``) always finalizes as ``timeout`` (C3);
+- full numeric values: per-step original actions / states are collected by ``TraceWriter`` and at finalization
+  written via ``trace_writer.merge_write_npz`` to ``arrays.npz`` in the trace directory
+  (``exec_action__%05d`` / ``exec_state__%05d``); when in the same directory as the recorder they merge with its
+  ``exec_action__%05d`` (same keys, same values) and neither overwrites the other in any order; this module no longer
+  calls ``np.savez`` directly;
+- language ledger: ``language.jsonl`` next to the trace. SimpleMemVLA has one ``action_model`` call per decision:
+  ``in`` (``role=fields``, the task goal) is written before sending; after the reply, the per-channel tokenization
+  of the server wrapper audit block and ``out`` (``role=assistant``, raw subtask text) are written, and
+  ``close_call`` records ``server_final_text`` (the server's templated prompt; None without an audit block); executed
+  steps point to the call via ``source_call_id`` / ``chunk_index``. ``_sgeval_audit`` in replies is always popped
+  first and never reaches actions or request bytes;
+- any exception inside the recorder only increments ``observer_hook_errors`` and prints ``TRACE_HOOK_ERROR``, never
+  changing the requests sent to the server, the actions given to the environment or the control flow (checked later
+  by ``CLIENT_REPLAY_EQ`` replay comparison).
 """
 
 from __future__ import annotations
@@ -66,14 +78,15 @@ CAM_WRIST = "wrist"
 
 
 class ProtocolError(RuntimeError):
-    """消息协议损坏（回包 sha 与发出内容不符、回包缺键）。属运行阻塞。"""
+    """Message protocol broken (reply sha does not match what was sent, reply missing keys). Blocks the run."""
 
 
 class ServerError(RuntimeError):
-    """server 回包 {"error": traceback}：server 侧异常，不是环境结局。"""
+    """Server replied {"error": traceback}: a server-side exception, not an environment outcome."""
 
 
-# 基础设施故障标记（与 framesamp_modul_client.INFRA_MARKERS 同表）：只决定 infra 标记（env_client 据此重试），不改 status。
+# infrastructure-failure markers (same table as framesamp_modul_client.INFRA_MARKERS): only decide the infra flag
+# (the outer loop retries based on it); status is unchanged.
 INFRA_MARKERS = ("RecorderError", "svulkan2", "EXCLUSIVE", "Vulkan", "vk::", "out of memory", "RESOURCE_EXHAUSTED",
                  "CUDA_ERROR", "ConnectionClosed", "ConnectionRefused", "InvalidStatus", "Connection reset")
 ENV_RESET_INFRA_MARKERS = ("svulkan2", "EXCLUSIVE", "Vulkan", "vk::")
@@ -88,7 +101,7 @@ def _marker(text: str | None, markers) -> str | None:
 
 
 def classify_exception(e: BaseException, tb: str) -> str | None:
-    """整局兜底异常 → infra_reason（None 表示非基础设施）。"""
+    """Episode-level catch-all exception -> infra_reason (None means not infrastructure)."""
     if isinstance(e, ServerError):
         return "server_oom" if _marker(str(e), SERVER_OOM_MARKERS) else "server_error"
     if isinstance(e, ProtocolError):
@@ -99,7 +112,7 @@ def classify_exception(e: BaseException, tb: str) -> str | None:
             return f"connection:{type(e).__name__}"
     except ImportError:
         pass
-    if isinstance(e, (OSError, TimeoutError)):  # ConnectionRefusedError / reset / 连接超时
+    if isinstance(e, (OSError, TimeoutError)):  # ConnectionRefusedError / reset / connection timeout
         return f"connection:{type(e).__name__}"
     m = _marker(tb, INFRA_MARKERS)
     return f"marker:{m}" if m else None
@@ -110,12 +123,12 @@ def sha256_bytes(b: bytes) -> str:
 
 
 def frame_sha(frame: np.ndarray) -> str:
-    """单帧指纹（与 recorder.frame_sha256、smvla_server.frame_sha 同一定义）。"""
+    """Single-frame fingerprint (same definition as recorder.frame_sha256 and smvla_server.frame_sha)."""
     return hashlib.sha256(np.ascontiguousarray(frame).tobytes()).hexdigest()
 
 
 def array_sha(arr: np.ndarray) -> str:
-    """数值数组指纹（与 recorder.array_sha256、smvla_server.array_sha 同一定义）。"""
+    """Numeric array fingerprint (same definition as recorder.array_sha256 and smvla_server.array_sha)."""
     a = np.ascontiguousarray(arr)
     h = hashlib.sha256(a.tobytes())
     h.update(a.dtype.str.encode())
@@ -124,15 +137,15 @@ def array_sha(arr: np.ndarray) -> str:
 
 
 def hard_bound(max_steps: int = MAX_STEPS, execute_horizon: int = EXECUTE_HORIZON) -> int:
-    """照抄 run_group：``max(1, -(-int(args.max_steps) // max(1, args.execute_horizon))) + 2``。"""
+    """Copied from run_group: ``max(1, -(-int(args.max_steps) // max(1, args.execute_horizon))) + 2``."""
     return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 2
 
 
 def timeout_error(hb: int) -> str:
-    return f"策略循环 hard_bound={hb} 用尽，环境未报终态"
+    return f"policy loop hard_bound={hb} exhausted, environment reported no terminal status"
 
 
-# ---- 以下五个函数逐行照抄 robomme_sim/robomme_env.py（c564c17 = 4e0c04f）第 33–75 行 ----
+# ---- the following five functions are copied line by line from robomme_sim/robomme_env.py (c564c17 = 4e0c04f) lines 33-75 ----
 def _to_uint8_hwc(img) -> np.ndarray:
     if hasattr(img, "detach"):
         img = img.detach().cpu().numpy()
@@ -176,11 +189,11 @@ def _scalar(x) -> float:
         except Exception:
             return float(np.asarray(x.detach().cpu() if hasattr(x, "detach") else x).reshape(-1)[0])
     return float(x)
-# ---- 照抄结束 ----
+# ---- end of copy ----
 
 
 def instruction_from_info(info: dict, task_name: str) -> str:
-    """照抄 SimEnvService.reset 取 instruction 的分支。"""
+    """Copied from the instruction branch of SimEnvService.reset."""
     task_goal = info.get("task_goal")
     if isinstance(task_goal, (list, tuple)) and task_goal:
         return str(task_goal[0])
@@ -188,7 +201,8 @@ def instruction_from_info(info: dict, task_name: str) -> str:
 
 
 def reset_session(session, task_name: str, retries: int = RESET_RETRIES) -> dict:
-    """照抄 SimEnvService.reset：最多 retries+1 次；返回 {ok, instruction, frames, states} 或 {ok: False, reason}。"""
+    """Copied from SimEnvService.reset: at most retries+1 attempts; returns {ok, instruction, frames, states} or
+    {ok: False, reason}."""
     last_err = "unknown"
     for _attempt in range(retries + 1):
         try:
@@ -201,7 +215,7 @@ def reset_session(session, task_name: str, retries: int = RESET_RETRIES) -> dict
                     "frames": frames, "states": states, "attempts": _attempt + 1}
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
-            try:  # 旧：出错后 env.close() 并置空，下一次重建
+            try:  # old behavior: env.close() after an error and clear it; the next attempt rebuilds
                 session.close()
             except Exception:
                 pass
@@ -209,13 +223,15 @@ def reset_session(session, task_name: str, retries: int = RESET_RETRIES) -> dict
 
 
 def step_chunk(session, action_chunk, on_exec=None, on_obs=None) -> dict:
-    """照抄 SimEnvService.step + RoboMMESimEnv.step_one（逐行执行、遇 done/error/obs None 即停）。
+    """Copied from SimEnvService.step + RoboMMESimEnv.step_one (row by row, stopping on done/error/obs None).
 
-    on_exec(act8) 在每行交给环境前回调（记录实际执行动作）。
-    on_obs(step, front, wrist, state, terminated, truncated, *, status, error) 在每行 ``session.step`` 返回后回调
-    （S4 逐步记录）：``step`` 为本块内第几步（从 1 计，即当时的 consumed）；一步返回多帧时取最后一帧的前视、腕部
-    画面与 8 维状态；``status == "error"`` 或 ``obs is None`` 时画面与状态传 ``None``（缺观测步）。``session.step``
-    抛异常时不回调（由调用方按环境侧计步处理）。回调只读，不改变本函数的返回值与控制流。
+    on_exec(act8) is called before each row is given to the environment (records the action actually executed).
+    on_obs(step, front, wrist, state, terminated, truncated, *, status, error) is called after each ``session.step``
+    returns (per-step recording): ``step`` is the step index within this chunk (from 1, i.e. the current consumed);
+    when one step returns several frames the front, wrist images and 8-d state of the last frame are used; when
+    ``status == "error"`` or ``obs is None`` images and state are passed as ``None`` (step without observation). Not
+    called when ``session.step`` raises (the caller handles it by environment-side step counting). The callbacks are
+    read-only and never change this function's return value or control flow.
     """
     action_chunk = np.asarray(action_chunk, dtype=np.float64)
     frames, states, consumed = [], [], 0
@@ -261,7 +277,7 @@ def step_chunk(session, action_chunk, on_exec=None, on_obs=None) -> dict:
 
 
 class WSPolicyConn:
-    """到 smvla_server 的同步 websocket 连接（msgpack_numpy；compression=None、max_size=None、不走代理）。"""
+    """Synchronous websocket connection to smvla_server (msgpack_numpy; compression=None, max_size=None, no proxy)."""
 
     def __init__(self, host: str, port: int, open_timeout: float = 600.0):
         from openpi_client import msgpack_numpy
@@ -278,7 +294,7 @@ class WSPolicyConn:
         self._ws.send(raw)
         rep_raw = self._ws.recv()
         if isinstance(rep_raw, str):
-            raise ProtocolError(f"server 返回文本帧：{rep_raw[:2000]}")
+            raise ProtocolError(f"server returned a text frame: {rep_raw[:2000]}")
         return self._m.unpackb(rep_raw), raw, rep_raw
 
     def close(self) -> None:
@@ -306,17 +322,18 @@ def episode_key(identity: dict) -> str:
     return f"{identity['task']}/{identity['source_episode']}/{identity['seed']}"
 
 
-# ---- S4：两条新侧路线（smvla／perceptual-framesamp-modul）共用的逐局轨迹记录器 ----
+# ---- per-episode trace recorder shared by the two new-side routes (smvla / perceptual-framesamp-modul) ----
 
 TRACE_TERMINALS = ("success", "fail", "timeout", "error")
-#: arrays.npz 的执行动作键（C4）；与 recorder._write_arrays 的 f"{name}__{k:05d}"（name="exec_action"）逐字同名
+#: executed-action key in arrays.npz (C4); literally the same name as recorder._write_arrays' f"{name}__{k:05d}"
+#: (name="exec_action")
 ACTION_KEY = "exec_action__%05d"
-#: 服务外壳回包审计键（冻结说明第五节；与 trace_writer.AUDIT_KEY 相同）
+#: server wrapper reply audit key (same as trace_writer.AUDIT_KEY)
 AUDIT_KEY = "_sgeval_audit"
 _TAG_ATTEMPT = re.compile(r"\.a(\d+)$")
 
 
-#: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
+#: legacy sibling module name -> module in the evaluation package (no longer loaded from each other by file path)
 SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
             "groundsg_client": "robomme_ood_eval.models.groundsg",
             "framesamp_modul_client": "robomme_ood_eval.models.framesamp_modul",
@@ -325,29 +342,34 @@ SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
 
 
 def load_sibling(name: str):
-    """取旧仓同目录模块在评估包里的对应模块（包内 import，已导入则复用）。"""
+    """Return the evaluation-package module corresponding to a legacy sibling module (package import; reused if
+    already imported)."""
     if name not in SIBLINGS:
-        raise ModuleNotFoundError(f"未登记的同伴模块 {name!r}，可选：{', '.join(SIBLINGS)}")
+        raise ModuleNotFoundError(f"unknown sibling module {name!r}; choices: {', '.join(SIBLINGS)}")
     return importlib.import_module(SIBLINGS[name])
 
 
 def episode_attempt(tag: str | None) -> int:
-    """局目录名 ``<key>.a<N>`` 的尝试号 N；无后缀记 1（与 groundsg_client 的 ``f"{key}.a1"`` 缺省一致）。"""
+    """Attempt number N from an episode directory name ``<key>.a<N>``; 1 without a suffix (consistent with the
+    groundsg_client default ``f"{key}.a1"``)."""
     m = _TAG_ATTEMPT.search(str(tag or ""))
     return int(m.group(1)) if m else 1
 
 
 def recorder_writes_arrays(recorder: Any) -> bool:
-    """录像器会在 ``out_dir`` 写 ``arrays.npz``（含 ``exec_action__%05d``）：真实 ``recorder.EpisodeRecorder`` 即如此。"""
+    """Whether the recorder writes ``arrays.npz`` (with ``exec_action__%05d``) in ``out_dir``: the real
+    ``recorder.EpisodeRecorder`` does."""
     return recorder is not None and getattr(recorder, "out_dir", None) is not None and \
         callable(getattr(recorder, "add_array", None))
 
 
 class PolicyTrace:
-    """一局新侧轨迹（route ``smvla/new``／``perceptual-framesamp-modul/new``）。``enabled`` 为假时（无落点）所有方法都是空操作。
+    """One episode's new-side trace (route ``smvla/new`` / ``perceptual-framesamp-modul/new``). When ``enabled`` is
+    false (no location) every method is a no-op.
 
-    所有记录方法吞掉自身异常、计 ``hook_errors``（收尾写 ``end.observer_hook_errors``，C11），绝不改变调用方的
-    请求、动作与控制流；动作一律先复制再记录。
+    Every recording method swallows its own exceptions and increments ``hook_errors`` (written to
+    ``end.observer_hook_errors`` at finalization, C11), never changing the caller's requests, actions or control
+    flow; actions are always copied before recording.
     """
 
     def __init__(self, route: str, identity: dict, conn_info: dict, recorder: Any, *, max_steps: int,
@@ -367,9 +389,9 @@ class PolicyTrace:
         self.encodings: set[str] = set()
         self.pending_frames: list[list[str | None]] = []
         self._tw = None
-        self.lang = None        # 第三阶段语言账本（trace 同目录 language.jsonl）
-        self.src_call: str | None = None  # 当前动作块来自哪次调用（log_step 的 source_call_id）
-        self.chunk_pos = 0      # 当前动作块内下一步的序号（log_step 的 chunk_index）
+        self.lang = None        # language ledger (language.jsonl next to the trace)
+        self.src_call: str | None = None  # which call the current action chunk came from (log_step's source_call_id)
+        self.chunk_pos = 0      # index of the next step within the current action chunk (log_step's chunk_index)
         try:
             ci = conn_info or {}
             path = load_sibling("groundsg_client").trace_location(ci, recorder)
@@ -382,14 +404,14 @@ class PolicyTrace:
             seed = ci.get("policy_seed", identity.get("policy_seed"))
             cap = ci.get("effective_cap")
             kw: dict[str, Any] = {}
-            if seed is not None:  # 冻结说明四.1：identity／header 记 policy_seed；未给时不写，旧字节不变
+            if seed is not None:  # identity / header record policy_seed; not written when absent, so old bytes are unchanged
                 ident["policy_seed"] = int(seed)
                 kw["policy_seed"] = int(seed)
             if cap is not None:
                 kw["effective_cap"] = int(cap)
             self.w = self._tw.TraceWriter(path, route=route, identity=ident, max_steps=self.max_steps, **kw)
             self.path = Path(path)
-        except Exception as e:  # noqa: BLE001 记录器建不起来：只告警，不影响本局
+        except Exception as e:  # noqa: BLE001 recorder cannot be created: warn only, the episode is unaffected
             self.w = None
             self._err("init", e)
             return
@@ -413,7 +435,7 @@ class PolicyTrace:
     def _copy(a: Any) -> np.ndarray | None:
         return None if a is None else np.array(a, copy=True)
 
-    # -- 演示、请求、响应、历史 --
+    # -- demo, requests, responses, history --
     def demo(self, fronts, wrists, states, goal) -> None:
         if not self.enabled:
             return
@@ -424,7 +446,8 @@ class PolicyTrace:
             self._err("demo", e)
 
     def note_frames(self, frames) -> None:
-        """SimpleMemVLA：记下已 observe 的帧（前视、腕部画面哈希），并入下一次 infer 的逻辑输入（C10）。"""
+        """SimpleMemVLA: record the observed frames (front, wrist image hashes), merged into the next infer's logical
+        input (C10)."""
         if not self.enabled:
             return
         try:
@@ -434,7 +457,8 @@ class PolicyTrace:
             self._err("note_frames", e)
 
     def logical_request(self, name: str, instruction: str, state: Any) -> None:
-        """SimpleMemVLA 的逻辑输入行：指令、状态、上次推理以来的帧哈希序列（C10，不比通信字节）。"""
+        """SimpleMemVLA logical-input line: instruction, state, frame-hash sequence since the previous inference (C10;
+        communication bytes are not compared)."""
         if not self.enabled:
             return
         try:
@@ -446,7 +470,8 @@ class PolicyTrace:
             self._err("request", e)
 
     def raw_request(self, name: str, obj: Any, raw: bytes | None) -> None:
-        """FrameSamp+Modulation：原始 msgpack 帧字节的 sha256（拿不到原始字节时退回 ``canonical_bytes``，收尾标 ``request_encoding``）。"""
+        """FrameSamp+Modulation: sha256 of the raw msgpack frame bytes (falls back to ``canonical_bytes`` when the raw
+        bytes are unavailable, marked ``request_encoding`` at finalization)."""
         if not self.enabled:
             return
         try:
@@ -475,9 +500,10 @@ class PolicyTrace:
         except Exception as e:  # noqa: BLE001
             self._err("history", e)
 
-    # -- 第三阶段语言账本（冻结说明第五节）：全部吞异常、计 hook_errors，不改请求、动作与控制流 --
+    # -- language ledger: every method swallows exceptions and increments hook_errors, never changing requests, actions or control flow --
     def lang_open(self, model: str, *, step: int | None = None, **kw: Any) -> str | None:
-        """开一次模型调用；``step`` 缺省取已交给环境的步数。账本不可用时返回 None（其余 lang_* 对 None 是空操作）。"""
+        """Open one model call; ``step`` defaults to the number of steps already given to the environment. Returns
+        None when the ledger is unavailable (the other lang_* methods are no-ops on None)."""
         if self.lang is None:
             return None
         try:
@@ -495,7 +521,8 @@ class PolicyTrace:
             self._err("language.message", e)
 
     def lang_audit(self, call_id: str | None, audit: Any) -> tuple[Any, Any]:
-        """服务外壳审计块的逐通道分词写成 ``in`` 消息，返回 ``(server_final_text, server_truncated)``；缺审计块记 None。"""
+        """Write the per-channel tokenization of the server wrapper audit block as ``in`` messages and return
+        ``(server_final_text, server_truncated)``; None without an audit block."""
         if self.lang is None or call_id is None:
             return None, None
         try:
@@ -513,7 +540,8 @@ class PolicyTrace:
             self._err("language.close", e)
 
     def image_ref(self, slot: int, ref: str, cam: str, img: Any) -> dict | None:
-        """附图引用：当前帧在 trace 里的位置（演示段末帧或第 N 步执行后）与原始帧 sha256（与 trace 同一算法）。"""
+        """Image reference: the current frame's position in the trace (last demo frame or after step N) and the raw
+        frame sha256 (same algorithm as the trace)."""
         if not self.enabled:
             return None
         try:
@@ -529,7 +557,7 @@ class PolicyTrace:
             return None
 
     def begin_chunk(self, call_id: str | None) -> None:
-        """之后执行的步都来自 ``call_id`` 这次调用，块内序号从 0 重新计。"""
+        """Steps executed from now on come from the call ``call_id``; the in-chunk index restarts at 0."""
         self.src_call = call_id
         self.chunk_pos = 0
 
@@ -540,9 +568,10 @@ class PolicyTrace:
         self.chunk_pos += 1
         return out
 
-    # -- 执行步 --
+    # -- executed steps --
     def step(self, action, front, wrist, state, *, subgoal, terminated, truncated, status) -> None:
-        """有效观测步（C4）：执行后的画面、状态、实际交给环境的动作与当步子目标。"""
+        """Step with a valid observation (C4): post-step images, state, the action actually given to the environment,
+        and the current subgoal."""
         if not self.enabled:
             return
         try:
@@ -556,7 +585,7 @@ class PolicyTrace:
             self._err("step", e)
 
     def missing(self, action, reason: str, subgoal=None) -> None:
-        """缺观测步（C8）：保留步号、动作与原因。"""
+        """Step without observation (C8): keeps step number, action and reason."""
         if not self.enabled:
             return
         try:
@@ -570,9 +599,11 @@ class PolicyTrace:
 
     def step_exception(self, action, exc: BaseException, before: int | None, after: int | None, *,
                        logged: int = 0, subgoal=None) -> None:
-        """``session.step`` 抛异常后：按环境会话 ``steps`` 的增量补记缺观测步（与结果行 ``exec_steps`` 同口径）。
+        """After ``session.step`` raised: add steps without observation according to the increase of the environment
+        session's ``steps`` (same basis as the result row ``exec_steps``).
 
-        ``StepCapReached``（strict-cap）不进环境、不计步，只标 ``cap_hit``；拿不到会话计步时其余异常按 1 步计。"""
+        ``StepCapReached`` (strict-cap) never reaches the environment and is not counted; it only sets ``cap_hit``;
+        when the session step count is unavailable, other exceptions count as 1 step."""
         if not self.enabled:
             return
         try:
@@ -588,12 +619,14 @@ class PolicyTrace:
         except Exception as e:  # noqa: BLE001
             self._err("step_exception", e)
 
-    # -- 收尾 --
-    # 第三阶段：arrays.npz 不再由本类直接 np.savez；TraceWriter 逐步收集 exec_action／exec_state，close 时经
-    # trace_writer.merge_write_npz 合并写盘（与同目录录像器先后任意都不覆盖；分目录时各写各的），end.arrays 为摘要。
+    # -- finalization --
+    # arrays.npz is no longer written by this class via np.savez; TraceWriter collects exec_action / exec_state per
+    # step and close writes them via trace_writer.merge_write_npz (in any order relative to a recorder in the same
+    # directory, neither overwrites the other; separate directories each write their own); end.arrays is a summary.
 
     def close(self, status: str | None, *, cap_hit: bool = False, **extra: Any) -> None:
-        """按 C2、C3、C8 收尾：strict-cap 记 ``timeout``；无演示帧的 error 局记 ``no_frame``。"""
+        """Finalize per C2, C3, C8: strict-cap records ``timeout``; an error episode without demo frames records
+        ``no_frame``."""
         if not self.enabled:
             return
         try:
@@ -603,11 +636,11 @@ class PolicyTrace:
                 st = "timeout"
             no_frame = self.demo_frames is None
             demo = 0 if no_frame else int(self.demo_frames)
-            # 官方循环超过 max_steps 时先 break、最后一步不录（只对 FrameSamp+Modulation 这类「第 max_steps+1 步判超时」的路线）
+            # the official loop breaks before recording the last step when exceeding max_steps (only for routes such as FrameSamp+Modulation that "judge timeout at step max_steps+1")
             omitted = int(self.omit_overflow_frame and st == "timeout" and not self.cap_hit and
                           self.steps == self.max_steps + 1)
             frames = 0 if no_frame else demo + 1 + self.observed - omitted
-            if self.lang is not None:  # 先关语言账本（悬空调用补 cancelled），其异常也计进本局 hook_errors
+            if self.lang is not None:  # close the language ledger first (dangling calls get cancelled); its exceptions also count toward this episode's hook_errors
                 try:
                     self.lang.close()
                 except Exception as e:  # noqa: BLE001
@@ -625,14 +658,16 @@ class PolicyTrace:
 def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn=None,
                 max_steps: int = MAX_STEPS, execute_horizon: int = EXECUTE_HORIZON,
                 reset_retries: int = RESET_RETRIES, record_frames: bool | None = None) -> dict:
-    """跑一局；返回 {status, task_success, steps, error, decisions, timing, server_meta, protocol}。
+    """Run one episode; returns {status, task_success, steps, error, decisions, timing, server_meta, protocol}.
 
-    conn：测试注入的假连接（需有 metadata、call(msg)->(reply, raw, rep_raw)、close()）；为 None
-    时按 conn_info={"host","port"} 建 WSPolicyConn。session 由调用方构造，本函数不 close。
+    conn: a fake connection injected by tests (needs metadata, call(msg)->(reply, raw, rep_raw), close()); when None
+    a WSPolicyConn is built from conn_info={"host","port"}. The session is built by the caller; this function does
+    not close it.
     """
     rec = recorder if recorder is not None else _NullRecorder()
-    # env_client.EnvSession 持有同一 recorder 时，原始帧、exec_action 与 reset/run 阶段已由环境侧记录，
-    # 本函数只记策略侧（消息指纹、state、model_action、决策事件），避免重复。
+    # when the environment session holds the same recorder, raw frames, exec_action and the reset/run phases are
+    # already recorded on the environment side; this function only records the policy side (message fingerprints,
+    # state, model_action, decision events) to avoid duplication.
     env_records = recorder is not None and getattr(session, "recorder", None) is recorder
     if record_frames is None:
         record_frames = not env_records
@@ -648,9 +683,11 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
     proto = out["protocol"]
     frame_idx = {"front": 0, "wrist": 0}
     own_conn = conn is None
-    # S4：逐局轨迹（无落点时 enabled=False，以下记录调用全是空操作，客户端行为与 BASE 相同）。
-    # 轨迹 max_steps 记客户端循环的真实步数上界 hard_bound×execute_horizon（1300 步时 84×16=1344）：决策用尽的
-    # timeout 局正常执行到该上界、每步都录，不存在「第 max_steps+1 步不录」；--max-steps 另记 end.episode_max_steps。
+    # per-episode trace (enabled=False without a location, in which case all recording calls below are no-ops and
+    # client behavior is unchanged). The trace's max_steps records the real upper bound of the client loop,
+    # hard_bound x execute_horizon (84 x 16 = 1344 for 1300 steps): a timeout episode that runs out of decisions
+    # executes up to that bound with every step recorded, so there is no "step max_steps+1 not recorded"; --max-steps
+    # is recorded separately as end.episode_max_steps.
     trace = PolicyTrace("smvla/new", identity, conn_info or {}, recorder, max_steps=hb * int(execute_horizon),
                         recorder_has_actions=recorder_writes_arrays(recorder), omit_overflow_frame=False)
 
@@ -662,7 +699,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
             idx[cam] = rec.add_frames(cam, np.stack([fr[cam] for fr in frames]), tag=tag)
         return {k: [v[0], v[-1]] if v else [] for k, v in idx.items()}
 
-    last_audit: list[Any] = [None]  # 最近一次回包里 pop 出的服务外壳审计块
+    last_audit: list[Any] = [None]  # server wrapper audit block popped from the most recent reply
 
     def call(kind: str, msg: dict, extra: dict | None = None) -> dict:
         t0 = time.monotonic()
@@ -677,14 +714,14 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         if kind == "infer":
             timing["rtt_ms"].append(round(rtt, 3))
         if not isinstance(reply, dict):
-            raise ProtocolError(f"{kind} 回包不是 dict：{type(reply)}")
-        # 第三阶段：服务外壳审计键先 pop 掉（只进语言账本，不进动作与后续校验）
+            raise ProtocolError(f"{kind} reply is not a dict: {type(reply)}")
+        # pop the server wrapper audit key first (it only goes to the language ledger, never to actions or later checks)
         last_audit[0] = reply.pop(AUDIT_KEY, None)
         if "error" in reply:
-            raise ServerError(f"server 报错（{kind}）：{reply['error']}")
+            raise ServerError(f"server error ({kind}): {reply['error']}")
         if reply.get("req_sha") != sha256_bytes(raw):
             proto["sha_mismatch"] += 1
-            raise ProtocolError(f"{kind} 回包 req_sha 与发出字节不符")
+            raise ProtocolError(f"{kind} reply req_sha does not match the bytes sent")
         return reply
 
     def observe(frames, tag):
@@ -697,7 +734,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         sent = [{CAM_FRONT: frame_sha(fr[CAM_FRONT]), CAM_WRIST: frame_sha(fr[CAM_WRIST])} for fr in frames]
         if reply.get("n") != len(frames) or reply.get("frame_sha") != sent:
             proto["sha_mismatch"] += 1
-            raise ProtocolError(f"observe 回包帧指纹与发出不符（发 {len(frames)} 帧，回 {reply.get('n')}）")
+            raise ProtocolError(f"observe reply frame fingerprints do not match what was sent (sent {len(frames)} frames, got {reply.get('n')})")
         proto["frames_sent"] += len(frames)
         timing["observe_ms"].append(round(float(reply.get("observe_time_ms", 0.0)), 3))
         trace.note_frames(frames)
@@ -706,7 +743,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
     error = None
     steps = 0
     try:
-        # ---- reset（旧：pool.reset → SimEnvService.reset）----
+        # ---- reset (old: pool.reset -> SimEnvService.reset) ----
         if not env_records:
             rec.set_phase("reset")
         t0 = time.monotonic()
@@ -715,7 +752,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         if not env_records:
             rec.set_phase("run")
         if not r.get("ok"):
-            status, error = "error", f"reset 失败：{r}"[:2000]
+            status, error = "error", f"reset failed: {r}"[:2000]
             m = _marker(r.get("reason"), ENV_RESET_INFRA_MARKERS)
             if m:
                 out.update(infra=True, infra_reason=f"env_reset:{m}")
@@ -723,7 +760,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         else:
             rec.add_event({"kind": "reset_ok", "attempts": r["attempts"], "n_frames": len(r["frames"]),
                            "instruction": r["instruction"]})
-            if trace.enabled:  # C2：全部 reset 帧（演示 + 初始帧）与对应 8 维状态
+            if trace.enabled:  # C2: all reset frames (demo + initial frame) and the matching 8-d states
                 trace.demo([fr[CAM_FRONT] for fr in r["frames"]], [fr[CAM_WRIST] for fr in r["frames"]],
                            r["states"], r["instruction"])
             if own_conn:
@@ -744,11 +781,11 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
             decisions = 0
             while decisions < hb:
                 decisions += 1
-                if success:  # 旧：act = [g for g in active if not success[g]]; if not act: break
+                if success:  # old: act = [g for g in active if not success[g]]; if not act: break
                     break
                 rec.add_array("state", cur_state, step=steps)
                 trace.logical_request("infer", instruction, cur_state)
-                # 第三阶段语言账本：每次决策一个 action_model 调用，in 消息在发送前落盘
+                # language ledger: one action_model call per decision; the in message is persisted before sending
                 cid = trace.lang_open("action_model", params={"decision": decisions - 1})
                 trace.lang_msg(cid, dir="in", role="fields", text={"instruction": instruction})
                 try:
@@ -757,7 +794,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                     if reply.get("recv_state_sha") != array_sha(cur_state) or \
                             reply.get("recv_instruction_sha") != sha256_bytes(instruction.encode("utf-8")):
                         proto["sha_mismatch"] += 1
-                        raise ProtocolError("infer 回包的状态/指令指纹与发出不符")
+                        raise ProtocolError("infer reply state/instruction fingerprints do not match what was sent")
                 except BaseException:
                     trace.lang_close(cid, status="error")
                     raise
@@ -771,17 +808,17 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                 rec.add_array("model_action", actions_full, step=steps)
                 chunk = np.asarray(reply["actions"])[:execute_horizon]
                 if not np.array_equal(chunk, actions_full[:execute_horizon]):
-                    raise ProtocolError("infer 回包 actions 与 actions_full[:16] 不符")
+                    raise ProtocolError("infer reply actions do not match actions_full[:16]")
                 rec.add_event({"kind": "decision", "decision": decisions - 1, "step": steps,
                                "subtask": reply.get("subtask"), "infer_ms": round(float(reply["infer_ms"]), 3),
                                "model_action_sha": array_sha(actions_full)})
 
                 trace.response(actions_full)
-                subtask = reply.get("subtask")  # 当前子目标（C4、C7）：本次决策回包的子任务文本
+                subtask = reply.get("subtask")  # current subgoal (C4, C7): the subtask text of this decision's reply
                 subgoal = subtask if subtask is None or isinstance(subtask, str) else str(subtask)
 
                 exec_step = [steps]
-                last_act = [None]  # S4：本块最近一行交给环境的动作（异常步补记用）
+                last_act = [None]  # the last row of this chunk given to the environment (for recording a step that raised)
                 obs_seen = [0]
 
                 def on_exec(act8, _s=exec_step, _last=last_act):
@@ -804,7 +841,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                 t0 = time.monotonic()
                 try:
                     res = step_chunk(session, chunk, on_exec=on_exec, on_obs=on_obs if trace.enabled else None)
-                except Exception as e:  # 旧：InProcSimPool.step 捕获为 {"error": f"step_exc: {e}"}
+                except Exception as e:  # old: InProcSimPool.step catches it as {"error": f"step_exc: {e}"}
                     res = {"error": f"step_exc: {e}"}
                     trace.step_exception(last_act[0], e, sess_before, getattr(session, "steps", None),
                                          logged=obs_seen[0], subgoal=subgoal)
@@ -833,7 +870,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                 status = "success" if success else "timeout"
                 error = None if success else timeout_error(hb)
     except Exception as e:
-        # 旧：evaluate_manifest 捕获 run_group 异常，error 取 traceback 末 2000 字符，steps 保留
+        # old: evaluate_manifest catches run_group exceptions; error takes the last 2000 characters of the traceback, steps kept
         status = "error"
         tb = traceback.format_exc()
         error = tb[-2000:]
@@ -846,14 +883,14 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         if own_conn and conn is not None:
             conn.close()
     if status not in FINAL_STATUSES + ("error",):
-        error = f"未知终态 {status}；{error}"
+        error = f"unknown terminal status {status}; {error}"
         status = "error"
     timing["step_env_s"] = round(timing["step_env_s"], 3)
     timing["episode_s"] = round(time.monotonic() - t_start, 3)
     out.update(status=status, task_success=status == "success", steps=steps, error=error)
     rec.add_event({"kind": "episode_end", "status": status, "steps": steps, "error": error,
                    "decisions": out["decisions"]})
-    if trace.enabled:  # C2、C3、C8：strict-cap 以会话 cap_hit 为准记 timeout（与 env_client._classify 同口径）
+    if trace.enabled:  # C2, C3, C8: strict-cap follows the session's cap_hit and records timeout (same basis as the outer _classify)
         trace.close(status, cap_hit=bool(getattr(session, "cap_hit", False)), decisions=out["decisions"],
                     episode_max_steps=int(max_steps), step_bound=hb * int(execute_horizon),
                     session_steps=getattr(session, "steps", None))
@@ -861,17 +898,18 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
     return out
 
 
-# ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
+# -- new interface: the four model-side methods --------------------------------------
 
 from robomme_ood_eval import servers as _servers  # noqa: E402
 from robomme_ood_eval.policy import Ready  # noqa: E402
 
 
 def smvla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
-    """SimpleMemVLA 服务端的命令、环境与 cwd，照抄旧 ``run_seat.sh::build_server_cmd`` 的 smvla 分支：
-    ``<smvla-env 解释器> servers/smvla_server.py serve --port --ckpt --warmup [--det] --policy-seed --metadata_out``，
-    cwd 为评估仓根，``OMP_NUM_THREADS=1`` 等固定变量。解释器取 ``cfg["smvla_py"]`` → 环境变量 ``SMVLA_PY`` →
-    ``envs/smvla-env/.venv/bin/python``。"""
+    """Command, environment and cwd of the SimpleMemVLA server, copied from the smvla branch of the legacy
+    ``run_seat.sh::build_server_cmd``:
+    ``<smvla-env interpreter> servers/smvla_server.py serve --port --ckpt --warmup [--det] --policy-seed
+    --metadata_out``, with cwd at the evaluation repo root and fixed variables such as ``OMP_NUM_THREADS=1``. The
+    interpreter comes from ``cfg["smvla_py"]`` -> env var ``SMVLA_PY`` -> ``envs/smvla-env/.venv/bin/python``."""
     S = _servers
     cfg = policy.cfg
     py = S.interpreter(cfg, "smvla_py", "SMVLA_PY", policy.root / "envs" / "smvla-env" / ".venv" / "bin" / "python")
@@ -886,18 +924,23 @@ def smvla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:
 
 
 class SmvlaPolicy(_servers.ServedPolicy):
-    """SimpleMemVLA（``smvla``）。
+    """SimpleMemVLA (``smvla``).
 
-    * ``load``：用 ``envs/smvla-env`` 的解释器起 ``servers/smvla_server.py``（服务端自带 ``--warmup``，就绪 = 端口在听），
-      核服务外壳元数据的 ``policy_seed``，后台 ckpt 指纹；
-    * ``reset(spec)``：不发消息、不碰环境——只探活并记下本局身份；
-    * ``play``：原样调本模块 ``run_episode``（``max_steps=spec.max_steps``、``reset_retries=0``，与旧席位相同）：先
-      ``session.reset()``，再连服务端发带 ``episode_key`` 的 ``reset``（触发 ``reseed``），沿用旧次序；会话经
-      ``SessionNoClose`` 交出，reset 失败时旧代码的 ``env.close()`` 不关外层环境；
-    * ``close``：停服务端进程组（基类）。
+    * ``load``: start ``servers/smvla_server.py`` with the ``envs/smvla-env`` interpreter (the server does its own
+      ``--warmup``; ready = port listening), check ``policy_seed`` in the server wrapper metadata, and fingerprint the
+      ckpt in the background;
+    * ``reset(spec)``: sends no message and never touches the environment -- only probes liveness and records this
+      episode's identity;
+    * ``play``: calls this module's ``run_episode`` unchanged (``max_steps=spec.max_steps``, ``reset_retries=0``, as
+      in the old seat runner): first ``session.reset()``, then connect to the server and send ``reset`` with
+      ``episode_key`` (triggering ``reseed``), keeping the old order; the session is handed over via
+      ``SessionNoClose`` so the old code's ``env.close()`` after a failed reset does not close the outer
+      environment;
+    * ``close``: stop the server process group (base class).
 
-    可选 cfg：``ckpt``（缺省旧 run_seat.sh 的 NFS 路径）、``smvla_py``、``det``。客户端进程宜以 ``OMP_NUM_THREADS=1``
-    启动（旧席位如此；进程内已加载 numpy 后再设无效，这里只核对并告警）。"""
+    cfg: ``ckpt`` (required; there is no default), optional ``smvla_py``, ``det``. The client process should be
+    started with ``OMP_NUM_THREADS=1`` (as the old seat runner did; setting it after numpy is loaded has no effect,
+    so this only checks and warns)."""
 
     model = "smvla"
     requires_ckpt = True
@@ -920,7 +963,7 @@ class SmvlaPolicy(_servers.ServedPolicy):
                 raise S.PreflightError(f"RUN_BLOCKED reason=smvla_ckpt_missing ckpt={self.ckpt}")
         omp = os.environ.get("OMP_NUM_THREADS")
         if omp != "1":
-            print(f"SMVLA_CLIENT_OMP=WARN OMP_NUM_THREADS={omp!r}（旧席位客户端为 1）", flush=True)
+            print(f"SMVLA_CLIENT_OMP=WARN OMP_NUM_THREADS={omp!r} (the old seat client used 1)", flush=True)
         self._launch(argv, env, cwd, [Ready.port()], self.ckpt)
         self._fingerprint(self.ckpt)
 
