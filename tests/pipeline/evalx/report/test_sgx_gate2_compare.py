@@ -123,8 +123,8 @@ def test_astra_mode_compares_terminal_and_subtasks(tmp_path):
     assert s["verdict"] == "INFO" and s["compared"] == 4 and s["same_terminal"] == 4 and s["same_subtasks"] == 3
     assert "identical_trace" not in s
     row = next(r for r in res["table"] if r["source_episode"] == 7 and r["task"] == "VideoUnmask")
-    assert row["orig_subtasks"] == ["子目标0", "子目标1"]
-    assert row["new_subtasks"] == ["子目标0", "子目标1（改）", "子目标1"]
+    assert row["orig_subtasks"] == ["subgoal0", "subgoal1"]
+    assert row["new_subtasks"] == ["subgoal0", "subgoal1(edited)", "subgoal1"]
     assert row["orig_requests"] == {"infer": 2}
     line = g.verdict_line(res, "astra")
     assert line.startswith("GATE2=INFO policy=astra mode=astra compared=4 same_terminal=4 same_subtasks=3 missing=0")

@@ -1,4 +1,5 @@
-"""C13-SG-TRACE：每局 ``trace.jsonl`` 的行序、字段与哈希口径（计划第二部分 1.7）。期望值手写。"""
+"""C13-SG-TRACE: row order, fields and hashing conventions of each episode's ``trace.jsonl`` (plan part two, 1.7).
+Expected values are hand-written."""
 from __future__ import annotations
 
 import hashlib
@@ -15,30 +16,31 @@ def test_row_order_and_fields(tmp_path):
     p = tmp_path / "ep" / "trace.jsonl"
     ident = {"task": "VideoUnmask", "source_episode": 3, "seed": 11, "attempt": 1}
     with t.TraceWriter(p, route="new", identity=ident, max_steps=1300) as w:
-        w.log_demo([F.frame(0)], [F.frame(0, 1)], [F.state(0)], ["看演示"])
+        w.log_demo([F.frame(0)], [F.frame(0, 1)], [F.state(0)], ["watch the demo"])
         w.log_request("reset", b"abc", step=0)
         w.log_response(np.zeros((2, 8), np.float32), step=0)
         w.log_history(1, 2, note="buf")
         w.log_step(step=1, front=F.frame(1), wrist=F.frame(1, 1), state=F.state(1), action=F.action(1),
-                   subgoal="拿起", terminated=False, truncated=False, status="ongoing")
+                   subgoal="pick up", terminated=False, truncated=False, status="ongoing")
         w.log_step(step=2, front=F.frame(2), wrist=None, state=F.state(2), action=F.action(2),
-                   subgoal="拿起", terminated=True, truncated=False, status="success")
+                   subgoal="pick up", terminated=True, truncated=False, status="success")
         w.close(status="success", terminal_reason="env_terminated", note="x")
     rows = t.read_trace(p)
     assert [r["kind"] for r in rows] == ["header", "demo", "request", "response", "history", "step", "step", "end"]
     h = rows[0]
     assert h["schema"] == "sgeval-trace/1" and h["identity"] == ident and h["max_steps"] == 1300 and h["route"] == "new"
-    assert rows[1]["frames"] == 1 and rows[1]["texts"] == ["看演示"]
+    assert rows[1]["frames"] == 1 and rows[1]["texts"] == ["watch the demo"]
     assert rows[2] == {"kind": "request", "name": "reset", "step": 0, "sha256": hashlib.sha256(b"abc").hexdigest(),
                        "nbytes": 3}
     assert rows[3]["actions"]["dtype"] == "<f4" and rows[3]["actions"]["shape"] == [2, 8]
     assert rows[6]["wrist_sha256"] is None and rows[6]["terminated"] is True
-    # 第三阶段（冻结说明四.3）：collect_arrays 缺省打开，end 行多一个 arrays 摘要；其余字段逐项不变
+    # Stage 3 (freeze note 4.3): collect_arrays is on by default, so the end row gains an arrays summary; all other
+    # fields are unchanged
     assert {k: v for k, v in rows[-1].items() if k != "arrays"} == {
         "kind": "end", "status": "success", "exec_steps": 2, "terminal_reason": "env_terminated", "note": "x"}
     assert rows[-1]["arrays"] == {"path": "arrays.npz", "action_keys": 2, "state_keys": 2, "missing_state_steps": []}
     assert t.validate_trace(rows) == []
-    assert t.subgoal_sequence(rows) == ["拿起"]
+    assert t.subgoal_sequence(rows) == ["pick up"]
 
 
 def test_array_hash_keeps_dtype_and_shape():
@@ -46,14 +48,14 @@ def test_array_hash_keeps_dtype_and_shape():
     a64 = np.arange(8, dtype=np.float64)
     a32 = a64.astype(np.float32)
     r64, r32 = t.array_record(a64), t.array_record(a32)
-    # 原始 dtype 字节直接哈希，不先转 float32：同值不同 dtype 哈希不同
+    # Raw dtype bytes are hashed directly without casting to float32: same values in different dtypes hash differently
     assert r64["sha256"] == hashlib.sha256(a64.tobytes()).hexdigest()
     assert r64["sha256"] != r32["sha256"] and r64["dtype"] == "<f8" and r32["dtype"] == "<f4"
-    assert r64["f32hex"] == r32["f32hex"]  # 人读字段相同，不参与判定
+    assert r64["f32hex"] == r32["f32hex"]  # human-readable field is equal and not used for verdicts
     assert t.array_record(a32.reshape(2, 4))["shape"] == [2, 4]
     assert t.image_sha256(None) is None
     img = F.frame(1)
-    assert t.image_sha256(img) != t.image_sha256(img.reshape(16, 3))  # shape 进入画面哈希
+    assert t.image_sha256(img) != t.image_sha256(img.reshape(16, 3))  # shape is part of the frame hash
     assert t.array_record(None) is None
 
 
@@ -69,7 +71,7 @@ def test_canonical_bytes_deterministic_and_dtype_sensitive():
     y = {"c": b"\x00", "a": [1, 2.5, "s", None, True], "b": np.ones(3, np.float32)}
     assert t.canonical_bytes(x) == t.canonical_bytes(y)
     assert t.canonical_bytes(x) != t.canonical_bytes({**x, "b": np.ones(3, np.float64)})
-    # 相邻浮点（只差最后一位）也要区分
+    # Adjacent floats (differing only in the last bit) must also be distinguished
     assert t.canonical_bytes({"v": 0.1}) != t.canonical_bytes({"v": float(np.nextafter(0.1, 1.0))})
 
 
@@ -102,6 +104,7 @@ def test_validate_trace_reports_structure_problems():
     assert "end.exec_steps does not match the last step" in t.validate_trace(bad_exec)
     assert t.validate_trace([]) == ["empty trace"]
     assert "demo is not before the first step" in t.validate_trace([good[0], good[2], good[1], good[3], good[4]])
-    # GroundSG 官方循环先 reset 策略再取初始观测：request 先于 demo 合规（12.454）
+    # The GroundSG official loop resets the policy before taking the initial observation: request before demo is
+    # compliant (12.454)
     assert t.validate_trace([good[0], {"kind": "request", "step": 0}, good[1], *good[2:]]) == []
-    assert json.dumps(good)  # 夹具本身可序列化
+    assert json.dumps(good)  # the fixture itself is serializable
