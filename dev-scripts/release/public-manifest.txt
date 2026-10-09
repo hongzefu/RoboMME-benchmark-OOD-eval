@@ -7,6 +7,7 @@
 LICENSE
 pyproject.toml
 readme.md
+.github/workflows/public-gate.yml
 uv.lock
 # --- 入口与评估包
 scripts/evaluate.py

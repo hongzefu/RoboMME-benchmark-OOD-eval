@@ -1,0 +1,45 @@
+# Read-only checks for the public branch. Runs on every push to main.
+# It never pushes and holds no write permission.
+name: public-gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true  # non-recursive on purpose
+
+      - name: No CJK characters in tracked files
+        run: |
+          files=$(git ls-files -s | awk '$1 != "160000" {sub(/^[^\t]*\t/, ""); print}')
+          if printf '%s\n' $files | xargs grep -nIP '[\x{2E80}-\x{2FDF}\x{3000}-\x{30FF}\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}\x{F900}-\x{FAFF}\x{FE30}-\x{FE4F}\x{FF00}-\x{FFEF}]'; then
+            echo "PUBLIC_LANG=FAIL"; exit 1
+          fi
+          echo "PUBLIC_LANG=PASS"
+
+      - name: No internal paths in tracked files
+        run: |
+          files=$(git ls-files -s | awk '$1 != "160000" {sub(/^[^\t]*\t/, ""); print}')
+          pat='/data/hongzef[u]|/nfs/turb[o]|chaij[y]|greatlake[s]|sle[d]-|dev[-_]script[s]|hongzef[u]@'
+          if printf '%s\n' $files | xargs grep -nIiE "$pat"; then
+            echo "PUBLIC_PATHS=FAIL"; exit 1
+          fi
+          echo "PUBLIC_PATHS=PASS"
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install
+        run: uv sync --extra dev
+
+      - name: Tests
+        run: uv run --no-sync python -m pytest -m 'not slow' -q
