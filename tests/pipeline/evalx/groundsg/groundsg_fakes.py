@@ -1,14 +1,22 @@
-"""GroundSG（S3）测试的公共替身：假环境、两种 builder、假 MME-VLA 服务与连接、不加载权重的 swift 替身、两侧驱动。
+"""Shared test doubles for GroundSG (S3) tests: fake env, two builders, fake MME-VLA server and connection,
+a swift stand-in that loads no weights, and drivers for both sides.
 
-设计口径：
-- 官方源码只读引用 ``SGEVAL_THIRD_PARTY``，未设时取当前检出的 ``third_party``（worktree 里子模块目录为空，须显式指向主检出）；缺官方源码即失败，不跳过。
-- 生产模块一律经 ``tests._support.loaders.load_script`` 按路径加载，不往 sys.modules 注入替身。
-- 假环境的下一帧由「执行的动作字节 + 步号」确定性生成，假服务的动作块由「本局 reset 之后收到的全部请求指纹」
-  确定性生成：两侧任何一个请求或动作不同，后面的帧、请求、动作都会随之不同（差异可观测，等式非平凡）。
-- 假服务的指纹函数在本文件手写，不调用被测代码（``official_defs.canonical_bytes``）。
-- swift 替身：``PtEngine`` 构造只记参数、不读任何权重；``infer`` 的回复由请求文本与所附图片字节确定性生成
-  （MemER 请求——system prompt 含 ``keyframe_positions``——回 JSON；也可给 ``script`` 逐次指定回复原文）。
-- 第三阶段（1006 计划八.3）：三个变体都带 ``policy_seed``（缺省 7），MemER 走同一套两侧装配。
+Design rules:
+- Official sources are read-only and referenced via ``SGEVAL_THIRD_PARTY``; when unset, the ``third_party`` of the
+  current checkout is used (submodule dirs are empty in a worktree, so point it at the main checkout explicitly).
+  Missing official sources fail the test; they are never skipped.
+- Production modules are always loaded by path via ``tests._support.loaders.load_script``; no doubles are injected
+  into sys.modules.
+- The fake env derives the next frame deterministically from "executed action bytes + step number", and the fake
+  server derives each action chunk deterministically from "fingerprints of all requests received since this
+  episode's reset": any differing request or action on either side changes all later frames, requests and actions
+  (differences are observable, equalities are non-trivial).
+- The fake server's fingerprint function is hand-written here and does not call the code under test
+  (``official_defs.canonical_bytes``).
+- swift stand-in: ``PtEngine`` construction only records its arguments and reads no weights; ``infer`` replies are
+  generated deterministically from the request text and attached image bytes (MemER requests, whose system prompt
+  contains ``keyframe_positions``, get JSON; a ``script`` can also give the exact reply text per call).
+- Stage 3 (1006 plan 8.3): all three variants carry ``policy_seed`` (default 7); MemER uses the same two-side wiring.
 """
 from __future__ import annotations
 
@@ -23,26 +31,28 @@ import numpy as np
 
 from tests._support.loaders import REPO, load_script
 
-#: 假帧形状 H×W：宽度取真实相机的 256，使官方叠字录像的文字区行数与真实运行同为固定高度（窄帧会让每个词各占一行、
-#: 帧高随文字变化，官方 mimsave 报「All images in a movie should have same size」）；高度取 8 以省内存
+#: Fake frame shape H x W: width matches the real camera's 256 so the official text-overlay video has a fixed-height
+#: text area as in real runs (narrow frames put each word on its own line and make frame height vary with the text,
+#: and the official mimsave fails with "All images in a movie should have same size"); height is 8 to save memory
 H, W = 8, 256
-N_RESET_FRAMES = 3  # 2 帧演示 + 1 帧初始
-CHUNK_ROWS = 20  # 假服务每次回的动作行数（官方只执行前 16 行）
-EXEC_HORIZON = 16  # 官方 Args.obs_horizon（手写）
+N_RESET_FRAMES = 3  # 2 demo frames + 1 initial frame
+CHUNK_ROWS = 20  # action rows per fake-server reply (official code executes only the first 16)
+EXEC_HORIZON = 16  # official Args.obs_horizon (hand-written)
 THIRD_PARTY_ENV = "SGEVAL_THIRD_PARTY"
 ORACLE = "ground-sg-oracle"
 QWENVL = "ground-sg-qwenvl"
 MEMER = "ground-sg-memer"
 VARIANTS = (ORACLE, QWENVL, MEMER)
 DATASET = "hard-verify"
-POLICY_SEED = 7  # 本版真实运行只传 7（计划〇.1）
+POLICY_SEED = 7  # real runs in this version only pass 7 (plan 0.1)
 
 
 def official_dir() -> Path:
-    # 未设时取当前检出的 third_party（主检出日常门禁走此路）；worktree 里子模块为空，须显式指向主检出，否则下面断言失败（不 skip）。
+    # When unset, use the current checkout's third_party (the daily gate in the main checkout takes this path); in a
+    # worktree the submodules are empty, so point it at the main checkout explicitly, or the assert below fails (no skip).
     tp = os.environ.get(THIRD_PARTY_ENV) or str(REPO / "third_party")
     d = Path(tp) / "mme-vla" / "examples" / "robomme"
-    assert (d / "eval.py").is_file(), f"官方源码不在 {d}"
+    assert (d / "eval.py").is_file(), f"official sources not found at {d}"
     return d
 
 
@@ -57,11 +67,11 @@ def print_official_sha() -> None:
         print(f"OFFICIAL_SOURCE {rel} sha256={s}")
 
 
-# ---------------------------------------------------------------- 生产模块
+# ---------------------------------------------------------------- production modules
 
 
 def env_session():
-    """拆仓后 ``EnvSession``／``NullRecorder``／``StepCapReached`` 在评估包 ``robomme_ood_eval.session``。"""
+    """After the repo split, ``EnvSession`` / ``NullRecorder`` / ``StepCapReached`` live in ``robomme_ood_eval.session``."""
     from robomme_ood_eval import session
 
     return session
@@ -75,7 +85,7 @@ def official_defs():
     return load_script("eval-official/official_defs.py")
 
 
-# ---------------------------------------------------------------- 假环境
+# ---------------------------------------------------------------- fake env
 
 
 def sha(b: bytes) -> str:
@@ -100,7 +110,7 @@ def obs_of(vals: list[int]) -> dict:
 
 
 def subgoal_at(n: int) -> str:
-    """Oracle 的 grounded 子目标：每 25 步换一次（带坐标，官方叠字会画点）。"""
+    """Oracle grounded subgoal: changes every 25 steps (has coordinates, so the official overlay draws a point)."""
     k = n // 25
     return f"pick up the cube at <{(k * 37) % 250}, {(k * 91) % 250}>"
 
@@ -111,7 +121,8 @@ def goal_of(task: str, ep: int) -> str:
 
 @dataclasses.dataclass
 class Plan:
-    """假环境行为：第 n 次 step 报 success／fail、报终止却不给 status（官方得 unknown）、或抛异常；都为空则永不终止。"""
+    """Fake env behavior: at step n report success / fail, terminate without a status (official result is unknown),
+    or raise; if all are None, never terminate."""
 
     success_at: int | None = None
     fail_at: int | None = None
@@ -164,7 +175,8 @@ class FakeEnv:
 
 
 class World:
-    """一组假环境：按 source_episode 给 Plan，记下全部假环境与官方 builder 的构造参数。"""
+    """A set of fake envs: assigns a Plan per source_episode and records every fake env and the official builder's
+    constructor arguments."""
 
     def __init__(self, plans: dict[int, Plan] | None = None, default: Plan | None = None):
         self.plans = dict(plans or {})
@@ -178,7 +190,8 @@ class World:
         return env
 
     def official_builder_cls(self):
-        """官方 ``env_runner.py`` 的 ``BenchmarkEnvBuilder`` 替身（构造参数照官方关键字记下）。"""
+        """Stand-in for the official ``env_runner.py`` ``BenchmarkEnvBuilder`` (records constructor args by official
+        keyword)."""
         world = self
 
         class FakeOfficialBuilder:
@@ -197,7 +210,8 @@ class World:
 
 
 class NewSideBuilder:
-    """新侧 ``EnvSession`` 用的 builder 替身：builder_episode → source_episode 的映射由调用方给出（手写）。"""
+    """Builder stand-in for the new-side ``EnvSession``: the builder_episode -> source_episode map is given by the
+    caller (hand-written)."""
 
     def __init__(self, task: str, world: World, ep_map: dict[int, int]):
         self.task, self.world, self.ep_map = task, world, dict(ep_map)
@@ -206,7 +220,7 @@ class NewSideBuilder:
         return self.world.new_env(self.task, self.ep_map[int(ep)])
 
 
-# ---------------------------------------------------------------- 假 MME-VLA 服务
+# ---------------------------------------------------------------- fake MME-VLA server
 
 
 def _arr_fp(a: Any) -> bytes:
@@ -215,7 +229,7 @@ def _arr_fp(a: Any) -> bytes:
 
 
 def request_fp(obj: dict) -> tuple[str, str]:
-    """（手写）请求指纹：返回 (种类, sha256)。"""
+    """(Hand-written) request fingerprint: returns (kind, sha256)."""
     if obj.get("reset"):
         return "reset", sha(b"reset")
     if obj.get("add_buffer"):
@@ -227,7 +241,8 @@ def request_fp(obj: dict) -> tuple[str, str]:
 
 
 class FakeServer:
-    """动作块由本局 reset 之后的全部请求指纹确定性生成；记下全部请求与发出的动作块。"""
+    """Action chunks are derived deterministically from all request fingerprints since this episode's reset;
+    records every request and every chunk sent."""
 
     def __init__(self):
         self.log: list[tuple[str, str, dict]] = []
@@ -252,7 +267,7 @@ class FakeServer:
 
 
 class FakeClient:
-    """``MMEVLAWebsocketClientPolicy`` 的进程内替身（接口：reset／add_buffer／infer）。"""
+    """In-process stand-in for ``MMEVLAWebsocketClientPolicy`` (interface: reset / add_buffer / infer)."""
 
     def __init__(self, server: FakeServer):
         self.server = server
@@ -268,21 +283,24 @@ class FakeClient:
         return self.server.handle(obs)
 
 
-# ---------------------------------------------------------------- swift 替身（不加载权重）
+# ---------------------------------------------------------------- swift stand-in (loads no weights)
 
 
 def memer_reply(h: int, n_images: int) -> str:
-    """（手写）MemER 替身回复：合法 JSON；当前输入图多于 1 张且 h%3==0 时挑第 1+h%n 张为关键帧，否则空列表。"""
+    """(Hand-written) MemER stand-in reply: valid JSON; when there is more than 1 input image and h%3==0, picks image
+    1+h%n as the keyframe, otherwise an empty list."""
     pos = [1 + h % n_images] if n_images > 1 and h % 3 == 0 else []
     return json.dumps({"current_subtask": f"pick up the cube at <|box_start|>({h % 1000},{(h // 1000) % 1000})<|box_end|>",
                        "keyframe_positions": pos})
 
 
 class FakeSwift:
-    """``swift.llm`` 三个名字的替身。``PtEngine`` 构造只记参数；``infer`` 的回复由请求确定性生成。
+    """Stand-ins for the three ``swift.llm`` names. ``PtEngine`` construction only records args; ``infer`` replies
+    are generated deterministically from the request.
 
-    ``script``：逐次指定回复原文的列表（用完后回落到确定性生成）；``InferRequest`` 与真实 swift 一样把
-    ``messages``／``images``／``videos``／``objects`` 放在同名属性上（另留 ``kw`` 原样）。"""
+    ``script``: list of exact reply texts, one per call (falls back to deterministic generation once used up);
+    like real swift, ``InferRequest`` puts ``messages`` / ``images`` / ``videos`` / ``objects`` on same-named
+    attributes (and also keeps ``kw`` as is)."""
 
     def __init__(self, script: list[str] | None = None):
         self.engines: list[dict] = []
@@ -331,7 +349,7 @@ class FakeSwift:
         self.names = {"PtEngine": PtEngine, "InferRequest": InferRequest, "RequestConfig": RequestConfig}
 
 
-# ---------------------------------------------------------------- 两侧驱动
+# ---------------------------------------------------------------- two-side drivers
 
 
 ADAPTER = "/fake/qwenvl/grounded_subgoal/checkpoint-1200"
@@ -339,7 +357,8 @@ MEMER_ADAPTER = "/fake/memer/grounded_subgoal/checkpoint-1300"
 
 
 def adapters_of(variant: str) -> dict:
-    """变体对应的 adapter 关键字（手写配对：QwenVL 只给 QwenVL 的，MemER 只给 MemER 的，Oracle 都不给）。"""
+    """Adapter keywords for a variant (hand-written pairing: QwenVL gets only the QwenVL one, MemER only the MemER
+    one, Oracle gets neither)."""
     return {"qwenvl_groundSG_adapter_path": ADAPTER if variant == QWENVL else None,
             "memer_adapter_path": MEMER_ADAPTER if variant == MEMER else None}
 
@@ -356,12 +375,13 @@ def seat_info(variant: str, max_steps: int, tmp: Path, port: int = 18120, policy
 
 
 class NewSide:
-    """新侧：真实 ``EnvSession`` + ``groundsg_client``（假环境、假服务、swift 替身）。"""
+    """New side: real ``EnvSession`` + ``groundsg_client`` (fake env, fake server, swift stand-in)."""
 
     def __init__(self, variant: str, max_steps: int, tmp: Path, world: World, *, strict_cap: bool = False,
                  port: int = 18120, real_client: bool = False, policy_seed: int = POLICY_SEED,
                  swift: FakeSwift | None = None, server: FakeServer | None = None):
-        """``real_client=True`` 时用生产默认的客户端工厂（真实 websocket 客户端，连 ``port`` 上的回环假服务）。"""
+        """With ``real_client=True``, use the production default client factory (a real websocket client connecting
+        to the loopback fake server on ``port``)."""
         self.variant, self.max_steps, self.tmp, self.world, self.strict_cap = variant, max_steps, tmp, world, strict_cap
         self.port = port
         self.server = server or FakeServer()
@@ -397,12 +417,14 @@ def read_trace(path: str | Path) -> list[dict]:
     return [json.loads(x) for x in Path(path).read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
-#: 语言账本打开时 step 行的关联字段（call_id 是各侧账本自己的编号，两侧逐项比较时不比）
+#: Link fields on step rows when the language ledger is on (call_id is each side's own ledger number and is not
+#: compared item by item across sides)
 LANG_LINK_FIELDS = ("source_call_id", "chunk_index")
 
 
 def trace_parts(rows: list[dict]) -> dict:
-    """轨迹按种类拆开；去掉两侧必然不同的字段（header.route、end.side、step 的语言账本关联编号）。"""
+    """Split a trace by kind; drop fields that always differ between sides (header.route, end.side, and the
+    language-ledger link ids on step rows)."""
     out: dict[str, list] = {"request": [], "response": [], "step": [], "demo": [], "history": [], "end": []}
     for r in rows:
         k = r["kind"]
@@ -415,19 +437,22 @@ def trace_parts(rows: list[dict]) -> dict:
     return out
 
 
-_BASE_TRACE_PARTS = trace_parts  # 供 legacy_trace_parts 调用（被 monkeypatch 换掉 trace_parts 后仍指向原函数）
+_BASE_TRACE_PARTS = trace_parts  # used by legacy_trace_parts (still the original after monkeypatch swaps trace_parts)
 
-#: 第二阶段 S1 新侧 end 行只增的字段（原侧 R1 不写）
+#: Fields added only on new-side end rows in stage 2 S1 (original side R1 does not write them)
 NEW_ONLY_END = ("steps_attempted", "steps_observed", "frames_recorded", "omitted_timeout_frames", "no_frame",
                 "official_source", "official_videos")
 
 
 def legacy_trace_parts(rows: list[dict]) -> dict:
-    """新侧契约字段还原成 BASE 口径后再按种类拆开（原侧行原样；1005 计划 S1）。
+    """Map new-side contract fields back to the BASE convention, then split by kind (original-side rows unchanged;
+    1005 plan S1).
 
-    只剥离新侧新增的记录字段，且是可逆映射：end 行官方原返回值 ``success_flag`` 还回 ``terminal_reason``、
-    删 ``NEW_ONLY_END``；缺观测步（``observed=false``）还回旧写法。``status``、动作、画面、请求一律不动，差异照报。
-    两侧逐项比较时用 ``monkeypatch.setattr(F, "trace_parts", F.legacy_trace_parts)`` 局部替换。"""
+    Only strips record fields the new side added, as a reversible mapping: on end rows the official raw return value
+    ``success_flag`` goes back to ``terminal_reason`` and ``NEW_ONLY_END`` is dropped; missing-observation steps
+    (``observed=false``) go back to the old form. ``status``, actions, frames and requests are never touched, so
+    differences are still reported. For item-by-item two-side comparison, swap it in locally with
+    ``monkeypatch.setattr(F, "trace_parts", F.legacy_trace_parts)``."""
     conv = []
     for r in rows:
         r = dict(r)
@@ -443,11 +468,12 @@ def legacy_trace_parts(rows: list[dict]) -> dict:
     return _BASE_TRACE_PARTS(conv)
 
 
-# ---------------------------------------------------------------- 回环 websocket 假服务（slow 用例）
+# ---------------------------------------------------------------- loopback websocket fake server (slow tests)
 
 
 class LoopbackServer:
-    """``127.0.0.1`` 上的 websocket 假服务：握手发元数据，之后逐条 msgpack 解包交给 ``FakeServer``、回包。"""
+    """Websocket fake server on ``127.0.0.1``: sends metadata on handshake, then msgpack-decodes each message, hands
+    it to ``FakeServer`` and replies."""
 
     def __init__(self, server: FakeServer):
         import threading
@@ -463,7 +489,7 @@ class LoopbackServer:
             try:
                 for msg in ws:
                     ws.send(packer.pack(self.fake.handle(msgpack_numpy.unpackb(msg))))
-            except Exception:  # noqa: BLE001 客户端断开
+            except Exception:  # noqa: BLE001 client disconnected
                 pass
 
         self._srv = wss.serve(handler, "127.0.0.1", 0, compression=None, max_size=None)

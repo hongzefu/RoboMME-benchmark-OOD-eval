@@ -1,12 +1,16 @@
-"""MemER 接入与兼容层（1006-rename-official-names-and-stage3-eval-plan.md 第二部分八.3；判定行 MEMER_COMPAT、MEMER_WIRING）。
+"""MemER wiring and compat layer (1006-rename-official-names-and-stage3-eval-plan.md part two, 8.3; verdict lines
+MEMER_COMPAT, MEMER_WIRING).
 
-全部用**真实摘取的官方类** ``subgoal_prediction/qwenvl/api_memer.py::Qwen3VLModelMemER``（``official_defs.load_memer_model``，
-套兼容层；``compat=False`` 取官方原文做回归对照）配假 ``PtEngine``（``groundsg_fakes.FakeSwift``，不读权重）。期望全部
-手写：回复原文、提醒句、温度、日志行、关键帧合并结果、隔一张取帧的下标都在本文件写死，不调被测函数推期望。
+Everything uses the **really extracted official class** ``subgoal_prediction/qwenvl/api_memer.py::Qwen3VLModelMemER``
+(``official_defs.load_memer_model`` with the compat layer applied; ``compat=False`` takes the official original as a
+regression reference) paired with a fake ``PtEngine`` (``groundsg_fakes.FakeSwift``, reads no weights). All
+expectations are hand-written: reply texts, the reminder sentence, temperatures, log rows, keyframe merge results and
+every-other-frame indices are fixed in this file; expectations are never derived by calling the code under test.
 
-八种情形（计划八.3 验收）：A 首次空关键帧、B 记忆非空且合法（与官方原函数逐字节相同）、C1 有上一次合法子目标时
-「坏坏好」、C2 有上一次时「坏坏坏」（沿用）、D1 没有上一次时「坏坏好」、D2 没有上一次时「坏坏坏」（具名异常）、
-E 缺 ``keyframe_positions`` 键、F 执行帧不足 15 张。
+Eight cases (plan 8.3 acceptance): A first query with empty keyframes; B non-empty memory and valid reply (byte-for-byte
+identical to the official function); C1 "bad, bad, good" with a previous valid subgoal; C2 "bad, bad, bad" with a
+previous one (reuse it); D1 "bad, bad, good" without a previous one; D2 "bad, bad, bad" without a previous one (named
+exception); E missing ``keyframe_positions`` key; F fewer than 15 execution frames.
 """
 from __future__ import annotations
 
@@ -17,7 +21,7 @@ import pytest
 
 import groundsg_fakes as F
 
-NOTE = "Your previous reply was not valid JSON. Reply with the JSON object only."  # 手写（计划八.3 原文）
+NOTE = "Your previous reply was not valid JSON. Reply with the JSON object only."  # hand-written (verbatim from plan 8.3)
 GOOD = '{"current_subtask": "move cube", "keyframe_positions": []}'
 BAD = "this is not json"
 
@@ -50,11 +54,12 @@ def frame_ids(paths) -> list[int]:
     return [int(Path(p).name.split("_")[1]) for p in paths]
 
 
-# ---------------------------------------------------------------- 八种情形
+# ---------------------------------------------------------------- eight cases
 
 
 def case_a(tmp):
-    """A：首次提问记忆为空、模型回空关键帧——官方原文 IndexError 逃出 call；兼容层取出子目标、局继续。"""
+    """A: first query with empty memory, model replies with empty keyframes -- the official original lets IndexError
+    escape call; the compat layer extracts the subgoal and the episode continues."""
     sw_o = F.FakeSwift(script=[GOOD])
     off = new_model(tmp / "off", sw_o, compat=False)
     with pytest.raises(IndexError):
@@ -64,14 +69,15 @@ def case_a(tmp):
     assert m.call() == "move cube"
     assert (m.subgoals, m.key_frame_paths, m._memer_fallback) == (["move cube"], {}, None)
     assert [r["config"] for r in sw.requests] == [{"max_tokens": 128, "temperature": 0}]
-    # 首问的提问原文与官方一字不差：关键帧栏字面 []、执行帧栏 1 张
+    # The first query text matches official verbatim: keyframe field is a literal [], execution-frame field has 1 image
     assert user_text(sw.requests[0]) == user_text(sw_o.requests[0])
     assert "importance:[]\nHere is current input image list from the front-view camera: [<image>]" in \
         user_text(sw.requests[0])
 
 
 def case_b(tmp):
-    """B：记忆非空且回复合法（含挑关键帧）——兼容层与官方原函数的返回值、记忆、日志字节逐一相同。"""
+    """B: non-empty memory and a valid reply (including keyframe picks) -- the compat layer matches the official
+    function in return value, memory and log bytes."""
     reply = '{"current_subtask": "pick up the cube at <|box_start|>(500,250)<|box_end|>", "keyframe_positions": [2, 4]}'
     outs = []
     for compat in (False, True):
@@ -83,12 +89,13 @@ def case_b(tmp):
                      Path(m.save_json_path).read_bytes().replace(str(tmp / f"b{int(compat)}").encode(), b"<T>"),
                      sw.requests))
     assert outs[0] == outs[1]
-    # 手写：20 帧取 19,17,…,5 共 8 张（升序 5..19 奇数），位置 2→7、4→11；与已有 3 合并：3,7,11 两两相距 ≤8 一组取中位 7
+    # Hand-written: from 20 frames take 19,17,...,5, 8 in total (ascending odd 5..19); position 2->7, 4->11; merged with
+    # the existing 3: 3,7,11 are pairwise <=8 apart, so one group keeps the median 7
     assert outs[1][0] == "pick up the cube at <128, 64>" and outs[1][1] == {7: "step_7_image.png"}
 
 
 def _with_prior(tmp, script, name):
-    """先一次合法提问（子目标 "first"），再加 4 帧，第二次提问按 script 回复。"""
+    """First one valid query (subgoal "first"), then add 4 frames; the second query is answered per script."""
     sw = F.FakeSwift(script=['{"current_subtask": "first", "keyframe_positions": []}', *script])
     m = new_model(tmp / name, sw)
     assert m.call() == "first"
@@ -98,7 +105,8 @@ def _with_prior(tmp, script, name):
 
 
 def _check_retry_requests(sw, first_idx):
-    """第二、三次请求：user prompt 末尾追加提醒句、temperature=0.7；system 与附图与首问相同。"""
+    """Second and third requests: reminder sentence appended to the user prompt, temperature=0.7; system prompt and
+    attached images match the first query."""
     a, b, c = sw.requests[first_idx:first_idx + 3]
     assert a["config"] == {"max_tokens": 128, "temperature": 0}
     for r in (b, c):
@@ -116,7 +124,7 @@ def case_c1(tmp):
     assert m.call() == "third" and m.subgoals == ["first", "third"] and m._memer_fallback is None
     _check_retry_requests(sw, 1)
     assert _retry_log(m) == [(1, False), (1, True), (2, False), (2, True)]
-    assert len(m.execution_frame_paths) == 5  # 重问不重复追加执行帧
+    assert len(m.execution_frame_paths) == 5  # retries do not re-append execution frames
 
 
 def case_c2(tmp):
@@ -149,7 +157,8 @@ def case_d2(tmp):
 
 
 def case_e(tmp):
-    """E：缺 keyframe_positions 键——官方 KeyError → 兜底再 IndexError；兼容层走重问。"""
+    """E: missing keyframe_positions key -- official raises KeyError, then IndexError in its fallback; the compat
+    layer retries."""
     sw_o = F.FakeSwift(script=['{"current_subtask": "x"}'])
     off = new_model(tmp / "eo", sw_o, compat=False)
     with pytest.raises(IndexError):
@@ -160,9 +169,10 @@ def case_e(tmp):
 
 
 def case_f(tmp):
-    """F：执行帧 1／5／14／15／40 张——不足 15 张时隔一张取到第 1 张为止（升序），1 张与 ≥15 张与官方原函数相同。"""
+    """F: 1 / 5 / 14 / 15 / 40 execution frames -- with fewer than 15, take every other frame down to the first
+    (ascending); 1 frame and >=15 frames match the official function."""
     want = {1: [0], 5: [0, 2, 4], 14: [1, 3, 5, 7, 9, 11, 13], 15: [0, 2, 4, 6, 8, 10, 12, 14],
-            40: [25, 27, 29, 31, 33, 35, 37, 39]}  # 手写（frame 下标从 0 计 = 第 n+1 张）
+            40: [25, 27, 29, 31, 33, 35, 37, 39]}  # hand-written (frame index from 0 = frame n+1)
     sw = F.FakeSwift()
     for n, ids in want.items():
         m = new_model(tmp / "f", sw, frames=n, name=f"f{n}")
@@ -174,7 +184,7 @@ def case_f(tmp):
         else:
             with pytest.raises(IndexError):
                 off._get_current_execution_frame_paths()
-    # 第二次提问时只有 5 帧：提问照常，附图 = 3 张最近帧
+    # Only 5 frames at the second query: the query proceeds as usual, attached images = the 3 most recent frames
     sw2 = F.FakeSwift(script=[GOOD, GOOD])
     m = new_model(tmp / "f2", sw2)
     m.call()
@@ -198,7 +208,7 @@ def test_memer_compat_cases(tmp_path):
     import hashlib
 
     assert fp == hashlib.sha256(mod.MEMER_COMPAT_SOURCE.encode("utf-8")).hexdigest()
-    # 官方原文件不动：摘取命名空间记的是官方整文件 sha256
+    # Official file is untouched: the extracted namespace records the sha256 of the whole official file
     src = F.official_dir() / "subgoal_prediction" / "qwenvl" / "api_memer.py"
     ns = mod.load_memer_model(swift_names=F.FakeSwift().names)
     assert ns["__source_sha256__"] == hashlib.sha256(src.read_bytes()).hexdigest()
@@ -206,7 +216,7 @@ def test_memer_compat_cases(tmp_path):
     print(f"MEMER_COMPAT=PASS cases={len(CASES)} fingerprint={fp}")
 
 
-# ---------------------------------------------------------------- 原子校验反例
+# ---------------------------------------------------------------- atomic validation counterexamples
 
 
 BAD_REPLIES = {
@@ -225,7 +235,8 @@ BAD_REPLIES = {
 
 @pytest.mark.parametrize("name", sorted(BAD_REPLIES))
 def test_atomic_validation_rejects_without_touching_state(tmp_path, name):
-    """坏回复：``update_history_subgoals`` 抛异常且关键帧、历史、执行帧都不变（官方原文对 [1,2] 会先写入第 1 张再越界）。"""
+    """Bad reply: ``update_history_subgoals`` raises and keyframes, history and execution frames are all unchanged
+    (for [1,2] the official original writes the first image before going out of range)."""
     sw = F.FakeSwift()
     m = new_model(tmp_path, sw, frames=1)
     m.current_execution_frame_paths = m._get_current_execution_frame_paths()
@@ -234,7 +245,7 @@ def test_atomic_validation_rejects_without_touching_state(tmp_path, name):
     with pytest.raises(Exception):
         m.update_history_subgoals(BAD_REPLIES[name])
     assert (m.key_frame_paths, m.subgoals, m.execution_frame_paths) == before
-    if name == "out_of_range":  # 官方原文：第 1 张先写进记忆再越界——状态被污染
+    if name == "out_of_range":  # official original: image 1 is written to memory before going out of range -- state is polluted
         off = new_model(tmp_path / "o", sw, compat=False, frames=1)
         off.current_execution_frame_paths = off._get_current_execution_frame_paths()
         with pytest.raises(IndexError):
@@ -257,7 +268,8 @@ def test_conversion_failure_is_atomic(tmp_path):
 
 
 def test_bad_then_good_retry_keeps_first_request_memory_and_images(tmp_path):
-    """首次回 [1,2]（只有 1 张画面，越界）后接合法回复：第二次请求的记忆与附图与首次一致，记忆未被污染。"""
+    """First reply [1,2] (only 1 image, out of range), then a valid reply: the second request has the same memory and
+    attached images as the first; memory is not polluted."""
     sw = F.FakeSwift(script=[BAD_REPLIES["out_of_range"], '{"current_subtask": "ok", "keyframe_positions": [1]}'])
     m = new_model(tmp_path, sw, frames=1)
     assert m.call() == "ok"
@@ -268,7 +280,8 @@ def test_bad_then_good_retry_keeps_first_request_memory_and_images(tmp_path):
 
 
 def test_merge_empty_memory_and_regression(tmp_path):
-    """记忆为空调用一次不报错；放 3、5、20 三张时与官方原函数一样（3 和 5 并成一组只留 5）。"""
+    """One call with empty memory does not raise; with frames 3, 5, 20 it matches the official function (3 and 5 merge
+    into one group, keeping only 5)."""
     sw = F.FakeSwift()
     m = new_model(tmp_path, sw)
     off = new_model(tmp_path / "o", sw, compat=False)
@@ -285,7 +298,7 @@ def test_merge_empty_memory_and_regression(tmp_path):
 
 
 def test_patch_refuses_changed_upstream(tmp_path):
-    """上游类若缺被补方法，补丁拒绝套用（KeyError），不静默装配。"""
+    """If the upstream class lacks a patched method, the patch refuses to apply (KeyError) instead of wiring silently."""
     import ast
 
     mod = od()
@@ -294,7 +307,7 @@ def test_patch_refuses_changed_upstream(tmp_path):
         mod.patch_memer_class(node)
 
 
-# ---------------------------------------------------------------- 装配与 seed
+# ---------------------------------------------------------------- wiring and seed
 
 
 @pytest.fixture
@@ -306,8 +319,9 @@ def clean_env(monkeypatch):
 
 
 def test_memer_wiring(tmp_path, clean_env):
-    """MemER 变体：只摘 MemERSubgoalPredictor + 套兼容层的 Qwen3VLModelMemER；引擎参数取官方原文；Args 恰 use_memer；
-    跑一局成功，日志归档、临时区清空。"""
+    """MemER variant: extracts only MemERSubgoalPredictor + Qwen3VLModelMemER with the compat layer; engine args come
+    verbatim from official code; Args has exactly use_memer; one episode succeeds, the log is archived and the temp
+    area is cleared."""
     import os
     import sys
 
@@ -334,13 +348,14 @@ def test_memer_wiring(tmp_path, clean_env):
     assert res["memer_compat_sha256"] == od().MEMER_COMPAT_SHA256 and res["error_kind"] is None
     tdir = Path(res["trace_path"]).parent
     assert not (tdir / "memer-tmp").exists() and (tdir / "ep3a1_MemER_log.jsonl").is_file()
-    assert len(side.swift.requests) == 3  # 决策在第 0、16、32 步
+    assert len(side.swift.requests) == 3  # decisions at steps 0, 16, 32
     print(f"MEMER_WIRING=PASS predictor={type(pred).__name__}")
 
 
 def test_memer_model_response_error_is_named_error_and_cleans_up(tmp_path, clean_env):
-    """D2 落到整局：三次都坏且没有上一次 → status=error、error_kind=model_response_error、非基础设施，不跑任何一步；
-    临时区清空、日志带 retry 两行归档、官方视频按 error 补存；同一上下文下一局照常。"""
+    """D2 at episode level: three bad replies and no previous one -> status=error, error_kind=model_response_error,
+    not infra, no step run; temp area cleared, log archived with the two retry rows, official video salvaged as
+    error; the next episode in the same context runs normally."""
     swift = F.FakeSwift(script=[BAD, BAD, BAD])
     side = F.NewSide(F.MEMER, 60, tmp_path, F.World(default=F.Plan(success_at=20)), swift=swift)
     res = side.run(F.identity())

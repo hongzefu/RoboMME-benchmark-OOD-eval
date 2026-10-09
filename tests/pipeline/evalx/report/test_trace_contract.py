@@ -1,4 +1,5 @@
-"""S0 契约助手自测：合规夹具通过、逐条反例报出；trace_writer 新接口默认不改旧格式字节。"""
+"""S0 contract helper self-test: compliant fixtures pass, each counterexample is reported; the new trace_writer API
+does not change old-format bytes by default."""
 from __future__ import annotations
 
 import json
@@ -28,7 +29,8 @@ def _write(root, *, route="smvla/new", status="fail", n=3, missing=(), no_frame=
     ep = root / f"{key}.a{attempt}"
     ident = {"task": "T", "tier": "xhard0", "seed": 7, "dataset": "hard-verify", "source_episode": 3,
              "key": key, "attempt": attempt}
-    # collect_arrays=False：本夹具自己按 C4 决定写不写 arrays.npz（第三阶段 TraceWriter 缺省会自动写）
+    # collect_arrays=False: this fixture decides per C4 whether to write arrays.npz (the stage 3 TraceWriter writes
+    # it automatically by default)
     w = t.TraceWriter(ep / "trace.jsonl", route=route, identity=ident, max_steps=1300, collect_arrays=False)
     payload = {}
     if no_frame:
@@ -36,7 +38,7 @@ def _write(root, *, route="smvla/new", status="fail", n=3, missing=(), no_frame=
         w.close(status="error", terminal_reason="error", demo_frames=0, no_frame=True,
                 steps_attempted=0, steps_observed=0, frames_recorded=0)
         return ep
-    w.log_demo([_img(-1), _img(0)], [_img(-1, 1), _img(0, 1)], [_st(-1), _st(0)], ["目标"])
+    w.log_demo([_img(-1), _img(0)], [_img(-1, 1), _img(0, 1)], [_st(-1), _st(0)], ["goal"])
     for s in range(1, n + 1):
         a = (np.arange(8) * 0.5 + s).astype(action_dtype)
         payload[f"exec_action__{s - 1:05d}"] = a
@@ -69,12 +71,12 @@ def test_float64_actions_need_arrays(tmp_path):
 
 def test_no_frame_error_episode_is_contract_ok(tmp_path):
     ep = _write(tmp_path, no_frame=True)
-    tc.assert_renderable(ep)  # 无帧局只核契约
+    tc.assert_renderable(ep)  # no-frame episodes only check the contract
 
 
 @pytest.mark.parametrize("kwargs,needle", [
     ({"route": "pp-new"}, "C1"),
-    ({"key": "X_xhard0_1", "attempt": 2}, None),  # 自身一致，应通过
+    ({"key": "X_xhard0_1", "attempt": 2}, None),  # self-consistent, should pass
     ({"end_extra": {"frames_recorded": 99}}, "C8 frames_recorded"),
     ({"end_extra": {"steps_observed": 1}}, "C8 steps_observed"),
     ({"status": "env_done"}, "C3"),
@@ -111,7 +113,8 @@ def test_missing_step_keeps_number_action_and_reason(tmp_path):
 
 
 def test_default_log_step_bytes_unchanged(tmp_path):
-    """不传新参数时 step 行的键集合与取值与旧格式相同（无 observed／missing_reason 等新键）。"""
+    """Without the new parameters, step rows have the same key set and values as the old format (no new keys such as
+    observed / missing_reason)."""
     t = _tw()
     w = t.TraceWriter(tmp_path / "trace.jsonl", route="r", identity={}, max_steps=5)
     w.log_step(step=1, front=_img(1), wrist=_img(1, 1), state=_st(1), action=_st(1), subgoal="x",

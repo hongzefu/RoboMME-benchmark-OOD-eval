@@ -1,6 +1,7 @@
-"""S7 报告类工具的手写夹具：按生产字段约定写轨迹与结果行（期望值直接写在各用例里，不读被测代码的常量）。
+"""Hand-written fixtures for the S7 report tools: write traces and result rows following production field conventions
+(expected values live in each test case; constants of the code under test are not read).
 
-生产模块一律经 ``tests._support.loaders.load_script`` 按路径加载。
+Production modules are always loaded by path via ``tests._support.loaders.load_script``.
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ def tw():
 
 
 def frame(step: int, cam: int = 0) -> np.ndarray:
-    """确定性小画面（4×4×3 uint8），每步、每相机不同。"""
+    """Small deterministic frame (4x4x3 uint8), different per step and per camera."""
     return np.full((4, 4, 3), (step * 7 + cam * 3) % 251, dtype=np.uint8)
 
 
@@ -30,7 +31,7 @@ def action(step: int) -> np.ndarray:
 
 
 def flip_bit(a: np.ndarray, idx: int = 0) -> np.ndarray:
-    """float32 数组第 idx 个元素的最低位翻转（动作改 1 bit）。"""
+    """Flip the lowest bit of element idx of a float32 array (a 1-bit action change)."""
     b = np.array(a, dtype=np.float32, copy=True)
     v = b.view(np.uint32)
     v[idx] ^= np.uint32(1)
@@ -40,10 +41,12 @@ def flip_bit(a: np.ndarray, idx: int = 0) -> np.ndarray:
 def write_episode(root: Path, *, task: str, source_episode: int, seed: int, n_steps: int = 6, attempt: int = 1,
                   status: str = "fail", subgoals: list[str] | None = None, mutate: dict | None = None,
                   route: str = "fixture") -> Path:
-    """写一局 ``trace.jsonl``：演示 2 帧、每 3 步一次请求与动作块、逐步画面／状态／动作／子目标。
+    """Write one episode's ``trace.jsonl``: 2 demo frames, a request and action chunk every 3 steps, and per-step
+    frames / state / action / subgoal.
 
-    ``mutate``：``{"action_bit": k}`` 第 k 步动作改 1 bit；``{"front": k}`` 第 k 步画面改 1 像素；
-    ``{"state": k}``；``{"text": k}``；``{"request": k}`` 第 k 个请求字节改动；``{"stop_at": k}`` 第 k 步提前结束。"""
+    ``mutate``: ``{"action_bit": k}`` flips 1 bit of the action at step k; ``{"front": k}`` changes 1 pixel of the
+    frame at step k; ``{"state": k}``; ``{"text": k}``; ``{"request": k}`` changes the bytes of request k;
+    ``{"stop_at": k}`` ends early at step k."""
     m = mutate or {}
     t = tw()
     key = f"{task}_xhard0_{seed}"
@@ -52,7 +55,7 @@ def write_episode(root: Path, *, task: str, source_episode: int, seed: int, n_st
              "attempt": attempt}
     n = int(m.get("stop_at", n_steps))
     with t.TraceWriter(path, route=route, identity=ident, max_steps=1300) as w:
-        w.log_demo([frame(-2), frame(-1)], [frame(-2, 1), frame(-1, 1)], [state(-2), state(-1)], ["演示"])
+        w.log_demo([frame(-2), frame(-1)], [frame(-2, 1), frame(-1, 1)], [state(-2), state(-1)], ["demo"])
         req_i = 0
         for s in range(1, n + 1):
             if (s - 1) % 3 == 0:
@@ -75,9 +78,9 @@ def write_episode(root: Path, *, task: str, source_episode: int, seed: int, n_st
             if m.get("state") == s:
                 st = st.copy()
                 st[3] += np.float32(1e-3)
-            sg = (subgoals[min(s - 1, len(subgoals) - 1)] if subgoals else f"子目标{(s - 1) // 3}")
+            sg = (subgoals[min(s - 1, len(subgoals) - 1)] if subgoals else f"subgoal{(s - 1) // 3}")
             if m.get("text") == s:
-                sg = sg + "（改）"
+                sg = sg + "(edited)"
             last = s == n
             w.log_step(step=s, front=f, wrist=frame(s, 1), state=st, action=a, subgoal=sg,
                        terminated=last, truncated=False, status=status if last else "ongoing")

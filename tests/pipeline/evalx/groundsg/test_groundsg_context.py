@@ -1,4 +1,5 @@
-"""GroundSG 官方定义摘取、变体隔离、互斥断言、整席上下文（1003 评估计划 1.3，子任务 S3）。"""
+"""GroundSG official-definition extraction, variant isolation, mutual-exclusion asserts, and per-seat context
+(1003 eval plan 1.3, subtask S3)."""
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +20,8 @@ ALL_PREDICTORS = ("GeminiSubgoalPredictor", "QwenVLSubgoalPredictor", "MemERSubg
 
 @pytest.fixture
 def clean_env(monkeypatch):
-    """被测代码直接写 os.environ；先经 monkeypatch 登记这些键，用例结束后恢复原值。"""
+    """The code under test writes os.environ directly; register these keys via monkeypatch first so the original
+    values are restored after the test."""
     for k in (*OFFICIAL_ENV, *QWEN_ENV):
         monkeypatch.delenv(k, raising=False)
     return monkeypatch
@@ -32,7 +34,7 @@ def test_extract_defs_takes_only_named_source(tmp_path):
                    "def f(a):\n    return a + X\n@dataclasses.dataclass\nclass C:\n    v: int = 1\n", encoding="utf-8")
     ns = od.extract_defs(src, ["X", "f", "C"])
     assert ns["f"](1) == 4 and ns["C"]().v == 1 and "Y" not in ns
-    assert "S3_PROBE" not in os.environ  # 模块级副作用与 import 行不执行
+    assert "S3_PROBE" not in os.environ  # module-level side effects and import lines are not executed
     assert ns["__source_sha256__"] == hashlib.sha256(src.read_bytes()).hexdigest()
     with pytest.raises(KeyError):
         od.extract_defs(src, ["X", "missing_name"])
@@ -71,7 +73,7 @@ def test_qwenvl_variant_loads_only_qwen_classes(tmp_path, clean_env):
     assert "QwenVLSubgoalPredictor" in pred_names and "OracleSubgoalPredictor" not in pred_names
     assert not any(n in pred_names for n in OTHER_PREDICTORS)
     assert type(side.ctx["predictor"]).__name__ == "QwenVLSubgoalPredictor"
-    # 引擎参数取官方原文：底座、adapter、flash_attention_2，构造一次、不读权重
+    # Engine args come verbatim from official code: base model, adapter, flash_attention_2; built once, no weights read
     assert side.swift.engines == [{"model_id_or_path": "Qwen/Qwen3-VL-4B-Instruct", "adapters": [F.ADAPTER],
                                    "attn_impl": "flash_attention_2"}]
     for k, v in {**OFFICIAL_ENV, **QWEN_ENV}.items():
@@ -93,7 +95,8 @@ def test_variants_are_mutually_exclusive(tmp_path, clean_env):
         args = Args(subgoal_type="grounded_subgoal", model_seed=7, **kw)
         with pytest.raises(AssertionError):
             od.build_predictor(defs, args, tmp_path)
-    # adapter 误配（接口冻结说明 2.3：QwenVL 只给 QwenVL adapter，MemER 只给 MemER adapter，Oracle 都不给）
+    # Adapter mismatches (interface freeze note 2.3: QwenVL gets only the QwenVL adapter, MemER only the MemER
+    # adapter, Oracle gets neither)
     bad_pairs = [(F.QWENVL, None, None), (F.QWENVL, F.ADAPTER, F.MEMER_ADAPTER), (F.QWENVL, None, F.MEMER_ADAPTER),
                  (F.MEMER, None, None), (F.MEMER, F.ADAPTER, None), (F.MEMER, F.ADAPTER, F.MEMER_ADAPTER),
                  (F.ORACLE, F.ADAPTER, None), (F.ORACLE, None, F.MEMER_ADAPTER)]
@@ -101,7 +104,7 @@ def test_variants_are_mutually_exclusive(tmp_path, clean_env):
         with pytest.raises(ValueError):
             od.make_args(defs, variant=variant, host="h", port=1, max_steps=10, model_seed=7, adapter_path=qa,
                          memer_adapter_path=ma)
-    # 模型种子必给：缺、负数、bool、非整数一律拒
+    # Model seed is required: missing, negative, bool, or non-integer are all rejected
     for seed in (None, -1, True, "x", 1.5):
         with pytest.raises(ValueError):
             od.make_args(defs, variant=F.ORACLE, host="h", port=1, max_steps=10, model_seed=seed)
@@ -114,7 +117,7 @@ def test_variants_are_mutually_exclusive(tmp_path, clean_env):
     for bad_seed in (None, -3, "abc"):
         with pytest.raises(ValueError, match="RUN_BLOCKED reason=policy_seed"):
             mc.make_policy_context(dict(F.seat_info(F.ORACLE, 60, tmp_path), policy_seed=bad_seed))
-    # MemER 变体缺 memer_adapter_path、或误带 QwenVL adapter：在加载任何模型之前就拒
+    # MemER variant missing memer_adapter_path, or wrongly given a QwenVL adapter: rejected before loading any model
     swift = F.FakeSwift()
     for extra in ({"memer_adapter_path": None}, {"qwenvl_groundSG_adapter_path": F.ADAPTER}):
         with pytest.raises(ValueError):
