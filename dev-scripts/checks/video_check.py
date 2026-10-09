@@ -34,7 +34,7 @@
 
 用法::
 
-    python scripts/eval-official/video_check.py --route groundsg-oracle-new --root <结果根> --results <结果 jsonl>... \
+    python dev-scripts/checks/video_check.py --route groundsg-oracle-new --root <结果根> --results <结果 jsonl>... \
         --side new [--policy-label groundsg-ground-sg-oracle] [--dataset hard-verify] \
         --frames-rule demo+exec --frame-offset 1 [--raw-root <节点临时目录>] [--out-json v.json]
 
@@ -87,15 +87,21 @@ def is_final(row: dict) -> bool:
 
 
 def official_defs():
-    """同目录 ``official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
+    """评估包里的别名表 ``robomme_hard_eval.models._official_defs``（旧名别名表的唯一来源；模块名 ``official_defs``，
+    已加载则复用同一模块）。"""
     import importlib.util
 
     mod = sys.modules.get("official_defs")
-    if mod is None:
-        spec = importlib.util.spec_from_file_location("official_defs", Path(__file__).resolve().parent / "official_defs.py")
+    if mod is None or not hasattr(mod, "canonical_row"):
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod
-        spec.loader.exec_module(mod)
+        try:
+            spec.loader.exec_module(mod)
+        except BaseException:
+            sys.modules.pop("official_defs", None)
+            raise
     return mod
 
 

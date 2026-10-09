@@ -15,8 +15,13 @@
 * ``retry_claim``：基础设施重试名额；``interrupt`` ∈ {``infra``，``expired``}，分别计数——``infra`` 占共享 infra
   额度，``expired``（有 Slurm 到期证据）占到期续跑额度；同一 ``route``+``key`` 至多 ``V8_MAX_ATTEMPTS-1`` 次重试。
 
-上限（六节）：轨迹 6366 硬上限；reset 计量 141430 为软上限（超过只打印 ``BUDGET_WARN``，不拦）；Astra 局数 2 硬上限；
-共享 infra 重试 50、到期续跑 500（两者都在 6366 之内，按预约另计轨迹）。
+上限（六节）：轨迹 6366 硬上限；reset 计量 141430；Astra 局数 2 硬上限；共享 infra 重试 50、到期续跑 500（两者都在 6366
+之内，按预约另计轨迹）。
+
+拆仓验收（1008 拆分方案 R5）起 **reset 计量也是硬上限**：``reserve`` 预约后的计量总数、``claim_reset`` 实领后的计量总数
+超过 ``reset_cap`` 一律抛 ``BudgetExhausted(reason="reset_cap")``、不写行（调用方在进入 attempt 前拒绝或按额度耗尽收尾），
+不再只打印 ``BUDGET_WARN``。``reset_cap`` 进 config 行（schema ``sgeval-budget/3``），所有入口必须给同一组上限，否则
+``BudgetConfigMismatch``。本轮拆仓验收的口径：轨迹 26、计量 60、共享 infra 0、到期续跑 0、计划首试 26（基础设施重试 0 次）。
 
 第三阶段（1006 计划第二部分八.9、八.10 第 5 条、八.12 第 1 条；接口冻结说明第三节）在此之上：
 
@@ -33,7 +38,7 @@
 
 CLI::
 
-    budget_ledger.py [--ledger PATH] [--trajectory-cap N --shared-infra-cap N --expired-cap N --planned-first-tries N]
+    budget_ledger.py [--ledger PATH] [--trajectory-cap N --reset-cap N --shared-infra-cap N --expired-cap N --planned-first-tries N]
                      reserve --resets N [--route R] [--key K] [--astra] [--token T] [--kind-of-try first|recovery]
     budget_ledger.py [--ledger PATH] commit --id RID [--resets N]
     budget_ledger.py [--ledger PATH] release --id RID
@@ -43,7 +48,7 @@ CLI::
 ``--ledger`` 缺省取环境变量 ``SGEVAL_BUDGET_LEDGER``。``reserve`` 成功时末行打印 ``BUDGET_RESERVE rid=<rid> ...``
 （标准输出最后一个字段即 rid，可被启动器取用）；额度不足打印 ``RUN_BLOCKED reason=budget ...`` 并以退出码 5 退出；
 账本坏行或配置不一致打印 ``RUN_BLOCKED reason=ledger_corrupt|budget_config`` 并以退出码 3 退出。
-``report`` 末行固定为 ``BUDGET_ENFORCEMENT=PASS|FAIL trajectories=<used>/<cap> resets=<used>/<soft> astra=<used>/2
+``report`` 末行固定为 ``BUDGET_ENFORCEMENT=PASS|FAIL trajectories=<used>/<cap> resets=<used>/<cap> astra=<used>/2
 shared_infra=<used>/<cap>``（格式不变；第三阶段的到期接续、恢复合计、首试计数记在 ``BUDGET_DETAIL`` 行）。
 """
 from __future__ import annotations
@@ -64,7 +69,9 @@ from typing import Any
 
 #: 六节预算：轨迹硬上限、reset 计量软上限（十倍）、Astra 局数硬上限、共享 infra 重试、到期续跑
 TRAJECTORY_CAP = 6366
-RESET_SOFT_CAP = 141430
+RESET_CAP = 141430
+#: 旧名（第二阶段曾是软上限）；现与 RESET_CAP 同值、同为硬上限
+RESET_SOFT_CAP = RESET_CAP
 ASTRA_CAP = 2
 SHARED_INFRA_CAP = 50
 EXPIRED_CAP = 500
@@ -75,17 +82,18 @@ ENV_LEDGER = "SGEVAL_BUDGET_LEDGER"
 EXIT_BUDGET = 5
 EXIT_BLOCKED = 3
 #: 第三阶段账本模式（config 行的 schema）
-SCHEMA = "sgeval-budget/2"
-#: config 行里比对的四个构造参数（接口冻结说明第三节第 1 条）
-CONFIG_KEYS = ("trajectory_cap", "shared_infra_cap", "expired_cap", "planned_first_tries")
+SCHEMA = "sgeval-budget/3"
+#: config 行里比对的构造参数（接口冻结说明第三节第 1 条；拆仓验收加 reset_cap）
+CONFIG_KEYS = ("trajectory_cap", "reset_cap", "shared_infra_cap", "expired_cap", "planned_first_tries")
 #: reserve 的尝试性质：首试或恢复（infra 重试／到期接续）
 KINDS_OF_TRY = ("first", "recovery")
 _SHARD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class BudgetExhausted(RuntimeError):
-    """硬上限（轨迹、Astra、共享 infra／到期续跑、每身份重试名额、首试保留额度）不足：调用方在进入 attempt 前拒绝。
-    ``reason`` 为具名原因（``trajectory_cap``／``astra_cap``／``reserved_for_first_tries``／``recovery_cap``）。"""
+    """硬上限（轨迹、reset 计量、Astra、共享 infra／到期续跑、每身份重试名额、首试保留额度）不足：调用方在进入
+    attempt 前拒绝。``reason`` 为具名原因（``trajectory_cap``／``reset_cap``／``astra_cap``／``reserved_for_first_tries``／
+    ``recovery_cap``）。"""
 
     budget_exhausted = True
 
@@ -122,15 +130,21 @@ def make_token(route: str, key: str, attempt_no: int) -> str:
 
 
 def _canonical_row(row: Any) -> Any:
-    """历史账本行的旧路线名映射成官方名（别名表在 ``official_defs.py``，已加载则复用同一模块）。"""
+    """历史账本行的旧路线名映射成官方名（别名表在评估包 ``robomme_hard_eval/models/_official_defs.py``，模块名
+    ``official_defs``，已加载则复用同一模块）。"""
     mod = sys.modules.get("official_defs")
-    if mod is None:
+    if mod is None or not hasattr(mod, "canonical_row"):
         import importlib.util
 
-        spec = importlib.util.spec_from_file_location("official_defs", Path(__file__).resolve().parent / "official_defs.py")
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod
-        spec.loader.exec_module(mod)
+        try:
+            spec.loader.exec_module(mod)
+        except BaseException:
+            sys.modules.pop("official_defs", None)
+            raise
     return mod.canonical_row(row)
 
 
@@ -204,6 +218,18 @@ class BudgetState:
     def astra(self) -> int:
         return sum(self.live(r) and bool(row.get("astra")) for r, row in self.reserves.items())
 
+    def resets_if_claimed(self, rid: str | None) -> int:
+        """假如对 ``rid`` 再记一次实领，计量总数会是多少（预约数之内的实领不增加总数）。"""
+        if rid is None or rid not in self.reserves:
+            return self.resets + 1
+        before = self.resets_of(rid)
+        self.claimed[rid] = self.claimed.get(rid, 0) + 1
+        try:
+            after = self.resets_of(rid)
+        finally:
+            self.claimed[rid] -= 1
+        return self.resets + (after - before)
+
     def resets_of(self, rid: str) -> int:
         """单局 reset 计量：退回的只计实领；收尾带实际数的取实际数与实领数之大；其余取预约数与实领数之大。"""
         claimed = self.claimed.get(rid, 0)
@@ -227,15 +253,17 @@ class BudgetState:
 
 class BudgetLedger:
     """共享预算账本。``caps`` 可覆盖（单测用），缺省取六节常量；``planned_first_tries`` 缺省 None（不做首试保留）。
-    第三阶段新侧与原侧由启动脚本显式给出 config 的四个参数，不回落常量默认值。"""
+    第三阶段新侧与原侧由启动脚本显式给出 config 的参数，不回落常量默认值。``reset_soft_cap`` 是 ``reset_cap`` 的旧名
+    （两者都给时以 ``reset_cap`` 为准），现为硬上限。"""
 
-    def __init__(self, path: Path | str, *, trajectory_cap: int = TRAJECTORY_CAP, reset_soft_cap: int = RESET_SOFT_CAP,
-                 astra_cap: int = ASTRA_CAP, shared_infra_cap: int = SHARED_INFRA_CAP, expired_cap: int = EXPIRED_CAP,
-                 planned_first_tries: int | None = None, warn_stream=None):
+    def __init__(self, path: Path | str, *, trajectory_cap: int = TRAJECTORY_CAP, reset_cap: int | None = None,
+                 reset_soft_cap: int | None = None, astra_cap: int = ASTRA_CAP, shared_infra_cap: int = SHARED_INFRA_CAP,
+                 expired_cap: int = EXPIRED_CAP, planned_first_tries: int | None = None, warn_stream=None):
         self.path = Path(path)
         self.lock_path = self.path.with_name(self.path.name + ".lock")
         self.trajectory_cap = int(trajectory_cap)
-        self.reset_soft_cap = int(reset_soft_cap)
+        self.reset_cap = int(reset_cap if reset_cap is not None else
+                             (reset_soft_cap if reset_soft_cap is not None else RESET_CAP))
         self.astra_cap = int(astra_cap)
         self.shared_infra_cap = int(shared_infra_cap)
         self.expired_cap = int(expired_cap)
@@ -246,7 +274,8 @@ class BudgetLedger:
 
     def config(self) -> dict:
         """本对象应有的 config 行内容（不含 t／host 等元字段）。"""
-        return {"kind": "config", "trajectory_cap": self.trajectory_cap, "shared_infra_cap": self.shared_infra_cap,
+        return {"kind": "config", "trajectory_cap": self.trajectory_cap, "reset_cap": self.reset_cap,
+                "shared_infra_cap": self.shared_infra_cap,
                 "expired_cap": self.expired_cap, "planned_first_tries": self.planned_first_tries, "schema": SCHEMA}
 
     @property
@@ -325,11 +354,17 @@ class BudgetLedger:
         """打开时的一致性核对（坏行、config）；不通过抛 LedgerCorrupt／BudgetConfigMismatch。"""
         self.state()
 
-    def _warn_resets(self, st: BudgetState, extra: int = 0) -> None:
-        total = st.resets + extra
-        if total > self.reset_soft_cap:
-            print(f"BUDGET_WARN resets={total} soft={self.reset_soft_cap}（软上限，只告警不拦）",
+    @property
+    def reset_soft_cap(self) -> int:
+        """旧名（只读）：等于 ``reset_cap``。"""
+        return self.reset_cap
+
+    def _check_resets(self, total: int) -> None:
+        """计量总数超过 ``reset_cap`` 即硬拒（不写行）：打印 ``BUDGET_REJECT`` 并抛 ``BudgetExhausted(reason="reset_cap")``。"""
+        if total > self.reset_cap:
+            print(f"BUDGET_REJECT resets={total} cap={self.reset_cap}（硬上限，拒绝）",
                   file=self.warn_stream or sys.stderr, flush=True)
+            raise BudgetExhausted(f"resets={total}/{self.reset_cap}", reason="reset_cap")
 
     def _recovery_block(self, st: BudgetState, *, recovery_in_use: int) -> str | None:
         """一次新的恢复会不会挤占未开始的计划首试额度、或超过恢复合计；返回具名原因，可以则 None。"""
@@ -370,7 +405,7 @@ class BudgetLedger:
     # ── 领取 ────────────────────────────────────────────────────────────
     def reserve(self, *, resets: int, route: str | None = None, key: str | None = None, astra: bool = False,
                 token: str | None = None, kind_of_try: str | None = None, **extra) -> str:
-        """预约一局：轨迹与 Astra 是硬上限（不足抛 BudgetExhausted，不写行）；reset 只做软告警。返回 rid。
+        """预约一局：轨迹、reset 计量与 Astra 都是硬上限（不足抛 BudgetExhausted，不写行）。返回 rid。
 
         ``token``：同 token 已有未退回的预约时返回同一 rid、不写新行（崩溃后续跑不重复扣额）。
         ``kind_of_try="recovery"``：另受首试保留额度与恢复合计约束（见模块文档）。"""
@@ -396,7 +431,7 @@ class BudgetLedger:
                         f"reason={why} trajectories={st.trajectories}/{self.trajectory_cap} "
                         f"first_started={st.first_started}/{self.planned_first_tries} "
                         f"recovery={st.recovery_used}/{self.recovery_cap}", reason=why)
-            self._warn_resets(st, resets)
+            self._check_resets(st.resets + resets)
             rid = uuid.uuid4().hex
             row = {"kind": "reserve", "rid": rid, "resets": resets, "route": route, "key": key, "astra": bool(astra)}
             if token:
@@ -427,10 +462,11 @@ class BudgetLedger:
             self._append({"kind": "release", "rid": rid, **extra})
 
     def claim_reset(self, rid: str | None, what: str, **extra) -> None:
-        """记一次实际 build／reset（软上限：超过只告警，从不抛额度异常）。"""
+        """记一次实际 build／reset；记完后计量总数会超过 ``reset_cap`` 即抛 ``BudgetExhausted(reason="reset_cap")``、
+        不写行（预约数之内的实领不增加总数，不会被拒）。"""
         with self._locked():
             st = self._load()
-            self._warn_resets(st, 1)
+            self._check_resets(st.resets_if_claimed(rid))
             self._append({"kind": "reset_claim", "rid": rid, "what": what, **extra})
 
     def claim_retry(self, *, route: str, key: str, interrupt: str, token: str | None = None, **extra) -> bool:
@@ -468,6 +504,8 @@ class BudgetLedger:
             problems.append("trajectories_over_cap")
         if st.astra > self.astra_cap:
             problems.append("astra_over_cap")
+        if st.resets > self.reset_cap:
+            problems.append("resets_over_cap")
         if st.retries_of("infra") > self.shared_infra_cap:
             problems.append("shared_infra_over_cap")
         if st.retries_of("expired") > self.expired_cap:
@@ -480,14 +518,14 @@ class BudgetLedger:
         rec_cap = "na" if self.recovery_cap is None else self.recovery_cap
         lines = [f"BUDGET_DETAIL ledger={self.path} reserves={len(st.reserves)} committed={len(st.commits)} "
                  f"released={len(st.releases)} open={open_n} expired={st.retries_of('expired')}/{self.expired_cap} "
-                 f"reset_soft_exceeded={int(st.resets > self.reset_soft_cap)} "
+                 f"reset_cap_exceeded={int(st.resets > self.reset_cap)} "
                  f"first_started={st.first_started}/{self.planned_first_tries} recovery={st.recovery_used}/{rec_cap} "
                  f"config={'present' if st.config is not None else 'absent'}"]
         if problems:
             lines.append(f"BUDGET_PROBLEMS {' '.join(problems)}")
         ok = not problems
         lines.append(f"BUDGET_ENFORCEMENT={'PASS' if ok else 'FAIL'} trajectories={st.trajectories}/{self.trajectory_cap} "
-                     f"resets={st.resets}/{self.reset_soft_cap} astra={st.astra}/{self.astra_cap} "
+                     f"resets={st.resets}/{self.reset_cap} astra={st.astra}/{self.astra_cap} "
                      f"shared_infra={st.retries_of('infra')}/{self.shared_infra_cap}")
         return ok, lines
 
@@ -499,7 +537,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="共享预算账本（轨迹／reset／Astra／基础设施重试／首试保留）")
     ap.add_argument("--ledger", default=None, help=f"账本 JSONL；缺省取环境变量 {ENV_LEDGER}")
     ap.add_argument("--trajectory-cap", type=int, default=TRAJECTORY_CAP)
-    ap.add_argument("--reset-soft-cap", type=int, default=RESET_SOFT_CAP)
+    ap.add_argument("--reset-cap", "--reset-soft-cap", dest="reset_cap", type=int, default=RESET_CAP,
+                    help="reset 计量硬上限（--reset-soft-cap 为旧名）；进 config 行比对")
     ap.add_argument("--astra-cap", type=int, default=ASTRA_CAP)
     ap.add_argument("--shared-infra-cap", type=int, default=SHARED_INFRA_CAP)
     ap.add_argument("--expired-cap", type=int, default=EXPIRED_CAP)
@@ -562,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
     if not path:
         print(f"RUN_BLOCKED reason=budget detail=未给 --ledger 且 {ENV_LEDGER} 为空", flush=True)
         return EXIT_BLOCKED
-    led = BudgetLedger(path, trajectory_cap=args.trajectory_cap, reset_soft_cap=args.reset_soft_cap,
+    led = BudgetLedger(path, trajectory_cap=args.trajectory_cap, reset_cap=args.reset_cap,
                        astra_cap=args.astra_cap, shared_infra_cap=args.shared_infra_cap, expired_cap=args.expired_cap,
                        planned_first_tries=args.planned_first_tries)
     try:

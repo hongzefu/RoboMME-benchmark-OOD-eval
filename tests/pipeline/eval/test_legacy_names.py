@@ -1,5 +1,5 @@
 """改名兼容（1006-rename-official-names-and-stage3-eval-plan.md 第二部分八.2「兼容」）：读历史时旧名映射成官方名，
-写出与 CLI 只用官方名；别名表只在 ``scripts/eval-official/official_defs.py`` 放一份。
+写出与 CLI 只用官方名；别名表只在评估包 ``src/robomme_hard_eval/models/_official_defs.py`` 放一份。
 
 旧名一律取自别名表（``LEGACY_*``），测试里不另写旧名字面值（``OFFICIAL_NAMES`` 残留检查同样覆盖 tests/）。
 纯 CPU、不加载权重、不联网。
@@ -65,10 +65,13 @@ def test_env_client_reads_legacy_results_as_official(defs, tmp_path):
     p = tmp_path / "results.jsonl"
     p.write_text(json.dumps({"policy": old_gsg, "dataset": old_hv, "key": "K"}) + "\n{半行", encoding="utf-8")
     assert env.read_results(p) == [{"policy": "groundsg", "dataset": "hard-verify", "key": "K"}]
-    assert "groundsg" in env.POLICIES and old_gsg not in env.POLICIES
-    assert set(env.POLICY_MODULES) == set(env.POLICIES)
-    for mod in env.POLICY_MODULES.values():
-        assert (Path(env.__file__).parent / f"{mod}.py").is_file()
+    # 拆仓后席位的 --policy 取评估包注册表（官方名），模块文件都在 src/robomme_hard_eval/models/
+    from robomme_hard_eval.models import REGISTRY
+
+    choices = env.model_choices()
+    assert "groundsg" in choices and old_gsg not in choices
+    for mod_name, _cls in REGISTRY.values():
+        assert (Path(env.REPO) / "src" / Path(*mod_name.split("."))).with_suffix(".py").is_file()
 
 
 def test_budget_ledger_reads_legacy_route(defs, tmp_path):

@@ -3,20 +3,20 @@
     "id": "C13-ORIG-OBSERVER",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/orig_observer/_obs_common.py",
-      "scripts/eval-official/orig_observer/framesamp_modul_client_wrap.py",
-      "scripts/eval-official/orig_observer/framesamp_modul_proxy.py",
-      "scripts/eval-official/orig_observer/observer_status.py",
-      "scripts/eval-official/orig_observer/official_rerun_shard.sh",
-      "scripts/eval-official/orig_observer/orig_budget.py",
-      "scripts/eval-official/orig_observer/orig_episode.py",
-      "scripts/eval-official/orig_observer/orig_observer_lib.sh",
-      "scripts/eval-official/orig_observer/orig_results_adapter.py",
-      "scripts/eval-official/orig_observer/run_orig_framesamp_modul.sh",
-      "scripts/eval-official/orig_observer/run_orig_smvla.sh",
-      "scripts/eval-official/orig_observer/smvla_wrap.py",
-      "scripts/eval-official/orig_observer/step_arrays.py",
-      "scripts/eval-official/orig_observer/transparency_check.py"
+      "dev-scripts/orig/orig_observer/_obs_common.py",
+      "dev-scripts/orig/orig_observer/framesamp_modul_client_wrap.py",
+      "dev-scripts/orig/orig_observer/framesamp_modul_proxy.py",
+      "dev-scripts/orig/orig_observer/observer_status.py",
+      "dev-scripts/orig/orig_observer/official_rerun_shard.sh",
+      "dev-scripts/orig/orig_observer/orig_budget.py",
+      "dev-scripts/orig/orig_observer/orig_episode.py",
+      "dev-scripts/orig/orig_observer/orig_observer_lib.sh",
+      "dev-scripts/orig/orig_observer/orig_results_adapter.py",
+      "dev-scripts/orig/orig_observer/run_orig_framesamp_modul.sh",
+      "dev-scripts/orig/orig_observer/run_orig_smvla.sh",
+      "dev-scripts/orig/orig_observer/smvla_wrap.py",
+      "dev-scripts/orig/orig_observer/step_arrays.py",
+      "dev-scripts/orig/orig_observer/transparency_check.py"
     ],
     "symbol": "orig_observer：smvla_wrap / framesamp_modul_client_wrap 钩子、orig_episode.OrigEpisode、step_arrays、orig_results_adapter、observer_status、orig_budget、framesamp_modul_proxy、transparency_check、run_orig_smvla.sh / run_orig_framesamp_modul.sh / official_rerun_shard.sh / orig_observer_lib.sh",
     "oracle": "假 InProcSimPool、假 EnvRunner、假 websocket 夹具；期望 trace／arrays／请求字节按 S4 新侧构造式与契约 C1～C11 手写；预算用真实 budget_ledger.py CLI",
@@ -34,7 +34,7 @@
     "id": "C13-ORIG-ARRAYS-MERGE",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/orig_observer/step_arrays.py"
+      "dev-scripts/orig/orig_observer/step_arrays.py"
     ],
     "symbol": "step_arrays.StepArrays.save 委托 trace_writer.merge_write_npz（接口冻结说明四.4），缺该函数时保持旧写法",
     "oracle": "sys.modules['trace_writer'] 装替身模块（有／无 merge_write_npz）；期望键、dtype、字节手写",

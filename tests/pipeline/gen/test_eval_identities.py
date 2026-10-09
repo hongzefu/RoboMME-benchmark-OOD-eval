@@ -1,12 +1,12 @@
-"""C12／C13 交界：``export_eval_identities.py`` 经真实 ``BenchmarkEnvBuilder(ood)`` 逐局列身份，对包内真实 V9 规格跑。
+"""``export_eval_identities.py`` 经真实 ``BenchmarkEnvBuilder(task, dataset)`` 逐局列身份，对包内真实规格跑。
 
-独立期望：新值身份集合直接从包内五份 ``specs.jsonl`` 的交付行（selected 且 rollout ok）读出，不经 builder；
-xhard0 开关打开时 192 局官方路线清单按贪心均衡切片（手算小例子核贪心规则）。
+独立期望：ood 的新值身份集合直接从包内五份 ``specs.jsonl`` 的交付行（selected 且 rollout ok）读出，不经 builder；
+hard-verify 每任务恰 12 局 xhard0、官方原号恰为 3, 7, …, 47（手写）。拆仓后 xhard0 只按数据集名出现在 hard-verify，
+不再前置到 ood（旧开关用例随之删除）。
 """
 from __future__ import annotations
 
 import json
-import os
 from collections import Counter
 from pathlib import Path
 
@@ -15,8 +15,10 @@ import pytest
 from tests._support.loaders import load_script
 
 E = load_script("injection-dev/export_eval_identities.py")
-H = E.hard_specs
+H = E.hard_specs()
 PACKAGED = Path(H.__file__).resolve().parents[1] / "env_metadata" / "ood"
+#: 官方 test 的 hard 子集原 episode 号（手写，不读被测代码）
+XHARD0_SOURCE = tuple(range(3, 48, 4))
 
 
 def _delivered_rows():
@@ -36,113 +38,102 @@ def delivered():
     return _delivered_rows()
 
 
-def isolate_specs_root_env(mp) -> None:
-    """main 会把 --specs-root 写进进程环境。``delenv(raising=False)`` 在变量本不存在时不登记，单用它会让写入泄漏
-    到后续用例；先 setenv（登记原状：存在则记原值、不存在则记「不存在」）再 delenv，用例结束即复原。"""
-    mp.setenv(H.SPECS_ROOT_ENV, "t7-placeholder")
-    mp.delenv(H.SPECS_ROOT_ENV)
-
-
-@pytest.fixture
-def env(monkeypatch):
-    isolate_specs_root_env(monkeypatch)
-    return monkeypatch
-
-
 def _write(path: Path, rows) -> Path:
     path.write_text(json.dumps({"schema": "v8-delivery/1", "rows": rows}), encoding="utf-8")
     return path
 
 
-def _lines(capsys) -> str:
+def _line(capsys) -> str:
     return next(l for l in capsys.readouterr().out.splitlines() if l.startswith("EVAL_IDENTITY_EXPORT="))
 
 
-def test_export_matches_packaged_delivery(env, delivered, tmp_path, capsys):
+def _read(path: Path) -> list[dict]:
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def test_split_accept_two_rows(tmp_path, capsys):
+    """S5 runbook：VideoUnmask × {hard-verify 局 0（官方原号 3）、ood 局 0} 恰两行。"""
     out = tmp_path / "ids.jsonl"
-    official = tmp_path / "official.jsonl"
-    rc = E.main(["--specs-root", str(PACKAGED), "--delivery", str(_write(tmp_path / "d.json", delivered)),
-                 "--out", str(out), "--official-out", str(official)])
-    line = _lines(capsys)
-    assert rc == 0 and line.startswith("EVAL_IDENTITY_EXPORT=PASS ") and "official=skipped" in line
-    rows = [json.loads(x) for x in out.read_text().splitlines()]
-    assert len(rows) == len(delivered)
-    assert {(r["task"], r["tier"], r["seed"]) for r in rows} == {(r["task"], r["tier"], r["seed"]) for r in delivered}
-    assert all(set(r) == {"task", "episode", "tier", "seed", "candidate", "source_episode", "round", "shard"} for r in rows)
-    assert all(r["round"] is None and r["shard"] is None for r in rows)
-    # 每任务 episode 连续 0..n-1，且任务按 16 任务规范序排列
-    per_task = Counter(r["task"] for r in rows)
-    assert [r["task"] for r in rows] == [t for t in H.ALL_TASKS for _ in range(per_task[t])]
+    rc = E.main(["--dataset", "hard-verify,ood", "--tasks", "VideoUnmask", "--episodes", "0:1", "--out", str(out)])
+    line = _line(capsys)
+    assert rc == 0 and line.startswith("EVAL_IDENTITY_EXPORT=PASS ") and " episodes=2 " in line
+    assert " hard_verify=1 ood=1 xhard0=1 " in line
+    rows = _read(out)
+    assert [(r["dataset"], r["task"], r["builder_episode"]) for r in rows] == [("hard-verify", "VideoUnmask", 0),
+                                                                              ("ood", "VideoUnmask", 0)]
+    hv, ood = rows
+    assert hv["tier"] == "xhard0" and hv["source_episode"] == 3 and hv["candidate"] is None and hv["spec_sha256"] is None
+    assert ood["tier"] != "xhard0" and ood["source_episode"] is None and isinstance(ood["candidate"], int)
+    assert len(ood["spec_sha256"]) == 64
+    for r in rows:
+        assert set(r) == set(E.ROW_KEYS) and r["episode"] == r["builder_episode"]
+        assert r["key"] == f"{r['task']}_{r['tier']}_{r['seed']}"
+    # 与执行侧 builder 的解析一致（同一 hard_specs）
+    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+
+    for r in rows:
+        got = BenchmarkEnvBuilder("VideoUnmask", dataset=r["dataset"]).resolve_identity(0)
+        assert (got["tier"], got["seed"], got.get("source_episode"), got.get("spec_sha256")) == \
+               (r["tier"], r["seed"], r["source_episode"], r["spec_sha256"])
+
+
+def test_full_export_matches_packaged_delivery(delivered, tmp_path, capsys):
+    out = tmp_path / "ids.jsonl"
+    rc = E.main(["--out", str(out), "--delivery", str(_write(tmp_path / "d.json", delivered))])
+    line = _line(capsys)
+    assert rc == 0 and line.startswith("EVAL_IDENTITY_EXPORT=PASS ") and "delivery_mismatch=0 " in line
+    rows = _read(out)
+    hv = [r for r in rows if r["dataset"] == "hard-verify"]
+    ood = [r for r in rows if r["dataset"] == "ood"]
+    assert [r["dataset"] for r in rows] == ["hard-verify"] * len(hv) + ["ood"] * len(ood)  # 按 --dataset 顺序写出
+    assert len(hv) == 16 * 12 and all(r["tier"] == "xhard0" for r in hv)
     for task in H.ALL_TASKS:
-        assert [r["episode"] for r in rows if r["task"] == task] == list(range(per_task[task]))
+        assert [r["source_episode"] for r in hv if r["task"] == task] == list(XHARD0_SOURCE)
+        assert [r["builder_episode"] for r in hv if r["task"] == task] == list(range(12))
+    assert not [r for r in ood if r["tier"] == "xhard0"]
+    assert len(ood) == len(delivered)
+    assert {(r["task"], r["tier"], r["seed"]) for r in ood} == {(r["task"], r["tier"], r["seed"]) for r in delivered}
     cand = {(r["task"], r["tier"], r["seed"]): r["candidate"] for r in delivered}
-    assert all(r["candidate"] == cand[(r["task"], r["tier"], r["seed"])] for r in rows)
-    assert not official.exists()  # 开关关：官方路线清单不写
+    assert all(r["candidate"] == cand[(r["task"], r["tier"], r["seed"])] for r in ood)
+    per_task = Counter(r["task"] for r in ood)
+    assert [r["task"] for r in ood] == [t for t in H.ALL_TASKS for _ in range(per_task[t])]
+    for task in H.ALL_TASKS:
+        assert [r["builder_episode"] for r in ood if r["task"] == task] == list(range(per_task[task]))
 
 
-def test_export_detects_delivery_mismatch(env, delivered, tmp_path, capsys):
-    rc = E.main(["--specs-root", str(PACKAGED), "--delivery", str(_write(tmp_path / "d.json", delivered[1:])),
-                 "--out", str(tmp_path / "ids.jsonl")])
-    line = _lines(capsys)
+def test_full_export_detects_delivery_mismatch(delivered, tmp_path, capsys):
+    rc = E.main(["--dataset", "ood", "--out", str(tmp_path / "ids.jsonl"),
+                 "--delivery", str(_write(tmp_path / "d.json", delivered[1:]))])
+    line = _line(capsys)
     assert rc == 1 and line.startswith("EVAL_IDENTITY_EXPORT=FAIL ") and "delivery_mismatch=1 " in line
 
 
-def test_v9_requires_delivery(env, tmp_path):
-    with pytest.raises(SystemExit):
-        E.main(["--specs-root", str(PACKAGED), "--out", str(tmp_path / "ids.jsonl")])
-    assert not (tmp_path / "ids.jsonl").exists()
-
-
-def test_xhard0_switch_on_adds_official_route(env, delivered, tmp_path, capsys):
-    env.setattr(H, "XHARD0_IN_TEST_HARD", True)
-    d = _write(tmp_path / "d.json", delivered)
-    with pytest.raises(SystemExit):  # 开关开时必须显式给 --official-out（默认值是 V8 根）
-        E.main(["--specs-root", str(PACKAGED), "--delivery", str(d), "--out", str(tmp_path / "x.jsonl")])
-    official = tmp_path / "official.jsonl"
-    rc = E.main(["--specs-root", str(PACKAGED), "--delivery", str(d), "--out", str(tmp_path / "ids.jsonl"),
-                 "--official-out", str(official)])
-    assert rc == 0, _lines(capsys)
-    rows = [json.loads(x) for x in (tmp_path / "ids.jsonl").read_text().splitlines()]
-    x0 = [r for r in rows if r["tier"] == H.XHARD0]
-    assert Counter(r["task"] for r in x0) == {t: H.XHARD0_PER_TASK for t in H.ALL_TASKS}
-    assert len(rows) == len(delivered) + len(x0)
-    off = [json.loads(x) for x in official.read_text().splitlines()]
-    assert {(r["task"], r["seed"]) for r in off} == {(r["task"], r["seed"]) for r in x0}
-    assert {r["shard"] for r in off} == set(range(E.SHARDS))
-    assert all(r["source_episode"] in H.XHARD0_EPISODES for r in off)
-
-
-def test_balance_greedy_by_hand():
-    # 三局两片：按估计用时降序逐局给当前最轻的片（同轻取片号小）
-    rows = [{"task": "StopCube", "episode": 0}, {"task": "BinFill", "episode": 0}, {"task": "PickHighlight", "episode": 0}]
-    assert E.TASK_SECONDS["PickHighlight"] > E.TASK_SECONDS["BinFill"] > E.TASK_SECONDS["StopCube"]
-    E.balance(rows, 2)
-    assert {r["task"]: r["shard"] for r in rows} == {"PickHighlight": 0, "BinFill": 1, "StopCube": 1}
-    same = [{"task": "StopCube", "episode": 1}, {"task": "StopCube", "episode": 0}]
-    E.balance(same, 2)
-    assert [(r["episode"], r["shard"]) for r in same] == [(1, 1), (0, 0)]
-
-
-def test_check_rows_negatives():
-    cells = {("StopCube", "xhard1"): 2}
-    good = [{"task": "StopCube", "tier": "xhard1", "seed": s, "round": None, "shard": None} for s in (1, 2)]
-    ok, facts = E.check_rows(good, [], cells, {("StopCube", "xhard1", 1), ("StopCube", "xhard1", 2)})
-    assert ok and facts["cell_mismatch"] == 0 and facts["delivery_mismatch"] == 0
-    assert not E.check_rows([dict(good[0], round=3), good[1]], [], cells)[0]
-    ok, facts = E.check_rows(good[:1], [], cells)
-    assert not ok and facts["cell_mismatch"] == 1
-    ok, facts = E.check_rows(good + [{"task": "BinFill", "tier": "xhard1", "seed": 3}], [], cells)
-    assert not ok and facts["cell_mismatch"] == 1  # 表外格也计
-    assert not E.check_rows(good, [{"task": "StopCube"}], cells)[0]  # 开关关时官方行必须为 0
-
-
-def test_specs_root_env_restored_after_main(delivered, tmp_path, capsys):
-    # 夹具的复原效果本身：在独立的 MonkeyPatch 上下文里跑 main，退出上下文后环境变量回到调用前（不依赖用例顺序）
-    before = os.environ.get(H.SPECS_ROOT_ENV)
-    with pytest.MonkeyPatch.context() as mp:
-        isolate_specs_root_env(mp)
-        assert E.main(["--specs-root", str(PACKAGED), "--delivery", str(_write(tmp_path / "d.json", delivered)),
-                       "--out", str(tmp_path / "ids.jsonl")]) == 0
-        assert os.environ[H.SPECS_ROOT_ENV] == str(PACKAGED.resolve())  # main 确实写了
-    assert os.environ.get(H.SPECS_ROOT_ENV) == before
+def test_check_rows_negatives(tmp_path, capsys):
+    E.main(["--dataset", "hard-verify,ood", "--tasks", "VideoUnmask", "--episodes", "0:1",
+            "--out", str(tmp_path / "ids.jsonl")])
     capsys.readouterr()
+    good = _read(tmp_path / "ids.jsonl")
+    exp = {"hard-verify": 1, "ood": 1}
+    assert E.check_rows(good, exp, H, full=False)[0]
+    hv, ood = good
+    cases = {
+        "hard-verify 行带 candidate": [dict(hv, candidate=1), ood],
+        "hard-verify 行原号不在官方 hard 子集": [dict(hv, source_episode=4), ood],
+        "ood 行是 xhard0": [hv, dict(ood, tier="xhard0", key=f"{ood['task']}_xhard0_{ood['seed']}")],
+        "ood 行缺指纹": [hv, dict(ood, spec_sha256=None)],
+        "key 不自洽": [dict(hv, key="x"), ood],
+        "缺一行": [hv],
+        "多一个键": [dict(hv, extra=1), ood],
+        "重复": [hv, ood, ood],
+    }
+    for name, rows in cases.items():
+        assert not E.check_rows(rows, exp, H, full=False)[0], name
+
+
+@pytest.mark.parametrize("argv", [["--dataset", "test", "--out", "x"], ["--tasks", "NoSuchTask", "--out", "x"],
+                                  ["--episodes", "3:1", "--out", "x"], ["--dataset", "ood,ood", "--out", "x"]],
+                         ids=["bad_dataset", "bad_task", "empty_range", "dup_dataset"])
+def test_bad_args_exit_2(argv):
+    with pytest.raises(SystemExit) as ei:
+        E.main(argv)
+    assert ei.value.code == 2

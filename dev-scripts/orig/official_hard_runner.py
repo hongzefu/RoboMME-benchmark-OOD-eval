@@ -4,15 +4,17 @@
 独立进程，解释器用客户端扩展环境（client-env）。官方 ``eval.py`` 经 ``subgoal_predictor.py`` 无条件导入 gemini
 （``google.generativeai``）与 memer，所以**不整模块 import** 官方文件：与新侧一样用
 ``official_defs.extract_defs`` 摘取 ``EpisodeEvaluator``、``Args``、``EnvRunner`` 与所选变体的预测器原文。
-``sys.path`` 只加官方 ``examples/robomme`` 与本仓库 ``src``（本目录模块按文件路径加载、不进 ``sys.path``）；启动时
-断言 ``robomme.__file__`` 在本仓库 ``src/robomme/`` 下、``"robomme_hard" not in sys.modules``，每局结束再查一次。
+``sys.path`` 只加官方 ``examples/robomme``、benchmark 子模块的 ``src``（官方 ``robomme`` 在
+``third_party/robomme_benchmark/src/robomme/``）与评估包 ``src``（同用的模块按文件路径加载，旧名→新文件见
+``EVAL_MODULE_FILES``）；启动时断言 ``robomme.__file__`` 在子模块 ``src/robomme/`` 下、``"robomme_hard" not in
+sys.modules``，每局结束再查一次。
 
 流程：对 hard0 分片（``eval_manifest.py --mode hard0`` 产出的 ``shard-NN.json``）的每一行，官方
 ``EnvRunner(task, video_dir, max_steps=--max-steps)``（每任务一个，与官方 ``evaluate`` 相同）→
 ``make_env(source_episode)`` → ``EpisodeEvaluator.eval_each_episode`` → ``close_env``。预测器与评估器整个进程只建
 一次（与官方相同，QwenVL 模型只加载一次）。
 
-外围记录全部是委托包装，不改 ``src/robomme`` 的任何方法、不 monkeypatch：
+外围记录全部是委托包装，不改官方 ``robomme`` 的任何方法、不 monkeypatch：
 
 * ``TapRunner`` 包住官方 ``EnvRunner`` 实例的 ``get_init_obs``／``step``（其余属性原样转发）；
 * ``EnvTap`` 包住 ``EnvRunner.env`` 这个对象：``step`` 原样转发并记下 ``terminated``／``truncated``，其余属性转发；
@@ -91,6 +93,20 @@ from pathlib import Path  # noqa: E402
 from typing import Any, Callable  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
+#: benchmark 子模块的源码根（官方 ``robomme`` 与 ``robomme_hard`` 都在这里）
+BENCH_SRC = REPO / "third_party" / "robomme_benchmark" / "src"
+#: 评估包源码根
+EVAL_SRC = REPO / "src"
+#: 旧仓评估目录下的模块名 → 拆仓后的文件（别名照旧）
+EVAL_MODULE_FILES = {
+    "official_defs": EVAL_SRC / "robomme_hard_eval" / "models" / "_official_defs.py",
+    "groundsg_client": EVAL_SRC / "robomme_hard_eval" / "models" / "groundsg.py",
+    "framesamp_modul_client": EVAL_SRC / "robomme_hard_eval" / "models" / "framesamp_modul.py",
+    "smvla_client": EVAL_SRC / "robomme_hard_eval" / "models" / "smvla.py",
+    "trace_writer": EVAL_SRC / "robomme_hard_eval" / "record" / "trace_writer.py",
+    "recorder": EVAL_SRC / "robomme_hard_eval" / "record" / "recorder.py",
+    "budget_ledger": REPO / "dev-scripts" / "gl" / "budget_ledger.py",
+}
 SIDE = "orig"
 POLICY = "groundsg"
 DATASET = "hard-verify"
@@ -108,19 +124,26 @@ PROBE_TIMEOUT_S = 300.0
 
 
 def _load(name: str):
-    """按文件路径加载本目录模块（别名与 env_client.load_sibling 相同）。"""
+    """按文件路径加载旧名 ``name`` 对应的模块（``EVAL_MODULE_FILES``；别名与模型客户端的 ``load_sibling`` 相同，已加载
+    则复用）。评估包 ``src`` 追加到 ``sys.path`` 末尾，供拆仓后模块里的 ``robomme_hard_eval.*`` 包内导入使用。"""
     if name in sys.modules:
         return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, Path(_HERE) / f"{name}.py")
+    if str(EVAL_SRC) not in sys.path:
+        sys.path.append(str(EVAL_SRC))
+    spec = importlib.util.spec_from_file_location(name, EVAL_MODULE_FILES[name])
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
     return mod
 
 
 official_defs = _load("official_defs")
+trace_writer = _load("trace_writer")  # 先于客户端登记：客户端按旧名 load_sibling 取同一份
 groundsg = _load("groundsg_client")
-trace_writer = _load("trace_writer")
 
 
 class ServerUnreachable(ConnectionError):
@@ -145,8 +168,8 @@ def dumps(obj: Any) -> str:
 
 
 def setup_paths() -> list[str]:
-    """``sys.path`` 只加官方 ``examples/robomme`` 与本仓库 ``src``（放最前）。返回加入的两项。"""
-    added = [str(official_defs.official_robomme_dir()), str(REPO / "src")]
+    """``sys.path`` 只加官方 ``examples/robomme`` 与 benchmark 子模块 ``src``（放最前）。返回加入的两项。"""
+    added = [str(official_defs.official_robomme_dir()), str(BENCH_SRC)]
     for p in reversed(added):
         while p in sys.path:
             sys.path.remove(p)
@@ -161,14 +184,14 @@ def assert_no_robomme_hard() -> None:
 
 
 def import_official_env() -> dict:
-    """照官方 ``env_runner.py`` 头部导入环境注册与 builder，并断言来源：``robomme`` 在本仓库 ``src/robomme/``，
+    """照官方 ``env_runner.py`` 头部导入环境注册与 builder，并断言来源：``robomme`` 在 benchmark 子模块 ``src/robomme/``，
     ``robomme_hard`` 未被导入。返回 ``{"BenchmarkEnvBuilder", "robomme_file"}``。"""
     import robomme
 
-    want = (REPO / "src" / "robomme").resolve()
+    want = (BENCH_SRC / "robomme").resolve()
     got = Path(robomme.__file__).resolve()
     if want not in got.parents:
-        raise AssertionError(f"robomme 不在仓库 src/robomme 下：{got}")
+        raise AssertionError(f"robomme 不在 benchmark 子模块 src/robomme 下：{got}")
     import robomme.robomme_env  # noqa: F401 环境注册（官方 from robomme.robomme_env import *）
     from robomme.env_record_wrapper import BenchmarkEnvBuilder
 

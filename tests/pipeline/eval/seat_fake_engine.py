@@ -9,6 +9,9 @@
   录像目录按录像器的真实格式写：``front.mkv``／``wrist.mkv`` 为 ffmpeg 现做的 16×16 FFV1（3 帧编码），
   ``frames-<stream>.jsonl`` 4 行（idx 0..3 → enc 0,1,1,2，含一帧重复），``summary.json``；给了 ``--trace-root`` 时在
   ``<trace-root>/<key>.a1/trace.jsonl`` 写一行轨迹。启动事件记数据集、步数、strict-cap、变体等透传参数。
+- ``seat``（代替拆仓后的 ``dev-scripts/gl/seat.py run``）：第 n 次启动按 ``FAKE_CLIENT_CODES`` 的第 n 项行事：非负整数 =
+  写本席位 ``progress.json`` 后以该码退出（75 时先打印 ``SERVER_START``／``SERVER_LEFT`` 两行并写服务元数据，模拟看门狗
+  只杀客户端、服务端留下）；``-1`` = 写一次进度后一直睡、不再更新进度（收 TERM 即退，模拟卡死）。启动事件记完整 argv。
 - ``runner``（代替 ``pp_official_runner.py``／``official_hard_runner.py``）：``--check-imports`` 打印
   ``OFFICIAL_IMPORTS=PASS``；否则对 ``--only`` 的每个 key 写 ``<out>/<key>.a<attempt>/``（``frames/{front,wrist}.rgb24``
   各 3 帧 16×16、``frames/frames.json``、``trace.jsonl``）与 ``<out>/results.jsonl`` 一行。``FAKE_RUNNER_INFRA_ONCE=1``
@@ -140,6 +143,36 @@ def client() -> None:
     sys.exit(code)
 
 
+def seat() -> None:
+    state = Path(os.environ["FAKE_STATE"])
+    n = int(state.read_text()) if state.exists() else 0
+    state.write_text(str(n + 1))
+    codes = [int(x) for x in os.environ.get("FAKE_CLIENT_CODES", "0").split(",")]
+    code = codes[min(n, len(codes) - 1)]
+    out = Path(arg("--out"))
+    policy = arg("--policy")
+    label = f"groundsg-{arg('--groundsg-variant')}" if policy == "groundsg" else policy
+    sd = out / "seats" / label / f"seed{arg('--policy-seed')}" / (arg("--seat") or "auto")
+    sd.mkdir(parents=True, exist_ok=True)
+    emit(event="start", n=n, code=code, policy=policy, argv=ARGS)
+    signal.signal(signal.SIGTERM, on_term)
+    (sd / "progress.json").write_text(json.dumps({"phase": "context_load", "t": time.time()}), encoding="utf-8")
+    print(f"CLIENT_READY policy={policy} seat={sd.name}", flush=True)
+    if code == -1:
+        while True:
+            time.sleep(0.1)
+    if code == 75:
+        meta = sd / "server-metadata-18999.json"
+        meta.write_text(json.dumps({"pid": 999999, "argv": ["fake-server"], "port": 18999}), encoding="utf-8")
+        print(f"SERVER_START name=fake port=18999 pid=999999 log={sd / 'fake-18999.log'}", flush=True)
+        print(f"INFRA_TIMEOUT phase=episode_wall key=K limit_s=1", flush=True)
+        print(f"SERVER_LEFT pid=999999 port=18999 metadata={meta} stop=\"scripts/evaluate.py --stop-server {meta}\"",
+              flush=True)
+    else:
+        print(f"全部完成 policy={policy} seat={sd.name} episodes=0 rc={code}", flush=True)
+    sys.exit(code)
+
+
 def runner() -> None:
     if "--check-imports" in ARGS:
         print("OFFICIAL_IMPORTS=PASS robomme=fake robomme_hard_imported=0", flush=True)
@@ -173,4 +206,4 @@ def runner() -> None:
 
 
 if __name__ == "__main__":
-    {"server": server, "client": client, "runner": runner}[ROLE]()
+    {"server": server, "client": client, "seat": seat, "runner": runner}[ROLE]()

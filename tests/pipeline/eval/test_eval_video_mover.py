@@ -1,4 +1,4 @@
-"""C13 评估视频搬运 ``scripts/injection-dev/eval_video_mover.py --mode v8 --once``（慢，真 ffmpeg 微型媒体）
+"""C13 评估视频搬运 ``dev-scripts/gl/eval_video_mover.py --mode v8 --once``（慢，真 ffmpeg 微型媒体）
 与 ``eval_report`` 对 ``--videos`` 产物的判定（``verify_new_videos`` → ``V9_EVAL_VIDEOS`` 判定行）。
 
 搬运脚本以测试子进程实际执行；运行根按生产布局手写（``eval_fakes.Stage``），录像目录里放 ffmpeg 现做的
@@ -26,7 +26,7 @@ import eval_fakes as F
 
 pytestmark = pytest.mark.slow
 
-MOVER = F.REPO / "scripts" / "injection-dev" / "eval_video_mover.py"
+MOVER = F.REPO / "dev-scripts" / "gl" / "eval_video_mover.py"
 POL = "perceptual-framesamp-modul"
 
 if shutil.which("ffmpeg") is None:  # pragma: no cover

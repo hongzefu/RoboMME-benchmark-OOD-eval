@@ -1,127 +1,182 @@
 {
-  "note": "T8b 评估块的具名植入：非受保护源码（scripts/eval-official）的植入全部在隔离副本（worktree 拷贝）里做，主检出与 worktree 不改；只跑非 slow 的本目录用例，「新增失败」为该植入下失败的用例数；M13／M16／M17 的评估部分为计划植入清单编号，F2／F3 为生产小修的回归牙齿，T8b-K* 为本块自加。；S2-D* 为 1003 评估计划 S2（数据集路由、--strict-cap、崩溃窗口补 accept、收尾缺失退出码、hard-verify 不判越限）自加，配方以 patch 字段内联。",
+  "note": "评估块的具名植入（拆仓后按新树重切）：每项都带内联 patch（文件、恰好命中 1 次的 old、new），在隔离副本里落盘植入；目标在 dev-scripts/gl、src/robomme_hard_eval（非受保护目录）。M13／M16／M17 为计划植入清单编号，F2／F3 为生产小修的回归牙齿，T8b-K* 为本块自加，S2-D* 为数据集路由等自加，Q-* 为拆仓后动态队列与看门狗结算（领取过期回收、回收结算 rid、同席位旧进程、O_EXCL 并发、_hard_exit 结算、心跳不复活已收尾领取）。旧 SeatRunner.run_one／run_identities_v8／_classify 与旧 check_identity 的植入项已删除或改指 episode.py 的对应位置。",
   "mutants": [
     {
       "id": "M13a",
-      "target": "scripts/eval-official/framesamp_modul_client.py::run_loop",
-      "method": "隔离副本把 `resp = client.reset()` 换成 `resp = {\"reset_finished\": True}`（不向策略发 reset）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_abA_third_episode_identical_to_first[perceptual-framesamp-modul]"
+      "target": "src/robomme_hard_eval/episode.py::run_episode",
+      "method": "隔离副本删掉每局开头的 policy.reset(spec)（常驻 Policy 不再按局重置）",
+      "patch": [
+        {
+          "file": "src/robomme_hard_eval/episode.py",
+          "old": "    policy.reset(spec)\n",
+          "new": "    pass\n"
+        }
       ],
-      "result": "KILLED（新增失败 1 个）"
-    },
-    {
-      "id": "M13b",
-      "target": "scripts/eval-official/smvla_client.py::run_episode",
-      "method": "隔离副本把 `reply = call(\"reset\", ...)` 换成 `reply = {}`（不向 server 发 reset）",
       "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_abA_third_episode_identical_to_first[smvla]"
-      ],
-      "result": "KILLED（新增失败 1 个）"
+        "tests/pipeline/eval/test_seat_runner_e2e.py::test_abA_resident_policy_third_episode_identical_to_first"
+      ]
     },
     {
       "id": "M16a",
-      "target": "scripts/eval-official/env_client.py::SeatRunner._classify",
-      "method": "隔离副本把步数到顶分支的 status=\"timeout\" 改成 \"fail\"（timeout 记成 fail）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report[perceptual-framesamp-modul-cap_timeout]",
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_cap_timeout_never_steps_past_cap[perceptual-framesamp-modul]"
+      "target": "src/robomme_hard_eval/episode.py::_classify",
+      "method": "隔离副本把步数到顶的终态 timeout 改成 fail",
+      "patch": [
+        {
+          "file": "src/robomme_hard_eval/episode.py",
+          "old": "        status = \"timeout\"\n",
+          "new": "        status = \"fail\"\n"
+        }
       ],
-      "result": "KILLED（新增失败 4 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_scenarios[cap_timeout]",
+        "tests/pipeline/eval/test_seat_runner_e2e.py::test_cap_timeout_never_steps_past_cap"
+      ]
     },
     {
       "id": "M16b",
-      "target": "scripts/eval-official/env_client.py::AttemptLedger.is_final",
-      "method": "隔离副本把最终结局集合从 TERMINAL_STATUSES 改成 (success, timeout)（fail 被当成可重试）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report[perceptual-framesamp-modul-fail]",
-        "tests/pipeline/eval/test_policy_clients.py::test_ordinary_failure_is_not_retried[perceptual-framesamp-modul-fail]"
+      "target": "dev-scripts/gl/seat.py::AttemptLedger.is_final",
+      "method": "隔离副本把最终结局集合改成 (success, timeout)（fail 被当成可重试）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "        if status in TERMINAL_STATUSES:\n            return True\n",
+          "new": "        if status in (\"success\", \"timeout\"):\n            return True\n"
+        }
       ],
-      "result": "KILLED（新增失败 7 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_scenarios[fail]",
+        "tests/pipeline/eval/test_attempt_ledger.py::test_is_final_table"
+      ]
     },
     {
       "id": "M16c",
-      "target": "scripts/eval-official/framesamp_modul_client.py::INFRA_MARKERS",
-      "method": "隔离副本在基础设施标记表里加 \"Error\"（普通失败按基础设施重试）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report[perceptual-framesamp-modul-step_error]",
-        "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_env_exception_becomes_error_without_infra"
+      "target": "src/robomme_hard_eval/models/framesamp_modul.py::INFRA_MARKERS",
+      "method": "隔离副本在基础设施标记表里加 \"Error\"（普通失败按基础设施记）",
+      "patch": [
+        {
+          "file": "src/robomme_hard_eval/models/framesamp_modul.py",
+          "old": "INFRA_MARKERS = (\"RecorderError\",",
+          "new": "INFRA_MARKERS = (\"Error\", \"RecorderError\","
+        }
       ],
-      "result": "KILLED（新增失败 4 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_policy_clients.py::test_framesamp_modul_env_exception_becomes_error_without_infra"
+      ]
     },
     {
       "id": "M17a",
-      "target": "scripts/eval-official/eval_report.py::build_report",
+      "target": "dev-scripts/gl/eval_report.py::build_report",
       "method": "隔离副本把 per_policy.denominator 从 len(mkeys) 改成 len(an[\"rows\"])（分母改用结果行数）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report[perceptual-framesamp-modul-step_infra_retry]",
-        "tests/pipeline/eval/test_eval_report.py::test_denominator_is_manifest_not_result_rows"
+      "patch": [
+        {
+          "file": "dev-scripts/gl/eval_report.py",
+          "old": "            \"denominator\": len(mkeys), \"outcomes\"",
+          "new": "            \"denominator\": len(an[\"rows\"]), \"outcomes\""
+        }
       ],
-      "result": "KILLED（新增失败 6 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_eval_report.py::test_denominator_is_manifest_not_result_rows"
+      ]
     },
     {
       "id": "M17b",
-      "target": "scripts/eval-official/eval_report.py::build_report",
+      "target": "dev-scripts/gl/eval_report.py::build_report",
       "method": "隔离副本把 outcomes 从显式六键改成 dict(Counter)（零计数键缺失）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report[perceptual-framesamp-modul-success]",
-        "tests/pipeline/eval/test_eval_report.py::test_clean_report_rates_and_outcome_keys"
+      "patch": [
+        {
+          "file": "dev-scripts/gl/eval_report.py",
+          "old": "\"outcomes\": {s: oc[s] for s in (*TERMINAL, \"error\", \"missing\", \"conflict\")},",
+          "new": "\"outcomes\": dict(oc),"
+        }
       ],
-      "result": "KILLED（新增失败 47 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_eval_report.py::test_clean_report_rates_and_outcome_keys"
+      ]
     },
     {
       "id": "F3",
-      "target": "scripts/eval-official/eval_report.py::build_reuse",
+      "target": "dev-scripts/gl/eval_report.py::build_reuse",
       "method": "隔离副本把 800 局总表逐格对 V9_CELLS 的比较改成 if False（回到只核总数）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/eval_report.py",
+          "old": "            if have_cells.get(cell, 0) != want_cells.get(cell, 0):",
+          "new": "            if False:"
+        }
+      ],
       "expected_failing": [
         "tests/pipeline/eval/test_eval_report.py::test_v9_total_table_matches_v9_cells[one_moved]"
-      ],
-      "result": "KILLED（新增失败 1 个）"
+      ]
     },
     {
       "id": "F2",
-      "target": "scripts/eval-official/eval_manifest.py::check_source",
-      "method": "隔离副本把 xhard0 期望改回写死 16 × XHARD0_PER_TASK（不随开关）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_eval_manifest.py::test_export_feeds_manifest[xhard0_off]",
-        "tests/pipeline/eval/test_eval_manifest.py::test_switch_mismatch_rejected_at_source_step[True-False]"
+      "target": "dev-scripts/gl/eval_manifest.py::xhard0_expected_for",
+      "method": "隔离副本让 ood 源集的 xhard0 期望改回 16 × XHARD0_PER_TASK（不按数据集名）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/eval_manifest.py",
+          "old": "    if dataset == SOURCE_DATASET:\n        return 0\n",
+          "new": "    if dataset == SOURCE_DATASET:\n        return len(hs.ALL_TASKS) * int(hs.XHARD0_PER_TASK)\n"
+        }
       ],
-      "result": "KILLED（新增失败 4 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_eval_manifest.py::test_export_feeds_manifest",
+        "tests/pipeline/eval/test_eval_manifest.py::test_hard_verify_rows_rejected_at_source_step"
+      ]
     },
     {
       "id": "T8b-K1",
-      "target": "scripts/eval-official/env_client.py::SeatRunner.run_identities_v8",
-      "method": "隔离副本把基础设施错误后立即重试的条件改成 if False（不重试）",
-      "expected_failing": [
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_infra_retry_reruns_same_identity_once[perceptual-framesamp-modul]"
+      "target": "dev-scripts/gl/seat.py::SeatRunner.claim",
+      "method": "隔离副本让上一次收尾后一律视为尝试用满（基础设施错误不再重试）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "                if n_last >= q.max_attempts:\n                    return \"exhausted\"\n",
+          "new": "                if True:\n                    return \"exhausted\"\n"
+        }
       ],
-      "result": "KILLED（新增失败 8 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_runner_e2e.py::test_infra_retry_reruns_same_identity_once",
+        "tests/pipeline/eval/test_seat_queue.py::test_b2_expired_claim_reclaimed_then_retried_when_allowed"
+      ]
     },
     {
       "id": "T8b-K2",
-      "target": "scripts/eval-official/smvla_client.py::hard_bound",
+      "target": "src/robomme_hard_eval/models/smvla.py::hard_bound",
       "method": "隔离副本把决策上限的 +2 改成 +3",
+      "patch": [
+        {
+          "file": "src/robomme_hard_eval/models/smvla.py",
+          "old": "    return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 2\n",
+          "new": "    return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 3\n"
+        }
+      ],
       "expected_failing": [
         "tests/pipeline/eval/test_policy_clients.py::test_smvla_decision_budget_hand_computed"
-      ],
-      "result": "KILLED（新增失败 1 个）"
+      ]
     },
     {
       "id": "T8b-K3",
-      "target": "scripts/eval-official/eval_report.py::build_report",
+      "target": "dev-scripts/gl/eval_report.py::build_report",
       "method": "隔离副本删掉「清单行数 ≠ expect_total」的核对",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/eval_report.py",
+          "old": "    if len(mrows) != expect_total:",
+          "new": "    if False:"
+        }
+      ],
       "expected_failing": [
         "tests/pipeline/eval/test_eval_report.py::test_manifest_header_negatives"
-      ],
-      "result": "KILLED（新增失败 1 个）"
+      ]
     },
     {
       "id": "S2-D1",
-      "target": "scripts/eval-official/env_client.py::check_identity",
-      "method": "隔离副本把 hard-verify 身份逐键比对的 (\"seed\", \"source_episode\") 改成只比 seed（source_episode 不核）",
+      "target": "src/robomme_hard_eval/episode.py::check_identity",
+      "method": "隔离副本把 hard-verify 身份逐键比对的 (seed, source_episode) 改成只比 seed",
       "patch": [
         {
-          "file": "scripts/eval-official/env_client.py",
+          "file": "src/robomme_hard_eval/episode.py",
           "old": "        for k in (\"seed\", \"source_episode\"):\n",
           "new": "        for k in (\"seed\",):\n"
         }
@@ -129,91 +184,175 @@
       "expected_failing": [
         "tests/pipeline/eval/test_identity_contract.py::test_hard_verify_identity_mismatch_blocks_run",
         "tests/pipeline/eval/test_identity_contract.py::test_check_identity_hard0_mode"
-      ],
-      "result": "KILLED（新增失败 2 个）"
+      ]
     },
     {
       "id": "S2-D2",
-      "target": "scripts/eval-official/env_client.py::SeatRunner.run_one",
-      "method": "隔离副本把 step_cap 改成恒等于 --max-steps（--strict-cap 失效、hard-verify 也被截断）",
+      "target": "src/robomme_hard_eval/episode.py::run_episode",
+      "method": "隔离副本把 step_cap 改成恒等于数据集步数（hard-verify 也被截断）",
       "patch": [
         {
-          "file": "scripts/eval-official/env_client.py",
-          "old": "step_cap=eff if self.strict_cap else None",
-          "new": "step_cap=eff"
+          "file": "src/robomme_hard_eval/episode.py",
+          "old": "step_cap=spec.max_steps if spec.strict_cap else None",
+          "new": "step_cap=spec.max_steps"
         }
       ],
       "expected_failing": [
         "tests/pipeline/eval/test_dataset_routing.py::test_hard_verify_without_strict_cap_lets_official_loop_run_step_1301",
-        "tests/pipeline/eval/test_identity_contract.py::test_max_steps_reaches_builder_conn_and_policy"
-      ],
-      "result": "KILLED（新增失败 3 个）"
+        "tests/pipeline/eval/test_identity_contract.py::test_max_steps_reaches_builder_spec_and_session"
+      ]
     },
     {
       "id": "S2-D3",
-      "target": "scripts/eval-official/env_client.py::SeatRunner.run_identities_v8",
+      "target": "dev-scripts/gl/seat.py::SeatRunner.run",
       "method": "隔离副本删掉恢复路径里的 recover_crash_window()（attempt_end 已写、accept 未写的崩溃窗口不补 accept）",
       "patch": [
         {
-          "file": "scripts/eval-official/env_client.py",
-          "old": "        self.recover_crash_window()\n",
+          "file": "dev-scripts/gl/seat.py",
+          "old": "            self.recover_crash_window()\n",
           "new": ""
         }
       ],
       "expected_failing": [
         "tests/pipeline/eval/test_attempt_ledger.py::test_crash_window_final_end_without_accept_gets_accept"
-      ],
-      "result": "KILLED（新增失败 2 个）"
+      ]
     },
     {
       "id": "S2-D4",
-      "target": "scripts/eval-official/eval_report.py::build_report",
+      "target": "dev-scripts/gl/eval_report.py::build_report",
       "method": "隔离副本把结果行 dataset 与 --dataset 的比对改成 if False（两个数据集串了不报）",
       "patch": [
         {
-          "file": "scripts/eval-official/eval_report.py",
+          "file": "dev-scripts/gl/eval_report.py",
           "old": "            if dataset is not None and r.get(\"dataset\") != dataset:",
           "new": "            if False:"
         }
       ],
       "expected_failing": [
-        "tests/pipeline/eval/test_eval_report.py::test_dataset_crossed_rows_are_counted",
-        "tests/pipeline/eval/test_dataset_routing.py::test_dataset_routing"
-      ],
-      "result": "KILLED（新增失败 2 个）"
+        "tests/pipeline/eval/test_eval_report.py::test_dataset_crossed_rows_are_counted"
+      ]
     },
     {
       "id": "S2-D5",
-      "target": "scripts/eval-official/env_client.py::SeatRunner.run_identities_v8",
-      "method": "隔离副本把收尾读回账本仍有缺失时的 return EXIT_INCOMPLETE 改成 return 0（只看是否跑完）",
+      "target": "dev-scripts/gl/seat.py::SeatRunner.summarize",
+      "method": "隔离副本把收尾仍有缺失时的 return EXIT_INCOMPLETE 改成 return 0",
       "patch": [
         {
-          "file": "scripts/eval-official/env_client.py",
+          "file": "dev-scripts/gl/seat.py",
           "old": "            return EXIT_INCOMPLETE\n",
           "new": "            return 0\n"
         }
       ],
       "expected_failing": [
-        "tests/pipeline/eval/test_attempt_ledger.py::test_resume_skips_accepted_and_full",
-        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_to_report[perceptual-framesamp-modul-server_disconnect]"
-      ],
-      "result": "KILLED（新增失败 3 个）"
+        "tests/pipeline/eval/test_attempt_ledger.py::test_resume_skips_accepted_and_exhausted",
+        "tests/pipeline/eval/test_seat_runner_e2e.py::test_seat_runner_scenarios[infra_no_retry]",
+        "tests/pipeline/eval/test_seat_queue.py::test_b_expired_claim_reclaimed_counts_attempt_and_exhausts_with_zero_retries"
+      ]
     },
     {
       "id": "S2-D6",
-      "target": "scripts/eval-official/eval_report.py::main_dataset",
-      "method": "隔离副本让 hard-verify 也按 --cap 做越限判定（cap = args.cap）",
+      "target": "dev-scripts/gl/eval_report.py::main_dataset",
+      "method": "隔离副本让 hard-verify 也按 --cap 做越限判定",
       "patch": [
         {
-          "file": "scripts/eval-official/eval_report.py",
+          "file": "dev-scripts/gl/eval_report.py",
           "old": "    cap = None if args.dataset == \"hard-verify\" else args.cap",
           "new": "    cap = args.cap"
         }
       ],
       "expected_failing": [
         "tests/pipeline/eval/test_eval_report.py::test_dataset_hard0_lines_pass_without_spec_and_skip_cap"
+      ]
+    },
+    {
+      "id": "Q-b1",
+      "target": "dev-scripts/gl/seat.py::DynamicQueue.state",
+      "method": "隔离副本把领取过期阈值放大 10 倍（过期领取不再被回收）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "                elif self.now() - float(beat) > self.expire_s:\n",
+          "new": "                elif self.now() - float(beat) > 10 * self.expire_s:\n"
+        }
       ],
-      "result": "KILLED（新增失败 1 个）"
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_queue.py::test_b_expired_claim_reclaimed_counts_attempt_and_exhausts_with_zero_retries"
+      ]
+    },
+    {
+      "id": "Q-b2",
+      "target": "dev-scripts/gl/seat.py::SeatRunner._reclaim_locked",
+      "method": "隔离副本删掉回收时对共享账本 rid 的结算（被回收尝试的 rid 悬空）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "            self._settle_shared(doc.get(\"rid\"), status=\"fail\", infra=True)\n",
+          "new": "            pass\n"
+        }
+      ],
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_queue.py::test_b_expired_claim_reclaimed_counts_attempt_and_exhausts_with_zero_retries"
+      ]
+    },
+    {
+      "id": "Q-c",
+      "target": "dev-scripts/gl/seat.py::DynamicQueue.state",
+      "method": "隔离副本不认同席位名旧进程（只能等过期）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "                mine = doc.get(\"seat\") == self.seat and doc.get(\"pid\") != os.getpid()\n",
+          "new": "                mine = False\n"
+        }
+      ],
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_queue.py::test_c_same_seat_stale_claim_reclaimed_immediately"
+      ]
+    },
+    {
+      "id": "Q-d",
+      "target": "dev-scripts/gl/seat.py::DynamicQueue.create_claim",
+      "method": "隔离副本把领取文件的 O_EXCL 改成 O_TRUNC（同一尝试号可被重复领取）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)\n        except FileExistsError:\n            return None\n",
+          "new": "            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)\n        except FileExistsError:\n            return None\n"
+        }
+      ],
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_queue.py::test_d_concurrent_claims_only_one_wins"
+      ]
+    },
+    {
+      "id": "Q-e",
+      "target": "dev-scripts/gl/seat.py::SeatRunner._hard_exit",
+      "method": "隔离副本删掉看门狗退出前对共享账本 rid 的 commit（rid 悬空）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "                    self._settle_shared(cur.rid, status=\"fail\", infra=True)\n",
+          "new": "                    pass\n"
+        }
+      ],
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_queue.py::test_e_hard_exit_settles_before_exit_75"
+      ]
+    },
+    {
+      "id": "Q-f",
+      "target": "dev-scripts/gl/seat.py::DynamicQueue.heartbeat",
+      "method": "隔离副本让心跳不看 ended（已收尾的领取被写回心跳）",
+      "patch": [
+        {
+          "file": "dev-scripts/gl/seat.py",
+          "old": "        if doc is None or doc.get(\"ended\"):\n            return\n        doc[\"t_heartbeat\"]",
+          "new": "        if doc is None:\n            return\n        doc[\"t_heartbeat\"]"
+        }
+      ],
+      "expected_failing": [
+        "tests/pipeline/eval/test_seat_queue.py::test_f_heartbeat_never_revives_ended_or_voided_claim"
+      ]
     }
   ]
 }

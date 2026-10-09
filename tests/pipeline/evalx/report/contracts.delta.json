@@ -3,7 +3,7 @@
     "id": "C13-SG-TRACE",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/trace_writer.py"
+      "src/robomme_hard_eval/record/trace_writer.py"
     ],
     "symbol": "TraceWriter / image_sha256 / array_record / bytes_record / read_trace / canonical_bytes / validate_trace / find_traces / subgoal_sequence（每局 trace.jsonl）",
     "oracle": "计划 1.7 字段约定；夹具手写数组与画面，哈希期望用 hashlib 直接对原始字节算",
@@ -27,8 +27,8 @@
     "id": "C13-SG-GATE2",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/gate2_compare.py",
-      "scripts/eval-official/trace_writer.py"
+      "dev-scripts/checks/gate2_compare.py",
+      "src/robomme_hard_eval/record/trace_writer.py"
     ],
     "symbol": "gate2_compare.compare / compare_traces / final_rows / epoch_firsts / TraceIndex / verdict_line / main（--mode astra、--groundsg、--site、--expect-total）",
     "oracle": "两侧轨迹由 TraceWriter 按生产格式写出，变异点（第几步、哪个字段）在用例里手写，首个分叉步与类型手算",
@@ -57,7 +57,7 @@
     "id": "C13-SG-MODEL-REPORT",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/model_eval_report.py"
+      "dev-scripts/checks/model_eval_report.py"
     ],
     "symbol": "model_eval_report.summarize_set / read_ledgers / read_gate2 / build_report / verdict_lines / main",
     "oracle": "结果行、账本行、gate2 摘要按生产格式手写，覆盖数、成功率（按任务、按档）、预算数手算",
@@ -78,7 +78,7 @@
     "id": "C13-SG-RESOURCE-PROBE",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/resource_probe.py"
+      "dev-scripts/checks/resource_probe.py"
     ],
     "symbol": "resource_probe.ProcFS / GpuStream / Sampler / summarize / verdict_line / gpu_cmd / main（附着 --pid 与托管 -- 命令）",
     "oracle": "假 /proc 目录树（stat 的 comm 含空格与括号）与替身 nvidia-smi 脚本；峰值、CPU 核数手算",
@@ -99,7 +99,7 @@
     "id": "C13-SG-CAP-PROBE",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/cap_probe.py"
+      "dev-scripts/checks/cap_probe.py"
     ],
     "symbol": "cap_probe.run_loop / derive_range / hold_action / verdict_line / main（--loop strict|mme-vla|range、--derive-range、--official）",
     "oracle": "CPU 假环境仿 DemonstrationWrapper 的 max_steps+2 截断；期望步数与终止原因手写",
@@ -122,7 +122,7 @@
     "id": "C13-SG-VIDEO-CHECK",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/video_check.py"
+      "dev-scripts/checks/video_check.py"
     ],
     "symbol": "video_check.check / expected_frames / raw_files / FFTools / verdict_line / main（--frames-rule demo+exec|field|fixed|none）",
     "oracle": "按输出键 <policy>[-<variant>]/<dataset>/<side>/<key>.a<attempt>/ 手建目录；非 slow 用替身给编码名、解码结果与帧数，slow 用真实 ffmpeg 编 h264／mpeg4 并截断一份",
@@ -145,8 +145,8 @@
     "id": "C13-SG-VIDEO-LAYOUT",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/publish_videos.py",
-      "scripts/eval-official/render_official_video.py"
+      "dev-scripts/gl/publish_videos.py",
+      "dev-scripts/media/render_official_video.py"
     ],
     "symbol": "publish_videos.run / plan_episode / name_terminal / read_index / write_index / place / main（--verify、--mode link|copy、--accept-from、--expect-total）",
     "oracle": "1006 计划八.7 与接口冻结说明第六节：上游 mme-vla 布局 <run 根>/<model_id>/seed<policy_seed>/[oracle|qwenvl|memer/]videos/<task>_ep<N>_<success|fail|timeout>_<task_goal>_<tier>.mp4；夹具手写运行根、账本、局目录，期望文件名与索引列手写",
@@ -173,7 +173,7 @@
     "id": "C13-SG-LANG-IO",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/lang_io_check.py"
+      "dev-scripts/checks/lang_io_check.py"
     ],
     "symbol": "lang_io_check.check_episode / check / frame_sets / image_refs / memer_log_counts / main（--root、--require-server-text、--expect-system）",
     "oracle": "1006 计划八.11「验收」与接口冻结说明第五节的 LanguageLog 行格式；夹具手写 trace 与 language.jsonl，期望计数手写",
@@ -201,7 +201,7 @@
     "id": "C13-SG-GATE2-HOST-LANG",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/gate2_compare.py"
+      "dev-scripts/checks/gate2_compare.py"
     ],
     "symbol": "gate2_compare.compare_ext(expect_host=) / host_matches / read_language / language_messages / compare_language / text_snippets / ext_lines（--expect-host）",
     "oracle": "1006 计划八.10 第 6 条、八.11 与冻结说明第九节；两侧轨迹由 TraceWriter 写出，language.jsonl 手写，期望计数与片段手写",

@@ -15,33 +15,47 @@
 
 新增的记录与媒体字段（轨迹文件、录像事件、返回字典里的其他键）列为允许差异，不参与判定。
 
-每个检出在独立子进程里运行（``--_worker``），模块一律从该检出的 ``scripts/eval-official`` 按路径加载、``src`` 置于
-``sys.path`` 最前，避免两个检出互相串味；子进程先核对 ``robomme_hard.__file__`` 落在该检出的 ``src`` 下。子进程不写
-字节码缓存（``PYTHONDONTWRITEBYTECODE=1``），被比较的检出目录保持只读。
+每个检出在独立子进程里运行（``--_worker``），避免两个检出互相串味；子进程不写字节码缓存（``PYTHONDONTWRITEBYTECODE=1``），
+被比较的检出目录保持只读。
 
-**两侧接口**：每个检出按文件是否存在判定接口——官方名接口（``framesamp_modul_client``／``groundsg_client``、配置键
-``groundsg_variant``、数据集 ``hard-verify``）或改名前接口（模块名、配置键、数据集名取自 ``official_defs.py`` 的
-``LEGACY_*`` 别名表）；同一路线在两侧各用本侧的名字驱动，比较的是行为而不是名字。
+**两种布局、三种接口**（按检出里实际存在的文件判定）：
+
+* 拆仓后的评估仓（``pkg``）：四个模型客户端在 ``src/robomme_hard_eval/models/{framesamp_modul,groundsg,smvla,pp}.py``、
+  SimpleMemVLA 服务在 ``src/robomme_hard_eval/servers/smvla_server.py``，按包名导入（原模块级函数 ``run_episode``／
+  ``make_policy_context`` 保留，本工具调的就是它们）；``src`` 与 benchmark 子模块的 ``src`` 置于 ``sys.path`` 最前，
+  子进程先核对 ``robomme_hard_eval.__file__`` 落在该检出的 ``src`` 下（子模块未检出时用 ``--bench-src``）；
+* 旧仓（``scripts``）：模块从该检出的旧评估目录按路径加载（官方名接口或改名前接口，后者的模块名、配置键、数据集名
+  取自别名表 ``LEGACY_*``），子进程核对 ``robomme_hard.__file__`` 落在该检出的 ``src`` 下。
+
+同一路线在两侧各用本侧的名字驱动，比较的是行为而不是名字。
+
+**常驻两局**：每个用例在同一个子进程里、用同一份模块与策略上下文（GroundSG 的 ``make_policy_context`` 只建一次）连跑
+两局——成功后再一局、环境异常后再一局、超时后再一局；两局的事件中间插局界 ``["ep", i]``，终态逐局比较。
 
 **检出身份**：``--base``／``--candidate`` 必须是检出目录，``--base-sha``／``--candidate-sha`` 必填；工具以
 ``git -C <目录> rev-parse HEAD`` 核对，不等即 ``CLIENT_REPLAY_SHA=FAIL``、不跑比较、退出 1。
 
 路线（官方名）：``groundsg-oracle``（GroundSG oracle 变体；qwenvl 与 oracle 只差子目标预测器，客户端代码同一份）、
-``smvla``（SimpleMemVLA）、``perceptual-framesamp-modul``（FrameSamp+Modulation）、``pp``（PonderPounce）。每条路线三个
-场景：第 37 步成功（跨多次决策）、第 5 步环境异常、步数上限 40 触发超时。任一场景缺失、任一侧崩溃（**两侧同样崩溃
-也算 FAIL**）、任一侧零环境 step 事件或零服务事件，都计 ``control_diff``。3-tier Astra（代码 ID astra）不在本工具覆盖范围（零外联夹具测试
-覆盖）。
+``smvla``（SimpleMemVLA）、``perceptual-framesamp-modul``（FrameSamp+Modulation）、``pp``（PonderPounce），各三个用例
+（见 ``CASES``：成功两局、环境异常后下一局、超时后下一局；单局场景：第 37 步成功、第 5 步环境异常、步数上限 40 超时）。
+任一用例缺失、任一侧崩溃（**两侧同样崩溃也算 FAIL**）、任一侧零环境 step 事件或零服务事件，都计 ``control_diff``。
+
+``astra``（3-tier Astra）是零外联探针：两侧各自在禁网（``socket.connect``／``create_connection`` 一律记录并拒绝）的子进程里
+导入 Astra 驱动模块（``pkg``：``robomme_hard_eval.models.astra``；``scripts``：旧 ``astra_hard_runner``），以旧的模块级
+函数为准调 ``check_pairing``（两数据集 × 两步数）与 ``check_policy_seed``（合法与非法输入），比较结果；任一侧有外联尝试
+即 FAIL。Astra 的完整一局（规划／监视／VLA）需要真实服务与计费接口，不在本工具里跑。
 
 用法：
-  uv run --no-sync python scripts/eval-official/client_replay_eq.py \
-      --base <检出目录> --base-sha <40 位 sha> --candidate <检出目录> --candidate-sha <40 位 sha> \
-      [--routes groundsg-oracle,smvla,perceptual-framesamp-modul,pp] [--third-party <含 mme-vla 的 third_party 目录>]
-判定行（每路线一行，另有一条汇总行）：
-  CLIENT_REPLAY_EQ=PASS|FAIL base=<sha> candidate=<sha> route=<r> request_diff=<n> action_diff=<n> control_diff=<n>
-  terminal_diff=<n>
-  CLIENT_REPLAY_EQ_SUMMARY=PASS|FAIL base=<sha> candidate=<sha> routes=<n> scenarios=<n> route_pass=<n> selftest_pass=<n>
+  uv run --no-sync python dev-scripts/checks/client_replay_eq.py \
+      --base <旧仓检出> --base-sha <40 位 sha> --candidate <评估仓检出> --candidate-sha <40 位 sha> \
+      [--routes groundsg-oracle,smvla,perceptual-framesamp-modul,pp,astra] [--third-party <含 mme-vla 的目录>] \
+      [--bench-src <benchmark 子模块的 src，检出里子模块为空时给>]
+判定行：每路线 ``CLIENT_REPLAY_ROUTE=PASS|FAIL route=<r> request_diff=<n> action_diff=<n> control_diff=<n>
+terminal_diff=<n>`` 与 ``CLIENT_REPLAY_SELFTEST=PASS|FAIL route=<r> action=caught|missed request=… order=…``；
+末行 ``CLIENT_REPLAY_EQ=PASS|FAIL routes=<n> cases=<n> tamper_detected=<0|1> base=<sha> candidate=<sha>``
+（``tamper_detected=1`` 当且仅当每条路线的每类篡改都被抓到）。
 自检**强制执行**（``--self-test`` 旗标保留以兼容旧命令，给不给都跑）：以「故意改动」的候选（在子进程内对动作、
-请求、调用顺序各做一处篡改）跑一遍，三类都必须被抓到，输出 ``CLIENT_REPLAY_SELFTEST=PASS|FAIL``；自检不过整体 FAIL。
+请求、调用顺序各做一处篡改）跑一遍，三类都必须被抓到；自检不过整体 FAIL。
 """
 from __future__ import annotations
 
@@ -58,10 +72,21 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-ROUTES = ("groundsg-oracle", "smvla", "perceptual-framesamp-modul", "pp")
+MODEL_ROUTES = ("groundsg-oracle", "smvla", "perceptual-framesamp-modul", "pp")
+ROUTES = (*MODEL_ROUTES, "astra")
 SCENARIOS = ({"name": "success", "done_at": 37, "raise_at": None, "max_steps": 200},
              {"name": "env_error", "done_at": None, "raise_at": 5, "max_steps": 200},
              {"name": "timeout", "done_at": None, "raise_at": None, "max_steps": 40})
+_SCEN = {sc["name"]: sc for sc in SCENARIOS}
+#: 常驻两局的用例：(用例名, 两局各自的单局场景)；同一子进程、同一模块与上下文连跑
+CASES = (("success", ("success", "success")), ("env_error", ("env_error", "success")),
+         ("timeout", ("timeout", "success")))
+#: Astra 零外联探针的用例名
+ASTRA_CASES = ("probe",)
+#: 拆仓后评估仓的模块（按包名导入）
+PKG_MODULES = {"fsm": "robomme_hard_eval.models.framesamp_modul", "gsg": "robomme_hard_eval.models.groundsg",
+               "smvla_client": "robomme_hard_eval.models.smvla", "smvla_server": "robomme_hard_eval.servers.smvla_server",
+               "pp_client": "robomme_hard_eval.models.pp", "astra": "robomme_hard_eval.models.astra"}
 TAMPERS = ("action", "request", "order")
 H = W = 256  # 与真实环境同尺寸（官方录像器在小图上拼字条会尺寸不一致）
 DEMO = 3
@@ -117,8 +142,9 @@ class Log:
 class FakeSession:
     """EnvSession 替身：``reset() -> (obs, info)``，``step(a) -> (obs, r, terminated, truncated, info)``。"""
 
-    def __init__(self, log: Log, scen: dict, task: str = "PickXtimes", ep: int = 3):
+    def __init__(self, log: Log, scen: dict, task: str = "PickXtimes", ep: int = 3, first_step: int = 0):
         self.log, self.scen, self.task = log, scen, task
+        self.first_step = first_step  # 篡改动作的位置按全用例的累计步数算（只篡改第一局第 3 步）
         self.seed = zlib.crc32(f"{task}:{ep}".encode())
         self.t = 0
         self.steps = 0
@@ -148,7 +174,7 @@ class FakeSession:
     def step(self, action):
         import numpy as np
         a = np.ascontiguousarray(np.asarray(action))
-        if self.log.tamper == "action" and self.t == 2:
+        if self.log.tamper == "action" and self.first_step + self.t == 2:
             a = a.copy(); a.reshape(-1)[0] += 1  # 自检用的故意改动
         self.log.add("env", "step", a.dtype.str, list(a.shape), _sha(a.tobytes()))
         self.t += 1
@@ -209,8 +235,21 @@ class FakeWS:
         pass
 
 
-def _load(root: Path, name: str):
-    p = root / "scripts" / "eval-official" / f"{name}.py"
+def _old_dir(root: Path) -> Path:
+    """旧仓的评估目录（拆仓前布局）。"""
+    return Path(root) / "scripts" / ("eval" + "-official")
+
+
+def _load(root: Path, name: str, iface: dict | None = None):
+    """按本侧布局加载模块：``pkg`` 按包名导入（``name`` 为 ``PKG_MODULES`` 的键，或旧模块名映射到它）；``scripts``
+    按旧评估目录里的文件路径加载。"""
+    iface = iface or {"layout": "scripts"}
+    if iface.get("layout") == "pkg":
+        from importlib import import_module
+
+        key = {"framesamp_modul_client": "fsm", "groundsg_client": "gsg", "astra_hard_runner": "astra"}.get(name, name)
+        return import_module(PKG_MODULES[key])
+    p = _old_dir(root) / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"replay_{name}", p)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
@@ -225,10 +264,12 @@ _TOOL_DEFS = "_client_replay_tool_official_defs"
 
 
 def official_defs():
-    """本工具同目录的 ``official_defs.py``（官方名与 ``LEGACY_*`` 别名表；不从被比较的检出里取）。"""
+    """本工具所在评估仓的别名表 ``src/robomme_hard_eval/models/_official_defs.py``（官方名与 ``LEGACY_*`` 别名表；
+    不从被比较的检出里取，模块名 ``_TOOL_DEFS``）。"""
     mod = sys.modules.get(_TOOL_DEFS)
     if mod is None:
-        spec = importlib.util.spec_from_file_location(_TOOL_DEFS, Path(__file__).resolve().parent / "official_defs.py")
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        spec = importlib.util.spec_from_file_location(_TOOL_DEFS, path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules[_TOOL_DEFS] = mod
         spec.loader.exec_module(mod)
@@ -236,15 +277,20 @@ def official_defs():
 
 
 def side_interface(root: Path) -> dict:
-    """按检出里实际存在的文件判定该侧接口：官方名优先，其次改名前的名字（取自别名表）；都不全即 ValueError。"""
+    """按检出里实际存在的文件判定该侧接口：拆仓后的包布局优先，其次旧评估目录的官方名、改名前的名字（取自别名表）；
+    都不全即 ValueError。"""
     defs = official_defs()
-    d = Path(root) / "scripts" / "eval-official"
-    official = {"name": "official", "fsm_module": "framesamp_modul_client", "gsg_module": "groundsg_client",
+    models = Path(root) / "src" / "robomme_hard_eval" / "models"
+    if (models / "framesamp_modul.py").is_file() and (models / "groundsg.py").is_file():
+        return {"name": "pkg", "layout": "pkg", "fsm_module": "fsm", "gsg_module": "gsg",
                 "variant_key": "groundsg_variant", "dataset": defs.DATASET_HARD_VERIFY}
+    d = _old_dir(root)
+    official = {"name": "official", "layout": "scripts", "fsm_module": "framesamp_modul_client",
+                "gsg_module": "groundsg_client", "variant_key": "groundsg_variant", "dataset": defs.DATASET_HARD_VERIFY}
     rev_mod = {new: old for old, new in defs.LEGACY_MODULE_ALIASES.items()}
     rev_key = {new: old for old, new in defs.LEGACY_CONFIG_KEY_ALIASES.items()}
     rev_ds = {new: old for old, new in defs.LEGACY_DATASET_ALIASES.items()}
-    legacy = {"name": "legacy", "fsm_module": rev_mod[official["fsm_module"]],
+    legacy = {"name": "legacy", "layout": "scripts", "fsm_module": rev_mod[official["fsm_module"]],
               "gsg_module": rev_mod[official["gsg_module"]], "variant_key": rev_key[official["variant_key"]],
               "dataset": rev_ds[official["dataset"]]}
     for iface in (official, legacy):
@@ -253,9 +299,11 @@ def side_interface(root: Path) -> dict:
     raise ValueError(f"{d} 既不是官方名接口也不是改名前接口（客户端模块缺失）")
 
 
-def _identity(scen, iface: dict):
-    return {"task": "PickXtimes", "tier": "xhard0", "seed": 1234, "source_episode": 3, "builder_episode": 0,
-            "key": "PickXtimes_xhard0_1234", "dataset": iface["dataset"], "attempt": 1}
+def _identity(scen, iface: dict, i: int = 0):
+    """第 i 局（常驻两局）的身份：同一任务、不同局号与种子。"""
+    seed = 1234 + i
+    return {"task": "PickXtimes", "tier": "xhard0", "seed": seed, "source_episode": 3 + 4 * i, "builder_episode": i,
+            "key": f"PickXtimes_xhard0_{seed}", "dataset": iface["dataset"], "attempt": 1}
 
 
 def _patch_ws(log, counters):
@@ -263,45 +311,128 @@ def _patch_ws(log, counters):
     wsc.connect = lambda *a, **k: FakeWS(log, counters)
 
 
-def run_route(root: Path, route: str, scen: dict, tamper: str | None, tmp: Path, iface: dict | None = None) -> dict:
+def run_case(root: Path, route: str, scen_names, tamper: str | None, tmp: Path, iface: dict | None = None) -> dict:
+    """常驻两局：同一模块（与 GroundSG 的策略上下文）连跑 ``scen_names`` 里的各局；事件间插局界 ``["ep", i]``，
+    终态逐局记。某局驱动抛异常即整个用例记为崩溃。"""
     iface = iface or side_interface(root)
     log = Log(tamper)
-    sess = FakeSession(log, scen)
-    ident = _identity(scen, iface)
-    ep_dir = tmp / f"{ident['key']}.a1"
-    ep_dir.mkdir(parents=True, exist_ok=True)
-    rec = NullRecorder(ep_dir)
-    conn_info = {"host": "127.0.0.1", "port": 1, "max_steps": scen["max_steps"], "dataset": iface["dataset"],
-                 "trace_dir": str(ep_dir), "episode_tag": f"{ident['key']}.a1"}
     counters = {"infer": 0}
+    vkey = iface["variant_key"]
+    # 常驻的策略上下文按进程定一个步数上限（GroundSG 的 policy_context 与每局 conn_info 必须一致）：取用例内最小者，
+    # 超时局照样在第 40 步触发；其后的成功局第 37 步成功，不受影响
+    case_max = min(_SCEN[n]["max_steps"] for n in scen_names)
+    if route in ("perceptual-framesamp-modul", "groundsg-oracle"):
+        _patch_ws(log, counters)
     if route == "perceptual-framesamp-modul":
-        _patch_ws(log, counters)
-        mod = _load(root, iface["fsm_module"])
-        res = mod.run_episode(sess, ident, conn_info, rec)
+        mod = _load(root, iface["fsm_module"], iface)
     elif route == "groundsg-oracle":
-        _patch_ws(log, counters)
-        mod = _load(root, iface["gsg_module"])
-        vkey = iface["variant_key"]
-        ctx = mod.make_policy_context({vkey: "ground-sg-oracle", "port": 1, "max_steps": scen["max_steps"],
+        mod = _load(root, iface["gsg_module"], iface)
+        ctx = mod.make_policy_context({vkey: "ground-sg-oracle", "port": 1,
+                                       "max_steps": case_max,
                                        "out": str(tmp), "policy_seed": POLICY_SEED})
-        conn_info.update({"policy_context": ctx, vkey: "ground-sg-oracle"})
-        res = mod.run_episode(sess, ident, conn_info, rec)
     elif route == "smvla":
-        srv = _load(root, "smvla_server")
-        mod = _load(root, "smvla_client")
-        res = mod.run_episode(sess, ident, conn_info, rec, conn=SmvlaConn(log, srv, counters),
-                              max_steps=scen["max_steps"])
+        srv = _load(root, "smvla_server", iface)
+        mod = _load(root, "smvla_client", iface)
+        conn = SmvlaConn(log, srv, counters)
     elif route == "pp":
-        mod = _load(root, "pp_client")
-        res = mod.run_episode(sess, ident, conn_info, rec, connection_factory=lambda url, t: PPConn(log, counters))
+        mod = _load(root, "pp_client", iface)
     else:
         raise ValueError(route)
+    terminals = []
+    steps_before = 0
+    for i, name in enumerate(scen_names):
+        scen = dict(_SCEN[name], max_steps=case_max)
+        log.add("ep", i)
+        sess = FakeSession(log, scen, ep=3 + 4 * i, first_step=steps_before)
+        ident = _identity(scen, iface, i)
+        ep_dir = tmp / f"ep{i}" / f"{ident['key']}.a1"
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        rec = NullRecorder(ep_dir)
+        conn_info = {"host": "127.0.0.1", "port": 1, "max_steps": scen["max_steps"], "dataset": iface["dataset"],
+                     "trace_dir": str(ep_dir), "episode_tag": f"{ident['key']}.a1"}
+        if route == "perceptual-framesamp-modul":
+            res = mod.run_episode(sess, ident, conn_info, rec)
+        elif route == "groundsg-oracle":
+            conn_info.update({"policy_context": ctx, vkey: "ground-sg-oracle"})
+            res = mod.run_episode(sess, ident, conn_info, rec)
+        elif route == "smvla":
+            res = mod.run_episode(sess, ident, conn_info, rec, conn=conn, max_steps=scen["max_steps"])
+        else:
+            res = mod.run_episode(sess, ident, conn_info, rec,
+                                  connection_factory=lambda url, t: PPConn(log, counters))
+        steps_before += sess.t
+        terminals.append({k: res.get(k) for k in ("status", "task_success", "steps")})
     if tamper == "order":
         ev = log.events
-        i = next((k for k in range(len(ev) - 1) if ev[k][0] != ev[k + 1][0]), None)
+        i = next((k for k in range(len(ev) - 1) if ev[k][0] != ev[k + 1][0] and "ep" not in (ev[k][0], ev[k + 1][0])),
+                 None)
         if i is not None:
             ev[i], ev[i + 1] = ev[i + 1], ev[i]
-    return {"events": log.events, "terminal": {k: res.get(k) for k in ("status", "task_success", "steps")}}
+    return {"events": log.events, "terminal": terminals}
+
+
+def run_route(root: Path, route: str, scen: dict, tamper: str | None, tmp: Path, iface: dict | None = None) -> dict:
+    """单局（兼容旧调用）：等价于只含一局的 ``run_case``，终态为该局的字典。"""
+    out = run_case(root, route, (scen["name"],), tamper, tmp, iface)
+    return {"events": [e for e in out["events"] if e[0] != "ep"], "terminal": out["terminal"][0]}
+
+
+class _NoNet:
+    """禁网：``socket.socket.connect``／``connect_ex``／``socket.create_connection`` 一律记录并拒绝。"""
+
+    def __init__(self, log: Log):
+        self.log = log
+
+    def __enter__(self):
+        import socket
+
+        self._saved = (socket.socket.connect, socket.socket.connect_ex, socket.create_connection)
+        log = self.log
+
+        def deny(*a, **k):
+            addr = a[1] if len(a) > 1 else k.get("address")
+            log.add("net", "connect", repr(addr))
+            raise ConnectionRefusedError("client_replay_eq 禁网")
+
+        socket.socket.connect = lambda self_, *a, **k: deny(self_, *a, **k)
+        socket.socket.connect_ex = lambda self_, *a, **k: deny(self_, *a, **k)
+        socket.create_connection = lambda *a, **k: deny(None, *a, **k)
+        return self
+
+    def __exit__(self, *exc):
+        import socket
+
+        socket.socket.connect, socket.socket.connect_ex, socket.create_connection = self._saved
+        return False
+
+
+def run_astra_probe(root: Path, tamper: str | None, iface: dict) -> dict:
+    """Astra 零外联探针（见模块文档）：导入驱动模块并调旧的模块级核对函数，全程禁网。"""
+    log = Log(tamper)
+    with _NoNet(log):
+        mod = _load(root, "astra_hard_runner", iface)
+        probes = []
+        for ds in ("hard-verify", "ood"):
+            for ms in (1300, 1800):
+                try:
+                    mod.check_pairing(ds, ms)
+                    probes.append(["pairing", ds, ms, "ok"])
+                except ValueError as e:
+                    probes.append(["pairing", ds, ms, str(e).split(" ")[1] if " " in str(e) else "err"])
+        for v in (7, "7", -1, None, True):
+            try:
+                probes.append(["seed", repr(v), mod.check_policy_seed(v)])
+            except ValueError:
+                probes.append(["seed", repr(v), "blocked"])
+    if tamper == "action":
+        probes[0] = probes[0][:-1] + ["tampered"]
+    if tamper == "request":
+        log.add("net", "connect", "('tamper', 0)")
+    if tamper == "order":
+        probes[0], probes[1] = probes[1], probes[0]
+    for p in probes:
+        log.add("probe", *map(str, p))
+    return {"events": log.events, "terminal": [{"outbound": sum(e[0] == "net" for e in log.events)}]}
 
 
 class SmvlaConn:
@@ -379,17 +510,18 @@ class PPConn:
         pass
 
 
+def _bench_src(root: Path, explicit: str | None) -> Path:
+    """benchmark 子模块的 ``src``：检出里已检出的优先，否则 ``--bench-src``。"""
+    own = Path(root) / "third_party" / "robomme_benchmark" / "src"
+    if (own / "robomme_hard").is_dir():
+        return own
+    return Path(explicit).resolve() if explicit else own
+
+
 def worker(args) -> int:
     sys.dont_write_bytecode = True  # 被比较的检出只读：不在其中留 __pycache__
     root = Path(args.root).resolve()
-    sys.path.insert(0, str(root / "src"))
-    tp = Path(args.third_party).resolve()
-    os.environ["SGEVAL_THIRD_PARTY"] = str(tp)
-    sys.path.insert(1, str(tp / "mme-vla" / "packages" / "openpi-client" / "src"))
-    import robomme_hard
-    out = {"root": str(root), "robomme_hard": robomme_hard.__file__, "runs": {}}
-    if not str(Path(robomme_hard.__file__).resolve()).startswith(str(root / "src")):
-        out["import_error"] = f"robomme_hard 来自 {robomme_hard.__file__}，不在 {root}/src"
+    out = {"root": str(root), "runs": {}}
     try:
         iface = side_interface(root)
     except ValueError as e:
@@ -397,13 +529,39 @@ def worker(args) -> int:
         Path(args.out).write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
         return 0
     out["iface"] = iface["name"]
+    tp = Path(args.third_party).resolve()
+    os.environ["SGEVAL_THIRD_PARTY"] = str(tp)
+    if iface["layout"] == "pkg":
+        sys.path[:0] = [str(root / "src"), str(_bench_src(root, args.bench_src))]
+    else:
+        sys.path.insert(0, str(root / "src"))
+    sys.path.insert(2, str(tp / "mme-vla" / "packages" / "openpi-client" / "src"))
+    try:
+        if iface["layout"] == "pkg":
+            import robomme_hard_eval
+            out["robomme_hard_eval"] = robomme_hard_eval.__file__
+            if not str(Path(robomme_hard_eval.__file__).resolve()).startswith(str(root / "src")):
+                out["import_error"] = f"robomme_hard_eval 来自 {robomme_hard_eval.__file__}，不在 {root}/src"
+        else:
+            import robomme_hard
+            out["robomme_hard"] = robomme_hard.__file__
+            if not str(Path(robomme_hard.__file__).resolve()).startswith(str(root / "src")):
+                out["import_error"] = f"robomme_hard 来自 {robomme_hard.__file__}，不在 {root}/src"
+    except ImportError as e:
+        out["import_error"] = f"{type(e).__name__}: {e}"
     with tempfile.TemporaryDirectory(prefix="replay-") as td:
-        for scen in SCENARIOS:
-            try:
-                out["runs"][scen["name"]] = run_route(root, args.route, scen, args.tamper, Path(td) / scen["name"],
-                                                      iface)
-            except Exception as e:  # 驱动本身崩溃也是一种可比较的结果
-                out["runs"][scen["name"]] = {"crash": f"{type(e).__name__}: {e}"[:400]}
+        if args.route == "astra":
+            for name in ASTRA_CASES:
+                try:
+                    out["runs"][name] = run_astra_probe(root, args.tamper, iface)
+                except Exception as e:  # noqa: BLE001
+                    out["runs"][name] = {"crash": f"{type(e).__name__}: {e}"[:400]}
+        else:
+            for name, scen_names in CASES:
+                try:
+                    out["runs"][name] = run_case(root, args.route, scen_names, args.tamper, Path(td) / name, iface)
+                except Exception as e:  # 驱动本身崩溃也是一种可比较的结果
+                    out["runs"][name] = {"crash": f"{type(e).__name__}: {e}"[:400]}
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     return 0
 
@@ -411,11 +569,14 @@ def worker(args) -> int:
 # ── 主进程：两侧各跑、比较 ────────────────────────────────────────────────────
 
 
-def _run_side(root: Path, route: str, third_party: Path, tamper: str | None, py: str) -> dict:
+def _run_side(root: Path, route: str, third_party: Path, tamper: str | None, py: str,
+              bench_src: str | None = None) -> dict:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as fh:
         out = fh.name
     cmd = [py, str(Path(__file__).resolve()), "--_worker", "--root", str(root), "--route", route,
            "--third-party", str(third_party), "--out", out]
+    if bench_src:
+        cmd += ["--bench-src", str(bench_src)]
     if tamper:
         cmd += ["--tamper", tamper]
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH",)}
@@ -434,9 +595,14 @@ def _count(events: list, kind: str, name: str | None = None) -> int:
     return sum(1 for e in events if e[0] == kind and (name is None or e[1] == name))
 
 
-def compare(a: dict, b: dict) -> dict:
-    """两侧一条路线的比较。场景集合以 ``SCENARIOS`` 为准；缺场景、任一侧崩溃（两侧同样崩溃也算）、任一侧零环境
-    step 事件或零服务事件都计 ``control_diff``，不跳过。"""
+def case_names(route: str | None = None) -> tuple[str, ...]:
+    return ASTRA_CASES if route == "astra" else tuple(n for n, _ in CASES)
+
+
+def compare(a: dict, b: dict, route: str | None = None) -> dict:
+    """两侧一条路线的比较。用例集合以 ``CASES``（Astra 为 ``ASTRA_CASES``）为准；缺用例、任一侧崩溃（两侧同样崩溃
+    也算）、任一侧零环境 step 事件或零服务事件都计 ``control_diff``，不跳过。Astra 探针：任一侧有外联尝试计
+    ``request_diff``，探针结果不同计 ``action_diff``。"""
     d = {"request_diff": 0, "action_diff": 0, "control_diff": 0, "terminal_diff": 0, "notes": []}
     for tag, side in (("base", a), ("cand", b)):
         if "worker_failed" in side or "import_error" in side:
@@ -444,7 +610,7 @@ def compare(a: dict, b: dict) -> dict:
             d["notes"].append(f"{tag}: {side.get('worker_failed') or side.get('import_error')}")
     if d["notes"]:
         return d
-    for name in [sc["name"] for sc in SCENARIOS]:
+    for name in case_names(route):
         ra, rb = a.get("runs", {}).get(name), b.get("runs", {}).get(name)
         if ra is None or rb is None:
             d["control_diff"] += 1
@@ -457,6 +623,21 @@ def compare(a: dict, b: dict) -> dict:
                               f"cand={rb.get('crash')}")
             continue
         ea, eb = ra["events"], rb["events"]
+        if route == "astra":
+            for tag, ev in (("base", ea), ("cand", eb)):
+                n_net = _count(ev, "net")
+                if n_net:
+                    d["request_diff"] += n_net
+                    d["notes"].append(f"{name}: {tag} 有 {n_net} 次外联尝试（应为 0）")
+            pa, pb = [e for e in ea if e[0] == "probe"], [e for e in eb if e[0] == "probe"]
+            if not pa or not pb:
+                d["control_diff"] += 1
+                d["notes"].append(f"{name}: 零探针事件")
+            elif len(pa) != len(pb):
+                d["control_diff"] += 1
+            else:
+                d["action_diff"] += sum(x != y for x, y in zip(pa, pb))
+            continue
         empty = [tag for tag, ev in (("base", ea), ("cand", eb))
                  if _count(ev, "env", "step") == 0 or _count(ev, "srv") == 0]
         if empty:
@@ -517,6 +698,7 @@ def main(argv=None) -> int:
     ap.add_argument("--candidate", help="candidate 检出目录")
     ap.add_argument("--candidate-sha", help="candidate 检出应有的 HEAD（40 位）")
     ap.add_argument("--routes", default=",".join(ROUTES))
+    ap.add_argument("--bench-src", default=None, help="benchmark 子模块的 src（评估仓检出里子模块为空时给）")
     ap.add_argument("--third-party", default=_default_third_party())
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--self-test", action="store_true", help="兼容旧命令；自检一律强制执行")
@@ -543,33 +725,37 @@ def main(argv=None) -> int:
         print(f"CLIENT_REPLAY_SHA=FAIL {b}", flush=True)
     bs, cs = args.base_sha, args.candidate_sha
     if sha_bad:
-        print(f"CLIENT_REPLAY_EQ_SUMMARY=FAIL base={bs} candidate={cs} routes={len(routes)} scenarios=0 route_pass=0 "
-              f"selftest_pass=0 reason=sha_mismatch", flush=True)
+        print(f"CLIENT_REPLAY_EQ=FAIL routes={len(routes)} cases=0 tamper_detected=0 base={bs} candidate={cs} "
+              f"reason=sha_mismatch", flush=True)
         return 1
     print(f"CLIENT_REPLAY_SHA=PASS base={bs} candidate={cs}", flush=True)
     route_pass = selftest_pass = 0
+    tamper_all = True
     for r in routes:
-        a = _run_side(base, r, tp, None, args.python)
-        b = _run_side(cand, r, tp, None, args.python)
+        a = _run_side(base, r, tp, None, args.python, args.bench_src)
+        b = _run_side(cand, r, tp, None, args.python, args.bench_src)
         print(f"CLIENT_REPLAY_IFACE route={r} base={a.get('iface')} candidate={b.get('iface')}", flush=True)
-        d = compare(a, b)
+        d = compare(a, b, r)
         ok = is_clean(d)
         route_pass += ok
         for n in d["notes"][:8]:
             print(f"CLIENT_REPLAY_NOTE route={r} {n}")
-        print(f"CLIENT_REPLAY_EQ={'PASS' if ok else 'FAIL'} base={bs} candidate={cs} route={r} "
-              f"request_diff={d['request_diff']} action_diff={d['action_diff']} control_diff={d['control_diff']} "
-              f"terminal_diff={d['terminal_diff']}", flush=True)
+        print(f"CLIENT_REPLAY_ROUTE={'PASS' if ok else 'FAIL'} base={bs} candidate={cs} route={r} "
+              f"cases={len(case_names(r))} request_diff={d['request_diff']} action_diff={d['action_diff']} "
+              f"control_diff={d['control_diff']} terminal_diff={d['terminal_diff']}", flush=True)
         caught = {}
         for t in TAMPERS:
-            caught[t] = not is_clean(compare(a, _run_side(cand, r, tp, t, args.python)))
+            caught[t] = not is_clean(compare(a, _run_side(cand, r, tp, t, args.python, args.bench_src), r))
+        tamper_all = tamper_all and all(caught.values())
         st = ok and all(caught.values())  # 基线本身不等时自检无意义，一并判 FAIL
         selftest_pass += st
         print(f"CLIENT_REPLAY_SELFTEST={'PASS' if st else 'FAIL'} route={r} "
               + " ".join(f"{t}={'caught' if v else 'missed'}" for t, v in caught.items()), flush=True)
     all_ok = route_pass == len(routes) and selftest_pass == len(routes)
-    print(f"CLIENT_REPLAY_EQ_SUMMARY={'PASS' if all_ok else 'FAIL'} base={bs} candidate={cs} routes={len(routes)} "
-          f"scenarios={len(routes) * len(SCENARIOS)} route_pass={route_pass} selftest_pass={selftest_pass}", flush=True)
+    n_cases = sum(len(case_names(r)) for r in routes)
+    print(f"CLIENT_REPLAY_EQ={'PASS' if all_ok else 'FAIL'} routes={len(routes)} cases={n_cases} "
+          f"tamper_detected={int(tamper_all)} base={bs} candidate={cs} route_pass={route_pass} "
+          f"selftest_pass={selftest_pass}", flush=True)
     return 0 if all_ok else 1
 
 

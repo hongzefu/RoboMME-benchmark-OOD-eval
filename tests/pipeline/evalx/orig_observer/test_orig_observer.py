@@ -30,7 +30,7 @@ import pytest
 from tests._support.loaders import REPO, load_script
 from tests.pipeline.evalx.report import trace_contract as tc
 
-OBS = REPO / "scripts" / "eval-official" / "orig_observer"
+OBS = REPO / "dev-scripts" / "orig" / "orig_observer"
 TASK, SRC, SEED = "PickXtimes", 3, 510300
 KEY = f"{TASK}_xhard0_{SEED}"
 SEEDS = {(TASK, SRC): SEED}
@@ -812,7 +812,7 @@ LEDGER_SHA = "345606ec"  # S8 合入 budget_ledger.py 的提交（仓库里没�
 
 
 def _real_ledger(tmp_path: Path) -> Path:
-    p = REPO / "scripts" / "eval-official" / "budget_ledger.py"
+    p = REPO / "dev-scripts" / "gl" / "budget_ledger.py"
     if p.is_file():
         return p
     out = subprocess.run(["git", "-C", str(REPO), "show", f"{LEDGER_SHA}:scripts/eval-official/budget_ledger.py"],
@@ -886,7 +886,7 @@ def test_budget_prepare_settle_with_real_ledger(tmp_path):
     r = _bash(f"{lib}; orig_budget_prepare {common.replace(str(state), str(tmp_path / 'r3.json'))} "
               f"--resets 2 --route perceptual-framesamp-modul/orig; echo RC=$?",
               {"BUDGET_LEDGER_CMD": "", "BUDGET_LEDGER_ARGS": "", "SGEVAL_BUDGET_LEDGER": str(tmp_path / "l3.jsonl")})
-    if (REPO / "scripts" / "eval-official" / "budget_ledger.py").is_file():
+    if (REPO / "dev-scripts" / "gl" / "budget_ledger.py").is_file():
         assert "BUDGET_PREPARE episodes=3 reserved=3" in r.stdout, r.stdout + r.stderr
     else:
         assert "RUN_BLOCKED reason=budget_ledger_missing" in r.stdout and "RC=5" in r.stdout

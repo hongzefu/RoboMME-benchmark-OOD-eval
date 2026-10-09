@@ -7,7 +7,7 @@
   （``end.no_frame=true``）只核契约，不调重绘器。
 - ``assert_counts_consistent(ep_dir, result_row)``：C8 三分计数与结果行 ``exec_steps`` 对账。
 
-契约正文在 ``scripts/eval-official/trace_writer.py`` 模块文档串；这里的判据只依据那份正文，不读被测路线的常量。
+契约正文在评估包 ``src/robomme_hard_eval/record/trace_writer.py`` 模块文档串；这里的判据只依据那份正文，不读被测路线的常量。
 生产模块一律经 ``tests._support.loaders.load_script`` 按路径加载。
 """
 from __future__ import annotations

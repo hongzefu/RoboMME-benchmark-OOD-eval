@@ -20,7 +20,7 @@
 #   7. 可选 NODE_TMP：OUTDIR／REC_ROOT 默认落在节点本地盘，跑完由调用方搬回。
 # 用法：MANIFEST=<清单.jsonl> SHARD=<i/n> ORIG_STAGE_ROOT=<本轮 stage 根> OUTDIR=<新目录> REC_ROOT=<新目录> \
 #       [VIDEO_DIR=<目录>] [NODE_TMP=<目录>] [SMVLA_ORIG_REPO=<原版工作树>] [ORIG_RESUME=1] [BUDGET_LEDGER_ARGS=...] \
-#       bash scripts/eval-official/orig_observer/run_orig_smvla.sh [额外参数，透传给 eval_success]
+#       bash dev-scripts/orig/orig_observer/run_orig_smvla.sh [额外参数，透传给 eval_success]
 set -euo pipefail
 OBS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCH_REPO="$(cd "$OBS_DIR/../../.." && pwd)"

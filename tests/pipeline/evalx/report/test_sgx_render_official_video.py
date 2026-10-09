@@ -226,8 +226,12 @@ def _write_index(ep, rows, stream="front"):
     (ep / f"frames-{stream}.jsonl").write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))
 
 
+#: 各原始帧来源的逐帧核验口径：拆仓后新侧 AV1 有损不核字节（只核索引覆盖与帧数），旧 FFV1 与原侧 rgb24 逐帧核验
+HASH_MODE = {"new": "skipped-lossy-av1", "legacy": "verified", "orig": "verified"}
+
+
 @pytest.mark.slow
-@pytest.mark.parametrize("raw", ["new", "orig"])
+@pytest.mark.parametrize("raw", ["new", "legacy", "orig"])
 def test_lossless_raw_without_mp4_renders(tmp_path, repo_root, capsys, raw):
     _need_ffmpeg()
     ep = fx.write_episode(tmp_path, "normal", raw=raw)
@@ -236,15 +240,16 @@ def test_lossless_raw_without_mp4_renders(tmp_path, repo_root, capsys, raw):
     mod = _module()
     assert mod.main([str(ep.dir), "--official-root", str(_official_root(repo_root)), "--source", "raw"]) == 0
     out = capsys.readouterr().out
-    kind = f"raw-{raw}"
+    kind = "raw-orig" if raw == "orig" else "raw-new"
     assert f"source_kind={kind}" in out and "OFFICIAL_RENDER_SUMMARY=PASS total=1 ok=1 fail=0" in out
     side = json.loads((ep.dir / "official/render.json").read_text())
     assert side["source_kind"] == kind and side["source_mp4"] is None
-    assert side["frame_hash_check"]["mode"] == "verified"
+    assert side["frame_hash_check"]["mode"] == HASH_MODE[raw]
+    assert side["raw_codec"] == {"new": "av1-yuv444p", "legacy": "ffv1", "orig": None}[raw]
     assert side["frame_hash_check"]["frames"] == {"front": ep.frames_recorded, "wrist": ep.frames_recorded}
     # 流与索引以局目录相对路径登记 sha256
     streams = sorted(side["source_media"]["streams"])
-    assert streams == (["front.mkv", "wrist.mkv"] if raw == "new" else ["frames/front.rgb24", "frames/wrist.rgb24"])
+    assert streams == (["frames/front.rgb24", "frames/wrist.rgb24"] if raw == "orig" else ["front.mkv", "wrist.mkv"])
     assert all(not Path(p).is_absolute() for p in side["source_media"]["index"])
     assert side["frames"] == side["frames_recorded"] == ep.frames_recorded
     assert _probe_frames(ep.dir / side["out_rel"]) == ep.frames_recorded
@@ -253,10 +258,14 @@ def test_lossless_raw_without_mp4_renders(tmp_path, repo_root, capsys, raw):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("defect", ["swap_streams", "wrong_enc", "missing_frame", "duplicate_idx", "lossy"])
-def test_raw_new_defects_fail_without_fallback(tmp_path, repo_root, defect):
+@pytest.mark.parametrize("raw,defect", [("legacy", "swap_streams"), ("legacy", "wrong_enc"), ("legacy", "missing_frame"),
+                                        ("legacy", "duplicate_idx"), ("legacy", "lossy"), ("new", "missing_frame"),
+                                        ("new", "duplicate_idx"), ("new", "codec_mismatch")])
+def test_raw_new_defects_fail_without_fallback(tmp_path, repo_root, raw, defect):
+    """调包流、错 enc、有损降级只有旧 FFV1 无损流能靠逐帧 sha256 抓到；AV1 有损流仍要抓缺帧、重复索引与
+    ``raw_codec`` 与实际编码不符。"""
     _need_ffmpeg()
-    ep = fx.write_episode(tmp_path, "normal").dir
+    ep = fx.write_episode(tmp_path, "normal", raw=raw).dir
     # 放一个合法 mp4 作诱饵：raw 失败也不得退回 mp4
     subprocess.run([shutil.which("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=512x256:rate=30",
                     "-frames:v", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(ep / "episode.mp4")], check=True)
@@ -277,6 +286,11 @@ def test_raw_new_defects_fail_without_fallback(tmp_path, repo_root, defect):
     elif defect == "duplicate_idx":
         _write_index(ep, rows + [rows[-1]])
         match = "重复索引"
+    elif defect == "codec_mismatch":
+        meta = json.loads((ep / "meta.json").read_text())
+        meta.pop("raw_codec")  # 声称旧 FFV1，实际是 AV1 流
+        (ep / "meta.json").write_text(json.dumps(meta))
+        match = "有损降级"
     else:
         meta = json.loads((ep / "meta.json").read_text())
         meta.update(level=1, codec="libx264-crf18")

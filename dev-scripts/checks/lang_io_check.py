@@ -36,7 +36,7 @@
 
 任一计数 > 0 或 ``episodes=0`` 即 FAIL，退出 1。用法::
 
-    python scripts/eval-official/lang_io_check.py <局目录>... | --root <根> [--require-server-text]
+    python dev-scripts/checks/lang_io_check.py <局目录>... | --root <根> [--require-server-text]
         [--expect-system subgoal_model=<sha256> ...] [--out-json <报告>]
 """
 from __future__ import annotations

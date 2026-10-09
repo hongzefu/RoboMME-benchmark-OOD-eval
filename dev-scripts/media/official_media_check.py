@@ -3,7 +3,25 @@
 
 只读：不改、不删任何局目录；只用标准库与 ffmpeg（完整解码数帧）。
 
-两种用法：
+三种用法（第 3 种是拆仓后的新产物树，1008 拆分方案 §四）：
+
+3. 新产物树验收（``--rollouts``，可重复；每个参数是一个 ``<out>/rollouts/<模型>/<数据集>/seed<n>/`` 目录）::
+
+     official_media_check.py --rollouts <运行目录> [--rollouts …] [--manifest <身份清单>] [--policy-seed <s>]
+
+   - 权威结果是每局 ``raw/<Task>_ep<N>_<tier>/result.json``（``run_episode`` 原子写入；GL 席位另在队列 ``accepted/``
+     落标记，以 result.json 为准）；``ep<N>``：ood 为 builder 局号，hard-verify 为官方原号（``source_episode``）；
+   - 逐局核：目录名与 result／trace 身份（task、tier、局号、seed、dataset）一致；result 的 dataset、policy_seed 与目录
+     层级（``<数据集>``、``seed<n>``）一致；``videos/`` 里恰 1 个属于本局的视频（``<Task>_ep<N>_<终态>_…_<tier>.mp4``，
+     且等于 result 的 ``video``），文件名里的终态等于 result 的 ``status``；完整解码帧数等于 trace 末行
+     ``frames_recorded``（trace 没写时取渲染清单的帧数，记 ``frames_source=sidecar``）；局目录 ``render.json`` 的 identity 等于 trace identity、记录的视频 sha256 与帧数等于实际；
+   - 无帧局（trace ``end.no_frame`` 或 ``frames_recorded == 0``）没有视频，计 ``no_frame_error``，不计 ``fail``；
+   - ``videos/`` 里不属于任何局的视频、给了 ``--manifest`` 时清单外的局目录计 ``extra``；清单里没有局目录或缺
+     ``result.json`` 的计 ``missing``；
+   - 判定行同上两行（``OFFICIAL_MEDIA_INPUTS``／``OFFICIAL_MEDIA``），逐局记录缺省写在第一个 ``--rollouts`` 下
+     ``official-media.jsonl``。
+
+两种旧用法：
 
 1. 全量验收（主会话在每批收尾跑）::
 
@@ -97,15 +115,21 @@ def sha256_file(path: Path) -> str:
 
 
 def official_defs():
-    """同目录 ``official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
+    """评估包里的别名表 ``robomme_hard_eval.models._official_defs``（旧名别名表的唯一来源；模块名 ``official_defs``，
+    已加载则复用同一模块）。"""
     import importlib.util
 
     mod = sys.modules.get("official_defs")
-    if mod is None:
-        spec = importlib.util.spec_from_file_location("official_defs", Path(__file__).resolve().parent / "official_defs.py")
+    if mod is None or not hasattr(mod, "canonical_row"):
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod
-        spec.loader.exec_module(mod)
+        try:
+            spec.loader.exec_module(mod)
+        except BaseException:
+            sys.modules.pop("official_defs", None)
+            raise
     return mod
 
 
@@ -400,9 +424,185 @@ def check_all(manifests: list[Path], ledgers: list[Path], roots: list[Path], dat
     return counts, media, out
 
 
+# ── 新产物树（--rollouts） ──────────────────────────────────────────────────
+
+RAW_RE = re.compile(r"^(?P<task>[A-Za-z]+)_ep(?P<ep>\d+)_(?P<tier>xhard\d+)$")
+TERMINALS = ("success", "fail", "timeout")
+
+
+def _ep_label(row: dict, dataset: str):
+    return row.get("source_episode") if dataset == "hard-verify" else row.get("builder_episode", row.get("episode"))
+
+
+def _video_belongs(name: str, task: str, ep, tier: str) -> bool:
+    """``<Task>_ep<N>_…_<tier>.mp4``；超长名被 safe_filename 截断时只核前缀。"""
+    prefix = f"{task}_ep{ep}_"
+    if not name.startswith(prefix) or not name.endswith(".mp4"):
+        return False
+    return name.endswith(f"_{tier}.mp4") or re.search(r"__[0-9a-f]{16}\.mp4$", name) is not None
+
+
+def verify_new_episode(raw: Path, run_dir: Path, ff: str, *, dataset: str, seed: int | None,
+                       expected_policy_seed: int | None = None) -> dict:
+    """新产物树的单局核验（见模块文档第 3 种用法）。"""
+    res: dict = {"dir": raw.name, "path": str(raw), "reasons": []}
+    reasons: list[str] = res["reasons"]
+    m = RAW_RE.match(raw.name)
+    if not m:
+        reasons.append(f"identity:dir_name={raw.name}")
+        res["status"] = "fail"
+        return res
+    result = None
+    try:
+        result = json.loads((raw / "result.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        reasons.append("result_missing")
+        res["status"] = "skip"
+        return res
+    res.update(key=result.get("key"), status_result=result.get("status"), video_rel=result.get("video"))
+    if result.get("task") != m["task"] or result.get("tier") != m["tier"]:
+        reasons.append(f"identity:dir={raw.name} result={result.get('task')}/{result.get('tier')}")
+    if str(_ep_label(result, dataset)) != m["ep"]:
+        reasons.append(f"identity:ep dir={m['ep']} result={_ep_label(result, dataset)}")
+    if result.get("dataset") != dataset:
+        reasons.append(f"identity:dataset dir={dataset} result={result.get('dataset')}")
+    if seed is not None and result.get("policy_seed") != seed:
+        reasons.append(f"policy_seed:dir=seed{seed} result={result.get('policy_seed')}")
+    if expected_policy_seed is not None and result.get("policy_seed") != expected_policy_seed:
+        reasons.append(f"policy_seed:expect={expected_policy_seed} result={result.get('policy_seed')}")
+    status = result.get("status")
+    if status not in TERMINALS:
+        reasons.append(f"result_status={status}")
+    try:
+        rows = read_rows(raw / "trace.jsonl")
+    except (OSError, ValueError):
+        rows = []
+    if not rows or rows[0].get("kind") != "header" or rows[-1].get("kind") != "end":
+        reasons.append("trace_incomplete")
+        res["status"] = "fail"
+        return res
+    header, end = rows[0], rows[-1]
+    ident = header.get("identity") if isinstance(header.get("identity"), dict) else {}
+    for k in ("task", "tier", "seed", "dataset", "key"):
+        if k in ident and ident[k] != result.get(k):
+            reasons.append(f"identity:{k} trace={ident[k]} result={result.get(k)}")
+    trace_seed = header.get("policy_seed", ident.get("policy_seed"))
+    if trace_seed is not None and trace_seed != result.get("policy_seed"):
+        reasons.append(f"policy_seed:trace={trace_seed} result={result.get('policy_seed')}")
+    vdir = run_dir / "videos"
+    mine = sorted(p for p in vdir.glob("*.mp4") if not p.name.startswith(".")
+                  and _video_belongs(p.name, m["task"], m["ep"], m["tier"])) if vdir.is_dir() else []
+    res["videos"] = [p.name for p in mine]
+    no_frame = end.get("no_frame") is True or end.get("frames_recorded") == 0
+    if no_frame:
+        if mine:
+            reasons.append(f"no_frame_but_video:{len(mine)}")
+        res["status"] = "fail" if reasons else "no_frame_error"
+        return res
+    if len(mine) != 1:
+        reasons.append(f"official_count={len(mine)}")
+        res["status"] = "fail"
+        return res
+    video = mine[0]
+    if result.get("video") and Path(result["video"]).name != video.name:
+        reasons.append(f"result_video={result.get('video')} actual={video.name}")
+    if not video.name.startswith(f"{m['task']}_ep{m['ep']}_{status}_"):
+        reasons.append(f"terminal_name:video={video.name} status={status}")
+    side_path = raw / "render.json"
+    side = None
+    if side_path.is_file():
+        try:
+            side = json.loads(side_path.read_text(encoding="utf-8"))
+        except ValueError:
+            reasons.append("provenance_unreadable:render.json")
+    else:
+        reasons.append("provenance_missing")
+    expected = end.get("frames_recorded")
+    res["frames_source"] = "trace"
+    if not isinstance(expected, int) or isinstance(expected, bool):
+        # trace 末行没写 frames_recorded（如 dummy 模型）：以渲染清单记录的帧数为期望，并注明来源
+        expected = sidecar_frames(side) if isinstance(side, dict) else None
+        res["frames_source"] = "sidecar"
+    n = decoded_frames(ff, video)
+    actual_sha = sha256_file(video)
+    res.update(video=video.name, frames_expected=expected, frames_decoded=n, video_sha256=actual_sha)
+    if n < 0:
+        reasons.append("undecodable")
+    elif not isinstance(expected, int) or isinstance(expected, bool):
+        reasons.append("frames_expected_missing")
+    elif n != expected:
+        reasons.append(f"frames_mismatch decoded={n} expect={expected}")
+    if isinstance(side, dict):
+        if side.get("identity") != ident:
+            reasons.append("provenance_identity_mismatch")
+        if sidecar_video_sha(side) != actual_sha:
+            reasons.append("provenance_video_sha_mismatch")
+        sf = sidecar_frames(side)
+        if sf is not None and n >= 0 and sf != n:
+            reasons.append(f"provenance_frames={sf} decoded={n}")
+    res["status"] = "fail" if reasons else "pass"
+    return res
+
+
+def check_tree(run_dirs: list[Path], ff: str, manifests: list[Path] | None = None,
+               policy_seed: int | None = None) -> tuple[dict, dict, list[dict]]:
+    counts = dict(missing=0, extra=0, ambiguous=0, identity_mismatch=0, attempt_mismatch=0, provenance_missing=0)
+    media = dict(total=0, skip=0, fail=0, no_frame_error=0, passed=0)
+    out: list[dict] = []
+    want: dict[str, set[str]] = {}
+    for mf in manifests or []:
+        for r in read_rows(mf):
+            ds = r.get("dataset")
+            want.setdefault(ds, set()).add(f"{r['task']}_ep{_ep_label(r, ds)}_{r['tier']}")
+    for run_dir in run_dirs:
+        run_dir = Path(run_dir)
+        dataset = run_dir.parent.name
+        m = re.match(r"^seed(\d+)$", run_dir.name)
+        seed = int(m.group(1)) if m else None
+        raws = sorted(p for p in (run_dir / "raw").iterdir() if p.is_dir() and not p.name.startswith(".")) \
+            if (run_dir / "raw").is_dir() else []
+        seen = set()
+        claimed_videos: set[str] = set()
+        for raw in raws:
+            seen.add(raw.name)
+            media["total"] += 1
+            if manifests and raw.name not in want.get(dataset, set()):
+                counts["extra"] += 1
+                out.append({"dir": raw.name, "run": str(run_dir), "status": "extra", "reasons": ["not_in_manifest"]})
+                media["total"] -= 1
+                continue
+            res = verify_new_episode(raw, run_dir, ff, dataset=dataset, seed=seed, expected_policy_seed=policy_seed)
+            res["run"] = str(run_dir)
+            claimed_videos.update(res.get("videos") or [])
+            rs = res["reasons"]
+            if any(r.startswith("identity:") for r in rs):
+                counts["identity_mismatch"] += 1
+            if "provenance_missing" in rs:
+                counts["provenance_missing"] += 1
+            if "result_missing" in rs:
+                counts["missing"] += 1
+            st = res["status"]
+            media[{"skip": "skip", "fail": "fail", "no_frame_error": "no_frame_error"}.get(st, "passed")] += 1
+            out.append(res)
+        for name in sorted(want.get(dataset, set()) - seen) if manifests else []:
+            counts["missing"] += 1
+            media["total"] += 1
+            media["skip"] += 1
+            out.append({"dir": name, "run": str(run_dir), "status": "skip", "reasons": ["dir_missing"]})
+        vdir = run_dir / "videos"
+        for v in sorted(vdir.glob("*.mp4")) if vdir.is_dir() else []:
+            if not v.name.startswith(".") and v.name not in claimed_videos:
+                counts["extra"] += 1
+                out.append({"dir": None, "video": v.name, "run": str(run_dir), "status": "extra",
+                            "reasons": ["orphan_video"]})
+    return counts, media, out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--verify-dir", type=Path)
+    ap.add_argument("--rollouts", type=Path, action="append", default=[],
+                    help="新产物树的运行目录 <out>/rollouts/<模型>/<数据集>/seed<n>/（可重复）")
     ap.add_argument("--manifest", type=Path, action="append", default=[])
     ap.add_argument("--ledger", type=Path, action="append", default=[])
     ap.add_argument("--root", type=Path, action="append", default=[])
@@ -427,16 +627,29 @@ def main(argv=None) -> int:
               f"expect={res.get('frames_expected')} frames_source={res.get('frames_source')} "
               f"sidecar={res.get('sidecar')} reasons={json.dumps(res['reasons'], ensure_ascii=False)}", flush=True)
         return 0 if tag in ("PASS", "NO_FRAME") else 1
+    if args.rollouts:
+        counts, media, rows = check_tree(args.rollouts, ff, args.manifest, policy_seed=args.policy_seed)
+        out = args.out or (args.rollouts[0] / "official-media.jsonl")
+        _write_rows(out, rows)
+        return _verdict(counts, media, args.policy_seed, out)
     if not args.manifest or not args.ledger or not args.root or not args.dataset:
         ap.error("全量验收须给 --manifest、--ledger、--root、--dataset（各可重复）")
     counts, media, rows = check_all(args.manifest, args.ledger, args.root, args.dataset, args.route, ff,
                                     policy_seed=args.policy_seed)
     out = args.out or (args.root[0] / "official-media.jsonl")
+    _write_rows(out, rows)
+    return _verdict(counts, media, args.policy_seed, out)
+
+
+def _write_rows(out: Path, rows: list[dict]) -> None:
     tmp = out.with_name(out.name + ".tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
         for r in rows:
             fh.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
     os.replace(tmp, out)
+
+
+def _verdict(counts: dict, media: dict, policy_seed, out: Path) -> int:
     inputs_ok = all(v == 0 for v in counts.values())
     media_ok = inputs_ok and media["skip"] == 0 and media["fail"] == 0
     print(f"OFFICIAL_MEDIA_INPUTS={'PASS' if inputs_ok else 'FAIL'} " + " ".join(f"{k}={v}" for k, v in counts.items()),
@@ -444,7 +657,7 @@ def main(argv=None) -> int:
     print(f"OFFICIAL_MEDIA={'PASS' if media_ok else 'FAIL'} total={media['total']} skip={media['skip']} "
           f"fail={media['fail']} no_frame_error={media['no_frame_error']} videos={media['passed']} "
           f"accepted={media['passed'] + media['no_frame_error']}"
-          + (f" policy_seed={args.policy_seed}" if args.policy_seed is not None else "") + f" report={out}", flush=True)
+          + (f" policy_seed={policy_seed}" if policy_seed is not None else "") + f" report={out}", flush=True)
     return 0 if media_ok else 1
 
 

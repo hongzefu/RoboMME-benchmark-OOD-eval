@@ -21,10 +21,10 @@
 
 用法::
 
-    python scripts/eval-official/cap_probe.py --dataset hard-verify --max-steps 1300 --task VideoUnmask --episode 0 \
+    python dev-scripts/checks/cap_probe.py --dataset hard-verify --max-steps 1300 --task VideoUnmask --episode 0 \
         --loop mme-vla --derive-range
-    python scripts/eval-official/cap_probe.py --dataset ood --max-steps 1600 --task VideoUnmask --episode <局> --loop strict
-    python scripts/eval-official/cap_probe.py --official --max-steps 1300 --task VideoUnmask --episode 3 --loop mme-vla
+    python dev-scripts/checks/cap_probe.py --dataset ood --max-steps 1600 --task VideoUnmask --episode <局> --loop strict
+    python dev-scripts/checks/cap_probe.py --official --max-steps 1300 --task VideoUnmask --episode 3 --loop mme-vla
 
 ``--official`` 用官方 ``robomme`` builder 与 ``dataset="test"``（``--episode`` 为官方局号）；否则用
 ``robomme_hard`` builder（``--episode`` 为 builder 局号）。

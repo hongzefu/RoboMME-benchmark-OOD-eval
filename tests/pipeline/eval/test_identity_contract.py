@@ -1,23 +1,25 @@
 """C13 身份契约：评估步数上限的取法、执行身份行的结构核对（两个数据集）、三处 key 函数一致。
 
-- 步数上限不再按档查表，一律取 ``--max-steps``（1003 评估计划 1.2）：经真实 ``SeatRunner.run_one`` 核对 builder 构造参数、
-  conn_info、策略关键字与 ``EnvSession.step_cap`` 拿到的都是入口给的值；``make_env_for_episode`` 不再逐局传步数。
-  期望值按启动约定手写：ood 为 1600 且带 --strict-cap，hard-verify 为 1300、不带 --strict-cap（step_cap 为空）。
-- 身份模式由 ``--dataset`` 决定：ood 逐键严格核 tier／seed／candidate／spec_sha256；hard-verify 要求 xhard0、
+- 拆仓后步数上限只由数据集决定（已定口径第 3 条）：经真实 ``SeatRunner``（常驻假模型）核对 builder 构造参数、
+  ``EpisodeSpec.max_steps``／``strict_cap``、``EnvSession.step_cap`` 与 ``result.json``；``make_env_for_episode`` 不逐局传步数。
+  期望值手写：ood 为 1800 且严格截断，hard-verify 为 1300、不截断（step_cap 为空）。
+- 身份核对（``episode.check_identity``）按数据集：ood 逐键严格核 tier／seed／candidate／spec_sha256；hard-verify 要求 xhard0、
   candidate 与 spec_sha256 为 null、source_episode 为整数且与 builder 解析结果相等；不符即运行阻塞（退出码 3）。
-- 三处 key 函数（``env_client.v8_key／key_of``、``eval_manifest.v8_key``、``eval_report.key_of``）对同一身份给出同一个键，
+- 三处 key 函数（``seat.v8_key／key_of``、``eval_manifest.v8_key``、``eval_report.key_of``）对同一身份给出同一个键，
   且键按契约手写为 ``<task>_<tier>_<seed>``；同 seed 不同档不碰撞。
 """
 from __future__ import annotations
 
-import inspect
+import json
+from pathlib import Path
 
 import pytest
 
 import eval_fakes as F
 
-#: (数据集, 手写步数上限, 是否 strict-cap)
-CASES = [("ood", 1600, True), ("hard-verify", 1300, False)]
+#: (数据集, 手写步数上限, 是否严格截断)
+CASES = [("ood", 1800, True), ("hard-verify", 1300, False)]
+LABEL = "perceptual-framesamp-modul"
 
 
 def _ident_for(dataset: str) -> dict:
@@ -28,53 +30,47 @@ def _ident_for(dataset: str) -> dict:
 
 
 @pytest.mark.parametrize("dataset,cap,strict", CASES, ids=[c[0] for c in CASES])
-@pytest.mark.parametrize("policy", ("perceptual-framesamp-modul", "smvla"))
-def test_max_steps_reaches_builder_conn_and_policy(tmp_path, monkeypatch, dataset, cap, strict, policy):
+def test_max_steps_reaches_builder_spec_and_session(tmp_path, dataset, cap, strict):
     ident = _ident_for(dataset)
-    seen = {}
-    sm = F.smvla_client()
-    real = sm.run_episode
-
-    def spy_smvla(session, identity, conn_info, recorder=None, **kw):
-        seen.update(kw=kw, conn=dict(conn_info), step_cap=session.step_cap)
-        return real(session, identity, conn_info, recorder, conn=F.FakeSmvlaConn(F.FakePolicyServer()), **kw)
-
     world = F.World()
-    if policy == "perceptual-framesamp-modul":
-        mod = F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer())
-        orig = mod.run_episode
+    pol = F.fake_seat_policy()
+    seen = {}
+    real_play = pol.play
 
-        def spy_framesamp_modul(session, identity, conn_info, recorder):
-            seen.update(kw={}, conn=dict(conn_info), step_cap=session.step_cap)
-            return orig(session, identity, conn_info, recorder)
+    def spy(session, spec, recorder):
+        seen.update(step_cap=session.step_cap, spec=spec)
+        return real_play(session, spec, recorder)
 
-        pol = type("P", (), {"run_episode": staticmethod(spy_framesamp_modul)})
-    else:
-        spy_smvla.__signature__ = inspect.signature(real)
-        pol = type("P", (), {"run_episode": staticmethod(spy_smvla)})
-    runner = F.make_runner(tmp_path, policy, pol, world, dataset=dataset, max_steps=cap, strict_cap=strict)
-    rec = runner.run_one(ident, attempt=1)
-    assert rec["status"] == "success"
+    pol.play = spy
+    stage = tmp_path / "stage"
+    assert F.run_rows(F.make_runner(stage, LABEL, pol, world), [ident]) == 0
     (b,) = world.builders
-    assert (b.dataset, b.max_steps) == (dataset, cap)  # builder 按 (task, dataset) 建，构造参数即 --max-steps
-    assert world.make_calls[0][2] is None  # make_env_for_episode 不再逐局传步数
+    assert (b.dataset, b.max_steps) == (dataset, cap)  # builder 按 (task, dataset) 建，构造参数即数据集步数
+    assert world.make_calls[0][2] is None  # make_env_for_episode 不逐局传步数
     assert seen["step_cap"] == (cap if strict else None)
-    assert seen["conn"]["max_steps"] == cap and seen["conn"]["dataset"] == dataset
-    assert seen["conn"]["strict_cap"] is strict
-    if policy == "smvla":  # smvla 签名带 max_steps／reset_retries：显式传入上限、reset 不重试
-        assert seen["kw"] == {"max_steps": cap, "reset_retries": 0}
-    else:  # perceptual-framesamp-modul 只读 conn_info
-        assert seen["kw"] == {}
-    assert rec["max_steps"] == rec["effective_max_steps"] == cap
-    assert rec["dataset"] == dataset and rec["strict_cap"] is strict and rec["policy_variant"] is None
+    assert seen["spec"].max_steps == cap and seen["spec"].strict_cap is strict and seen["spec"].dataset == dataset
+    acc = json.loads((F.queue_dir(stage, LABEL) / "accepted" / f"{dataset}__{ident['key']}.json").read_text())
+    rec = json.loads(Path(acc["result"]).read_text())
+    assert rec["status"] == "success" and rec["max_steps"] == cap
+    assert rec["dataset"] == dataset and rec["strict_cap"] is strict
+
+
+def _blocked(tmp_path, bad: dict):
+    world = F.World()
+    stage = tmp_path / "stage"
+    rc = F.run_rows(F.make_runner(stage, LABEL, F.fake_seat_policy(), world), [bad])
+    assert rc == 3
+    (row,) = F.seat_results(stage, LABEL)
+    assert row["run_blocked"] is True and row["status"] == "error" and row["error"].startswith("IDENTITY_MISMATCH")
+    assert row["void"] is True and not list((F.queue_dir(stage, LABEL) / "claims").glob("*.json"))
+    assert world.make_calls == [] and world.envs == []
 
 
 @pytest.mark.parametrize("field", ["seed", "spec_sha256", "tier", "candidate"])
-def test_identity_mismatch_blocks_run(tmp_path, monkeypatch, field):
-    """ood：身份行任一项与 builder 真实解析不符 → RUN_BLOCKED，写 run_blocked 行，不建环境。"""
+def test_identity_mismatch_blocks_run(tmp_path, field):
+    """ood：身份行任一项与 builder 真实解析不符 → RUN_BLOCKED（退出 3），不建环境、领取作废。"""
     task, tier = F.v9_cells_sorted()[0]
-    ident = F.packaged_identity(task, tier, 0)
-    bad = dict(ident)
+    bad = dict(F.packaged_identity(task, tier, 0))
     if field == "spec_sha256":
         bad[field] = "f" * 64
     elif field == "tier":
@@ -82,21 +78,13 @@ def test_identity_mismatch_blocks_run(tmp_path, monkeypatch, field):
     else:
         bad[field] = bad[field] + 1
     bad["key"] = f"{bad['task']}_{bad['tier']}_{bad['seed']}"
-    world = F.World()
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world)
-    with pytest.raises(SystemExit) as ei:
-        runner.run_one(bad, attempt=1)
-    assert ei.value.code == 3
-    (row,) = F.read_jsonl(tmp_path / "s00" / "perceptual-framesamp-modul" / "results.jsonl")
-    assert row["run_blocked"] is True and row["status"] == "error" and row["error"].startswith("IDENTITY_MISMATCH")
-    assert world.make_calls == [] and world.envs == []
+    _blocked(tmp_path, bad)
 
 
 @pytest.mark.parametrize("field", ["seed", "source_episode", "candidate", "spec_sha256"])
-def test_hard_verify_identity_mismatch_blocks_run(tmp_path, monkeypatch, field):
+def test_hard_verify_identity_mismatch_blocks_run(tmp_path, field):
     """hard-verify：seed／source_episode 与 builder 不符，或 candidate／spec_sha256 非 null → RUN_BLOCKED、不建环境。"""
-    ident = F.hard0_identity("PickXtimes", 1)
-    bad = dict(ident)
+    bad = dict(F.hard0_identity("PickXtimes", 1))
     if field in ("seed", "source_episode"):
         bad[field] = bad[field] + 4
     elif field == "candidate":
@@ -104,15 +92,7 @@ def test_hard_verify_identity_mismatch_blocks_run(tmp_path, monkeypatch, field):
     else:
         bad[field] = "a" * 64
     bad["key"] = f"{bad['task']}_{bad['tier']}_{bad['seed']}"
-    world = F.World()
-    runner = F.make_runner(tmp_path, "perceptual-framesamp-modul", F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
-                           dataset="hard-verify")
-    with pytest.raises(SystemExit) as ei:
-        runner.run_one(bad, attempt=1)
-    assert ei.value.code == 3
-    (row,) = F.read_jsonl(tmp_path / "s00" / "perceptual-framesamp-modul" / "results.jsonl")
-    assert row["run_blocked"] is True and row["error"].startswith("IDENTITY_MISMATCH")
-    assert world.make_calls == [] and world.envs == []
+    _blocked(tmp_path, bad)
 
 
 def test_validate_identity_row_structure():
@@ -155,7 +135,7 @@ def test_validate_hard0_identity_row_structure():
 
 def test_check_identity_requires_exact_int_candidate():
     """candidate 两侧须同为 null 或同一整数；True 与 1 不算相等。"""
-    ec = F.env_client()
+    ec = F.episode_mod()
     task, tier = F.v9_cells_sorted()[0]
     want = F.packaged_identity(task, tier, 0)
     resolved = {"tier": tier, "seed": want["seed"], "candidate": want["candidate"], "spec_sha256": want["spec_sha256"]}
@@ -168,7 +148,7 @@ def test_check_identity_requires_exact_int_candidate():
 
 
 def test_check_identity_hard0_mode():
-    ec = F.env_client()
+    ec = F.episode_mod()
     want = F.hard0_identity("PickXtimes", 2)
     resolved = F.real_builder("PickXtimes", dataset="hard-verify").resolve_identity(want["builder_episode"])
     assert ec.check_identity(resolved, want, dataset="hard-verify") is None
@@ -207,7 +187,7 @@ def test_manifest_join_writes_contract_key_without_step_cap():
                                                           "candidate": ident["candidate"],
                                                           "spec_sha256": ident["spec_sha256"]}]}
     (row,) = em.join_delivery(src, delivery, hs)
-    assert row == ident
+    assert row == {k: v for k, v in ident.items() if k != "dataset"}
     assert "effective_max_steps" not in row
     assert tuple(em.SHARD_ROW_KEYS) == tuple(ec.V8_IDENTITY_KEYS)
     assert ec.validate_v8_identity(row, "ood") is None
