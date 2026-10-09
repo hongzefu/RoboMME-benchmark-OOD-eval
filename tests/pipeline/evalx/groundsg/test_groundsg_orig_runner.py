@@ -45,8 +45,10 @@ def test_official_hard_source_imports_only_official_robomme():
     kv = dict(x.split("=", 1) for x in line.split())
     assert kv["OFFICIAL_IMPORTS"] == "PASS" and kv["robomme_hard_imported"] == "0"
     assert kv["official_modules_imported"] == "0" and kv["variants"] == "3"
-    assert Path(kv["robomme"]).resolve() == (REPO / "src" / "robomme" / "__init__.py").resolve()
-    assert kv["sys_path_added"].split(",") == [str(F.official_dir().resolve()), str(REPO / "src")]
+    # 拆仓后 robomme 只在 benchmark 子模块里（评估仓没有 src/robomme 副本）；原侧驱动只往 sys.path 加官方目录与子模块 src
+    bench_src = REPO / "third_party" / "robomme_benchmark" / "src"
+    assert Path(kv["robomme"]).resolve() == (bench_src / "robomme" / "__init__.py").resolve()
+    assert kv["sys_path_added"].split(",") == [str(F.official_dir().resolve()), str(bench_src)]
     defs = [x for x in p.stdout.splitlines() if x.startswith("OFFICIAL_DEFS ")]
     want = F.official_sha256()
     assert len(defs) == 3 and all(f"eval.py={want['eval.py']}" in d for d in defs)

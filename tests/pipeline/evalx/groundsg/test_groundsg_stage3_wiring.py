@@ -532,7 +532,7 @@ for a in "${RUN_ARGV[@]}"; do printf 'RUN %s\n' "$a"; done
     p = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60,
                        env=dict(os.environ, EO=str(EO)))
     run = [x[4:] for x in p.stdout.splitlines() if x.startswith("RUN ")]
-    assert run[:2] == ["/py/client", "scripts/eval-official/official_hard_runner.py"], p.stdout + p.stderr
+    assert run[:2] == ["/py/client", "dev-scripts/orig/official_hard_runner.py"], p.stdout + p.stderr  # 拆仓后新位置
 
     def opt(name):
         return run[run.index(name) + 1] if name in run else None

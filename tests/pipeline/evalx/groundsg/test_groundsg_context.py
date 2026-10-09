@@ -125,7 +125,7 @@ def test_variants_are_mutually_exclusive(tmp_path, clean_env):
 
 def test_run_episode_rejects_mismatched_context(tmp_path, clean_env):
     side = F.NewSide(F.ORACLE, 60, tmp_path, F.World())
-    ec = F.env_client()
+    ec = F.env_session()
     for conn in ({"policy_context": {}, "groundsg_variant": F.ORACLE, "max_steps": 60},
                  {"policy_context": side.ctx, "groundsg_variant": F.QWENVL, "max_steps": 60},
                  {"policy_context": side.ctx, "groundsg_variant": F.ORACLE, "max_steps": 1300}):
@@ -150,54 +150,95 @@ class _HybridBuilder:
 
 
 def test_policy_context_built_once_per_seat(tmp_path, clean_env):
-    """SeatRunner 两局：make_policy_context 只调一次（Qwen 引擎只构造一次），每局同一上下文，close 调一次。"""
+    """拆仓后：GL 席位（``SeatRunner``，常驻 Policy）跑两局，真实 ``GroundSGPolicy.load`` 只调一次
+    ``make_policy_context``（Qwen 引擎只构造一次），两局用同一上下文，席位收尾 ``close`` 一次（停服务端一次、释放上下文）。
+    服务端只换成假进程（``load_mme_vla_server`` 替身：不起进程，记下种子元数据）；旧 ``policy_mod``／``make_policy_context
+    (seat_info)`` 注入点已不存在，改在 ``load_policy`` 工厂处注入。"""
     import types
 
-    ec, mc = F.env_client(), F.groundsg_client()
+    from robomme_hard_eval import episode as E
+    from robomme_hard_eval.models import framesamp_modul as fm
+    from robomme_hard_eval.models import groundsg as gmod
+    from robomme_hard_eval.session import NullRecorder
+
+    from tests.pipeline.eval import eval_fakes as EF
+
+    ec = F.env_client()
     world = F.World(default=F.Plan(success_at=12))
     server, swift = F.FakeServer(), F.FakeSwift()
-    calls = {"make": 0, "close": 0, "ctx": []}
+    calls = {"make": 0, "factory": 0, "ctx": [], "stops": 0}
 
-    def make(seat_info):
+    class _Srv:
+        metadata = {"policy_seed": F.POLICY_SEED}
+
+        def check(self):
+            pass
+
+        def stop(self, **_k):
+            calls["stops"] += 1
+            return "stopped"
+
+        def left_line(self):
+            return ""
+
+    def fake_load_server(policy, model):
+        policy.port = 18120
+        policy.server = _Srv()
+        return Path("/ck/groundsg")
+
+    orig_make, orig_run = gmod.make_policy_context, gmod.run_episode
+
+    def make(seat_info, **kw):
         calls["make"] += 1
-        # policy_seed 由 R3 的 SeatRunner.seat_info 提供（接口冻结说明 2.5）：来自 run 的 --policy-seed，不在这里补
-        info = dict(seat_info)
-        assert info["policy_seed"] == F.POLICY_SEED
-        return mc.make_policy_context(info, client_factory=lambda h, p, ep: F.FakeClient(server),
-                                      qwen_extra=swift.names)
+        assert seat_info["policy_seed"] == F.POLICY_SEED and seat_info["groundsg_variant"] == F.QWENVL
+        return orig_make(seat_info, **kw)
 
     def run_episode(session, identity, conn_info, recorder):
         calls["ctx"].append(id(conn_info["policy_context"]))
-        return mc.run_episode(session, identity, conn_info, recorder)
+        return orig_run(session, identity, conn_info, recorder)
 
-    def close(ctx):
-        calls["close"] += 1
-        mc.close_policy_context(ctx)
+    clean_env.setattr(fm, "load_mme_vla_server", fake_load_server)
+    clean_env.setattr(gmod, "make_policy_context", make)
+    clean_env.setattr(gmod, "run_episode", run_episode)
 
-    mod = types.SimpleNamespace(make_policy_context=make, run_episode=run_episode, close_policy_context=close)
-    args = ec.build_parser().parse_args([
-        "run", "--policy", "groundsg", "--identities", "unused.json", "--dataset", "hard-verify", "--max-steps", "1300",
-        "--groundsg-variant", F.QWENVL, "--qwenvl-groundsg-adapter", F.ADAPTER, "--trace-root", str(tmp_path / "trace"),
-        "--cond", "N", "--seat", "00", "--port", "18120", "--out", str(tmp_path / "out"), "--first-extra-s", "0",
-        "--ledger", str(tmp_path / "ledger.jsonl"), "--reset-budget", "10", "--infra-retry-budget", "0",
-        "--policy-seed", str(F.POLICY_SEED)])
-    runner = ec.SeatRunner(args, policy_mod=mod,
-                           builder_factory=lambda task, dataset, ms: _HybridBuilder(task, dataset, ms, world))
-    rows = []
-    for ep in (0, 1):
-        ident = runner.builder_for("PickXtimes").resolve_identity(ep)
-        rows.append({"task": "PickXtimes", "tier": ident["tier"], "seed": ident["seed"], "candidate": None,
-                     "builder_episode": ep, "source_episode": ident["source_episode"], "spec_sha256": None,
-                     "key": f"PickXtimes_xhard0_{ident['seed']}"})
-    assert runner.run_identities(rows) == 0
-    runner.close()
-    assert calls["make"] == 1 and calls["close"] == 1 and len(set(calls["ctx"])) == 1 and len(calls["ctx"]) == 2
+    def factory(model, seed, **cfg):
+        calls["factory"] += 1
+        assert (model, seed, cfg) == ("groundsg", F.POLICY_SEED, {"groundsg_variant": F.QWENVL,
+                                                                   "qwenvl_groundsg_adapter": F.ADAPTER})
+        p = gmod.GroundSGPolicy(seed, **cfg, preflight=False, warmup=False, work_dir=str(tmp_path / "work"),
+                                client_factory=lambda h, pt, ep: F.FakeClient(server), qwen_extra=swift.names)
+        p.load()
+        return p
+
+    args = EF.seat_args(tmp_path / "out", "groundsg", seat="00", policy_seed=F.POLICY_SEED, reset_budget=10,
+                        infra_retries=0, groundsg_variant=F.QWENVL, qwenvl_groundsg_adapter=F.ADAPTER)
+    prev = E.BUILDER_FACTORY
+    E.clear_builders()
+    E.BUILDER_FACTORY = lambda task, ds, ms: _HybridBuilder(task, ds, ms, world)
+    try:
+        runner = ec.SeatRunner(args, policy_factory=factory, shared=None, hard_exit=lambda code: None,
+                               episode_kwargs={"recorder_factory": lambda raw, meta: NullRecorder(), "render": False})
+        rows = []
+        for ep in (0, 1):
+            ident = E.builder_for("PickXtimes", "hard-verify").resolve_identity(ep)
+            rows.append({"dataset": "hard-verify", "task": "PickXtimes", "tier": ident["tier"], "seed": ident["seed"],
+                         "candidate": None, "builder_episode": ep, "source_episode": ident["source_episode"],
+                         "spec_sha256": None, "key": f"PickXtimes_xhard0_{ident['seed']}"})
+        assert runner.run(rows) == 0
+        runner.close()
+    finally:
+        E.BUILDER_FACTORY = prev
+        E.clear_builders()
+    assert calls["factory"] == 1 and calls["make"] == 1 and calls["stops"] == 1
+    assert len(calls["ctx"]) == 2 and len(set(calls["ctx"])) == 1
     assert len(swift.engines) == 1
-    got = [json.loads(x) for x in (tmp_path / "out" / "results.jsonl").read_text().splitlines()]
-    assert [(g["status"], g["exec_steps"], g["policy_variant"], g["side"], g["dataset"]) for g in got] == [
-        ("success", 12, F.QWENVL, "new", "hard-verify")] * 2
-    for g, r in zip(got, rows):
-        tdir = tmp_path / "trace" / f"{r['key']}.a1"
-        assert g["trace_path"] == str(tdir / "trace.jsonl") and (tdir / "trace.jsonl").is_file()
-        assert not (tdir / "qwen-tmp").exists()
-        assert [w.ep for w in world.envs] == [r["source_episode"] for r in rows]
+    assert runner.policy.ctx is None and runner.policy.evaluators == {}
+    got = EF.read_jsonl(runner.results_path)
+    assert [(g["status"], g["exec_steps"], g["dataset"]) for g in got] == [("success", 12, "hard-verify")] * 2
+    for g in got:
+        res = json.loads(Path(g["result"]).read_text())
+        raw = Path(g["result"]).parent
+        assert res["policy_variant"] == F.QWENVL and res["side"] == "new" and res["dataset"] == "hard-verify"
+        assert res["trace_path"] == str(raw / "trace.jsonl") and (raw / "trace.jsonl").is_file()
+        assert not (raw / "qwen-tmp").exists()
+    assert [w.ep for w in world.envs] == [r["source_episode"] for r in rows]

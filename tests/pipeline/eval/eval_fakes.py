@@ -43,6 +43,14 @@ def env_client():
     return load_script("eval-official/env_client.py")
 
 
+def env_session():
+    """拆仓后 ``EnvSession``、``NullRecorder``、``StepCapReached``、``RecorderError``、``ResetBudgetExhausted`` 在评估包
+    ``robomme_hard_eval.session``（原在 env_client.py；``env_client()`` 现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
+    from robomme_hard_eval import session
+
+    return session
+
+
 def framesamp_modul_client():
     return load_script("eval-official/framesamp_modul_client.py")
 

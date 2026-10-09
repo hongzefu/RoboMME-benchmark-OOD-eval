@@ -16,7 +16,7 @@
 逐步比对（首个子目标可见前为 ``None``、``ready_at_ns`` 之前仍回旧子目标、chunk 用尽后不变）。
 
 父类依赖 vla-eval、torch、transformers，主检出 ``.venv`` 没有 vla-eval，故等价部分在子进程里用主检出 client-env
-的解释器（``artifacts/sg-evaluation/venvs/client-env``，含 vla-eval 0.7.0 与 torch，CPU）跑本文件的 ``--child`` 分支，
+的解释器（``envs/client-env/.venv``，含 vla-eval 0.7.0 与 torch，CPU）跑本文件的 ``--child`` 分支，
 PonderPounce 源码只读引用主检出 ``third_party/PonderPounce``（可用 ``SGEVAL_PP_PYTHON``／``SGEVAL_THIRD_PARTY`` 覆盖）。
 解释器或源码缺失时测试失败，不跳过。子进程沿用本进程的 ``PYTHONPATH``（资源守卫的 sitecustomize 随之生效）。
 """
@@ -43,7 +43,7 @@ WRAP = REPO / "src" / "robomme_hard_eval" / "servers" / "pp_server_wrap.py"  # �
 PP_GITLINK = "723df35762bb641e1d520e4fa9359b98644adc21"
 PARENT_REL = "ponderpounce/eval/robomme_server.py"
 PARENT_SHA256 = "0664c0abc1598c68f75a8f2eaf2889062a34e39d4e1d75269512907a8f1cb135"
-CLIENT_ENV_PY = "artifacts/sg-evaluation/venvs/client-env/bin/python"
+CLIENT_ENV_PY = "envs/client-env/.venv/bin/python"  # 拆仓后客户端扩展环境在 envs/client-env/.venv
 
 # 节拍（毫秒）与 System 2 桩的子目标脚本；dt = 1000/20 = 50 ms
 DT_MS = 50

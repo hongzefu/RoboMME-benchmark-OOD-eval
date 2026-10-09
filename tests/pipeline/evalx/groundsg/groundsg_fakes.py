@@ -64,6 +64,14 @@ def env_client():
     return load_script("eval-official/env_client.py")
 
 
+def env_session():
+    """拆仓后 ``EnvSession``／``NullRecorder``／``StepCapReached`` 在评估包 ``robomme_hard_eval.session``（``env_client()``
+    现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
+    from robomme_hard_eval import session
+
+    return session
+
+
 def groundsg_client():
     return load_script("eval-official/groundsg_client.py")
 
@@ -374,7 +382,7 @@ class NewSide:
         self.sessions: list[Any] = []
 
     def run(self, ident: dict, *, attempt: int = 1) -> dict:
-        ec = env_client()
+        ec = env_session()
         sess = ec.EnvSession(ident["task"], ident["builder_episode"], max_steps=self.max_steps,
                              builder=NewSideBuilder(ident["task"], self.world,
                                                     {ident["builder_episode"]: ident["source_episode"]}),
