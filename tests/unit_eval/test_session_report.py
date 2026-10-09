@@ -1,4 +1,4 @@
-"""``EnvSession``（预算账本、严格截断、钩子、只读属性、close 幂等）与 ``report.summarize``。"""
+"""``EnvSession`` (budget ledger, strict truncation, hooks, read-only attributes, idempotent close) and ``report.summarize``."""
 from __future__ import annotations
 
 import json
@@ -28,7 +28,7 @@ def test_build_reset_step_counts_and_readonly_props():
                         first_step_cb=lambda: first.append(1))
     assert s.recorder is rec and s.env is None
     s.build()
-    s.build()  # 只建一次
+    s.build()  # built only once
     obs, info = s.reset()
     assert s.task_goal == fakes.GOAL and s.info is info and s.reset_calls == 2
     for _ in range(4):
@@ -37,7 +37,7 @@ def test_build_reset_step_counts_and_readonly_props():
     with pytest.raises(AttributeError):
         s.steps = 0  # type: ignore[misc]
     s.close()
-    s.close()  # 幂等
+    s.close()  # idempotent
     assert b.envs[0].closed == 1 and s.env is None and s.timing["step_n"] == 4
 
 
@@ -58,7 +58,7 @@ def test_ledger_claim_before_build_and_reset():
 
         def claim(self, what):
             if len(self.whats) >= 1:
-                raise ResetBudgetExhausted("超额")
+                raise ResetBudgetExhausted("over budget")
             self.whats.append(what)
 
     led = Ledger()
@@ -74,7 +74,7 @@ def test_external_exception_with_budget_attr_marks_exhausted():
         budget_exhausted = True
 
     def claim(what):
-        raise Exhausted("共享账本超额")
+        raise Exhausted("shared ledger over budget")
 
     s, _ = make_session(claim_reset=claim)
     with pytest.raises(Exhausted):
@@ -87,9 +87,9 @@ def test_report_summarize(tmp_path):
         {"key": "A_x_1", "task": "VideoUnmask", "status": "success", "infra": False, "model": "dummy",
          "policy_label": "dummy", "dataset": "ood", "policy_seed": 0},
         {"key": "A_x_2", "task": "VideoUnmask", "status": "fail", "infra": False},
-        {"key": "A_x_3", "task": "VideoUnmask", "status": "fail", "infra": True},  # 基础设施局不进分母
+        {"key": "A_x_3", "task": "VideoUnmask", "status": "fail", "infra": True},  # infrastructure episodes are excluded from the denominator
         {"key": "B_x_1", "task": "BinFill", "status": "timeout", "infra": False},
-        {"key": "B_x_1", "task": "BinFill", "status": "success", "infra": False},  # 同 key 取最后一行
+        {"key": "B_x_1", "task": "BinFill", "status": "success", "infra": False},  # for a repeated key the last row wins
         {"key": "C_x_1", "task": "StopCube", "status": "timeout", "infra": False},
     ]
     p = tmp_path / "results.jsonl"
@@ -100,7 +100,7 @@ def test_report_summarize(tmp_path):
                                            "infra": 1, "success_rate": 0.5}
     assert log["tasks"]["BinFill"]["success_rate"] == 1.0 and log["tasks"]["StopCube"]["success_rate"] == 0.0
     assert log["total_success_rate"] == pytest.approx((0.5 + 1.0 + 0.0) / 3)
-    assert list(log["tasks"]) == ["BinFill", "StopCube", "VideoUnmask"]  # 官方任务序
+    assert list(log["tasks"]) == ["BinFill", "StopCube", "VideoUnmask"]  # official task order
     assert log["episodes"] == 5 and log["infra"] == 1 and log["success"] == 2 and len(log["tasks_missing"]) == 13
     assert log["model"] == "dummy" and log["dataset"] == "ood"
 

@@ -1,7 +1,8 @@
-"""外层接口单测的替身：假 builder／假环境（不跑仿真）、假录制器、可配置行为的假 Policy。
+"""Test doubles for the outer-interface unit tests: fake builder / fake env (no simulation), fake recorder, and a
+fake Policy with configurable behavior.
 
-``EVENTS`` 是全局事件序列，用来钉调用顺序（reset 在 build 之前、play 在 build 之后、收尾 session.close →
-recorder.close → result.json）。
+``EVENTS`` is a global event sequence used to pin the call order (reset before build, play after build, teardown
+session.close -> recorder.close -> result.json).
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ def obs_of(frames: list[int], joint_scale: float = 0.0) -> dict:
 
 
 class FakeEnv:
-    """reset 给 3 帧（2 帧演示 + 初始帧）；第 ``finish_at`` 步以 ``finish_status`` 终止；``None`` 时永不终止。"""
+    """reset yields 3 frames (2 demo frames + the initial frame); step ``finish_at`` terminates with ``finish_status``; ``None`` never terminates."""
 
     def __init__(self, episode: int, finish_at: int | None = 4, finish_status: str = "success", demo: int = 2):
         self.episode = episode
@@ -58,7 +59,7 @@ class FakeEnv:
 
 
 class FakeBuilder:
-    """``resolve_identity`` 按数据集给身份；``make_env_for_episode`` 记事件。"""
+    """``resolve_identity`` returns an identity per dataset; ``make_env_for_episode`` records an event."""
 
     instances: list["FakeBuilder"] = []
 
@@ -133,9 +134,9 @@ class FakeServer:
 
 
 class FakePolicy(Policy):
-    """``behavior``：success／fail_status／raise／stepcap（一直 step 到 StepCapReached 上抛）／swallow_cap（吞掉
-    StepCapReached 返回 fail）／return_error／bad_output／sleep（睡 ``sleep_s`` 后返回 success）／touch_close（违规
-    调 session.close）。"""
+    """``behavior``: success / fail_status / raise / stepcap (keep stepping until StepCapReached propagates) /
+    swallow_cap (swallow StepCapReached and return fail) / return_error / bad_output / sleep (sleep ``sleep_s`` then
+    return success) / touch_close (illegally call session.close)."""
 
     model = "fake"
 
@@ -158,11 +159,11 @@ class FakePolicy(Policy):
     def play(self, session, spec, recorder):
         EVENTS.append("policy.play")
         self.session_seen = session
-        assert session.env is not None, "play 之前环境必须已 build（M2）"
+        assert session.env is not None, "env must be built before play (M2)"
         assert session.recorder is recorder
         b = self.behavior
         if b == "raise":
-            raise ValueError("模型炸了")
+            raise ValueError("model blew up")
         if b == "bad_output":
             return {"status": "success"}
         if b == "sleep":
@@ -187,7 +188,7 @@ class FakePolicy(Policy):
             if term or trunc:
                 break
         if b == "return_error":
-            return {"status": "error", "task_success": 0, "steps": steps, "error": "IK 失败", "infra": False,
+            return {"status": "error", "task_success": 0, "steps": steps, "error": "IK failed", "infra": False,
                     "infra_reason": None}
         if b == "fail_status":
             return {"status": "fail", "task_success": 0, "steps": steps, "error": None, "infra": False,

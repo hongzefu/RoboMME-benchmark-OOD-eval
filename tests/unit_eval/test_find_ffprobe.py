@@ -1,7 +1,9 @@
-"""official_render.find_ffprobe 的查找顺序：ROBOMME_FFPROBE → 与 ffmpeg 同目录（未给 ffmpeg 时按录制器 find_ffmpeg，认 V75_FFMPEG）→ PATH。
+"""Lookup order of official_render.find_ffprobe: ROBOMME_FFPROBE -> the directory of ffmpeg (when no ffmpeg is given,
+use the recorder's find_ffmpeg, which honors V75_FFMPEG) -> PATH.
 
-2026-10-08 拆仓验收 S5：GL 计算节点 PATH 上没有 ffprobe，run_episode 调 render_video 时不传 ffmpeg，旧实现只查 PATH，
-8 局网站视频全部记 video_error「找不到 ffprobe」。这里钉住修复后的三条规则与报错。
+2026-10-08 repo-split acceptance S5: the cluster compute node had no ffprobe on PATH, run_episode calls render_video
+without passing ffmpeg, and the old implementation only searched PATH, so all 8 site videos recorded video_error
+"ffprobe not found". These tests pin the three rules and the error after the fix.
 """
 from __future__ import annotations
 

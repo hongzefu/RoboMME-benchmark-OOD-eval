@@ -1,8 +1,10 @@
-"""``scripts/evaluate.py`` 端到端（CPU）：dummy 模型 + 假环境 + 真录制器（AV1）+ 真官方 RolloutRecorder 渲染。
+"""``scripts/evaluate.py`` end to end (CPU): dummy model + fake env + real recorder (AV1) + real official
+RolloutRecorder rendering.
 
-与 S2 的 ``EVAL_EPISODE`` 判定同形：一次调用 ``--dataset hard-verify,ood --episodes 0:1``，同一个 Policy 先后跑两档，
-核 loads=1 resets=2 closes=1、每局 raw 产物（front／wrist mkv 为 av1／yuv444p，arrays.npz、trace.jsonl、
-result.json）、网站视频（av1／yuv420p）与 log.json；重跑全部跳过。真实仿真冒烟由主会话合并后跑。"""
+Same shape as the S2 ``EVAL_EPISODE`` verdict: one call with ``--dataset hard-verify,ood --episodes 0:1`` runs both
+datasets with the same Policy, then checks loads=1 resets=2 closes=1, the raw artifacts of each episode (front / wrist
+mkv as av1 / yuv444p, arrays.npz, trace.jsonl, result.json), the site video (av1 / yuv420p) and log.json; a rerun skips
+everything. The real-simulation smoke test is run by the main session after merge."""
 from __future__ import annotations
 
 import importlib.util
@@ -24,7 +26,7 @@ SCRIPT = REPO / "scripts" / "evaluate.py"
 
 
 def official_root() -> Path | None:
-    """官方 RolloutRecorder 所在仓根：本检出子模块有就用本检出，否则（worktree 子模块为空）用主检出。"""
+    """Repo root holding the official RolloutRecorder: this checkout if its submodule is present, otherwise (empty submodule in a worktree) the main checkout."""
     if (REPO / official_render.OFFICIAL_UTILS_REL).is_file():
         return REPO
     try:
@@ -87,12 +89,12 @@ def test_dummy_end_to_end_two_datasets_resident(tmp_path, monkeypatch, capsys):
     try:
         recorder.find_ffmpeg()
     except RuntimeError as e:
-        pytest.skip(f"未验证：本机没有支持 libaom-av1 的 ffmpeg（{e}）")
+        pytest.skip(f"Not verified: no ffmpeg with libaom-av1 on this machine ({e})")
     if shutil.which("ffprobe") is None:
-        pytest.skip("未验证：本机没有 ffprobe")
+        pytest.skip("Not verified: no ffprobe on this machine")
     root = official_root()
     if root is None:
-        pytest.skip("未验证：找不到官方 RolloutRecorder（mme-vla 子模块未初始化）")
+        pytest.skip("Not verified: official RolloutRecorder not found (mme-vla submodule not initialized)")
     monkeypatch.setenv(official_render.ENV_OFFICIAL_ROOT, str(root))
     fakes.EVENTS.clear()
     E.clear_builders()
@@ -131,7 +133,7 @@ def test_dummy_end_to_end_two_datasets_resident(tmp_path, monkeypatch, capsys):
         assert log["episodes"] == 1 and "VideoUnmask" in log["tasks"] and log["total_success_rate"] is not None
         files_ok += 1
     assert files_ok == 2
-    # 续跑：已有 result.json 的局全部跳过，Policy 照样只 load／close 一次
+    # resume: every episode that already has result.json is skipped; the Policy still loads / closes only once
     seen.clear()
     assert mod.main(argv) == 0
     assert seen[0].calls["reset"] == 0 and seen[0].calls["load"] == 1 and seen[0].calls["close"] == 1
@@ -139,14 +141,15 @@ def test_dummy_end_to_end_two_datasets_resident(tmp_path, monkeypatch, capsys):
 
 
 def test_official_render_reads_by_raw_codec(tmp_path, monkeypatch):
-    """同一局原始产物：meta.json 记 av1-yuv444p 时按有损版读（跳过字节 sha）；去掉 raw_codec（视为旧 FFV1 产物）
-    时走旧版核验，AV1 产物被拒为「有损降级」。"""
+    """Same raw episode artifacts: when meta.json records av1-yuv444p they are read as lossy (byte sha skipped); with
+    raw_codec removed (treated as a legacy FFV1 artifact) the legacy verification runs and the AV1 artifact is
+    rejected as a lossy downgrade."""
     try:
         recorder.find_ffmpeg()
     except RuntimeError as e:
-        pytest.skip(f"未验证：本机没有支持 libaom-av1 的 ffmpeg（{e}）")
+        pytest.skip(f"Not verified: no ffmpeg with libaom-av1 on this machine ({e})")
     if shutil.which("ffprobe") is None:
-        pytest.skip("未验证：本机没有 ffprobe")
+        pytest.skip("Not verified: no ffprobe on this machine")
     E.clear_builders()
     monkeypatch.setattr(E, "BUILDER_FACTORY", fakes.FakeBuilder)
     with P.load_policy("dummy", 0) as p:

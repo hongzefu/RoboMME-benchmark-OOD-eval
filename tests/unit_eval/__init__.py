@@ -1,1 +1,1 @@
-"""外层接口（policy／episode／session／record／report／evaluate）的 CPU 单测。"""
+"""CPU unit tests for the outer interface (policy / episode / session / record / report / evaluate)."""

@@ -1,6 +1,7 @@
-"""``Policy`` 基类计数器、``load_policy`` 工厂、模型注册表与 ``ServerProcess``（起停、就绪、attach 核对、按元数据停）。
+"""``Policy`` base-class counters, the ``load_policy`` factory, the model registry and ``ServerProcess`` (start/stop,
+readiness, attach checks, stop by metadata).
 
-服务端用本机回环上的一个小 HTTP 进程充当（不碰 GPU、不出网）。"""
+A small HTTP process on local loopback stands in for the server (no GPU, no outbound network)."""
 from __future__ import annotations
 
 import json
@@ -53,7 +54,7 @@ def test_counters_count_outermost_call_only():
         model = "sub"
 
         def reset(self, spec):
-            super().reset(spec)  # 基类 reset 不重复计数
+            super().reset(spec)  # base-class reset does not double count
 
         def play(self, session, spec, recorder):
             return {}
@@ -64,7 +65,7 @@ def test_counters_count_outermost_call_only():
     p.reset(None)
     p.play(None, None, None)
     p.close()
-    p.close()  # 幂等，但调用计数照记
+    p.close()  # idempotent, but the call is still counted
     assert p.calls == {"load": 1, "reset": 2, "play": 1, "close": 2}
     assert p.label == "sub" and p.policy_seed == 3 and p.episodes_run == 0
 
@@ -84,7 +85,7 @@ def test_load_policy_calls_load_once_and_context_closes():
 def test_load_failure_closes(monkeypatch):
     class Boom(fakes.FakePolicy):
         def load(self):
-            raise RuntimeError("加载失败")
+            raise RuntimeError("load failed")
 
     monkeypatch.setattr(fakes, "Boom", Boom, raising=False)
     monkeypatch.setitem(models.REGISTRY, "boom", ("tests.unit_eval.fakes", "Boom"))
@@ -128,16 +129,16 @@ def test_server_start_metadata_attach_mismatch_stop(tmp_path, capsys):
     try:
         meta = json.loads(srv.metadata_path.read_text())
         assert meta["pid"] == srv.pid and meta["port"] == port and meta["policy_seed"] == 7 and meta["ckpt"] == "/ckpt/a"
-        assert meta["argv"] == srv.argv and os.getpgid(srv.pid) == srv.pid  # setsid 起进程组
+        assert meta["argv"] == srv.argv and os.getpgid(srv.pid) == srv.pid  # setsid starts a process group
         srv.check()
-        # 同配置 attach：不另起
+        # attach with the same config: no new process
         again = _server(tmp_path, port)
         assert again.attach() is True and again.pid == srv.pid
-        # 种子不同：拒接
+        # different seed: refused
         with pytest.raises(ServerMismatch):
             _server(tmp_path, port, seed=8).start()
         assert "RUN_BLOCKED reason=server_mismatch" in capsys.readouterr().out
-        # argv 不同（端口参数相同、多一个参数）：拒接
+        # different argv (same port argument, one extra argument): refused
         with pytest.raises(ServerMismatch):
             _server(tmp_path, port, extra=("x",)).attach()
         assert "SERVER_LEFT" in srv.left_line() and "--stop-server" in srv.left_line()
@@ -176,11 +177,11 @@ def test_stop_by_metadata_and_attach_stale(tmp_path):
     port = pick_port()
     srv = _server(tmp_path, port).start()
     path = srv.metadata_path
-    # 模拟看门狗 os._exit 后另一个进程按元数据停服务端
+    # simulate another process stopping the server by metadata after a watchdog os._exit
     assert ServerProcess.stop_by_metadata(path, grace_s=10, check_gpu=False) == "term"
     srv.proc.wait(timeout=10)
     assert not path.exists()
-    # 元数据残留但进程已不在：attach 返回 False，start 新起
+    # stale metadata but the process is gone: attach returns False, start launches a new one
     path.write_text(json.dumps({"pid": srv.pid, "argv": srv.argv, "port": port, "policy_seed": 7, "ckpt": "/ckpt/a"}))
     fresh = _server(tmp_path, port)
     assert fresh.attach() is False
@@ -209,6 +210,6 @@ def test_policy_close_stops_server(tmp_path):
     p = WithServer(7)
     p.load()
     p.server.stop = lambda **k: ServerProcess.stop(p.server, grace_s=10, check_gpu=False)
-    p.reset(None)  # 探活通过
+    p.reset(None)  # liveness probe passes
     p.close()
     assert not port_busy(port)

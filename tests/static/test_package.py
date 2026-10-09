@@ -1,18 +1,21 @@
-"""L0（慢）：评估包 ``robomme-ood-eval`` 的打包与来源（C18-WHEEL）。
+"""L0 (slow): packaging and provenance of the eval package ``robomme-ood-eval`` (C18-WHEEL).
 
-拆仓后本仓只打评估包 ``src/robomme_ood_eval``（``[tool.hatch.build.targets.wheel] packages``）；``robomme``／
-``robomme_hard`` 的 wheel 由 benchmark 仓自己的同名测试守护。
+After the repo split this repo only packages the eval package ``src/robomme_ood_eval``
+(``[tool.hatch.build.targets.wheel] packages``); the ``robomme`` / ``robomme_hard`` wheels are guarded by the
+benchmark repo's own tests of the same name.
 
-构建 wheel → 在 tmp 新建 uv 环境 → 非 editable 安装（``--no-deps``，依赖借当前解释器的 site-packages 只读挂在
-``PYTHONPATH`` 上；该目录里 editable 安装的 ``.pth`` 不会被处理，因此 ``robomme_ood_eval`` 只能来自 tmp 环境）→
-在仓库外的 cwd 里导入，核：
+Build the wheel -> create a fresh uv env in tmp -> non-editable install (``--no-deps``; dependencies are borrowed
+read-only from the current interpreter's site-packages via ``PYTHONPATH``, where editable-install ``.pth`` files are not
+processed, so ``robomme_ood_eval`` can only come from the tmp env) -> import from a cwd outside the repo, and check:
 
-- 评估包的模块实际位置在 tmp 环境的 site-packages 里，tmp 环境里没有指回仓库的 ``.pth``；
-- wheel 内文件集合 = git 跟踪的 ``src/robomme_ood_eval`` 文件集合，安装后逐字节等于源码树（含 ``models``、``record``、
-  ``servers`` 子包）；
-- dist-info 的 Name／Version 与 ``pyproject.toml`` 一致，且不是 editable 安装。
+- the eval package modules actually live in the tmp env's site-packages, and the tmp env has no ``.pth`` pointing back
+  at the repo;
+- the file set in the wheel equals the git-tracked file set of ``src/robomme_ood_eval``, and after install it is
+  byte-identical to the source tree (including the ``models``, ``record`` and ``servers`` subpackages);
+- dist-info Name / Version match ``pyproject.toml`` and the install is not editable.
 
-网络受限：构建、建环境、安装一律 ``--offline``；装不了就 ``pytest.skip("未验证：<原因>")``，不记 PASS。
+Network is restricted: build, env creation and install all use ``--offline``; if installation is impossible, call
+``pytest.skip("Not verified: <reason>")`` instead of recording a PASS.
 """
 from __future__ import annotations
 
@@ -43,7 +46,7 @@ def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
 def _uv() -> str:
     uv = shutil.which("uv")
     if uv is None:
-        pytest.skip("未验证：PATH 里没有 uv")
+        pytest.skip("Not verified: uv is not on PATH")
     return uv
 
 
@@ -60,21 +63,21 @@ def installed(tmp_path_factory):
     dist, venv, cwd = tmp / "dist", tmp / "venv", tmp / "outside"
     cwd.mkdir()
     env = dict(os.environ)
-    # 构建与安装不能被当前项目环境变量带偏到主 .venv。
+    # Build and install must not be redirected to the main .venv by the current project env vars.
     for k in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV", "PYTHONPATH"):
         env.pop(k, None)
     r = _run([uv, "build", "--wheel", "--offline", "--out-dir", str(dist)], cwd=REPO, env=env)
     if r.returncode != 0:
-        pytest.skip(f"未验证：离线构建 wheel 失败：{r.stderr.strip()[-300:]}")
+        pytest.skip(f"Not verified: offline wheel build failed: {r.stderr.strip()[-300:]}")
     wheels = list(dist.glob("*.whl"))
     assert len(wheels) == 1, wheels
     r = _run([uv, "venv", "--offline", "--python", sys.executable, str(venv)], cwd=cwd, env=env)
     if r.returncode != 0:
-        pytest.skip(f"未验证：离线建 tmp 环境失败：{r.stderr.strip()[-300:]}")
+        pytest.skip(f"Not verified: offline tmp env creation failed: {r.stderr.strip()[-300:]}")
     py = venv / "bin" / "python"
     r = _run([uv, "pip", "install", "--offline", "--no-deps", "--python", str(py), str(wheels[0])], cwd=cwd, env=env)
     if r.returncode != 0:
-        pytest.skip(f"未验证：离线安装 wheel 失败：{r.stderr.strip()[-300:]}")
+        pytest.skip(f"Not verified: offline wheel install failed: {r.stderr.strip()[-300:]}")
     site = Path(_run([str(py), "-c", "import sysconfig;print(sysconfig.get_paths()['purelib'])"],
                      cwd=cwd, env={"PATH": env.get("PATH", "")}).stdout.strip())
     return {"wheel": wheels[0], "py": py, "site": site, "cwd": cwd, "env": env}
@@ -91,7 +94,7 @@ def test_installed_files_byte_identical_to_source(installed):
     bad = [rel for rel in _tracked_sources()
            if (site / rel.removeprefix("src/")).read_bytes() != (REPO / rel).read_bytes()]
     assert bad == []
-    # 子包都在（不是只装了顶层 __init__）。
+    # All subpackages are present (not just the top-level __init__).
     for sub in ("models", "record", "servers"):
         assert (site / "robomme_ood_eval" / sub / "__init__.py").is_file(), sub
     assert (site / "robomme_ood_eval" / "episode.py").is_file() and (site / "robomme_ood_eval" / "policy.py").is_file()
@@ -101,7 +104,7 @@ def test_dist_info_metadata_and_not_editable(installed):
     site = installed["site"]
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     infos = list(site.glob("*.dist-info"))
-    mine = [d for d in infos if d.name.startswith(f"{project['name'].replace('-', '_')}-")]  # dist-info 名把 - 规范成 _
+    mine = [d for d in infos if d.name.startswith(f"{project['name'].replace('-', '_')}-")]  # the dist-info name normalizes - to _
     assert len(mine) == 1, infos
     meta = (mine[0] / "METADATA").read_text(encoding="utf-8").splitlines()
     assert f"Name: {project['name']}" in meta
@@ -109,13 +112,13 @@ def test_dist_info_metadata_and_not_editable(installed):
     direct = mine[0] / "direct_url.json"
     if direct.exists():
         assert not json.loads(direct.read_text()).get("dir_info", {}).get("editable", False)
-    # tmp 环境里没有任何 .pth 指回仓库。
+    # No .pth in the tmp env points back at the repo.
     for pth in site.glob("*.pth"):
         assert str(REPO) not in pth.read_text(encoding="utf-8"), pth
 
 
 def test_import_resolves_to_tmp_env_outside_repo(installed):
-    deps = sysconfig.get_paths()["purelib"]  # 只借依赖；其中的 editable .pth 不经 PYTHONPATH 处理
+    deps = sysconfig.get_paths()["purelib"]  # borrow dependencies only; editable .pth files there are not processed via PYTHONPATH
     env = dict(installed["env"])
     env["PYTHONPATH"] = os.pathsep.join([str(SITE_DIR), deps])
     code = ("import json, robomme_ood_eval, robomme_ood_eval.episode as ep, robomme_ood_eval.policy as pol\n"
@@ -124,7 +127,7 @@ def test_import_resolves_to_tmp_env_outside_repo(installed):
     r = _run([str(installed["py"]), "-c", code], cwd=installed["cwd"], env=env)
     if r.returncode != 0 and "No module named" in r.stderr \
             and "robomme_ood_eval" not in r.stderr.split("No module named")[-1]:
-        pytest.skip(f"未验证：借用依赖导入失败：{r.stderr.strip()[-300:]}")
+        pytest.skip(f"Not verified: import with borrowed dependencies failed: {r.stderr.strip()[-300:]}")
     assert r.returncode == 0, r.stderr[-2000:]
     files = json.loads(r.stdout.strip().splitlines()[-1])
     site = installed["site"].resolve()
