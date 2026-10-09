@@ -11,7 +11,7 @@ import json
 import shutil
 from pathlib import Path
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 SYS = "You are a helpful robot subgoal predictor."
 

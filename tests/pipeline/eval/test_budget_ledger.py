@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-import eval_fakes as F
-from tests._support.loaders import load_script, script_path
+import eval_fakes_dev as F
+from tests._support.dev_loaders import load_script, script_path
 
 
 def bl_mod():
@@ -339,7 +339,7 @@ def test_reset_cap_rejects_before_claim(tmp_path, capsys):
 
 
 def test_env_var_gate_opens_shared_mode(tmp_path, monkeypatch):
-    from tests._support.loaders import load_script as _ls
+    from tests._support.dev_loaders import load_script as _ls
 
     path = tmp_path / "budget.jsonl"
     monkeypatch.setenv("SGEVAL_BUDGET_LEDGER", str(path))

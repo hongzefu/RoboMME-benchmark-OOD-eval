@@ -286,7 +286,7 @@ def test_transport_retry_opens_new_call_with_attempt(tmp_path, monkeypatch):
     """真实 ``GuardedResponsesClient``（零外联替身）遇 429 后重试成功：语言账本两个 planner 调用，
     ``transport_attempt`` 0（error）与 1（reply），输入原文相同；费用守卫行为不变（urlopen 恰 2 次、同一份预留）。"""
     import urllib.request
-    from test_astra_wiring import Clock, FakeUrlopen, GuardFixture, _client, _http_429, _resp
+    from astra_fakes import Clock, FakeUrlopen, GuardFixture, _client, _http_429, _resp
     fake = FakeUrlopen([_http_429(), {"input_tokens": 10}])
     monkeypatch.setattr(urllib.request, "urlopen", fake)
     fx = GuardFixture(tmp_path)

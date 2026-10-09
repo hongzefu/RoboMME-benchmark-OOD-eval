@@ -16,15 +16,12 @@
 """
 from __future__ import annotations
 
-import io
 import json
 import signal
 import subprocess
 import sys
 import time
-import urllib.error
 import urllib.request
-from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -33,6 +30,8 @@ import pytest
 
 from astra_fakes import (FAKE_KEY, FakeEnv, FakeRecorder, Harness, NetCounter,
                          astra_session, load_guard, print_upstream_digests, read_trace, third_party_dir)
+# 费用硬上限的零外联夹具（test_astra_stage3 也用，放在公共替身 astra_fakes）
+from astra_fakes import OUT_WORST, PRICES, Clock, FakeUrlopen, GuardFixture, _client, _http_429, _resp
 from tests.pipeline.evalx.report import trace_contract as tc
 
 
@@ -293,115 +292,7 @@ def test_env_sources_point_to_benchmark_submodule():
     assert files["robomme_hard"].startswith(src) and files["robomme"].startswith(src)
 
 
-# ── 费用硬上限：零外联夹具 ───────────────────────────────────────────────
-
-PRICES = {"unit": "usd_per_1m_tokens", "input": 2.0, "cached_input": 0.5, "output": 8.0}
-#: 2048 个输出 token 的最坏价：2048 × 8 / 1e6
-OUT_WORST = 2048 * 8.0 / 1e6
-
-
-class FakeUrlopen:
-    """``urllib.request.urlopen`` 的替身：计数，按序返回 Responses API 样式的回包（或抛 HTTPError）。"""
-
-    def __init__(self, plan=None) -> None:
-        self.calls = 0
-        self.plan = list(plan or [])
-
-    def __call__(self, request, timeout=None):
-        self.calls += 1
-        item = self.plan.pop(0) if self.plan else {"input_tokens": 100}
-        if isinstance(item, Exception):
-            raise item
-        body = {"status": "completed", "model": "gpt-6-astra", "reasoning": {"effort": "medium"},
-                "output": [{"type": "message", "content": [{"type": "output_text", "text": "ok"}]}]}
-        if item is not None:
-            body["usage"] = {"input_tokens": item["input_tokens"], "output_tokens": 50,
-                             "input_tokens_details": {"cached_tokens": 0},
-                             "output_tokens_details": {"reasoning_tokens": 10}}
-        return _Resp(body)
-
-
-class _Resp:
-    def __init__(self, body):
-        self._b = json.dumps(body).encode()
-        self.headers = {"x-request-id": "req-fake"}
-
-    def read(self):
-        return self._b
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
-def _http_429():
-    headers = Message()
-    headers["Retry-After"] = "1"
-    return urllib.error.HTTPError("https://example.invalid", 429, "rate", headers,
-                                  io.BytesIO(b'{"error":{"code":"rate_limit_exceeded"}}'))
-
-
-class Clock:
-    """假单调钟：``sleep`` 只推进时间并执行回调（模拟等待期间守卫写 STOP）。"""
-
-    def __init__(self) -> None:
-        self.now = 1000.0
-        self.slept: list = []
-        self.on_sleep = None
-
-    def monotonic(self):
-        return self.now
-
-    def sleep(self, s):
-        self.slept.append(s)
-        self.now += max(0.0, s)
-        if self.on_sleep is not None:
-            self.on_sleep(s)
-
-
-class GuardFixture:
-    def __init__(self, tmp_path: Path) -> None:
-        self.guard = load_guard()
-        self.group = tmp_path / "group_0"
-        self.spool = self.group / "run" / "planner_calls"
-        self.spool.mkdir(parents=True)
-        self.state = tmp_path / "guard" / "ledger.state.json"
-        self.ledger = self.guard.new_ledger()
-        self.prices = dict(PRICES, cached_input=0.5, reasoning_billed_separately=False)
-        self.n = 0
-
-    def round(self) -> dict:
-        return self.guard.guard_round([self.group], self.ledger, self.prices, 5.0, 2048, self.state)
-
-    def request(self, text_bytes: int, images: int = 0) -> Path:
-        """仿 Astra ``Planner`` 的 spool 布局写一份请求（文本 + 256×256 PNG）。"""
-        from PIL import Image
-        self.n += 1
-        out = self.spool / f"{self.n:032x}"
-        out.mkdir()
-        names = []
-        for i in range(images):
-            Image.fromarray(np.full((256, 256, 3), i, np.uint8)).save(out / f"{i}.png")
-            names.append(f"{i}.png")
-        (out / "request.json").write_text(json.dumps({"images": names, "task": "BinFill", "episode": 0}))
-        (out / "prompt.txt").write_text("x" * text_bytes)
-        return out
-
-    def reservations(self) -> dict:
-        return self.guard.load_reservations(self.state)["reservations"]
-
-
-def _client(mod, astra, fx: GuardFixture, clock: Clock, gate_clock=None):
-    gate = mod.CostGate(fx.state, clock=gate_clock or time.time)
-    cls = mod.guarded_client_class(astra.api_client)
-    return cls(FAKE_KEY, gate, sleep=clock.sleep, monotonic=clock.monotonic), gate
-
-
-def _resp(out: Path) -> dict:
-    return json.loads((out / "response.json").read_text())
-
+# ── 费用硬上限（零外联夹具在 astra_fakes） ───────────────────────────────────────────────
 
 def test_guard_defaults_hard_cap_and_constants(tmp_path, capsys):
     guard = load_guard()

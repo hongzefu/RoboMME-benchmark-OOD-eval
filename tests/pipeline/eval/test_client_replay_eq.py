@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from tests._support.loaders import REPO, load_script
+from tests._support.dev_loaders import REPO, load_script
 
 SCRIPT = REPO / "dev-scripts" / "checks" / "client_replay_eq.py"
 

@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-import groundsg_fakes as F
-from tests._support.loaders import REPO, script_path
+import groundsg_fakes_dev as F
+from tests._support.dev_loaders import REPO, script_path
 
 EO = script_path("eval-official/run_official_hard.sh").parent
 NOTE = "Your previous reply was not valid JSON. Reply with the JSON object only."

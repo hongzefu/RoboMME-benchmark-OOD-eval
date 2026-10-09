@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 
 pytestmark = pytest.mark.slow
 

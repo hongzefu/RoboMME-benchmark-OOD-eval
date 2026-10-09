@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests._support.loaders import REPO, load_script, script_path
+from tests._support.dev_loaders import REPO, load_script, script_path
 
 SEM = load_script("injection-dev/site/semantic_diff.py")
 CHECKER = script_path("injection-dev/site/site_browser_check.py")

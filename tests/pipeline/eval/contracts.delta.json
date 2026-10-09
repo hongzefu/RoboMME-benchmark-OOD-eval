@@ -397,7 +397,7 @@
       "tests/pipeline/eval/test_eval_recorder.py::test_refuses_non_empty_dir",
       "tests/pipeline/eval/test_eval_recorder.py::test_degrade_level_respects_never_degrade",
       "tests/pipeline/eval/test_eval_recorder.py::test_level2_keeps_head_and_tail_only",
-      "tests/pipeline/eval/test_eval_recorder.py::test_seat_runner_with_real_recorder_feeds_report"
+      "tests/pipeline/eval/test_eval_recorder_seat.py::test_seat_runner_with_real_recorder_feeds_report"
     ],
     "resource": "cpu-ffmpeg（slow）",
     "mutants": [],

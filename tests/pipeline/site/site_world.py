@@ -18,7 +18,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 APP = load_script("injection-dev/site/site_app.py")
 SERVER = APP.site_server

@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from gen_world import R, FakeRunner, freeze_file
-from tests._support.loaders import load_script, script_path
+from tests._support.dev_loaders import load_script, script_path
 
 S = "StopCube"
 #: 12.403 加的保护：回读时文件已不在则 h5 记 None（隔离副本里把它换回保护前的一行）

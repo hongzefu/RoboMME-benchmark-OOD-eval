@@ -37,9 +37,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 import test_stage3_seven_routes as R
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 from tests.pipeline.evalx.groundsg import groundsg_fakes as G
 
 SEAT_ROUTES = R.SEAT_ROUTES

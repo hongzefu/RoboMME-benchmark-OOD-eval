@@ -25,7 +25,7 @@ from typing import Any
 import h5py
 import numpy as np
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 # ── 生产模块（同一对象）──────────────────────────────────────────────
 

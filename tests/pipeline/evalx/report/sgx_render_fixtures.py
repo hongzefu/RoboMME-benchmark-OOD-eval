@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 H = W = 256
 

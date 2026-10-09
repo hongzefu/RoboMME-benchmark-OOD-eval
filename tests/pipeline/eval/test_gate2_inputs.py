@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evalx" / "report"))
-import sgx_report_fixtures as F  # noqa: E402
+import sgx_report_fixtures_dev as F  # noqa: E402
 
 BASE_SHA = "b869a3df9e7406b8f5458697f22656165b9c50b3"
 IDS = [("VideoUnmask", 3, 101), ("VideoUnmask", 7, 102), ("PickXtimes", 3, 201), ("PickXtimes", 7, 202)]

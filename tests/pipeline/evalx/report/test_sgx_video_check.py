@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 import sgx_report_fixtures as F
 

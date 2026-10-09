@@ -28,9 +28,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 from tests.pipeline.evalx.astra.astra_fakes import astra_session
-from tests.pipeline.evalx.groundsg import groundsg_fakes as G
+from tests.pipeline.evalx.groundsg import groundsg_fakes_dev as G
 from tests.pipeline.evalx.pp import pp_fakes as P
 
 

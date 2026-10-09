@@ -561,7 +561,7 @@
     "tests/pipeline/eval/test_eval_recorder.py::test_refuses_non_empty_dir",
     "tests/pipeline/eval/test_eval_recorder.py::test_degrade_level_respects_never_degrade",
     "tests/pipeline/eval/test_eval_recorder.py::test_level2_keeps_head_and_tail_only",
-    "tests/pipeline/eval/test_eval_recorder.py::test_seat_runner_with_real_recorder_feeds_report"
+    "tests/pipeline/eval/test_eval_recorder_seat.py::test_seat_runner_with_real_recorder_feeds_report"
    ],
    "resource": "cpu-ffmpeg（slow）",
    "mutants": [],
@@ -1324,7 +1324,7 @@
     "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_qwenvl_variant_loads_only_qwen_classes",
     "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_variants_are_mutually_exclusive",
     "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_run_episode_rejects_mismatched_context",
-    "tests/pipeline/evalx/groundsg/test_groundsg_context.py::test_policy_context_built_once_per_seat"
+    "tests/pipeline/evalx/groundsg/test_groundsg_context_seat.py::test_policy_context_built_once_per_seat"
    ],
    "resource": "cpu",
    "mutants": [],
@@ -1381,7 +1381,7 @@
     "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_memer_wiring",
     "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_memer_model_response_error_is_named_error_and_cleans_up",
     "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_engine_exception_cleans_memer_tmp",
-    "tests/pipeline/evalx/groundsg/test_groundsg_memer.py::test_policy_seed_reaches_args_and_seed_everything"
+    "tests/pipeline/evalx/groundsg/test_groundsg_memer_orig.py::test_policy_seed_reaches_args_and_seed_everything"
    ],
    "resource": "cpu",
    "mutants": [],

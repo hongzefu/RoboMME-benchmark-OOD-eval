@@ -15,7 +15,7 @@ from typing import Any, Iterable
 import h5py
 import numpy as np
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 REPO = Path(__file__).resolve().parents[3]
 #: 对拍配置（评估仓 dev-scripts/parity/configs，原 scripts/configs 的五份）

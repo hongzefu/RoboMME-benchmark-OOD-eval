@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-import eval_fakes as F
-from tests._support.loaders import load_script
+import eval_fakes_dev as F
+from tests._support.dev_loaders import load_script
 
 
 def _delivered_rows() -> list[dict]:

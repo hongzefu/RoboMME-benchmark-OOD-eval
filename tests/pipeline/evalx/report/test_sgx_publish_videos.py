@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 GOAL = "pick the cube"
 COLUMNS = ["model_id", "policy_seed", "dataset", "side", "key", "accepted_attempt_id", "episode_id", "terminal",

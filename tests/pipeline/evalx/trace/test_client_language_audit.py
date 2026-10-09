@@ -11,7 +11,7 @@ import json
 import numpy as np
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 from tests.pipeline.eval import eval_fakes as F
 from tests.pipeline.evalx.pp import pp_fakes as P
 

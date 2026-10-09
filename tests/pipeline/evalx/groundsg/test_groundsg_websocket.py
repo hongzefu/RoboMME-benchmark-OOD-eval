@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-import groundsg_fakes as F
+import groundsg_fakes_dev as F
 
 
 @pytest.mark.slow

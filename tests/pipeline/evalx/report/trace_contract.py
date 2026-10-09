@@ -3,7 +3,7 @@
 各路线子任务（S1、S3、S4、S5、S7）的测试对自己写出的局目录调用：
 
 - ``assert_renderable(ep_dir)``：按契约逐条核对 ``trace.jsonl``（及 ``arrays.npz``）；有帧的局再交给重绘工具
-  ``render_official_video.load_trace`` 读一遍，确认官方版式视频能从这份记录画出来。无帧 ``error`` 局
+  ``robomme_ood_eval.record.official_render.load_trace`` 读一遍，确认官方版式视频能从这份记录画出来。无帧 ``error`` 局
   （``end.no_frame=true``）只核契约，不调重绘器。
 - ``assert_counts_consistent(ep_dir, result_row)``：C8 三分计数与结果行 ``exec_steps`` 对账。
 
@@ -30,7 +30,9 @@ def _tw():
 
 
 def _render():
-    return load_script("eval-official/render_official_video.py")
+    from robomme_ood_eval.record import official_render
+
+    return official_render
 
 
 def _fail(ep_dir: Path, msg: str) -> None:

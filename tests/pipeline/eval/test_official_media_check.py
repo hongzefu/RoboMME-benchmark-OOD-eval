@@ -304,7 +304,7 @@ def test_verify_dir_modes(world):
 def test_sidecar_frames_accepts_groundsg_provenance_dict():
     """GroundSG 官方原生视频的 provenance.json（S1）把 frames 写成字典：三值一致取 decoded，不一致或缺计数给失败说明。
     （2026-10-06 批次 2 本机 smoke 实测：字典被当整数比较，原生视频被误判不合格后改走重绘。）"""
-    from tests._support.loaders import load_script
+    from tests._support.dev_loaders import load_script
 
     m = load_script("eval-official/official_media_check.py")
     assert m.sidecar_frames({"frames": 392}) == 392
