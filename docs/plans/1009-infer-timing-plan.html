@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推理测速改造计划</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1b1b; --muted:#666; --line:#ddd; --head:#f3f4f6; --accent:#1d4ed8; --code:#f6f8fa; --warn:#b45309; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#111; --fg:#e6e6e6; --muted:#aaa; --line:#333; --head:#1c1c1c; --accent:#7aa2ff; --code:#1a1a1a; --warn:#f59e0b; } }
+  :root[data-theme="dark"] { --bg:#111; --fg:#e6e6e6; --muted:#aaa; --line:#333; --head:#1c1c1c; --accent:#7aa2ff; --code:#1a1a1a; --warn:#f59e0b; }
+  body { background:var(--bg); color:var(--fg); font:15px/1.6 -apple-system,"Noto Sans CJK SC","PingFang SC",sans-serif; max-width:960px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:24px; margin:36px 0 8px; border-bottom:2px solid var(--accent); padding-bottom:4px; }
+  h2 { font-size:18px; margin:26px 0 8px; border-bottom:1px solid var(--line); padding-bottom:3px; }
+  h3 { font-size:16px; margin:18px 0 6px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  table { border-collapse:collapse; width:100%; margin:8px 0 12px; font-size:14px; display:block; overflow-x:auto; }
+  th, td { border:1px solid var(--line); padding:5px 8px; vertical-align:top; text-align:left; }
+  th { background:var(--head); }
+  code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:13px; word-break:break-word; }
+  pre { background:var(--code); padding:10px; border-radius:6px; overflow-x:auto; font-size:13px; line-height:1.45; }
+  pre code { background:none; padding:0; }
+  .box { border-left:4px solid var(--accent); background:var(--head); padding:8px 12px; margin:10px 0; }
+  .warn { border-left:4px solid var(--warn); background:var(--head); padding:8px 12px; margin:10px 0; }
+  ul, ol { padding-left:20px; } li { margin:2px 0; }
+  .trees { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:10px 0 14px; }
+  @media (max-width:720px) { .trees { grid-template-columns:1fr; } }
+  .tree { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--bg); }
+  .tree h4 { margin:0 0 6px; font-size:15px; }
+  .tree ul { list-style:none; padding-left:16px; margin:0; border-left:1px dashed var(--line); }
+  .tree > ul { border-left:none; padding-left:0; }
+  .tree li { margin:2px 0; font-size:13.5px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .tree li.dir::before { content:"\1F4C1  "; } .tree li.file::before { content:"\1F4C4  "; }
+  .only-dev { background:rgba(245,158,11,.18); border-radius:3px; padding:0 4px; }
+  .shared { background:rgba(37,99,235,.14); border-radius:3px; padding:0 4px; }
+  .new { color:var(--accent); font-weight:600; }
+  .legend span { display:inline-block; margin-right:14px; font-size:13px; }
+  .flow svg { width:100%; height:auto; display:block; }
+  details summary { cursor:pointer; color:var(--accent); }
+  figure.flow { margin:14px 0; } figcaption { color:var(--muted); font-size:13px; margin-top:4px; }
+</style>
+</head>
+<body>
+<div class="meta">RoboMME-benchmark-OOD-eval · 2026-10-09 第一稿 · 代码锚点 <code>dev @ 3941409</code>（1.43）· 只规划不实施：本文件入库 = 计划获批；代码改动另需用户在完整计划呈现后不加修改地说「开工」</div>
+<div class="box">
+<p><strong>引言块</strong>。本计划只规划不实施；<code>ExitPlanMode</code> 批准 = 批准计划内容并授权把它渲染成 <code>docs/plans/1009-infer-timing-plan.html</code>（含两张 opus 画的内联 SVG：时序图、流程图）并提交；<strong>代码改动另需用户在完整计划呈现后不加修改地说「开工」</strong>（AGENTS.md 第 2 条）。代码锚点 <code>dev @ 3941409</code>，工作副本 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>，commit 体例 <code>1.44 …</code> 起递增，<code>sub/&lt;编号&gt;:</code> 为子代理前缀。第三方依赖锚点：五个子模块 gitlink 不动（第 24 条），<strong>本计划零第三方改动</strong>。用户原话（2026-10-09）：「出一份测速改造计划 进 plan mode html 能否只在 simulation 的这一侧去计时一次就是每次收到一个 ActionChunk 的时间 以此为准？」「然后服务器这里和客户端是否都可以测速。评估一下改动的到底有多大」「画出时序图来。然后画出流程图来这个让我可视化用 HTML」。</p>
+</div>
+<h1>第一部分（给人看）</h1>
+<h2>一、一句话方案与已定口径</h2>
+<p><strong>一句话</strong>：以 <strong>仿真侧（评估进程）每收到一个新 ActionChunk 的往返时间 <code>chunk_rtt_ms</code></strong> 为五个模型统一的权威测速指标，在五个 Policy 客户端各加一处 <code>perf_counter</code> 包住「发观测 → 收到新 chunk」；服务端前向时间 <code>server_infer_ms</code> 作为<strong>辅助</strong>指标，只在本仓已有的两个服务端包装器与 SimpleMemVLA 自家服务端里取，不碰第三方源码。两者都写进 <code>result.json</code> 的 <code>timing.policy.chunks</code>，<code>eval_report.py</code> 出一张按模型、按 GPU 型号分的速度表。</p>
+<p><strong>已定口径</strong>（依据小节在括号里）：</p>
+<ol>
+<li>权威指标是客户端 <code>chunk_rtt_ms</code>，不是服务端数（§二）。回答用户问题：<strong>可以只在仿真侧计时、以此为准</strong>。它含 msgpack 编解码 + 本机回环网络 + 服务端全部处理，五个模型测量点完全一致；本机回环开销实测可由 FrameSamp 现有 <code>network_mean_s = rtt − server</code> 看到量级，计划把它作为验收项之一。</li>
+<li>服务端也能测，五个模型里四个 GPU 模型都能在本仓代码内测到（§三）；Astra 的规划器是远程付费 API，只记已有的 <code>seconds</code>，不算前向。</li>
+<li>「一次」= 一个 decision（一次新 chunk），不是一个 env step。PonderPounce 客户端每步收一个动作，chunk 边界靠服务端包装器打标 <code>chunk_fresh</code>（§三 PP 行）。</li>
+<li>统计分「首次（含编译／预热残余）／第 2、3 次／稳态（第 4 次起）」三段，报 mean、p50、p95；按 GPU 型号分组，<strong>A40 与 RTX 6000 Ada 不混比</strong>（第 16 条）。</li>
+<li><code>trace.jsonl</code> 行 schema 冻结不改；新字段只进 <code>result.json</code> 与 <code>events.jsonl</code>（§四）。</li>
+<li>协议字节不变：PonderPounce 新字段放进已存在、客户端已 pop 的 <code>_sgeval_audit</code> 块；mme-vla 服务端的新字段同样放审计块（§三）。<code>SGEVAL_AUDIT=0</code> 时回复与第三方逐字节相同的既有保证保持。</li>
+<li>本计划零第三方改动、零受保护目录改动、零 <code>pyproject.toml</code> 改动。</li>
+</ol>
+<h2>二、现状：五个模型分别怎么测、缺什么</h2>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>一次前向出几步</th>
+<th>客户端现有</th>
+<th>服务端现有</th>
+<th>缺口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SimpleMemVLA</td>
+<td>16（<code>EXECUTE_HORIZON</code>，<code>models/smvla.py</code>）</td>
+<td><code>run_episode::call</code> 每次 infer 记 <code>rtt_ms</code> 列表</td>
+<td><code>servers/smvla_server.py::SMVLAPolicyHost.infer</code> 用 <code>monotonic</code> + <code>torch.cuda.synchronize()</code> 记 <code>infer_ms</code>（含 <code>_prepare_inputs</code>）</td>
+<td>只缺统一字段名与三段统计</td>
+</tr>
+<tr>
+<td>FrameSamp</td>
+<td>服务端出 20，客户端取 16（<code>OBS_HORIZON</code>）</td>
+<td><code>framesamp_modul.py::make_recording_client._roundtrip</code> 记 <code>pack_s / rtt_s / unpack_s</code>，<code>summarize_timing</code> 已有首次／2／3／稳态</td>
+<td>第三方 <code>mme_vla_suite/policies/policy.py::infer</code> 的 <code>infer_time_ms</code> 只包住 JAX 派发，<code>np.asarray</code> 在停表之后，<strong>偏小</strong></td>
+<td>服务端数不可信；要在本仓 <code>policy_server_wrap.py::AuditedPolicy.infer</code> 外包一层（该层返回时已是 numpy，阻塞完成）</td>
+</tr>
+<tr>
+<td>GroundSG</td>
+<td>同 FrameSamp</td>
+<td>复用同一 <code>_roundtrip</code></td>
+<td>同 FrameSamp</td>
+<td>同上；子目标模型（Qwen／MemER）在评估进程内，另记 <code>subgoal_ms</code>（可选，默认关）</td>
+</tr>
+<tr>
+<td>PonderPounce</td>
+<td>服务端缓存 chunk，<code>_fire_s1</code> 按 1000 ms 仿真钟触发；客户端每步一个动作</td>
+<td>只有 <code>connect_s / episode_s</code></td>
+<td>零计时</td>
+<td>客户端 <code>TracedConnection.act</code> 加每步 RTT；<code>pp_server_wrap.py::SubgoalReportingServer._fire_s1</code> 加 <code>s1_infer_ms</code>，<code>_dispense</code> 在审计块里加 <code>chunk_fresh</code> 与该值</td>
+</tr>
+<tr>
+<td>Astra</td>
+<td>本地 VLA（mme-vla 服务端）16 步 + 远程规划器</td>
+<td>第三方 <code>runner.py</code> 已记 <code>vla</code> 事件 <code>seconds</code>（含本仓 trace 写盘）</td>
+<td>VLA 服务端同 FrameSamp</td>
+<td>客户端 <code>models/astra.py::TracedClient.infer</code> 外包计时得到纯往返；服务端由同一 <code>AuditedPolicy</code> 改动覆盖</td>
+</tr>
+</tbody>
+</table>
+<p>外层 <code>episode.py::run_episode</code> 只有整局 <code>episode_wall_s</code>；<code>session.py::EnvSession.step</code> 只计 <code>env.step</code>。<code>eval_report.py</code> 只读 <code>episode_wall_s</code>。</p>
+<h2>三、客户端与服务端都能测：怎么测、改在哪</h2>
+<p><strong>客户端（权威）</strong>：五处各一个 <code>time.perf_counter()</code> 对，包住「ws.send 观测 → ws.recv 回复」。SimpleMemVLA、FrameSamp、GroundSG 已有该对，只是字段名不一；PonderPounce、Astra 新加。统一写进 <code>timing.policy.chunks[]</code>，每项 <code>{decision, env_step, client_rtt_ms, server_infer_ms, pack_ms, unpack_ms}</code>。</p>
+<p><strong>服务端（辅助）</strong>：</p>
+<ul>
+<li>mme-vla（FrameSamp／GroundSG／Astra-VLA 共用）：<code>AuditedPolicy.infer</code> 在 <code>self._inner.infer(obs)</code> 前后 <code>perf_counter</code>，结果写 <code>out[AUDIT_KEY]["server_timing"] = {"infer_ms": …, "gpu": torch/jax 设备名}</code>。第三方 <code>infer</code> 末尾已 <code>np.asarray</code> 落地，所以这个区间是真实的「预处理 + 前向 + 回传主机」。</li>
+<li>PonderPounce：<code>SubgoalReportingServer._fire_s1</code> 包住 <code>super()._fire_s1</code>（<code>predict_action</code> 返回 CPU tensor，已同步），把 <code>s1_infer_ms</code> 挂到 <code>ep.chunk</code>；<code>_dispense</code> 判断 <code>ep.chunk.cursor == 1</code> 即「这一步是新 chunk 的第一行」→ 审计块 <code>pp_timing = {"chunk_fresh": True, "s1_infer_ms": …, "n_s1_fires": …}</code>。客户端收到后把该步 RTT 记为该 chunk 的 <code>client_rtt_ms</code>。</li>
+<li>SimpleMemVLA：已有 <code>infer_ms</code>，只改字段名映射。</li>
+</ul>
+<p><strong>客户端 RTT 与服务端前向的差 = 编解码 + 回环网络</strong>，FrameSamp 现有 <code>network_mean_s</code> 就是这个量；验收时要求五个模型的 <code>client_rtt_ms − server_infer_ms</code> 中位数为正且在同一量级（见 §五）。</p>
+<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 966" width="1200" height="966" font-family="sans-serif"><defs><marker id="ac0392b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c0392b"/></marker><marker id="a2b6cb0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2b6cb0"/></marker><marker id="a2f855a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2f855a"/></marker><marker id="a555" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#555"/></marker></defs><rect width="1200" height="966" fill="#fff"/><g font-size="13"><rect x="20" y="16" width="14" height="14" fill="#c0392b"/><text x="40" y="28">client_rtt_ms：客户端 ws.send→ws.recv（权威指标）</text><rect x="420" y="16" width="14" height="14" fill="#2b6cb0"/><text x="440" y="28">server_infer_ms：服务端前向</text><rect x="680" y="16" width="14" height="14" fill="#2f855a"/><text x="700" y="28">lang_ms / 语言·子目标·规划段</text><line x1="940" y1="23" x2="980" y2="23" stroke="#555" stroke-dasharray="3 3"/><text x="986" y="28">泳道；虚线箭头=返回</text></g><rect x="4" y="60" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="62" fill="#111" font-size="14" text-anchor="start" font-weight="bold">① SimpleMemVLA</text><text x="150" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="84" x2="150" y2="228" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="84" x2="430" y2="228" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">模型服务端</text><line x1="730" y1="84" x2="730" y2="228" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">（语言段在服务端同一前向内）</text><line x1="1020" y1="84" x2="1020" y2="228" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="110" x2="730" y2="110" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="106" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">smvla.py::run_episode::call ws.send(obs)</text><rect x="724" y="116" width="12" height="34" fill="#2f855a" opacity="0.35"/><rect x="724" y="152" width="12" height="28" fill="#2b6cb0" opacity="0.35"/><text x="746" y="136" fill="#2f855a" font-size="12" text-anchor="start" font-weight="normal">自回归生成 subtask token</text><text x="746" y="170" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="normal">action_head.sample + cuda.synchronize</text><path d="M1010 116 h6 V150 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1020" y="137.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">lang_ms</text><path d="M1010 116 h6 V180 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="1020" y="152.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold"></text><text x="1190" y="200" fill="#2b6cb0" font-size="12" text-anchor="end" font-weight="bold">server_infer_ms（SMVLAPolicyHost.infer）</text><line x1="730" y1="190" x2="430" y2="190" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="186" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">16 步 ActionChunk（ws.recv）</text><path d="M390 110 h-6 V190 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="154.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="210" x2="150" y2="210" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="206" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步 env.step 后再发下一次</text><rect x="4" y="240" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="242" fill="#111" font-size="14" text-anchor="start" font-weight="bold">② FrameSamp</text><text x="150" y="258" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="264" x2="150" y2="408" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="258" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="264" x2="430" y2="408" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="258" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">模型服务端</text><line x1="730" y1="264" x2="730" y2="408" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="282" fill="#555" font-size="11" text-anchor="middle" font-weight="normal">framesamp_modul.py::_roundtrip：pack →</text><line x1="430" y1="300" x2="730" y2="300" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="296" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">ws.send</text><rect x="724" y="306" width="12" height="44" fill="#2b6cb0" opacity="0.35"/><text x="746" y="332" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="normal">mme-vla AuditedPolicy.infer（本仓包装器）</text><path d="M1030 306 h6 V350 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="1040" y="332.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">server_infer_ms</text><line x1="730" y1="365" x2="430" y2="365" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="361" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">20 步 chunk（ws.recv）→ unpack，取前 16</text><path d="M390 300 h-6 V365 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="336.5" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="390" x2="150" y2="390" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="386" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步</text><text x="1020" y="330" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">无语言系统</text><rect x="4" y="420" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="422" fill="#111" font-size="14" text-anchor="start" font-weight="bold">③ GroundSG</text><text x="150" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="444" x2="150" y2="588" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="444" x2="430" y2="588" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">模型服务端</text><line x1="730" y1="444" x2="730" y2="588" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">子目标预测器 Qwen/MemER（评估进程内）</text><line x1="1020" y1="444" x2="1020" y2="588" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="466" x2="1020" y2="466" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)"/><text x="725.0" y="462" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">get_subgoal（每 subgoal_keep_period）</text><rect x="1014" y="470" width="12" height="22" fill="#2f855a" opacity="0.35"/><path d="M1034 470 h6 V492 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="485.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">lang_ms</text><line x1="1020" y1="500" x2="430" y2="500" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)" stroke-dasharray="5 3"/><text x="725.0" y="496" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">subgoal</text><line x1="430" y1="518" x2="730" y2="518" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="514" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">ws.send(obs+subgoal)</text><rect x="724" y="522" width="12" height="26" fill="#2b6cb0" opacity="0.35"/><path d="M744 522 h6 V548 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="754" y="539.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">server_infer_ms（同 FrameSamp 服务端）</text><line x1="730" y1="558" x2="430" y2="558" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="554" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">20 步 chunk → 取 16</text><path d="M390 518 h-6 V558 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="542.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="580" x2="150" y2="580" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="576" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步</text><rect x="4" y="600" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="602" fill="#111" font-size="14" text-anchor="start" font-weight="bold">④ PonderPounce</text><text x="150" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(每步 1 次)</text><line x1="150" y1="624" x2="150" y2="768" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">pp.py::TracedConnection.act</text><line x1="430" y1="624" x2="430" y2="768" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Pounce（S1）</text><line x1="730" y1="624" x2="730" y2="768" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Ponder（S2）</text><line x1="1020" y1="624" x2="1020" y2="768" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="650" x2="730" y2="650" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="646" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">obs</text><line x1="730" y1="662" x2="430" y2="662" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="658" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">1 个动作</text><path d="M410 650 h-6 V662 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="400" y="660.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="695" x2="730" y2="695" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="691" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">obs</text><line x1="730" y1="707" x2="430" y2="707" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="703" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">1 个动作</text><path d="M410 695 h-6 V707 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="400" y="705.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="735" x2="730" y2="735" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="731" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">obs</text><line x1="730" y1="747" x2="430" y2="747" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="743" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">1 个动作</text><path d="M410 735 h-6 V747 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="400" y="745.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><rect x="1014" y="630" width="12" height="50" fill="#2f855a" opacity="0.35"/><path d="M1034 630 h6 V680 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="659.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">_fire_s2：s2_infer_ms</text><line x1="1020" y1="670" x2="730" y2="670" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)" stroke-dasharray="5 3"/><text x="875.0" y="666" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">subgoal/cognition</text><rect x="724" y="652" width="12" height="8" fill="#2b6cb0" opacity="0.35"/><path d="M744 652 h6 V660 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="754" y="660.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">_fire_s1（1000 ms 仿真钟）s1_infer_ms</text><text x="750" y="680" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">chunk_fresh=True</text><text x="750" y="720" fill="#555" font-size="12" text-anchor="start" font-weight="normal">_dispense：从缓存发一行（chunk_fresh=False）</text><line x1="430" y1="765" x2="150" y2="765" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="761" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">每收到 1 个动作执行 1 次 env.step</text><rect x="4" y="780" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="782" fill="#111" font-size="14" text-anchor="start" font-weight="bold">⑤ Astra</text><text x="150" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="804" x2="150" y2="948" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="804" x2="430" y2="948" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">本地 mme-vla VLA 服务端</text><line x1="730" y1="804" x2="730" y2="948" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">规划器（远程 Responses API）/ 监视器（本地）</text><line x1="1020" y1="804" x2="1020" y2="948" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="824" x2="1020" y2="824" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)"/><text x="725.0" y="820" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">planner 请求（≥20 s 发送间隔）</text><rect x="1014" y="828" width="12" height="24" fill="#2f855a" opacity="0.35"/><path d="M1034 828 h6 V852 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="844.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">planner seconds</text><line x1="1020" y1="860" x2="430" y2="860" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)" stroke-dasharray="5 3"/><text x="725.0" y="856" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">plan</text><line x1="430" y1="878" x2="730" y2="878" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="874" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">astra.py::TracedClient.infer ws.send</text><rect x="724" y="882" width="12" height="22" fill="#2b6cb0" opacity="0.35"/><path d="M744 882 h6 V904 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="754" y="897.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">server_infer_ms</text><line x1="730" y1="914" x2="430" y2="914" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="910" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">16 步 chunk</text><path d="M390 878 h-6 V914 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="900.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><rect x="1014" y="920" width="12" height="16" fill="#2f855a" opacity="0.35"/><path d="M1034 920 h6 V936 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="932.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">monitor seconds（本地监视器）</text><line x1="430" y1="940" x2="150" y2="940" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="936" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步</text></svg><figcaption>图 1 五个模型「观测 → ActionChunk」时序与三类计时区间（红 client_rtt_ms 权威、蓝 server_infer_ms、绿 lang_ms）</figcaption></figure><h2>三′、双系统的子目标生成也要测清；单模型内「语言推理 vs 动作」能否拆开</h2>
+<p>用户追问（2026-10-09）：「这个是双系统的 subgoal 生成的也要清楚 然后如果不是双系统或者说内部 Language Reasoning 和 Action 是不是都可以测分开测出来」。结论：<strong>五个模型都能把「语言／子目标」与「动作」拆成两列，且全部在本仓代码内做到，零第三方源码改动</strong>。拆法分三类：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>结构</th>
+<th>语言／子目标怎么测</th>
+<th>动作怎么测</th>
+<th>两者关系</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PonderPounce</td>
+<td>双系统：Ponder（S2，<code>_fire_s2</code>）出 cognition+subgoal，Pounce（S1，<code>_fire_s1</code>）出 chunk</td>
+<td>本仓 <code>pp_server_wrap.py::_S2Watch.fire</code> 已包住第三方 <code>ctx.fire</code>（同步调用），在里面加 <code>perf_counter</code> 得 <code>s2_infer_ms</code>，随现有 <code>pp_generation</code> 块回传</td>
+<td><code>_fire_s1</code> 外包计时得 <code>s1_infer_ms</code>（§三）</td>
+<td>独立两次前向，各自触发（仿真钟 1000 ms），可分别统计</td>
+</tr>
+<tr>
+<td>GroundSG</td>
+<td>双系统：子目标预测器（Qwen／MemER）在评估进程内，动作在 mme-vla 服务端</td>
+<td>本仓 <code>groundsg.py::make_policy_context</code> 在 <code>build_predictor</code> 返回后包一层代理，<code>get_subgoal</code> 前后 <code>perf_counter</code>（含 <code>torch.cuda.synchronize</code>，模型在本进程）得 <code>subgoal_ms</code> 列表</td>
+<td><code>chunk_rtt_ms</code> / <code>server_infer_ms</code>（§三）</td>
+<td>独立，默认都开（原 §二「可选默认关」作废）</td>
+</tr>
+<tr>
+<td>Astra</td>
+<td>双系统：规划器（远程 API）+ 监视器（本地）+ VLA</td>
+<td>第三方 <code>runner.py</code> 已逐次记 <code>planner / monitor / second_button_review</code> 的 <code>seconds</code> 进 <code>decisions.jsonl</code>；本仓只汇总，不改</td>
+<td><code>TracedClient.infer</code> 外包（§三）</td>
+<td>独立；规划器 <code>seconds</code> 含 20 s 发送间隔与退避，报表单列并注明</td>
+</tr>
+<tr>
+<td>SimpleMemVLA</td>
+<td>单模型：同一次 <code>generate_batch</code> 先自回归生成 subtask token，再 <code>self.model.action_head.sample(...)</code> 出动作</td>
+<td>本仓 <code>smvla_server.py</code> 在 <code>SMVLAPolicyHost.__init__</code> 把 <code>self.batched.model.action_head.sample</code> 换成计时代理：进入时 <code>torch.cuda.synchronize()</code> 打点 <code>t_lang_end</code>，调原 <code>sample</code> 后再 <code>synchronize</code> 打点 <code>t_act_end</code>；<code>lang_ms = t_lang_end − t0</code>（t0 为现有 <code>infer</code> 起点，含预处理），<code>action_ms = t_act_end − t_lang_end</code></td>
+<td>同左 <code>action_ms</code></td>
+<td>串行同一前向，两段相加 ≈ 现有 <code>infer_ms</code>（验收：差 &lt; 1%）</td>
+</tr>
+<tr>
+<td>FrameSamp</td>
+<td>单模型，无语言输出</td>
+<td>无（报表填 <code>—</code>）</td>
+<td><code>chunk_rtt_ms</code> / <code>server_infer_ms</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>SimpleMemVLA 这一处是对第三方模型对象方法的<strong>运行时替换</strong>（第 21 条意义上的「覆盖」，但 <code>third_party/SimpleMemVLA</code> 不在 <code>&lt;PROTECTED_DIRS&gt;</code>），不改第三方源文件、不改随机数、不改输出；<code>SGEVAL_AUDIT=0</code> 时不安装代理。替代方案是在 fork 分支改 <code>batched_policy.py</code> 加时间戳，改动更重、要升 gitlink，不推荐。</p>
+<p>统一字段：<code>timing.policy.lang_calls[]</code>（每次语言／子目标调用 <code>{index, env_step, ms, kind: s2|subgoal|planner|monitor|lang_in_forward}</code>）、<code>lang_summary</code>（同 <code>chunk_summary</code> 三段统计）。报表速度表加两列「语言稳态 mean」「动作稳态 mean」。</p>
+<h2>四、输出到哪、怎么汇总</h2>
+<ul>
+<li><code>result.json</code>：<code>timing.policy.chunks[]</code>（逐 decision）+ <code>timing.policy.chunk_summary</code>（<code>n / first_ms / second_ms / third_ms / steady_mean_ms / steady_p50_ms / steady_p95_ms</code>，client 与 server 各一套）+ <code>timing.policy.gpu_name</code>。</li>
+<li><code>events.jsonl</code>：每个 decision 一条 <code>{"kind": "chunk_timing", …}</code>（recorder 已有 <code>add_event</code>）。</li>
+<li><code>trace.jsonl</code>：不动。</li>
+<li><code>dev-scripts/gl/eval_report.py</code>：新表「推理速度」：行 = 模型 × GPU 型号，列 = decision 数（按 P5 写成 <code>任务 × 档 × 局</code> 的乘式旁注）、首次、稳态 mean／p50／p95（client）、稳态 mean（server）、差值。</li>
+<li><code>src/robomme_ood_eval/report.py</code>：<code>log.json</code> 汇总加同一组字段。</li>
+</ul>
+<h2>五、验收判定行</h2>
+<table>
+<thead>
+<tr>
+<th>查什么</th>
+<th>怎么查</th>
+<th>判定行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>统计助手正确</td>
+<td>单测喂固定列表</td>
+<td><code>TIMING_HELPER=PASS cases=6</code></td>
+</tr>
+<tr>
+<td>五个客户端都产出 chunks</td>
+<td>dummy 冒烟 + 各模型单测用假服务端（<code>tests/pipeline/evalx/pp/pp_fakes.py</code> 等已有夹具）</td>
+<td><code>CHUNK_TIMING=PASS model=&lt;m&gt; decisions=&lt;n&gt; missing=0</code></td>
+</tr>
+<tr>
+<td>PP chunk 边界与服务端一致</td>
+<td>假服务端固定 chunk=5，验证 <code>chunk_fresh</code> 每 5 步一次</td>
+<td><code>PP_CHUNK_FRESH=PASS period=5 fires=&lt;n&gt;</code></td>
+</tr>
+<tr>
+<td>协议字节不变</td>
+<td><code>SGEVAL_AUDIT=0</code> 时回复与第三方逐字节相同（既有 <code>OBS_EQ</code> 测试扩到新字段）</td>
+<td><code>OBS_EQ=PASS</code></td>
+</tr>
+<tr>
+<td>语言与动作拆分</td>
+<td>PP 假服务端：<code>s2_infer_ms</code> 每次 S2 一条；GroundSG 假预测器：<code>subgoal_ms</code> 条数 = 调用次数；SimpleMemVLA 假 <code>action_head.sample</code>：<code>lang_ms + action_ms</code> 与 <code>infer_ms</code> 差 &lt; 1%</td>
+<td><code>LANG_SPLIT=PASS model=&lt;m&gt; calls=&lt;n&gt; delta_pct=&lt;x&gt;</code></td>
+</tr>
+<tr>
+<td>trace 冻结</td>
+<td>既有 contract 测试</td>
+<td><code>TRACE_SCHEMA=PASS</code></td>
+</tr>
+<tr>
+<td>核心短测</td>
+<td><code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code></td>
+<td><code>TEST_RESOURCE=</code> 末行 + 全绿</td>
+</tr>
+<tr>
+<td>真机一次</td>
+<td>本机 RTX 6000 Ada，每模型 1 任务 × 1 档 × 1 局 smoke（Astra 需先批局数与费用，P2″）</td>
+<td><code>SPEED_SMOKE=PASS model=&lt;m&gt; steady_p50_ms=&lt;x&gt; server_mean_ms=&lt;y&gt; gap_ms=&lt;x−y&gt;</code> 且 <code>gap_ms&gt;0</code></td>
+</tr>
+</tbody>
+</table>
+<h2>六、步骤</h2>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>内容</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>渲染 HTML 计划（两张 SVG）、commit <code>1.44</code></td>
+<td><code>grep -c '&lt;h1[^&gt;]*&gt;第一部分\|&lt;h1[^&gt;]*&gt;第二部分'</code> = 2</td>
+</tr>
+<tr>
+<td>1</td>
+<td>S1 共享助手 <code>timing.py</code> + SimpleMemVLA 映射</td>
+<td><code>TIMING_HELPER</code>、<code>CHUNK_TIMING model=smvla</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>S2 mme-vla 客户端 + <code>policy_server_wrap</code> 服务端计时（FrameSamp／GroundSG）</td>
+<td><code>CHUNK_TIMING model=framesamp,groundsg</code>、<code>OBS_EQ</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>S3 PonderPounce 客户端 + <code>pp_server_wrap</code></td>
+<td><code>CHUNK_TIMING model=pp</code>、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>S4 Astra 客户端</td>
+<td><code>CHUNK_TIMING model=astra</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td>S5 <code>eval_report.py</code> / <code>report.py</code> 速度表</td>
+<td>用 S1～S4 的 result.json 夹具生成表</td>
+</tr>
+<tr>
+<td>6</td>
+<td>主会话：合并、核心短测、本机 smoke、留档 <code>docs/validation/infer-timing-20261009/</code></td>
+<td><code>SPEED_SMOKE</code> × 5</td>
+</tr>
+</tbody>
+</table>
+<h2>七、改动有多大（评估）</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>性质</th>
+<th>估算</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新 <code>src/robomme_ood_eval/timing.py</code></td>
+<td>新增：<code>ChunkTimer</code>、<code>summarize_chunks</code></td>
+<td>~80 行</td>
+</tr>
+<tr>
+<td><code>models/smvla.py</code></td>
+<td>字段映射到 <code>chunks[]</code></td>
+<td>~15 行</td>
+</tr>
+<tr>
+<td><code>models/framesamp_modul.py</code></td>
+<td><code>_roundtrip</code> 的 <code>per_msg</code> 转 <code>chunks[]</code>；读审计块 <code>server_timing</code></td>
+<td>~25 行</td>
+</tr>
+<tr>
+<td><code>models/groundsg.py</code></td>
+<td>复用上条，只接 summary</td>
+<td>~5 行</td>
+</tr>
+<tr>
+<td><code>servers/policy_server_wrap.py</code></td>
+<td><code>AuditedPolicy.infer</code> 计时进审计块</td>
+<td>~10 行</td>
+</tr>
+<tr>
+<td><code>models/pp.py</code></td>
+<td><code>TracedConnection.act</code> 计时；按 <code>chunk_fresh</code> 归 chunk</td>
+<td>~30 行</td>
+</tr>
+<tr>
+<td><code>servers/pp_server_wrap.py</code></td>
+<td><code>_fire_s1</code> 计时、<code>_dispense</code> 加 <code>pp_timing</code></td>
+<td>~15 行</td>
+</tr>
+<tr>
+<td><code>models/astra.py</code></td>
+<td><code>TracedClient.infer</code> 计时</td>
+<td>~15 行</td>
+</tr>
+<tr>
+<td><code>dev-scripts/gl/eval_report.py</code>、<code>report.py</code></td>
+<td>速度表</td>
+<td>~60 行</td>
+</tr>
+<tr>
+<td>测试</td>
+<td>6 个新测试文件／用例</td>
+<td>~200 行</td>
+</tr>
+</tbody>
+</table>
+<p>风险集中在 PP 的 <code>chunk_fresh</code> 判定（依赖 <code>ep.chunk.cursor</code> 这一第三方私有属性，gitlink 锁死、不会漂）。</p>
+<h2>八、子代理分工与合并（简述）</h2>
+<p>拆成 S1～S5 五个写入型子代理（opus，worktree 隔离），可写集合互不重叠：S1 共享助手与 smvla；S2 mme-vla 两端；S3 PP 两端；S4 Astra；S5 报表。S2～S4 依赖 S1 的 <code>timing.py</code> 接口（先定好签名写进分配表，S2～S4 按签名写、不等 S1 合入）。合并顺序 S1→S2→S3→S4→S5，每次合并前一个 sonnet 审查者审 diff 范围、前缀、协议字节；合并后主会话跑核心短测。HTML 计划与两张 SVG 由主会话在阶段 0 派两个 opus 画图子代理（只读代码、只写 scratchpad SVG）后拼装。</p>
+<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" font-family="sans-serif">
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#555"/></marker>
+<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2f855a"/></marker>
+</defs>
+<rect width="1200" height="900" fill="#fff"/>
+<text x="600" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">推理测速改造：实施流程与子代理合并顺序</text>
+<text x="20" y="62" font-size="15" font-weight="bold" fill="#2b6cb0">一、阶段流</text>
+<g font-size="12" text-anchor="middle">
+<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
+<rect x="20" y="75" width="150" height="70" rx="8"/><rect x="188" y="75" width="150" height="70" rx="8"/><rect x="356" y="75" width="150" height="70" rx="8"/><rect x="524" y="75" width="150" height="70" rx="8"/><rect x="692" y="75" width="150" height="70" rx="8"/><rect x="860" y="75" width="150" height="70" rx="8"/><rect x="1028" y="75" width="152" height="70" rx="8"/>
+</g>
+<g fill="#1a365d">
+<text x="95" y="100" font-weight="bold">0 渲染 HTML 计划</text><text x="95" y="118">（本图）</text>
+<text x="263" y="98" font-weight="bold">1 S1 共享助手</text><text x="263" y="115">timing.py +</text><text x="263" y="131">SimpleMemVLA 两端</text>
+<text x="431" y="100" font-weight="bold">2 S2 mme-vla 两端</text><text x="431" y="118">FrameSamp/GroundSG</text>
+<text x="599" y="100" font-weight="bold">3 S3 PonderPounce</text><text x="599" y="118">两端</text>
+<text x="767" y="100" font-weight="bold">4 S4 Astra</text><text x="767" y="118">客户端</text>
+<text x="935" y="100" font-weight="bold">5 S5 报表</text><text x="935" y="118">eval_report/report</text>
+<text x="1104" y="95" font-weight="bold">6 主会话合并后</text><text x="1104" y="111">核心短测 + 本机 smoke</text><text x="1104" y="125" font-size="10">每模型1任务×1档×1局</text><text x="1104" y="139">+ 留档</text>
+</g>
+<g stroke="#555" stroke-width="1.5" marker-end="url(#ar)">
+<line x1="170" y1="110" x2="186" y2="110"/><line x1="338" y1="110" x2="354" y2="110"/><line x1="506" y1="110" x2="522" y2="110"/><line x1="674" y1="110" x2="690" y2="110"/><line x1="842" y1="110" x2="858" y2="110"/><line x1="1010" y1="110" x2="1026" y2="110"/>
+</g>
+<g font-size="10" fill="#444" font-family="monospace">
+<text x="95" y="162">判定：无</text>
+<text x="263" y="162">TIMING_HELPER</text><text x="263" y="176">CHUNK_TIMING(smvla)</text><text x="263" y="190">LANG_SPLIT(smvla)</text>
+<text x="431" y="162">CHUNK_TIMING(</text><text x="431" y="176">framesamp,groundsg)</text><text x="431" y="190">LANG_SPLIT(groundsg)</text><text x="431" y="204">OBS_EQ</text>
+<text x="599" y="162">CHUNK_TIMING(pp)</text><text x="599" y="176">PP_CHUNK_FRESH</text><text x="599" y="190">LANG_SPLIT(pp)</text><text x="599" y="204">OBS_EQ</text>
+<text x="767" y="162">CHUNK_TIMING(astra)</text>
+<text x="935" y="162">速度表单测</text>
+<text x="1104" y="162">TEST_RESOURCE</text><text x="1104" y="176">SPEED_SMOKE×5</text>
+</g>
+</g>
+<line x1="20" y1="225" x2="1180" y2="225" stroke="#ccc" stroke-dasharray="4 4"/>
+<text x="20" y="252" font-size="15" font-weight="bold" fill="#2b6cb0">二、S1～S5 五个 opus worktree 子代理：并行开发 → 顺序合并</text>
+<rect x="20" y="420" width="130" height="50" rx="8" fill="#f0fff4" stroke="#2f855a" stroke-width="2"/>
+<text x="85" y="442" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f855a">dev @BASE</text>
+<text x="85" y="459" text-anchor="middle" font-size="10" fill="#2f855a">同时分出 5 个分支</text>
+<g font-size="11">
+<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
+<rect x="220" y="270" width="300" height="62" rx="6"/><rect x="220" y="345" width="300" height="62" rx="6"/><rect x="220" y="420" width="300" height="62" rx="6"/><rect x="220" y="495" width="300" height="62" rx="6"/><rect x="220" y="570" width="300" height="62" rx="6"/>
+</g>
+<g fill="#1a365d">
+<text x="230" y="290" font-weight="bold">S1（opus · worktree）共享助手 + SimpleMemVLA</text><text x="230" y="310" font-family="monospace" font-size="10">timing.py, models/smvla.py,</text><text x="230" y="323" font-family="monospace" font-size="10">servers/smvla_server.py</text>
+<text x="230" y="365" font-weight="bold">S2（opus · worktree）mme-vla 两端</text><text x="230" y="385" font-family="monospace" font-size="10">models/framesamp_modul.py, models/groundsg.py,</text><text x="230" y="398" font-family="monospace" font-size="10">servers/policy_server_wrap.py</text>
+<text x="230" y="440" font-weight="bold">S3（opus · worktree）PonderPounce 两端</text><text x="230" y="460" font-family="monospace" font-size="10">models/pp.py, servers/pp_server_wrap.py</text>
+<text x="230" y="515" font-weight="bold">S4（opus · worktree）Astra 客户端</text><text x="230" y="535" font-family="monospace" font-size="10">models/astra.py</text>
+<text x="230" y="590" font-weight="bold">S5（opus · worktree）报表</text><text x="230" y="610" font-family="monospace" font-size="10">dev-scripts/gl/eval_report.py, report.py</text>
+</g>
+</g>
+<g stroke="#555" stroke-width="1.3" fill="none" marker-end="url(#ar)">
+<path d="M150,445 C185,445 185,301 218,301"/><path d="M150,445 C185,445 185,376 218,376"/><path d="M150,445 L218,451"/><path d="M150,445 C185,445 185,526 218,526"/><path d="M150,445 C185,445 185,601 218,601"/>
+</g>
+<g stroke="#2b6cb0" stroke-width="1.3" stroke-dasharray="5 4" fill="none" marker-end="url(#ar)">
+<path d="M520,301 C560,301 560,376 522,376"/><path d="M520,301 C585,301 585,451 522,451"/><path d="M520,301 C610,301 610,526 522,526"/>
+</g>
+<text x="615" y="420" font-size="11" fill="#2b6cb0" transform="rotate(90 615 420)" text-anchor="middle">S2～S4 依赖 timing.py 签名：按签名写，不等合入</text>
+<text x="860" y="268" text-anchor="middle" font-size="12" font-weight="bold" fill="#2f855a">逐个 --no-ff 合回 dev（S1→S2→S3→S4→S5）</text>
+<g font-size="10" text-anchor="middle">
+<g id="rows">
+</g>
+</g>
+<g font-size="10" text-anchor="middle">
+<!-- 每行：审查菱形 -> 合并框 -> POST 菱形 -->
+<g fill="#fffaf0" stroke="#555" stroke-width="1.3">
+<path d="M720,281 L770,301 L720,321 L670,301z"/><path d="M720,356 L770,376 L720,396 L670,376z"/><path d="M720,431 L770,451 L720,471 L670,451z"/><path d="M720,506 L770,526 L720,546 L670,526z"/><path d="M720,581 L770,601 L720,621 L670,601z"/>
+</g>
+<g fill="#333"><text x="720" y="299">sonnet 审查</text><text x="720" y="310" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="374">sonnet 审查</text><text x="720" y="385" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="449">sonnet 审查</text><text x="720" y="460" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="524">sonnet 审查</text><text x="720" y="535" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="599">sonnet 审查</text><text x="720" y="610" font-size="8">PRE_MERGE_REVIEW</text></g>
+<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.5">
+<rect x="800" y="286" width="110" height="30" rx="5"/><rect x="800" y="361" width="110" height="30" rx="5"/><rect x="800" y="436" width="110" height="30" rx="5"/><rect x="800" y="511" width="110" height="30" rx="5"/><rect x="800" y="586" width="110" height="30" rx="5"/>
+</g>
+<g fill="#2f855a" font-size="11"><text x="855" y="305">① 合并 S1 --no-ff</text><text x="855" y="380">② 合并 S2 --no-ff</text><text x="855" y="455">③ 合并 S3 --no-ff</text><text x="855" y="530">④ 合并 S4 --no-ff</text><text x="855" y="605">⑤ 合并 S5 --no-ff</text></g>
+<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.3">
+<path d="M1000,279 L1062,301 L1000,323 L938,301z"/><path d="M1000,354 L1062,376 L1000,398 L938,376z"/><path d="M1000,429 L1062,451 L1000,473 L938,451z"/><path d="M1000,504 L1062,526 L1000,548 L938,526z"/><path d="M1000,579 L1062,601 L1000,623 L938,601z"/>
+</g>
+<g fill="#2f855a" font-size="8"><text x="1000" y="299">POST_MERGE_REVIEW</text><text x="1000" y="310">+ push</text>
+<text x="1000" y="374">POST_MERGE_REVIEW</text><text x="1000" y="385">+ push</text>
+<text x="1000" y="449">POST_MERGE_REVIEW</text><text x="1000" y="460">+ push</text>
+<text x="1000" y="524">POST_MERGE_REVIEW</text><text x="1000" y="535">+ push</text>
+<text x="1000" y="599">POST_MERGE_REVIEW</text><text x="1000" y="610">+ push</text></g>
+</g>
+<g stroke="#555" stroke-width="1.3" marker-end="url(#ar)">
+<line x1="625" y1="301" x2="668" y2="301"/><line x1="625" y1="376" x2="668" y2="376"/><line x1="625" y1="451" x2="668" y2="451"/><line x1="625" y1="526" x2="668" y2="526"/><line x1="625" y1="601" x2="668" y2="601"/>
+<line x1="770" y1="301" x2="798" y2="301"/><line x1="770" y1="376" x2="798" y2="376"/><line x1="770" y1="451" x2="798" y2="451"/><line x1="770" y1="526" x2="798" y2="526"/><line x1="770" y1="601" x2="798" y2="601"/>
+<line x1="910" y1="301" x2="936" y2="301"/><line x1="910" y1="376" x2="936" y2="376"/><line x1="910" y1="451" x2="936" y2="451"/><line x1="910" y1="526" x2="936" y2="526"/><line x1="910" y1="601" x2="936" y2="601"/>
+</g>
+<g stroke="#555" stroke-width="1" fill="none" stroke-dasharray="2 3">
+<line x1="520" y1="301" x2="625" y2="301"/><line x1="520" y1="376" x2="625" y2="376"/><line x1="520" y1="451" x2="625" y2="451"/><line x1="520" y1="526" x2="625" y2="526"/><line x1="520" y1="601" x2="625" y2="601"/>
+</g>
+<g stroke="#2f855a" stroke-width="1.5" fill="none" marker-end="url(#ag)">
+<path d="M1062,301 C1110,301 1110,340 720,340 L720,354"/><path d="M1062,376 C1110,376 1110,415 720,415 L720,429"/><path d="M1062,451 C1110,451 1110,490 720,490 L720,504"/><path d="M1062,526 C1110,526 1110,565 720,565 L720,579"/>
+<path d="M1000,623 L1000,665"/>
+</g>
+<text x="1115" y="345" font-size="9" fill="#2f855a">下一个</text>
+<rect x="880" y="667" width="240" height="48" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="1000" y="687" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a365d">阶段 6：主会话核心短测 + smoke</text>
+<text x="1000" y="704" text-anchor="middle" font-size="10" font-family="monospace" fill="#444">TEST_RESOURCE / SPEED_SMOKE×5</text>
+<text x="20" y="680" font-size="11" fill="#555">图例：实线箭头 = 流程；蓝虚线 = 接口签名依赖（不等合入）；绿 = 合并与合并后审查；</text>
+<text x="20" y="697" font-size="11" fill="#555">合并对象是审查钉死的 TIP sha；FAIL 不合并，findings 用 SendMessage 交回原子代理续改。</text>
+<rect x="20" y="760" width="560" height="110" rx="8" fill="#fff5f5" stroke="#c0392b" stroke-width="2.5"/>
+<text x="40" y="788" font-size="15" font-weight="bold" fill="#c0392b">红线</text>
+<g font-size="13" fill="#c0392b"><text x="40" y="812">· 零 third_party 改动</text><text x="40" y="834">· trace.jsonl schema 不变</text><text x="40" y="856">· SGEVAL_AUDIT=0 时协议逐字节不变</text></g>
+</svg>
+<figcaption>图 2 实施阶段 0～6 与 S1～S5 worktree 子代理的并行、审查与合并顺序</figcaption></figure><h1>第二部分（技术细节，供 agent 追踪）</h1>
+<h2>〇 红线</h2>
+<p>R1 不改 <code>third_party/**</code>；R2 不改 <code>third_party/robomme_benchmark/src/robomme/**</code>；R3 <code>trace.jsonl</code> 各行键集合不变（contract 测试守）；R4 <code>SGEVAL_AUDIT=0</code> 时服务端回复逐字节同第三方；R5 不改 <code>pyproject.toml</code>／<code>uv.lock</code>；R6 不动 <code>scripts/evaluate.py</code> 以外的 <code>scripts/</code>；R7 Astra 任何真机局先批局数与美元（P2″）；R8 计时只用 <code>time.perf_counter</code>，不用 <code>time.time</code>。</p>
+<h2>一 逐文件改动</h2>
+<p><strong><code>src/robomme_ood_eval/timing.py</code>（新）</strong>
+- <code>class ChunkTimer</code>: <code>start() -&gt; token</code>，<code>stop(token, *, decision, env_step, server_infer_ms=None, pack_ms=None, unpack_ms=None) -&gt; dict</code>，内部 <code>perf_counter</code>，追加到 <code>self.chunks</code>。
+- <code>summarize_chunks(chunks: list[dict]) -&gt; dict</code>：对 <code>client_rtt_ms</code> 与 <code>server_infer_ms</code> 各算 <code>n, first, second, third, steady_mean, steady_p50, steady_p95</code>（稳态 = 索引 ≥3，不足 4 条时稳态 = 全部并标 <code>steady_short=True</code>）；缺 server 值时该组为 <code>None</code>。
+- <code>attach_policy_timing(timing: dict, timer: ChunkTimer, gpu_name: str | None) -&gt; dict</code>：写 <code>chunks</code>、<code>chunk_summary</code>、<code>gpu_name</code>。</p>
+<p><strong><code>servers/smvla_server.py::SMVLAPolicyHost</code></strong>：<code>__init__</code> 末尾（<code>audit_enabled()</code> 下）安装 <code>_TimedSample</code> 代理替换 <code>self.batched.model.action_head.sample</code>：<code>__call__</code> 先 <code>torch.cuda.synchronize()</code> 记 <code>t_lang_end</code>，调原函数，再 <code>synchronize</code> 记 <code>t_act_end</code>，存到 <code>self._split</code>；<code>infer()</code> 回复多两键 <code>lang_ms</code>、<code>action_ms</code>（<code>t0</code> 为现有起点）。</p>
+<p><strong><code>models/smvla.py::run_episode</code></strong>：读 <code>reply["lang_ms"] / ["action_ms"]</code> 进 <code>lang_calls</code>（kind <code>lang_in_forward</code>）；在 <code>call("infer")</code> 处用 <code>ChunkTimer</code>，<code>server_infer_ms = reply["infer_ms"]</code>；保留旧 <code>infer_ms / rtt_ms</code> 列表一版（兼容报表），<code>timing</code> 经 <code>attach_policy_timing</code>。gpu_name 从服务端 <code>SMVLA_LOAD</code> 已有 load_info 取，若无则 <code>None</code>。</p>
+<p><strong><code>models/framesamp_modul.py</code></strong>：<code>_roundtrip</code> 对 <code>dig["kind"] == "actions"</code> 的回复，读 <code>self._last_audit.get("server_timing", {}).get("infer_ms")</code> 作 server 值；<code>per_msg</code> 保留；<code>summarize_timing</code> 末尾调用 <code>attach_policy_timing</code>。<code>response_digest</code> 不改。</p>
+<p><strong><code>models/groundsg.py</code></strong>：<code>make_policy_context</code> 在 <code>build_predictor</code> 后包 <code>_TimedPredictor(predictor)</code>（<code>__getattr__</code> 转发；<code>get_subgoal</code> 前后 <code>torch.cuda.synchronize()</code> + <code>perf_counter</code>，追加到 <code>ctx["episode"]["timing"]["lang_calls"]</code>，kind <code>subgoal</code>）；<code>run_official_episode</code> 透传。</p>
+<p><strong><code>servers/policy_server_wrap.py::AuditedPolicy.infer</code></strong>：</p>
+<pre><code class="language-python">t0 = time.perf_counter()
+out = self._inner.infer(obs)
+infer_ms = (time.perf_counter() - t0) * 1000.0
+...
+audit = build_audit(sink); audit[&quot;server_timing&quot;] = {&quot;infer_ms&quot;: infer_ms, &quot;gpu&quot;: _gpu_name()}
+</code></pre>
+<p><code>_gpu_name()</code>：优先 <code>jax.devices()[0].device_kind</code>，异常返回 <code>None</code>。<code>audit_enabled()</code> 为假时<strong>不加任何键</strong>（R4）。</p>
+<p><strong><code>servers/pp_server_wrap.py::_S2Watch.fire</code></strong>：包住 <code>orig_fire</code> 的 <code>perf_counter</code>，<code>sink</code> 条目加 <code>s2_infer_ms</code>（S2 在本进程同步执行，<code>fire</code> 返回时 cognition 已落 CPU／GPU tensor，加一次 <code>torch.cuda.synchronize()</code>）。</p>
+<p><strong><code>models/pp.py</code></strong>：从 <code>last_audit["pp_generation"]</code> 里取 <code>s2_infer_ms</code> 进 <code>lang_calls</code>（kind <code>s2</code>）；<code>TracedConnection.act</code> 前后 <code>perf_counter</code> 得 <code>rtt_ms</code>；读 <code>self.last_audit.get("pp_timing")</code>，若 <code>chunk_fresh</code> 为真则 <code>timer.record(decision=n_fresh, env_step=step, client_rtt_ms=rtt_ms, server_infer_ms=pp_timing["s1_infer_ms"])</code>；非 fresh 步的 RTT 另记 <code>dispense_rtt_ms</code> 列表（用于报回环基线）。<code>_run_episode_async</code> 末尾 <code>attach_policy_timing</code>。</p>
+<p><strong><code>servers/pp_server_wrap.py</code></strong>：<code>_fire_s1</code> 包住 <code>super()._fire_s1</code>，<code>setattr(ep.chunk, "_sgeval_s1_ms", ms)</code>；<code>_dispense</code> 在 <code>audit_enabled()</code> 下 <code>out[AUDIT_KEY]["pp_timing"] = {"chunk_fresh": ep.chunk is not None and ep.chunk.cursor == 1, "s1_infer_ms": getattr(ep.chunk, "_sgeval_s1_ms", None), "n_s1_fires": ep.n_s1_fires, "gpu": torch.cuda.get_device_name(0) if available else None}</code>。</p>
+<p><strong><code>models/astra.py::_finish_one</code></strong>：读 <code>decisions.jsonl</code> 把 <code>planner / monitor / second_button_review</code> 的 <code>seconds</code> 汇成 <code>lang_calls</code>（kind 同名）。<strong><code>models/astra.py::TracedClient.infer</code></strong>：包住 <code>self._inner.infer(element)</code>，server 值取回复里 <code>_sgeval_audit.server_timing.infer_ms</code>（该回复经 mme-vla 包装器）；<code>AstraPolicy.play</code> 的 <code>timing</code> 加 <code>chunks / chunk_summary</code>，保留 <code>astra_seconds</code>；规划器 <code>seconds</code> 不并入 chunk 统计。</p>
+<p><strong><code>dev-scripts/gl/eval_report.py</code></strong>：新函数 <code>speed_table(rows)</code>：按 <code>(model, timing.policy.gpu_name)</code> 分组，聚合各局 <code>chunk_summary</code>（稳态值按 decision 数加权）；渲染一张表，decision 总数旁注乘式。<strong><code>src/robomme_ood_eval/report.py</code></strong>：<code>log.json</code> 加 <code>speed</code> 节。</p>
+<h2>二 子代理分配表</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>目标</th>
+<th>可写集合</th>
+<th>禁触</th>
+<th>接口契约与依赖</th>
+<th>合并顺序</th>
+<th>验收（worktree 内，环境取法见 CLAUDE.md 项目专属补充）</th>
+<th>资源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td><code>timing.py</code> + smvla 两端</td>
+<td><code>src/robomme_ood_eval/timing.py</code>、<code>models/smvla.py</code>、<code>servers/smvla_server.py</code>、<code>tests/unit_eval/test_timing.py</code>、<code>tests/pipeline/eval/test_smvla_chunk_timing.py</code></td>
+<td>其余全部</td>
+<td>导出上述三个符号，签名如 §一</td>
+<td>1</td>
+<td><code>pytest tests/unit_eval/test_timing.py tests/pipeline/eval/test_smvla_chunk_timing.py -q</code> → <code>TIMING_HELPER=PASS</code>、<code>CHUNK_TIMING=PASS model=smvla</code>、<code>LANG_SPLIT=PASS model=smvla</code></td>
+<td>CPU</td>
+</tr>
+<tr>
+<td>S2</td>
+<td>mme-vla 两端</td>
+<td><code>models/framesamp_modul.py</code>、<code>models/groundsg.py</code>、<code>servers/policy_server_wrap.py</code>、<code>tests/pipeline/eval/test_mmevla_chunk_timing.py</code></td>
+<td>S1 文件</td>
+<td>import <code>robomme_ood_eval.timing</code>（按签名写）</td>
+<td>2</td>
+<td><code>pytest tests/pipeline/eval/test_mmevla_chunk_timing.py tests/pipeline/eval/test_policy_clients.py -q</code> → <code>CHUNK_TIMING model=framesamp,groundsg</code>、<code>LANG_SPLIT model=groundsg</code>、<code>OBS_EQ=PASS</code></td>
+<td>CPU</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>PP 两端</td>
+<td><code>models/pp.py</code>、<code>servers/pp_server_wrap.py</code>、<code>tests/pipeline/evalx/pp/test_pp_chunk_timing.py</code></td>
+<td>S1 文件、<code>pp_fakes.py</code>（只读复用）</td>
+<td>同上</td>
+<td>3</td>
+<td><code>pytest tests/pipeline/evalx/pp -q</code> → <code>PP_CHUNK_FRESH=PASS period=5</code>、<code>LANG_SPLIT model=pp</code>、<code>OBS_EQ=PASS</code></td>
+<td>CPU</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>Astra 客户端</td>
+<td><code>models/astra.py</code>、<code>tests/pipeline/evalx/astra/test_astra_chunk_timing.py</code></td>
+<td>一切第三方、费用账本</td>
+<td>同上；不发任何 API 请求</td>
+<td>4</td>
+<td><code>pytest tests/pipeline/evalx/astra -q</code> → <code>CHUNK_TIMING model=astra</code></td>
+<td>CPU</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>报表</td>
+<td><code>dev-scripts/gl/eval_report.py</code>、<code>src/robomme_ood_eval/report.py</code>、<code>tests/unit_eval/test_speed_table.py</code></td>
+<td>其余</td>
+<td>读 <code>chunk_summary</code> 字段名</td>
+<td>5</td>
+<td><code>pytest tests/unit_eval/test_speed_table.py -q</code></td>
+<td>CPU</td>
+</tr>
+<tr>
+<td>主会话</td>
+<td>HTML 计划、两张 SVG 拼装、合并、短测、真机 smoke、留档、<code>uv.lock</code>（不动）</td>
+<td><code>docs/plans/1009-infer-timing-plan.html</code>、<code>docs/validation/infer-timing-20261009/**</code></td>
+<td>—</td>
+<td>—</td>
+<td>0／6</td>
+<td>§五全部</td>
+<td>本机 GPU</td>
+</tr>
+</tbody>
+</table>
+<p>共享文件归属：<code>timing.py</code> 只 S1 写；<code>servers/__init__.py</code> 不改（S2～S4 若需加 gpu_name 走各自客户端）。<code>BASE</code> 在派发时记。画图子代理（opus，只读，输出到 scratchpad）两个：时序图（五模型「观测→chunk」时序，标 client/server 计时区间，双系统另画 S2／子目标泳道，SimpleMemVLA 画同一前向内语言段与动作段）、流程图（阶段 0～6 与合并顺序）。</p>
+<h2>三 闸门总表</h2>
+<p><code>TIMING_HELPER</code>、<code>CHUNK_TIMING×5</code>、<code>LANG_SPLIT×4</code>（framesamp 无）、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code>、<code>TRACE_SCHEMA</code>、核心短测 <code>TEST_RESOURCE=</code>、<code>SPEED_SMOKE×5</code>（真机）、<code>PRE_MERGE_REVIEW×5</code>、<code>POST_MERGE_REVIEW×5</code>。</p>
+<h2>四 runbook（合并后主会话）</h2>
+<ol>
+<li><code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code>。</li>
+<li>本机 smoke，每模型 <code>--tasks VideoUnmask --episodes 0:1 --seed 0 --out artifacts/infer-timing-smoke-&lt;model&gt;</code>（1 任务 × 1 档 × 1 局；Astra 先申请 1 局与美元上限）。detached tmux <code>it-&lt;model&gt;</code>，Monitor 过滤 <code>EXIT_CODE=|Traceback|EPISODE_DONE</code>。</li>
+<li><code>jq .timing.policy.chunk_summary artifacts/infer-timing-smoke-&lt;model&gt;/**/result.json</code> → 填 <code>SPEED_SMOKE</code> 行。</li>
+<li>留档 <code>docs/validation/infer-timing-20261009/{launch.md,result.md,records/}</code>。</li>
+</ol>
+<h2>五 风险</h2>
+<ul>
+<li>PP <code>cursor == 1</code> 依赖第三方私有字段；gitlink 锁死，加断言测试。</li>
+<li>JAX 首次编译在 warmup 已做，但首个 episode 首次 infer 仍可能偏慢，三段统计已隔离。</li>
+<li><code>events.jsonl</code> 多一类事件，recorder verify 不检查事件种类（已核：<code>add_event</code> 无白名单），仍跑 <code>test_eval_recorder.py</code>。</li>
+<li>GL 上 A40 的数字与本机不混比；报表按 gpu_name 分组。</li>
+</ul>
+<h2>六 盲区</h2>
+<ul>
+<li>mme-vla 服务端 <code>infer_time_ms</code> 偏小的量级未实测，smoke 时比对 <code>server_timing.infer_ms</code> 与它。</li>
+<li>Astra 远程规划器只记已有 <code>seconds</code>。</li>
+</ul>
+<h2>七 留档与 commit</h2>
+<p>阶段 0 一个 commit（<code>1.44 计划：推理测速改造（HTML+两图）</code>）；S1～S5 各 <code>sub/</code> 提交经 <code>--no-ff</code> 合并提交 <code>1.45</code>～<code>1.49</code>；阶段 6 留档 <code>1.50</code>。每次 commit 后 push。</p>
+</body>
+</html>
