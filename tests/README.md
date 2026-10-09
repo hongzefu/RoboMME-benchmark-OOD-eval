@@ -12,7 +12,7 @@
 
 公共件只归主会话：`tests/_support/`（资源守卫 `resource_policy.py`、按路径加载脚本 `loaders.py`）、`tests/conftest.py`、`tests/contract/benchmark_contracts.json`、`pyproject.toml` 的 pytest 段。
 
-资源守卫：日常门禁里构建真实 SAPIEN 场景、初始化 CUDA、`torch.load`／safetensors 读权重、连非回环地址都会被拒并记账；子进程经 `sitecustomize` 继承。收集为空、出现 xfail、skip 原因不以「未验证」开头，整场判失败。末行判定 `TEST_RESOURCE=`。
+资源守卫：日常门禁里构建真实 SAPIEN 场景、初始化 CUDA、`torch.load`／safetensors 读权重、连非回环地址都会被拒并记账；子进程经 `sitecustomize` 继承。收集为空、出现 xfail、skip 原因不以「未验证」或 `Not verified` 开头（公开清单内的测试一律用英文前缀 `Not verified: …`，dev 侧可沿用中文；见 `tests/_support/resource_policy.py::NOT_VERIFIED_PREFIXES`），整场判失败。末行判定 `TEST_RESOURCE=`。
 
 ```bash
 # 日常门禁

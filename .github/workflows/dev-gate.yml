@@ -1,0 +1,29 @@
+# 只在 dev：每次 push dev 时对公开清单内的文件跑闸门，挂了就红，提醒这次 dev 改动让公开面不合规。
+# 只检查、不推送、不持有写权限（口径⑧、红线 R0-8）。
+name: dev-gate
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: 公开面零中文
+        run: uv run --no-project python dev-scripts/release/check_public_lang.py
+
+      - name: 公开面无内部路径
+        run: uv run --no-project python dev-scripts/release/check_public_paths.py
+
+      - name: 清单与跟踪文件一致
+        run: uv run --no-project python dev-scripts/release/check_manifest.py
