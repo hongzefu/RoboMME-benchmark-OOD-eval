@@ -1,6 +1,6 @@
 # public-split-20261009：公开 main 与 dev 分支拆分（result）
 
-计划：[`docs/plans/1009-public-main-dev-branch-split-plan.html`](../../plans/1009-public-main-dev-branch-split-plan.html)（第六稿，1.21 入库）。本档记 S1～S5 的实施结果与判定行；S6（分支保护、改 PUBLIC）待用户当场确认后补记。
+计划：[`docs/plans/1009-public-main-dev-branch-split-plan.html`](../../plans/1009-public-main-dev-branch-split-plan.html)（第六稿，1.21 入库）。本档记 S1～S6 的实施结果与判定行。
 
 ## ① 一句话结论与判定速览
 
@@ -17,7 +17,8 @@
 | ckpt 无默认 | `CKPT_NO_DEFAULT=PASS exit=2` | src、scripts 零 `DEFAULT_CKPTS`；`evaluate.py --model smvla` 不带 `--ckpt` 退出码 2 |
 | 翻译不改行为 | `TRANSLATE_EQ=PASS passed=1242 base=1242` | 每次合并后全量短测均 `1242 passed, 6 skipped, 101 deselected`（BASE1 1228 + A1 新增 14） |
 | main 能跑 | `PUBLIC_SMOKE=PASS model=dummy episodes=1 exit=0 tests_passed=254` | 见 ⑤ |
-| 同步可用 | `SYNC_MAIN=PASS dev=f786143 main=0bca124 files=79 changed=1`、`SYNC_MAIN=NOOP dev=f786143 main=0bca124 files=79 changed=0` | S5 |
+| 同步可用 | `SYNC_MAIN=PASS dev=f786143 main=0bca124 files=79 changed=1`、`SYNC_MAIN=NOOP dev=f786143 main=0bca124 files=79 changed=0` | S5；其后 1.41 再同步 `main=3482d7b`，public-gate success |
+| 公开与保护 | `PUBLIC_SECRETS=PASS commits=74 hits=0 allowlisted=18`、`SUBMODULE_PUBLIC=PASS repos=5 public=5 reachable=5`；visibility=public、default=main；main 保护 force_push=false deletions=false enforce_admins=true pr_required=false；dev protected=false | S6 |
 
 ## ② 版本与锚点
 
@@ -72,8 +73,19 @@
 2. 「gh auth 已经 refresh 好了」。
 3. 「授权执行 S3 的 --force-with-lease 强推」。
 4. MemER 指纹变化：主会话接受新值并在本档记新旧对应，已告知用户，用户未提异议。
+5. 「main开保护 改public dev不要动」；AskUserQuestion 答复「照计划，dev 一起公开」。
 
-## ⑧ 当前状态与下一步
+## ⑧ S6 执行
 
-- S6 未做：main、dev 分支保护（禁强推、禁删除、不要求 PR）→ 重跑 `PUBLIC_SECRETS`、`SUBMODULE_PUBLIC` → 当场问用户后 `gh repo edit --visibility public`。
+- 先尝试给 main 开保护：私有仓库在免费账户下返回 403（「Upgrade to GitHub Pro or make this repository public」），顺序改为先公开、后保护。
+- 公开前用 AskUserQuestion 确认「GitHub 无法只公开 main，dev 会一起公开」，用户选「照计划，dev 一起公开」。
+- 重跑 `PUBLIC_SECRETS=PASS commits=74 hits=0 allowlisted=18`、`SUBMODULE_PUBLIC=PASS repos=5 public=5 reachable=5`。
+- 本机 gh 2.45 不认 `--accept-visibility-change-consequences`，改用 `gh api -X PATCH repos/hongzefu/RoboMME-benchmark-OOD-eval -f visibility=public` → `public private=false default=main`。
+- main 分支保护（`PUT …/branches/main/protection`）：禁强推、禁删除、enforce_admins、不要求 PR、无必需检查；dev 按用户「dev不要动」不加保护。
+- 计划原写 dev 同样禁强推与删除，按用户指令偏离。
+
+## ⑨ 当前状态与下一步
+
+- 仓库公开，默认分支 main = `3482d7b`，public-gate 与 dev-gate 均为 success。
 - 以后改公开面：只在 dev 上改，用户说「同步到 main」才跑 `sync_to_main.sh --message "<英文摘要>"`。
+- 下次 GL 评估前：rsync 后对 NFS 副本 `UV_LINK_MODE=copy uv sync --extra dev`（包名已改）。
