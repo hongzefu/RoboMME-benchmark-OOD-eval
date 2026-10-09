@@ -101,3 +101,9 @@ GL 首跑被拦（RUN_INPUTS／mme_vla_dirty）与 Astra 首跑 load 失败均�
 - tmux：本轮 `split-*` 会话均已随命令结束，`tmux ls` 无会话，无需清理。
 - GL 占位 job `63431430～63431433`：用户 2026-10-08 选「保留给后续工作」，不取消。
 - `CLEANUP=PASS worktrees=11 tmux=0 jobs=0（4 个占位 job 按用户决定保留）`
+
+## ⑪ 归档解除（用户 2026-10-08）
+
+用户原话：「RoboMME-benchmark-OOD为什么是Archive」「先作unarchive。」
+已执行 `gh repo unarchive hongzefu/RoboMME-benchmark-OOD --yes`：`archived=false visibility=PUBLIC`；远端 `main` 与 `v1.0-ood^{}` 仍为 `a5efb99`。
+此后 benchmark 仓远端可写，「锁死」只靠约定（R9：不再提交，确需改环境代码另开裁决、另打版本 tag、评估仓更新 gitlink）；上文 ⑥ 的 `BENCH_LOCKED=PASS … archived=1 push_rejected=1` 是归档期间的实测，不再代表当前状态。
