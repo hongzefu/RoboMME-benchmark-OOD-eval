@@ -22,7 +22,7 @@ The parent depends on vla-eval, torch and transformers; the main checkout's ``.v
 equivalence part runs this file's ``--child`` branch in a subprocess with the main checkout's client-env interpreter
 (``envs/client-env/.venv``, with vla-eval 0.7.0 and torch, CPU). PonderPounce sources are referenced read-only from the
 main checkout's ``third_party/PonderPounce`` (override with ``SGEVAL_PP_PYTHON``/``SGEVAL_THIRD_PARTY``). A missing
-interpreter or source fails the test, no skip. The subprocess inherits this process's ``PYTHONPATH`` (so the resource
+interpreter is reported as a "Not verified" skip (counted by the resource guard); a missing source fails the test. The subprocess inherits this process's ``PYTHONPATH`` (so the resource
 guard's sitecustomize applies too).
 """
 from __future__ import annotations
@@ -606,7 +606,9 @@ def _pp_root() -> Path:
 
 def _pp_python() -> str:
     py = os.environ.get("SGEVAL_PP_PYTHON") or str(_main_checkout() / CLIENT_ENV_PY)
-    assert Path(py).exists(), f"interpreter with vla-eval/torch not found (set SGEVAL_PP_PYTHON): {py}"
+    if not Path(py).exists():
+        pytest.skip(f"Not verified: interpreter with vla-eval/torch not found (build envs/client-env or set "
+                    f"SGEVAL_PP_PYTHON): {py}")
     return py
 
 
