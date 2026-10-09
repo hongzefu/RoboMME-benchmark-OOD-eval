@@ -41,6 +41,7 @@
 | split-sync | 三个子环境 venv 构建 | 已结束（`EXIT_CODE=0`，会话随命令退出） |
 | split-dummy2 | EVAL_EPISODE 续跑：dummy VideoUnmask ood 局 0（卡 0；hard-verify 局已完成、跳过） | 已结束：`EVAL_DONE episodes_run=1 skipped=1 exit=0`，`EXIT_CODE=0` |
 | split-sim | benchmark 仓 `tests/robomme_hard/sim --allow-sim-reset`（卡 1，59 + 1 = 60 次 reset） | 已结束：60 passed，217.7 s，`EXIT_CODE=0` |
+| split-demos | S4 专家演示全量渲染（16 任务 × 50 局 × 2 版，16 进程） | 2026-10-08 20:13 起；20:2x 按用户指令停止（`tmux kill-session -t '=split-demos'`，删前删后 tmux ls 核对），停时 done=128/800，产物原样留在 `expert_demos/ood/`（含被打断的半成品） |
 | split-glsync | 经 ssh 在 GL 登录节点为 NFS 副本建主 `.venv` 与 `envs/client-env/.venv`（`uv sync --frozen`，解释器 NFS 上的 cpython 3.11.14） | 已结束：`EXIT_CODE=0`，两环境 `robomme_hard.__file__` 均指 NFS 副本子模块 |
 
 ## 五、预算账本
@@ -55,3 +56,18 @@
 | 主 `.venv`、`envs/client-env/.venv` | GL 登录节点新建（见 split-glsync） |
 | 三方服务 venv（沿用上一轮 GL 评估，同锁定 gitlink） | `mme_vla_py`、`pp_py`：`…/robomme_benchmark-sgeval/third_party/{mme-vla,PonderPounce}/.venv/bin/python`；`smvla_py`：`…/robomme_benchmark-sgeval2-b34/artifacts/v8-two/venvs/smvla-env/bin/python` |
 | 本机输入 symlink | `artifacts/inputs/v9-delivery` → 旧仓 `artifacts/newtask-v9/delivery`（5 档 800 个 h5，只读） |
+
+## 七、S4 口径变更（用户 2026-10-08）
+
+用户原话：「你现在为什么要进行全量的渲染」「不需要渲染所有的专家演示渲染。我只需要每一个任务渲染一局就可以了」。
+S4 由「16 任务 × 50 局 × 2 版 = 1600 个视频」改为「16 任务 × 1 局（ood 局 0）× 2 版 = 32 个视频」，输出 `artifacts/split-accept-20261008-01/expert_demos_ep0/ood/`；
+判定行相应为 `EXPERT_DEMOS=PASS episodes=16 files=32 frames_match=16`。
+
+## 八、S3 与 S4 判定行（主检出 32b7845）
+
+- 全量门禁：`timeout 600s uv run --no-sync python -m pytest -m 'not slow' -q` → 1223 passed, 6 skipped，`TEST_RESOURCE=PASS`；`-m slow` → 101 passed。
+  旧仓同口径评估侧基线 1127 passed（eval 328、evalx 334、gen 112、parity 287、site 66）；差额构成见 1.12 合并提交（gen 只留四类、parity 去 train_split 一路、新增 static／unit_eval／test_episode）。
+- `TEST_INVENTORY=PASS unclassified=0 stale=0 exempt=13`；`TEST_CONTRACTS=PASS entries=115 verified=112 conditional=3 blocked=0 planned=0 missing=0 pending=0`；
+  `EVAL_PATHS=PASS legacy_hits=0 exempt_legacy_map_keys=83`；`EVAL_ENTRIES=PASS scripts=1 bench_scripts=5`；`PARITY_IMPORT=PASS legacy_hits=0 files=12 light_ok=1`（E5）；
+  `CLIENT_REPLAY_EQ=PASS routes=5 cases=13 tamper_detected=1 route_pass=5 selftest_pass=5`（E4，旧仓对旧仓）。
+- S4：`EXPERT_DEMOS=PASS episodes=16 files=32 frames_match=16`（每任务 ood 局 0 × 2 版，`expert_demos_ep0/ood/`；目视抽查 VideoUnmask、PatternLock、StopCube 红框区间与文字区正确）。
