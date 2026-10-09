@@ -900,6 +900,7 @@ class SmvlaPolicy(_servers.ServedPolicy):
     启动（旧席位如此；进程内已加载 numpy 后再设无效，这里只核对并告警）。"""
 
     model = "smvla"
+    requires_ckpt = True
 
     def __init__(self, policy_seed: int, **cfg: Any):
         super().__init__(policy_seed, **cfg)
@@ -908,7 +909,7 @@ class SmvlaPolicy(_servers.ServedPolicy):
 
     def load(self) -> None:
         S = _servers
-        self.ckpt = Path(self.cfg.get("ckpt") or S.DEFAULT_CKPTS[self.model])
+        self.ckpt = S.require_ckpt(self.cfg, self.model)
         self._pick_port()
         argv, env, cwd = smvla_server_spec(self, self.ckpt)
         if self.preflight:

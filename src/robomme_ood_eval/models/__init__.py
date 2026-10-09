@@ -16,6 +16,9 @@ REGISTRY: dict[str, tuple[str, str]] = {
     "astra": ("robomme_ood_eval.models.astra", "AstraPolicy"),
 }
 MODELS = tuple(REGISTRY)
+#: Models that need ``--ckpt`` (no default checkpoint). Kept static so the CLI can check it without importing
+#: every model module; must match each Policy subclass's ``requires_ckpt`` (pinned by a unit test).
+MODELS_REQUIRING_CKPT: frozenset[str] = frozenset({"perceptual-framesamp-modul", "groundsg", "smvla", "pp"})
 
 
 def resolve(name: str) -> type:

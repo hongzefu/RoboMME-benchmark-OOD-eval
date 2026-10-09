@@ -1177,6 +1177,7 @@ class GroundSGPolicy(_servers.ServedPolicy):
     ``warmup``、``work_dir``；``client_factory``、``qwen_extra`` 只供单测注入替身。"""
 
     model = "groundsg"
+    requires_ckpt = True
 
     def __init__(self, policy_seed: int, **cfg: Any):
         super().__init__(policy_seed, **cfg)
