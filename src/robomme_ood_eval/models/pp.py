@@ -114,7 +114,7 @@ HELLO, OBSERVATION, ACTION, EPISODE_START, EPISODE_END, ERROR = (
 
 def load_trace_writer():
     """评估包的 ``record.trace_writer`` 模块（包内 import，已导入则复用；单测可整体替换本函数）。"""
-    from robomme_hard_eval.record import trace_writer
+    from robomme_ood_eval.record import trace_writer
 
     return trace_writer
 
@@ -882,8 +882,8 @@ def _rec_array(recorder, name: str, arr: np.ndarray, step: int) -> None:
 
 # ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
 
-from robomme_hard_eval import servers as _servers  # noqa: E402
-from robomme_hard_eval.policy import Ready  # noqa: E402
+from robomme_ood_eval import servers as _servers  # noqa: E402
+from robomme_ood_eval.policy import Ready  # noqa: E402
 
 
 def pp_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:

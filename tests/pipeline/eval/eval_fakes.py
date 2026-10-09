@@ -45,8 +45,8 @@ def env_client():
 
 def env_session():
     """拆仓后 ``EnvSession``、``NullRecorder``、``StepCapReached``、``RecorderError``、``ResetBudgetExhausted`` 在评估包
-    ``robomme_hard_eval.session``（原在 env_client.py；``env_client()`` 现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
-    from robomme_hard_eval import session
+    ``robomme_ood_eval.session``（原在 env_client.py；``env_client()`` 现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
+    from robomme_ood_eval import session
 
     return session
 
@@ -427,7 +427,7 @@ EXEC_ROWS = 5
 
 
 def _policy_base():
-    from robomme_hard_eval.policy import Policy
+    from robomme_ood_eval.policy import Policy
 
     return Policy
 
@@ -474,7 +474,7 @@ def _make_policy_classes():
             except Exception as e:  # noqa: BLE001
                 from websockets.exceptions import ConnectionClosed
 
-                from robomme_hard_eval.session import StepCapReached
+                from robomme_ood_eval.session import StepCapReached
 
                 if isinstance(e, StepCapReached):
                     raise
@@ -541,7 +541,7 @@ def as_policy(policy_obj, policy_name: str, seed: int = 7):
 
 
 def episode_mod():
-    from robomme_hard_eval import episode as E
+    from robomme_ood_eval import episode as E
 
     return E
 

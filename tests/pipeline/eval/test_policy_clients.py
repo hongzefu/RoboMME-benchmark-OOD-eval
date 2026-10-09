@@ -325,7 +325,7 @@ def test_run_args_accept_all_four_policies(tmp_path):
 # ---------------------------------------------------------------- S4：两条新侧路线的逐步轨迹（契约 C1～C11）
 #
 # 期望一律由假环境的计划手算（步数、帧数、终态）；契约判据交 S0 的 trace_contract 助手。
-# 环境会话用真实 robomme_hard_eval.session.EnvSession（假 builder），步数口径（异常步计步、strict-cap 不进环境）与生产相同。
+# 环境会话用真实 robomme_ood_eval.session.EnvSession（假 builder），步数口径（异常步计步、strict-cap 不进环境）与生产相同。
 
 IDENT = {"task": "T", "tier": "xhard0", "seed": 1, "source_episode": 2, "builder_episode": 2, "key": "T_xhard0_1"}
 

@@ -78,7 +78,7 @@ from pathlib import Path
 
 import numpy as np
 
-#: 评估仓根（本文件在 src/robomme_hard_eval/servers/ 下）
+#: 评估仓根（本文件在 src/robomme_ood_eval/servers/ 下）
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SUBMODULE_ROOT = REPO_ROOT / "third_party" / "SimpleMemVLA"
 OPENPI_CLIENT_SRC = REPO_ROOT / "third_party" / "mme-vla" / "packages" / "openpi-client" / "src"

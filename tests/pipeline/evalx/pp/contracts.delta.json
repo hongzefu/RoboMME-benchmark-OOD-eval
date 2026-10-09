@@ -3,7 +3,7 @@
     "id": "C13-PP-PROTOCOL",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/pp.py",
+      "src/robomme_ood_eval/models/pp.py",
       "dev-scripts/orig/pp_official_runner.py"
     ],
     "symbol": "pp_client.run_episode / ObsPacker.make / exec_action8 / episode_start_payload；pp_official_runner.run_shard / make_tracing_bench_class / make_fixed_sid_recorder_class",
@@ -28,7 +28,7 @@
     "id": "C13-PP-SID",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/pp.py"
+      "src/robomme_ood_eval/models/pp.py"
     ],
     "symbol": "pp_client.fixed_sid / episode_idx_of",
     "oracle": "计划 1.4「固定 sid」行手写：xhard0 为 <task>|<source_episode>|<seed>，V9 为 <task>|<tier>|<seed>；eid 与 sid 相同；EPISODE_START 的 episode_idx 取官方局号 source_episode",
@@ -47,7 +47,7 @@
     "id": "C13-PP-STEPS-RECONNECT",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/pp.py",
+      "src/robomme_ood_eval/models/pp.py",
       "dev-scripts/orig/pp_official_runner.py"
     ],
     "symbol": "pp_client._run_episode_async 的 range(max_steps) 循环与 _act_with_reconnect；pp_official_runner.run_shard 的异常与 reconnect 分支",
@@ -93,7 +93,7 @@
     "id": "C13-PP-SERVER-WRAP",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/servers/pp_server_wrap.py"
+      "src/robomme_ood_eval/servers/pp_server_wrap.py"
     ],
     "symbol": "SubgoalReportingServer._fire_s1 / _dispense / latest_visible_subgoal / 入口 run_server",
     "oracle": "锁定父类真实方法 + CPU 桩，原类与外壳两套节拍各 200 步逐步比较；子目标按节拍算式独立推出",

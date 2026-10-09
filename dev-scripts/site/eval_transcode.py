@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v8 站点：把 V8 双模型评估录像（FFV1 无损 mkv）转成浏览器可播的 H.264 mp4（只读录像目录，不跑仿真）。
 
-评估录像器（``src/robomme_hard_eval/record/recorder.py``）每局两路 ``front.mkv``／``wrist.mkv``，同一流里 sha256 相同的帧只编码
+评估录像器（``src/robomme_ood_eval/record/recorder.py``）每局两路 ``front.mkv``／``wrist.mkv``，同一流里 sha256 相同的帧只编码
 一份，``frames-<stream>.jsonl`` 逐帧记 ``idx``（原始帧序号）、``enc``（该帧在 mkv 里的编码序号）、``tag``（``reset``
 ＝初始观测与演示段，``step<k>``＝执行第 k 步）。直接转码 mkv 会丢掉重复帧、时间轴错位，所以逐局：
 

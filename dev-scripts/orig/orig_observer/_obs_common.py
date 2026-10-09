@@ -6,7 +6,7 @@
 S7（1005-eval-video-phase2-all-models-rerun-plan.md 第二部分一节 S7）相对 v7.5eval ``_v75_obs_common.py`` 的改动：
 - 局目录改为与 GroundSG 原侧 ``official_hard_runner.run_identity`` 同布局的 ``<root>/<key>.a<N>/``，``key`` 与上一轮
   xhard0 分片相同（``<task>_xhard0_<seed>``），``N`` 按该身份在本录制根下的开局顺序编号（续跑接着编）；
-- 新增 ``load_eval_module`` 按路径加载评估包里的 ``groundsg_client``（拆仓后在 ``src/robomme_hard_eval/models/groundsg.py``；
+- 新增 ``load_eval_module`` 按路径加载评估包里的 ``groundsg_client``（拆仓后在 ``src/robomme_ood_eval/models/groundsg.py``；
   复用其 ``RawFrameWriter`` 与已加载的 ``trace_writer``），旧模块名到新文件的映射见 ``EVAL_MODULE_FILES``；
 - 新增 ``HookErrors``：钩子异常只打一行 ``OBSERVER_HOOK_ERROR`` 并累加计数，同时追加到
   ``<root>/hook-errors.jsonl``（启动器据此出 ``OBSERVER_COMPLETE`` 的 ``hook_errors=``）。
@@ -28,8 +28,8 @@ from typing import Any
 OBS_DIR = Path(__file__).resolve().parent
 #: 评估仓根（本文件在 ``dev-scripts/orig/orig_observer/``）
 REPO = OBS_DIR.parents[2]
-#: 评估包源码根（``src/robomme_hard_eval/``）
-EVAL_PKG = REPO / "src" / "robomme_hard_eval"
+#: 评估包源码根（``src/robomme_ood_eval/``）
+EVAL_PKG = REPO / "src" / "robomme_ood_eval"
 #: 旧仓评估目录下 ``<名>.py`` 的模块名 → 拆仓后的文件（别名照旧，同一模块只加载一份）
 EVAL_MODULE_FILES = {
     "official_defs": EVAL_PKG / "models" / "_official_defs.py",
@@ -65,7 +65,7 @@ def load_recorder():
 def load_eval_module(name: str):
     """按路径加载旧名 ``name`` 对应的评估包模块（``EVAL_MODULE_FILES``；模块名即 ``name``，已加载则复用；与模型客户端
     的 ``load_sibling`` 同一别名约定，故 ``trace_writer`` 只有一份）。评估包 ``src`` 追加到 ``sys.path`` 末尾，供拆仓后
-    模块里的 ``robomme_hard_eval.*`` 包内导入使用（放末尾，不遮蔽原版客户端的同名模块）。"""
+    模块里的 ``robomme_ood_eval.*`` 包内导入使用（放末尾，不遮蔽原版客户端的同名模块）。"""
     if name in sys.modules:
         return sys.modules[name]
     src = str(REPO / "src")

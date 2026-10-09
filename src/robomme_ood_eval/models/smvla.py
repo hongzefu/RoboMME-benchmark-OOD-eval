@@ -317,11 +317,11 @@ _TAG_ATTEMPT = re.compile(r"\.a(\d+)$")
 
 
 #: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
-SIBLINGS = {"smvla_client": "robomme_hard_eval.models.smvla",
-            "groundsg_client": "robomme_hard_eval.models.groundsg",
-            "framesamp_modul_client": "robomme_hard_eval.models.framesamp_modul",
-            "official_defs": "robomme_hard_eval.models._official_defs",
-            "trace_writer": "robomme_hard_eval.record.trace_writer"}
+SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
+            "groundsg_client": "robomme_ood_eval.models.groundsg",
+            "framesamp_modul_client": "robomme_ood_eval.models.framesamp_modul",
+            "official_defs": "robomme_ood_eval.models._official_defs",
+            "trace_writer": "robomme_ood_eval.record.trace_writer"}
 
 
 def load_sibling(name: str):
@@ -863,8 +863,8 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
 
 # ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
 
-from robomme_hard_eval import servers as _servers  # noqa: E402
-from robomme_hard_eval.policy import Ready  # noqa: E402
+from robomme_ood_eval import servers as _servers  # noqa: E402
+from robomme_ood_eval.policy import Ready  # noqa: E402
 
 
 def smvla_server_spec(policy, ckpt: Any) -> tuple[list, dict, Path]:

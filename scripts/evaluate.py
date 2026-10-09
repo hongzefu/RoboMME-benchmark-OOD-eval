@@ -76,7 +76,7 @@ def parse_extra(tokens: list[str]) -> dict:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    from robomme_hard_eval.models import MODELS
+    from robomme_ood_eval.models import MODELS
 
     p = argparse.ArgumentParser(prog="scripts/evaluate.py", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -117,7 +117,7 @@ def make_cfg(args, extra: dict) -> dict:
 
 
 def episode_range(task: str, dataset: str, rng: tuple[int, int] | None) -> range:
-    from robomme_hard_eval import episode as E
+    from robomme_ood_eval import episode as E
 
     n = int(E.builder_for(task, dataset).get_episode_num())
     if rng is None:
@@ -129,7 +129,7 @@ def episode_range(task: str, dataset: str, rng: tuple[int, int] | None) -> range
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args, rest = parser.parse_known_args(argv)
-    from robomme_hard_eval.policy import ServerProcess
+    from robomme_ood_eval.policy import ServerProcess
 
     if args.stop_server is not None:
         how = ServerProcess.stop_by_metadata(args.stop_server)
@@ -137,10 +137,10 @@ def main(argv: list[str] | None = None) -> int:
     missing = [n for n in ("model", "dataset", "seed", "out") if getattr(args, n) is None]
     if missing:
         parser.error("必须给 " + " ".join(f"--{m}" for m in missing))
-    from robomme_hard_eval import episode as E
-    from robomme_hard_eval import report
-    from robomme_hard_eval.policy import AstraStop, ServerDead, ServerMismatch, load_policy
-    from robomme_hard_eval.session import ResetBudgetExhausted
+    from robomme_ood_eval import episode as E
+    from robomme_ood_eval import report
+    from robomme_ood_eval.policy import AstraStop, ServerDead, ServerMismatch, load_policy
+    from robomme_ood_eval.session import ResetBudgetExhausted
 
     datasets = [d.strip() for d in args.dataset.split(",") if d.strip()]
     bad = [d for d in datasets if d not in E.DATASET_MAX_STEPS]

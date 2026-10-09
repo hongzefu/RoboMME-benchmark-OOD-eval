@@ -29,11 +29,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from robomme_hard_eval.policy import Policy, ServerMismatch, ServerProcess, pick_port
+from robomme_ood_eval.policy import Policy, ServerMismatch, ServerProcess, pick_port
 
 #: 本目录（三个服务外壳脚本所在处）
 SERVERS_DIR = Path(__file__).resolve().parent
-#: 评估仓根（本文件在 src/robomme_hard_eval/servers/ 下）
+#: 评估仓根（本文件在 src/robomme_ood_eval/servers/ 下）
 REPO = Path(__file__).resolve().parents[3]
 #: 起服务端前一律去掉的变量（旧 run_seat.sh 的 CLEAN_ENV）
 CLEAN_ENV = ("XLA_FLAGS", "JAX_COMPILATION_CACHE_DIR", "JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES",

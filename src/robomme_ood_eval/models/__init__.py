@@ -8,12 +8,12 @@ import importlib
 
 #: 注册名 → (模块路径, 类名)；注册名即 ``scripts/evaluate.py --model`` 的取值与产物树里的 ``<模型>`` 目录名
 REGISTRY: dict[str, tuple[str, str]] = {
-    "dummy": ("robomme_hard_eval.models.dummy", "DummyPolicy"),
-    "perceptual-framesamp-modul": ("robomme_hard_eval.models.framesamp_modul", "FrameSampModulPolicy"),
-    "groundsg": ("robomme_hard_eval.models.groundsg", "GroundSGPolicy"),
-    "smvla": ("robomme_hard_eval.models.smvla", "SmvlaPolicy"),
-    "pp": ("robomme_hard_eval.models.pp", "PPPolicy"),
-    "astra": ("robomme_hard_eval.models.astra", "AstraPolicy"),
+    "dummy": ("robomme_ood_eval.models.dummy", "DummyPolicy"),
+    "perceptual-framesamp-modul": ("robomme_ood_eval.models.framesamp_modul", "FrameSampModulPolicy"),
+    "groundsg": ("robomme_ood_eval.models.groundsg", "GroundSGPolicy"),
+    "smvla": ("robomme_ood_eval.models.smvla", "SmvlaPolicy"),
+    "pp": ("robomme_ood_eval.models.pp", "PPPolicy"),
+    "astra": ("robomme_ood_eval.models.astra", "AstraPolicy"),
 }
 MODELS = tuple(REGISTRY)
 

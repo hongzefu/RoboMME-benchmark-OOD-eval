@@ -99,12 +99,12 @@ BENCH_SRC = REPO / "third_party" / "robomme_benchmark" / "src"
 EVAL_SRC = REPO / "src"
 #: 旧仓评估目录下的模块名 → 拆仓后的文件（别名照旧）
 EVAL_MODULE_FILES = {
-    "official_defs": EVAL_SRC / "robomme_hard_eval" / "models" / "_official_defs.py",
-    "groundsg_client": EVAL_SRC / "robomme_hard_eval" / "models" / "groundsg.py",
-    "framesamp_modul_client": EVAL_SRC / "robomme_hard_eval" / "models" / "framesamp_modul.py",
-    "smvla_client": EVAL_SRC / "robomme_hard_eval" / "models" / "smvla.py",
-    "trace_writer": EVAL_SRC / "robomme_hard_eval" / "record" / "trace_writer.py",
-    "recorder": EVAL_SRC / "robomme_hard_eval" / "record" / "recorder.py",
+    "official_defs": EVAL_SRC / "robomme_ood_eval" / "models" / "_official_defs.py",
+    "groundsg_client": EVAL_SRC / "robomme_ood_eval" / "models" / "groundsg.py",
+    "framesamp_modul_client": EVAL_SRC / "robomme_ood_eval" / "models" / "framesamp_modul.py",
+    "smvla_client": EVAL_SRC / "robomme_ood_eval" / "models" / "smvla.py",
+    "trace_writer": EVAL_SRC / "robomme_ood_eval" / "record" / "trace_writer.py",
+    "recorder": EVAL_SRC / "robomme_ood_eval" / "record" / "recorder.py",
     "budget_ledger": REPO / "dev-scripts" / "gl" / "budget_ledger.py",
 }
 SIDE = "orig"
@@ -125,7 +125,7 @@ PROBE_TIMEOUT_S = 300.0
 
 def _load(name: str):
     """按文件路径加载旧名 ``name`` 对应的模块（``EVAL_MODULE_FILES``；别名与模型客户端的 ``load_sibling`` 相同，已加载
-    则复用）。评估包 ``src`` 追加到 ``sys.path`` 末尾，供拆仓后模块里的 ``robomme_hard_eval.*`` 包内导入使用。"""
+    则复用）。评估包 ``src`` 追加到 ``sys.path`` 末尾，供拆仓后模块里的 ``robomme_ood_eval.*`` 包内导入使用。"""
     if name in sys.modules:
         return sys.modules[name]
     if str(EVAL_SRC) not in sys.path:

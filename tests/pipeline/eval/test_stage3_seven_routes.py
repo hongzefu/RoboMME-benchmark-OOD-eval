@@ -90,10 +90,10 @@ SRV_CFG = {"perceptual-framesamp-modul": {"mme_vla_py": "/py/mme-vla", "ckpt": "
 
 def server_argv(route: str, seed: int) -> list[str]:
     """该路线 Policy 的服务端 argv（端口 18123，不起服务）。"""
-    from robomme_hard_eval.models import framesamp_modul as fm
-    from robomme_hard_eval.models import pp as ppm
-    from robomme_hard_eval.models import resolve
-    from robomme_hard_eval.models import smvla as smm
+    from robomme_ood_eval.models import framesamp_modul as fm
+    from robomme_ood_eval.models import pp as ppm
+    from robomme_ood_eval.models import resolve
+    from robomme_ood_eval.models import smvla as smm
 
     pol, variant = ROUTES[route]
     cfg = dict(SRV_CFG[pol], port=18123, openpi_data_home="/openpi", preflight=False, ckpt_fingerprint=False,

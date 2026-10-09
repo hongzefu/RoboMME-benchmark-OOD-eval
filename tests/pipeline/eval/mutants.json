@@ -1,13 +1,13 @@
 {
-  "note": "评估块的具名植入（拆仓后按新树重切）：每项都带内联 patch（文件、恰好命中 1 次的 old、new），在隔离副本里落盘植入；目标在 dev-scripts/gl、src/robomme_hard_eval（非受保护目录）。M13／M16／M17 为计划植入清单编号，F2／F3 为生产小修的回归牙齿，T8b-K* 为本块自加，S2-D* 为数据集路由等自加，Q-* 为拆仓后动态队列与看门狗结算（领取过期回收、回收结算 rid、同席位旧进程、O_EXCL 并发、_hard_exit 结算、心跳不复活已收尾领取）。旧 SeatRunner.run_one／run_identities_v8／_classify 与旧 check_identity 的植入项已删除或改指 episode.py 的对应位置。",
+  "note": "评估块的具名植入（拆仓后按新树重切）：每项都带内联 patch（文件、恰好命中 1 次的 old、new），在隔离副本里落盘植入；目标在 dev-scripts/gl、src/robomme_ood_eval（非受保护目录）。M13／M16／M17 为计划植入清单编号，F2／F3 为生产小修的回归牙齿，T8b-K* 为本块自加，S2-D* 为数据集路由等自加，Q-* 为拆仓后动态队列与看门狗结算（领取过期回收、回收结算 rid、同席位旧进程、O_EXCL 并发、_hard_exit 结算、心跳不复活已收尾领取）。旧 SeatRunner.run_one／run_identities_v8／_classify 与旧 check_identity 的植入项已删除或改指 episode.py 的对应位置。",
   "mutants": [
     {
       "id": "M13a",
-      "target": "src/robomme_hard_eval/episode.py::run_episode",
+      "target": "src/robomme_ood_eval/episode.py::run_episode",
       "method": "隔离副本删掉每局开头的 policy.reset(spec)（常驻 Policy 不再按局重置）",
       "patch": [
         {
-          "file": "src/robomme_hard_eval/episode.py",
+          "file": "src/robomme_ood_eval/episode.py",
           "old": "    policy.reset(spec)\n",
           "new": "    pass\n"
         }
@@ -18,11 +18,11 @@
     },
     {
       "id": "M16a",
-      "target": "src/robomme_hard_eval/episode.py::_classify",
+      "target": "src/robomme_ood_eval/episode.py::_classify",
       "method": "隔离副本把步数到顶的终态 timeout 改成 fail",
       "patch": [
         {
-          "file": "src/robomme_hard_eval/episode.py",
+          "file": "src/robomme_ood_eval/episode.py",
           "old": "        status = \"timeout\"\n",
           "new": "        status = \"fail\"\n"
         }
@@ -50,11 +50,11 @@
     },
     {
       "id": "M16c",
-      "target": "src/robomme_hard_eval/models/framesamp_modul.py::INFRA_MARKERS",
+      "target": "src/robomme_ood_eval/models/framesamp_modul.py::INFRA_MARKERS",
       "method": "隔离副本在基础设施标记表里加 \"Error\"（普通失败按基础设施记）",
       "patch": [
         {
-          "file": "src/robomme_hard_eval/models/framesamp_modul.py",
+          "file": "src/robomme_ood_eval/models/framesamp_modul.py",
           "old": "INFRA_MARKERS = (\"RecorderError\",",
           "new": "INFRA_MARKERS = (\"Error\", \"RecorderError\","
         }
@@ -142,11 +142,11 @@
     },
     {
       "id": "T8b-K2",
-      "target": "src/robomme_hard_eval/models/smvla.py::hard_bound",
+      "target": "src/robomme_ood_eval/models/smvla.py::hard_bound",
       "method": "隔离副本把决策上限的 +2 改成 +3",
       "patch": [
         {
-          "file": "src/robomme_hard_eval/models/smvla.py",
+          "file": "src/robomme_ood_eval/models/smvla.py",
           "old": "    return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 2\n",
           "new": "    return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 3\n"
         }
@@ -172,11 +172,11 @@
     },
     {
       "id": "S2-D1",
-      "target": "src/robomme_hard_eval/episode.py::check_identity",
+      "target": "src/robomme_ood_eval/episode.py::check_identity",
       "method": "隔离副本把 hard-verify 身份逐键比对的 (seed, source_episode) 改成只比 seed",
       "patch": [
         {
-          "file": "src/robomme_hard_eval/episode.py",
+          "file": "src/robomme_ood_eval/episode.py",
           "old": "        for k in (\"seed\", \"source_episode\"):\n",
           "new": "        for k in (\"seed\",):\n"
         }
@@ -188,11 +188,11 @@
     },
     {
       "id": "S2-D2",
-      "target": "src/robomme_hard_eval/episode.py::run_episode",
+      "target": "src/robomme_ood_eval/episode.py::run_episode",
       "method": "隔离副本把 step_cap 改成恒等于数据集步数（hard-verify 也被截断）",
       "patch": [
         {
-          "file": "src/robomme_hard_eval/episode.py",
+          "file": "src/robomme_ood_eval/episode.py",
           "old": "step_cap=spec.max_steps if spec.strict_cap else None",
           "new": "step_cap=spec.max_steps"
         }

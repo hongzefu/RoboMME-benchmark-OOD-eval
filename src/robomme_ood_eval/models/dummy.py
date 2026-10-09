@@ -10,8 +10,8 @@ from pathlib import Path
 
 import numpy as np
 
-from robomme_hard_eval.policy import Policy
-from robomme_hard_eval.record.trace_writer import TraceWriter
+from robomme_ood_eval.policy import Policy
+from robomme_ood_eval.record.trace_writer import TraceWriter
 
 #: 官方 DummyModel 的基准关节动作（7 关节 + 夹爪）
 BASE_ACTION = np.array([0.0, 0.0, 0.0, -np.pi / 2, 0.0, np.pi / 2, np.pi / 4, 1.0], dtype=np.float32)
@@ -70,7 +70,7 @@ class DummyPolicy(Policy):
                     status = "success" if st == "success" else ("timeout" if st == "timeout" else "fail")
                     break
         except BaseException as e:
-            from robomme_hard_eval.session import StepCapReached
+            from robomme_ood_eval.session import StepCapReached
 
             status = "timeout" if isinstance(e, StepCapReached) else "error"
             trace.close(status=status, terminal_reason=status, demo_frames=demo_frames, cap_hit=session.cap_hit,

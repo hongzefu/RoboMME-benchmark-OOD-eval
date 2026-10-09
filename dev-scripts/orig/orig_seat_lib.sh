@@ -3,7 +3,7 @@
 #
 # 1008 拆分方案：新侧席位已改为 dev-scripts/gl/seat.py（常驻 Policy + 动态队列，服务端由 Python ServerProcess 起停），
 # 旧席位执行器不迁入；但原侧对照（dev-scripts/orig/run_official_hard.sh、pair_seat.sh）照旧复用这里的服务端起停、
-# 端口挑选、配对核对、无进展检测与媒体收尾函数，语义不改。拆仓只改路径：服务外壳在 src/robomme_hard_eval/servers/、
+# 端口挑选、配对核对、无进展检测与媒体收尾函数，语义不改。拆仓只改路径：服务外壳在 src/robomme_ood_eval/servers/、
 # 媒体函数库在 dev-scripts/gl/seat_media_lib.sh；新侧客户端构造（build_client_cmd）已停用，调用即 RUN_BLOCKED。
 # 以下为原文件说明（路径已按拆仓更新）。
 #
@@ -38,7 +38,7 @@
 #   RUN_BLOCKED reason=variant_pairing。
 # 模型种子（接口冻结说明 2.2）：--policy-seed 必填（非负整数，缺失 RUN_BLOCKED reason=policy_seed、退出 3），转发给
 #   客户端（seat_info、结果行）与服务：perceptual-framesamp-modul／groundsg（含 MemER，动作服务命令相同）改走外壳
-#   src/robomme_hard_eval/servers/policy_server_wrap.py --seed=<n>（包锁定三方 serve_policy.py，不改三方源码），smvla
+#   src/robomme_ood_eval/servers/policy_server_wrap.py --seed=<n>（包锁定三方 serve_policy.py，不改三方源码），smvla
 #   smvla_server.py serve --policy-seed <n>，pp --args.seed <n>；服务写 <out>/<label>/server-metadata-<端口>.json
 #   （含 policy_seed、argv），客户端经 --server-metadata 反查结果行 server_seed。作为库被 source 时种子取全局
 #   POLICY_SEED（缺省继承同名环境变量），为空则 build_server_cmd 打印 RUN_BLOCKED reason=policy_seed、返回 3。
@@ -91,7 +91,7 @@
 #   SGEVAL_OFFICIAL_RENDER=1  finish_episode_dir 在并入轨迹之后、转码之前调 render_official_dir 出官方版式视频
 #                             （<局目录>/official/）；失败则本局转码带 --keep-raw（原始帧随目录发布）、写
 #                             official-render.failed、照常发布成绩；结果按行记进 OR_TALLY（若设）。
-#   SGEVAL_PP_SERVER_WRAP=1   pp 服务改以绝对路径起 src/robomme_hard_eval/servers/pp_server_wrap.py（回包带 subgoal），
+#   SGEVAL_PP_SERVER_WRAP=1   pp 服务改以绝对路径起 src/robomme_ood_eval/servers/pp_server_wrap.py（回包带 subgoal），
 #                             参数与 ponderpounce.eval.robomme_server 相同；外壳缺失则 RUN_BLOCKED reason=pp_server_wrap_missing。
 set -uo pipefail
 
@@ -351,11 +351,11 @@ preflight_pp() {
 }
 
 pp_server_wrap_path() {  # pp 服务外壳的绝对路径（服务 cwd 在第三方目录，必须用绝对路径起）
-  echo "$REPO/src/robomme_hard_eval/servers/pp_server_wrap.py"
+  echo "$REPO/src/robomme_ood_eval/servers/pp_server_wrap.py"
 }
 
 policy_server_wrap_path() {  # MME-VLA 动作服务外壳（perceptual-framesamp-modul／groundsg 共用）的绝对路径
-  echo "$REPO/src/robomme_hard_eval/servers/policy_server_wrap.py"
+  echo "$REPO/src/robomme_ood_eval/servers/policy_server_wrap.py"
 }
 
 server_metadata_path() {  # $1 = 策略；$2 = 端口 → 服务元数据路径（SRV_META_DIR 可覆盖目录；缺省 <out>/<label>）
@@ -477,7 +477,7 @@ build_server_cmd() {  # $1 = 策略；$2 = 端口 → 设 SRV_DIR、SRV_ENV、SR
       [[ "$DET" == "on" ]] && detarg=(--det) && SRV_ENV=(CUBLAS_WORKSPACE_CONFIG=:4096:8)
       SRV_ENV+=(PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false PYTHONUTF8=1
                 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True MPLBACKEND=Agg)
-      SRV_ARGV=("$SMVLA_PY" src/robomme_hard_eval/servers/smvla_server.py serve --port "$port" --ckpt "$SMVLA_CKPT"
+      SRV_ARGV=("$SMVLA_PY" src/robomme_ood_eval/servers/smvla_server.py serve --port "$port" --ckpt "$SMVLA_CKPT"
                 --warmup "${detarg[@]}" --policy-seed "$POLICY_SEED" --metadata_out "$meta");;
   esac
   return 0
@@ -517,7 +517,7 @@ start_server() {  # $1 = 策略；$2 = 端口；$3 = 日志；$4 = 结果目录�
       echo "RUN_BLOCKED reason=server_config（日志里没有 history_config='$expect'）"; stop_server; return 3
     fi
     if [[ "$pol" == "perceptual-framesamp-modul" && "$RELAY" == "on" ]]; then
-      ( exec setsid env "${NOPROXY_ENV[@]}" PYTHONUNBUFFERED=1 "$BENCH_PY" "$REPO/src/robomme_hard_eval/models/framesamp_modul.py" relay \
+      ( exec setsid env "${NOPROXY_ENV[@]}" PYTHONUNBUFFERED=1 "$BENCH_PY" "$REPO/src/robomme_ood_eval/models/framesamp_modul.py" relay \
           --listen "$((port + 1))" --upstream "$port" --log "$rdir/relay-$port.jsonl" ) >"$rdir/relay-$port.log" 2>&1 &
       RELAY_PID=$!
       local i; for i in $(seq 1 60); do port_busy "$((port + 1))" && break; sleep 0.5; done

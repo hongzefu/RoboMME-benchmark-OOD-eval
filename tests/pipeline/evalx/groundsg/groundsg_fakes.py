@@ -65,9 +65,9 @@ def env_client():
 
 
 def env_session():
-    """拆仓后 ``EnvSession``／``NullRecorder``／``StepCapReached`` 在评估包 ``robomme_hard_eval.session``（``env_client()``
+    """拆仓后 ``EnvSession``／``NullRecorder``／``StepCapReached`` 在评估包 ``robomme_ood_eval.session``（``env_client()``
     现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
-    from robomme_hard_eval import session
+    from robomme_ood_eval import session
 
     return session
 

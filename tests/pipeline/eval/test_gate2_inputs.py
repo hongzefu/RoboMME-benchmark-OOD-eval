@@ -325,7 +325,7 @@ def _load_base(tmp_path):
     d = tmp_path / "base_mod"
     d.mkdir()
     (d / "gate2_compare_base.py").write_bytes(src)
-    sys.path.insert(0, str(repo / "src" / "robomme_hard_eval" / "record"))  # BASE 按同目录模块名 import trace_writer
+    sys.path.insert(0, str(repo / "src" / "robomme_ood_eval" / "record"))  # BASE 按同目录模块名 import trace_writer
     try:
         spec = importlib.util.spec_from_file_location("_gate2_compare_base_s6", d / "gate2_compare_base.py")
         mod = importlib.util.module_from_spec(spec)

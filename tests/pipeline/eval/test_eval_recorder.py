@@ -119,10 +119,10 @@ def test_level2_keeps_head_and_tail_only(tmp_path, rec_mod):
 
 def test_seat_runner_with_real_recorder_feeds_report(tmp_path, monkeypatch, capsys, rec_mod):
     """拆仓后：GL 席位（常驻 Policy + 动态队列）用真实 AV1 录制器跑一局：局结果 ``recorder_verify=PASS``、录制器
-    ``summary.json`` 帧数 = 两路 ×（reset 帧 + 20 步各 1 帧）；本局结果行喂评估包汇总 ``robomme_hard_eval.report``
+    ``summary.json`` 帧数 = 两路 ×（reset 帧 + 20 步各 1 帧）；本局结果行喂评估包汇总 ``robomme_ood_eval.report``
     （拆仓后的汇总入口，读 ``rollouts/<模型>/<数据集>/seed<n>/results.jsonl``；旧 ``eval_report`` 读的 ``sNN/<policy>/``
     布局新席位不再产出）。"""
-    from robomme_hard_eval import report
+    from robomme_ood_eval import report
 
     task, tier = F.v9_cells_sorted()[0]
     ident = F.packaged_identity(task, tier, 0)

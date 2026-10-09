@@ -1,7 +1,7 @@
 """Astra 测试的公共替身：规划、监视、VLA、环境、两个服务端全部替身，零外联、零费用、零 GPU。
 
-被测对象是评估仓的 ``robomme_hard_eval.models.astra.AstraPolicy``（模型侧 4 方法），外层用真实的
-``robomme_hard_eval.episode.run_episode``（builder 是真实 ``BenchmarkEnvBuilder`` 的子类，只把
+被测对象是评估仓的 ``robomme_ood_eval.models.astra.AstraPolicy``（模型侧 4 方法），外层用真实的
+``robomme_ood_eval.episode.run_episode``（builder 是真实 ``BenchmarkEnvBuilder`` 的子类，只把
 ``make_env_for_episode`` 打桩成 ``FakeEnv``；录制器是 ``FakeRecorder``，不出网站视频）。
 
 Astra 上游源码只读引用 ``$SGEVAL_THIRD_PARTY/Astra-on-RoboMME``；未设时取当前检出的 ``third_party``，worktree 里
@@ -68,13 +68,13 @@ def print_upstream_digests() -> dict:
 
 
 def load_runner():
-    from robomme_hard_eval.models import astra
+    from robomme_ood_eval.models import astra
 
     return astra
 
 
 def load_guard():
-    from robomme_hard_eval.servers import astra_cost_guard
+    from robomme_ood_eval.servers import astra_cost_guard
 
     return astra_cost_guard
 
@@ -351,7 +351,7 @@ class FakeServer:
     def check(self):
         self.checks += 1
         if self.dead:
-            from robomme_hard_eval.policy import ServerDead
+            from robomme_ood_eval.policy import ServerDead
             raise ServerDead(f"{self.name} 服务端已退出（替身）")
 
     def stop(self, **k):
@@ -405,7 +405,7 @@ class Harness:
 
     def __init__(self, tmp_path: Path, monkeypatch, mod, astra, *, env_plan=None, monitor=None, vla=None,
                  responder="fake", prices=None, max_episodes: int | None = None, **cfg) -> None:
-        from robomme_hard_eval import episode as E
+        from robomme_ood_eval import episode as E
 
         self.tmp, self.mod, self.astra, self.E = Path(tmp_path), mod, astra, E
         monkeypatch.setattr(astra.runner.imageio, "get_writer", lambda *a, **k: NullWriter())
@@ -458,7 +458,7 @@ class Harness:
         return self.ledger.parent / "group_0"
 
     def load(self, seed: int = 7):
-        from robomme_hard_eval.policy import load_policy
+        from robomme_ood_eval.policy import load_policy
 
         self.policy = load_policy("astra", seed, **self.cfg)
         return self.policy
@@ -472,7 +472,7 @@ class Harness:
 
     def batch(self, dataset: str, tasks: list, episode: int = 0):
         """仿 ``scripts/evaluate.py`` 主循环：逐局 ``run_episode``，``AstraStop`` 即整批停。返回 (结果列表, 停机异常)。"""
-        from robomme_hard_eval.policy import AstraStop
+        from robomme_ood_eval.policy import AstraStop
 
         results = []
         try:
@@ -503,7 +503,7 @@ def read_trace(path) -> list[dict]:
 
 def ensure_language_log(monkeypatch) -> str:
     """评估仓的 ``trace_writer.LanguageLog`` 恒存在：返回 ``real``（保留旧接口以免改动调用点）。"""
-    from robomme_hard_eval.record import trace_writer as tw
+    from robomme_ood_eval.record import trace_writer as tw
 
     assert getattr(tw, "LanguageLog", None) is not None
     return "real"

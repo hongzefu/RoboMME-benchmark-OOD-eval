@@ -1,4 +1,4 @@
-"""C13 ``robomme_hard_eval.session.EnvSession``（拆仓前在 env_client.py）：一局环境的 build／reset／step／close 与录制、额度、步数上限。
+"""C13 ``robomme_ood_eval.session.EnvSession``（拆仓前在 env_client.py）：一局环境的 build／reset／step／close 与录制、额度、步数上限。
 
 假环境与假 builder 的行为由本文件手写；核对的是 EnvSession 交给环境与录制器的东西。
 """

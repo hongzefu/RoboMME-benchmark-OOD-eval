@@ -25,7 +25,7 @@ def _trace(path: Path) -> list[dict]:
 
 
 def _ctx(mod, tmp_path: Path, *, cap: int, strict: bool, lang=None):
-    from robomme_hard_eval.record import trace_writer as tw
+    from robomme_ood_eval.record import trace_writer as tw
     writer = tw.TraceWriter(tmp_path / "trace.jsonl", route="astra/new",
                             identity={"task": "BinFill", "dataset": "ood", "key": "k", "attempt": 1}, max_steps=cap)
     return mod.TraceContext(writer, effective_cap=cap, strict_cap=strict, lang=lang), writer
@@ -294,7 +294,7 @@ def test_transport_retry_opens_new_call_with_attempt(tmp_path, monkeypatch):
     clock = Clock()
     with astra_session() as (mod, astra):
         ensure_language_log(monkeypatch)
-        from robomme_hard_eval.record import trace_writer as tw
+        from robomme_ood_eval.record import trace_writer as tw
         client, _gate = _client(mod, astra, fx, clock)
         lang = tw.LanguageLog(tmp_path / "lang" / "language.jsonl")
         ctx = mod.TraceContext(None, lang=lang)
@@ -320,7 +320,7 @@ def test_write_exec_actions_uses_merge_write_npz_when_present(tmp_path, monkeypa
     """``trace_writer.merge_write_npz`` 存在时 ``write_exec_actions`` 只经它写（键 ``exec_action__%05d``）；
     不存在时保持旧的 ``np.savez``。"""
     with astra_session() as (mod, _astra):
-        from robomme_hard_eval.record import trace_writer as tw
+        from robomme_ood_eval.record import trace_writer as tw
         actions = [np.full(8, i, dtype=np.float32) for i in range(3)]
         seen = []
         real = getattr(tw, "merge_write_npz", None)

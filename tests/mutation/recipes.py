@@ -18,7 +18,7 @@ def _t(*patches: tuple[str, str, str]) -> dict:
 
 
 # 拆仓后（评估仓）：挑战接口块（tests/pipeline/challenge）与契约块（tests/contract 的规格 jsonl／builder 植入）随 benchmark
-# 仓走，配方已删；评估块（tests/pipeline/eval）的 mutants.json 每条自带内联 patch（指向 dev-scripts／src/robomme_hard_eval
+# 仓走，配方已删；评估块（tests/pipeline/eval）的 mutants.json 每条自带内联 patch（指向 dev-scripts／src/robomme_ood_eval
 # 新位置），不再依赖本表，旧评估目录（eval-official）的配方一并删去。
 
 # ─────────────────────────────── 生成块（tests/pipeline/gen）与站点块（tests/pipeline/site） ───────────────────────────────

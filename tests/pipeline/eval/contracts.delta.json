@@ -4,9 +4,9 @@
     "domain": "C13",
     "source": [
       "dev-scripts/gl/seat.py",
-      "src/robomme_hard_eval/episode.py",
-      "src/robomme_hard_eval/models/framesamp_modul.py",
-      "src/robomme_hard_eval/models/smvla.py",
+      "src/robomme_ood_eval/episode.py",
+      "src/robomme_ood_eval/models/framesamp_modul.py",
+      "src/robomme_ood_eval/models/smvla.py",
       "dev-scripts/gl/eval_report.py"
     ],
     "symbol": "SeatRunner.run_identities_v8 / run_one → framesamp_modul_client.run_episode / smvla_client.run_episode → eval_report.main",
@@ -40,7 +40,7 @@
     "domain": "C13",
     "source": [
       "dev-scripts/gl/seat.py",
-      "src/robomme_hard_eval/episode.py"
+      "src/robomme_ood_eval/episode.py"
     ],
     "symbol": "同一 SeatRunner 连续 run_one(A)、run_one(B)、run_one(A)",
     "oracle": "假 server 的动作由本局 reset 后收到的帧指纹 + 状态 + 指令确定性生成；第三局执行动作必须与第一局逐位相同",
@@ -62,7 +62,7 @@
     "domain": "C13",
     "source": [
       "dev-scripts/gl/seat.py",
-      "src/robomme_hard_eval/episode.py",
+      "src/robomme_ood_eval/episode.py",
       "dev-scripts/gl/eval_manifest.py"
     ],
     "symbol": "SeatRunner.builder_for / policy_kwargs / run_one（conn_info、step_cap）/ validate_v8_identity / check_identity（按 --dataset 的身份模式）/ eval_manifest.SHARD_ROW_KEYS",
@@ -92,7 +92,7 @@
     "domain": "C13",
     "source": [
       "dev-scripts/gl/seat.py",
-      "src/robomme_hard_eval/episode.py"
+      "src/robomme_ood_eval/episode.py"
     ],
     "symbol": "hard-verify 的步数口径（原 Q16：按档查表 TIER_MAX_STEPS['xhard0'] 与入口 max_steps 不一致，查表已删）",
     "oracle": "1003 评估计划 1.1／1.2 了结 Q16：hard-verify 由入口给 --max-steps 1300、不带 --strict-cap（手写）",
@@ -191,8 +191,8 @@
     "id": "C13-07",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/framesamp_modul.py",
-      "src/robomme_hard_eval/models/smvla.py"
+      "src/robomme_ood_eval/models/framesamp_modul.py",
+      "src/robomme_ood_eval/models/smvla.py"
     ],
     "symbol": "framesamp_modul_client.pack_state/run_loop/evaluate_one、smvla_client.step_chunk/run_episode",
     "oracle": "假环境帧值与动作序列手算；决策上限用 max_steps=32、执行段 16 手算为 4 次、64 步",
@@ -360,8 +360,8 @@
     "id": "C13-13",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/servers/smvla_server.py",
-      "src/robomme_hard_eval/models/smvla.py"
+      "src/robomme_ood_eval/servers/smvla_server.py",
+      "src/robomme_ood_eval/models/smvla.py"
     ],
     "symbol": "smvla_server._serve/_handler、SMVLAPolicyHost.new_episode/observe/infer、smvla_client.WSPolicyConn",
     "oracle": "模型三件换 CPU 替身，host 其余方法真实；回环端口真实 websocket",
@@ -383,7 +383,7 @@
     "id": "C13-14",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/record/recorder.py",
+      "src/robomme_ood_eval/record/recorder.py",
       "dev-scripts/gl/seat.py",
       "dev-scripts/gl/eval_report.py"
     ],
@@ -407,7 +407,7 @@
     "id": "C13-15",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/framesamp_modul.py"
+      "src/robomme_ood_eval/models/framesamp_modul.py"
     ],
     "symbol": "make_recording_client（真实 openpi 客户端子类）、cmd_relay（relay 子命令）、transport_check／cmd_transport_check（transport-check 子命令）、payload_digest／response_digest／summarize_timing、run_episode",
     "oracle": "回环端口上的假 FrameSamp+Modulation server（openpi msgpack_numpy 收发，动作为 rng(k) 的 50×8）＋生产中继＋真实 RecordingClient＋EnvSession（假 builder）；帧数、消息数、执行动作与计时由假环境与假 server 手算",
@@ -457,7 +457,7 @@
     "id": "C13-17",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/servers/smvla_server.py"
+      "src/robomme_ood_eval/servers/smvla_server.py"
     ],
     "symbol": "smvla_server 进程内：sha256_file／array_sha／frame_sha、make_closures、reseed／rng_digest、SMVLAPolicyHost.new_episode/observe/infer/warmup、_handler（内存假 websocket）、enable_det、main、cmd_serve、_git_head、_setup_paths",
     "oracle": "模型三件换 CPU 替身（host 用 object.__new__ 构造，其余方法真实）；_handler 喂真实 msgpack 字节，req_sha 由 hashlib 独立算；cmd_serve 的 host 与 asyncio.run 换替身（scripts 侧临时 patch）",
@@ -611,7 +611,7 @@
     "domain": "C13",
     "source": [
       "dev-scripts/gl/seat.py",
-      "src/robomme_hard_eval/episode.py",
+      "src/robomme_ood_eval/episode.py",
       "dev-scripts/gl/eval_manifest.py",
       "dev-scripts/gl/eval_report.py"
     ],
@@ -705,7 +705,7 @@
     "id": "C13-LEGACY-NAMES",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/_official_defs.py",
+      "src/robomme_ood_eval/models/_official_defs.py",
       "dev-scripts/gl/seat.py",
       "dev-scripts/gl/budget_ledger.py",
       "dev-scripts/gl/eval_report.py",
@@ -738,8 +738,8 @@
       "dev-scripts/gl/budget_ledger.py",
       "dev-scripts/orig/orig_seat_lib.sh",
       "dev-scripts/gl/run_eval_gl.sh",
-      "src/robomme_hard_eval/servers/smvla_server.py",
-      "src/robomme_hard_eval/servers/policy_server_wrap.py"
+      "src/robomme_ood_eval/servers/smvla_server.py",
+      "src/robomme_ood_eval/servers/policy_server_wrap.py"
     ],
     "symbol": "EnvSession.step（strict cap）/ SeatRunner.run_one / run_identities / entry_blockers / BudgetLedger.reserve,claim_retry,lease,_load,_append / run_seat.sh::step_cap_pairing,variant_pairing,policy_seed_check,budget_args_check,build_server_cmd,build_client_cmd,progress_idle,recovery_load / policy_server_wrap.run,AuditedPolicy,install_tokenizer_spy / SMVLAPolicyHost.infer,new_episode",
     "oracle": "手写期望：ood 1800 strict 边界、0／7／42 三个种子逐路线的服务与客户端 argv、870／50／50／821 下的预约与领取序列、三处期限的结果行与账本行、审计开关两侧回包字节",
@@ -759,15 +759,15 @@
     "source": [
       "dev-scripts/gl/seat.py",
       "dev-scripts/orig/orig_seat_lib.sh",
-      "src/robomme_hard_eval/models/framesamp_modul.py",
-      "src/robomme_hard_eval/models/smvla.py",
-      "src/robomme_hard_eval/servers/smvla_server.py",
-      "src/robomme_hard_eval/models/pp.py",
-      "src/robomme_hard_eval/models/groundsg.py",
-      "src/robomme_hard_eval/models/_official_defs.py",
-      "src/robomme_hard_eval/servers/policy_server_wrap.py",
-      "src/robomme_hard_eval/models/astra.py",
-      "src/robomme_hard_eval/record/trace_writer.py"
+      "src/robomme_ood_eval/models/framesamp_modul.py",
+      "src/robomme_ood_eval/models/smvla.py",
+      "src/robomme_ood_eval/servers/smvla_server.py",
+      "src/robomme_ood_eval/models/pp.py",
+      "src/robomme_ood_eval/models/groundsg.py",
+      "src/robomme_ood_eval/models/_official_defs.py",
+      "src/robomme_ood_eval/servers/policy_server_wrap.py",
+      "src/robomme_ood_eval/models/astra.py",
+      "src/robomme_ood_eval/record/trace_writer.py"
     ],
     "symbol": "七路线（FrameSamp+Modulation、SimpleMemVLA、PonderPounce、GroundSG Oracle／QwenVL／MemER、3-tier Astra）× --policy-seed 0／7／42：run_seat.sh::build_server_cmd → policy_server_wrap.run（create_policy 实参、服务元数据）／SMVLAPolicyHost.new_episode（reseed）／official_defs.make_args（Args.model_seed）与 seed_everything → SeatRunner.run_one 结果行 policy_seed／server_seed／budget_token 与 trace header／identity／end；run_astra.sh VLA 服务 --seed、astra_hard_runner check／run --policy-seed、trace／result／provenance；ood --max-steps 1800 --strict-cap：EnvSession.step 守卫 × 六个真实客户端循环、Astra TracedEnv 守卫；OBS_EQ：policy_server_wrap.AuditedPolicy／install_tokenizer_spy 与 SMVLAPolicyHost._watch_prompt／_audit_block",
     "oracle": "计划第二部分三节第二段与八.3：期望值在用例里手写（种子取值、1800／1801、timeout、exec_steps、trace 行数）；服务 argv 的种子按路线手写取法；OBS_EQ 比较器手写（模型实际 token id／mask、动作字节、RNG、调用次数四项）",
@@ -791,12 +791,12 @@
       "dev-scripts/checks/lang_io_check.py",
       "dev-scripts/gl/seat.py",
       "dev-scripts/gl/budget_ledger.py",
-      "src/robomme_hard_eval/record/trace_writer.py",
-      "src/robomme_hard_eval/models/framesamp_modul.py",
-      "src/robomme_hard_eval/models/smvla.py",
-      "src/robomme_hard_eval/models/pp.py",
-      "src/robomme_hard_eval/models/groundsg.py",
-      "src/robomme_hard_eval/models/astra.py"
+      "src/robomme_ood_eval/record/trace_writer.py",
+      "src/robomme_ood_eval/models/framesamp_modul.py",
+      "src/robomme_ood_eval/models/smvla.py",
+      "src/robomme_ood_eval/models/pp.py",
+      "src/robomme_ood_eval/models/groundsg.py",
+      "src/robomme_ood_eval/models/astra.py"
     ],
     "symbol": "六条 env_client 路线真实客户端经 SeatRunner 产出（另含 PP／GroundSG Oracle 第 5 步环境异常局与一局 Astra）→ trace_arrays_check.main／lang_io_check.main；SeatRunner 换种子（独立目录、同一共享账本）；BudgetLedger.reserve（first／recovery）／claim_retry（infra／expired）／report_lines 的上限一致性",
     "oracle": "检查器判定行的期望计数在用例里手写；小账本（轨迹 12、首试 9、恢复合计 3）的领取序列手算",

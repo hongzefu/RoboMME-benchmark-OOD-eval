@@ -388,8 +388,8 @@ def test_policy_seed_checked(world):
 def new_tree(tmp_path_factory):
     import os
 
-    from robomme_hard_eval import episode as E
-    from robomme_hard_eval.policy import load_policy
+    from robomme_ood_eval import episode as E
+    from robomme_ood_eval.policy import load_policy
     from tests.unit_eval import fakes
 
     out = tmp_path_factory.mktemp("newtree")

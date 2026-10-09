@@ -1,14 +1,14 @@
-"""L0（慢）：评估包 ``robomme-hard-eval`` 的打包与来源（C18-WHEEL）。
+"""L0（慢）：评估包 ``robomme-ood-eval`` 的打包与来源（C18-WHEEL）。
 
-拆仓后本仓只打评估包 ``src/robomme_hard_eval``（``[tool.hatch.build.targets.wheel] packages``）；``robomme``／
+拆仓后本仓只打评估包 ``src/robomme_ood_eval``（``[tool.hatch.build.targets.wheel] packages``）；``robomme``／
 ``robomme_hard`` 的 wheel 由 benchmark 仓自己的同名测试守护。
 
 构建 wheel → 在 tmp 新建 uv 环境 → 非 editable 安装（``--no-deps``，依赖借当前解释器的 site-packages 只读挂在
-``PYTHONPATH`` 上；该目录里 editable 安装的 ``.pth`` 不会被处理，因此 ``robomme_hard_eval`` 只能来自 tmp 环境）→
+``PYTHONPATH`` 上；该目录里 editable 安装的 ``.pth`` 不会被处理，因此 ``robomme_ood_eval`` 只能来自 tmp 环境）→
 在仓库外的 cwd 里导入，核：
 
 - 评估包的模块实际位置在 tmp 环境的 site-packages 里，tmp 环境里没有指回仓库的 ``.pth``；
-- wheel 内文件集合 = git 跟踪的 ``src/robomme_hard_eval`` 文件集合，安装后逐字节等于源码树（含 ``models``、``record``、
+- wheel 内文件集合 = git 跟踪的 ``src/robomme_ood_eval`` 文件集合，安装后逐字节等于源码树（含 ``models``、``record``、
   ``servers`` 子包）；
 - dist-info 的 Name／Version 与 ``pyproject.toml`` 一致，且不是 editable 安装。
 
@@ -33,7 +33,7 @@ from tests._support.resource_policy import SITE_DIR
 
 pytestmark = pytest.mark.slow
 
-PACKAGES = ("robomme_hard_eval",)
+PACKAGES = ("robomme_ood_eval",)
 
 
 def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -93,8 +93,8 @@ def test_installed_files_byte_identical_to_source(installed):
     assert bad == []
     # 子包都在（不是只装了顶层 __init__）。
     for sub in ("models", "record", "servers"):
-        assert (site / "robomme_hard_eval" / sub / "__init__.py").is_file(), sub
-    assert (site / "robomme_hard_eval" / "episode.py").is_file() and (site / "robomme_hard_eval" / "policy.py").is_file()
+        assert (site / "robomme_ood_eval" / sub / "__init__.py").is_file(), sub
+    assert (site / "robomme_ood_eval" / "episode.py").is_file() and (site / "robomme_ood_eval" / "policy.py").is_file()
 
 
 def test_dist_info_metadata_and_not_editable(installed):
@@ -118,12 +118,12 @@ def test_import_resolves_to_tmp_env_outside_repo(installed):
     deps = sysconfig.get_paths()["purelib"]  # 只借依赖；其中的 editable .pth 不经 PYTHONPATH 处理
     env = dict(installed["env"])
     env["PYTHONPATH"] = os.pathsep.join([str(SITE_DIR), deps])
-    code = ("import json, robomme_hard_eval, robomme_hard_eval.episode as ep, robomme_hard_eval.policy as pol\n"
-            "print(json.dumps({'robomme_hard_eval': robomme_hard_eval.__file__, 'episode': ep.__file__,"
+    code = ("import json, robomme_ood_eval, robomme_ood_eval.episode as ep, robomme_ood_eval.policy as pol\n"
+            "print(json.dumps({'robomme_ood_eval': robomme_ood_eval.__file__, 'episode': ep.__file__,"
             " 'policy': pol.__file__}))\n")
     r = _run([str(installed["py"]), "-c", code], cwd=installed["cwd"], env=env)
     if r.returncode != 0 and "No module named" in r.stderr \
-            and "robomme_hard_eval" not in r.stderr.split("No module named")[-1]:
+            and "robomme_ood_eval" not in r.stderr.split("No module named")[-1]:
         pytest.skip(f"未验证：借用依赖导入失败：{r.stderr.strip()[-300:]}")
     assert r.returncode == 0, r.stderr[-2000:]
     files = json.loads(r.stdout.strip().splitlines()[-1])

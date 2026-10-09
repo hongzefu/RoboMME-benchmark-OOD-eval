@@ -73,12 +73,12 @@ class StepArrays:
 
 
 def _trace_writer():
-    """评估包 ``src/robomme_hard_eval/record/trace_writer.py``（模块名 ``trace_writer``，已加载则复用，与 ``_obs_common.load_eval_module``
+    """评估包 ``src/robomme_ood_eval/record/trace_writer.py``（模块名 ``trace_writer``，已加载则复用，与 ``_obs_common.load_eval_module``
     同一别名约定）；加载失败返回 None（只影响是否走合并写，不影响旧写法）。"""
     mod = sys.modules.get("trace_writer")
     if mod is not None:
         return mod
-    path = Path(__file__).resolve().parents[3] / "src" / "robomme_hard_eval" / "record" / "trace_writer.py"
+    path = Path(__file__).resolve().parents[3] / "src" / "robomme_ood_eval" / "record" / "trace_writer.py"
     try:
         spec = importlib.util.spec_from_file_location("trace_writer", path)
         mod = importlib.util.module_from_spec(spec)

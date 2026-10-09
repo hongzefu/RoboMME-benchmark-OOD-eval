@@ -35,11 +35,11 @@ import numpy as np
 import pytest
 
 import eval_fakes as F
-from robomme_hard_eval import episode as E
-from robomme_hard_eval import servers as S
+from robomme_ood_eval import episode as E
+from robomme_ood_eval import servers as S
 from tests._support.loaders import load_script
 
-#: 旧仓 run_seat.sh 不迁（拆分方案第二部分 §二）：起服务端的命令与种子核对改由 ``robomme_hard_eval.servers`` 与各模型
+#: 旧仓 run_seat.sh 不迁（拆分方案第二部分 §二）：起服务端的命令与种子核对改由 ``robomme_ood_eval.servers`` 与各模型
 #: Policy 子类承担，本文件对应断言改接到那里；席位脚本的预算参数核对与无进展检测归 GL 席位（dev-scripts/gl）。
 CAPS = {"trajectory_cap": 870, "shared_infra_cap": 50, "expired_cap": 50, "planned_first_tries": 821}
 CAP_ARGV = ["--trajectory-cap", "870", "--shared-infra-cap", "50", "--expired-cap", "50", "--planned-first-tries", "821"]
@@ -164,7 +164,7 @@ SRV_CFG = {"perceptual-framesamp-modul": {"mme_vla_py": "/py/mme-vla", "ckpt": "
 
 def _seed_policy(pol, seed, tmp_path, *, variant="", memer="", wrap="0"):
     """按旧 LIB_SRV 的口径建 Policy 实例（不 load、不起服务），端口固定 18123，元数据目录 ``<tmp>/o/<label>``。"""
-    from robomme_hard_eval.models import resolve
+    from robomme_ood_eval.models import resolve
 
     cfg = dict(SRV_CFG[pol], port=18123, openpi_data_home="/openpi", preflight=False, ckpt_fingerprint=False)
     if pol == "groundsg":
@@ -187,9 +187,9 @@ def _fake_spec(dataset, pol, tmp_path):
 
 def _srv_cli(pol, seed, tmp_path, *, variant="", memer="", wrap="0"):
     """服务端 argv（各模型 ``*_server_spec``，即旧 ``build_server_cmd`` 的 Python 版）与交给客户端的 conn_info。"""
-    from robomme_hard_eval.models import framesamp_modul as fm
-    from robomme_hard_eval.models import pp as ppm
-    from robomme_hard_eval.models import smvla as smm
+    from robomme_ood_eval.models import framesamp_modul as fm
+    from robomme_ood_eval.models import pp as ppm
+    from robomme_ood_eval.models import smvla as smm
 
     p = _seed_policy(pol, seed, tmp_path, variant=variant, memer=memer, wrap=wrap)
     ck = SRV_CFG[pol]["ckpt"]
@@ -206,7 +206,7 @@ def _opt(argv, name):
 def test_policy_seeds_reach_servers_clients_seat_info_and_results(tmp_path):
     ec = F.env_client()
     srv_mod = F.smvla_server()
-    from robomme_hard_eval import servers as S
+    from robomme_ood_eval import servers as S
 
     wrap = str(S.SERVERS_DIR / "policy_server_wrap.py")
     o = tmp_path / "o"

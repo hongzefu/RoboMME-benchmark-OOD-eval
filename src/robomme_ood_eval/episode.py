@@ -35,7 +35,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Callable
 
-from robomme_hard_eval.session import (DATASETS, HARD_VERIFY, OOD, EnvSession, RecorderError, ResetBudgetExhausted,
+from robomme_ood_eval.session import (DATASETS, HARD_VERIFY, OOD, EnvSession, RecorderError, ResetBudgetExhausted,
                                        StepCapReached)
 
 #: 每个数据集的步数上限（已定口径第 3 条）；ood 严格截断（第 1801 步不进环境）
@@ -446,7 +446,7 @@ def wall_limit(policy, first: bool, override: float | None = None) -> float:
 
 
 def _default_recorder(raw: Path, meta: dict):
-    from robomme_hard_eval.record.recorder import EpisodeRecorder
+    from robomme_ood_eval.record.recorder import EpisodeRecorder
 
     return EpisodeRecorder(raw, meta, overwrite=True)
 
@@ -458,7 +458,7 @@ def _render(spec: EpisodeSpec, result: EpisodeResult, official_root: str | Path 
         result.video_error = "no_trace"
         return
     try:
-        from robomme_hard_eval.record import official_render
+        from robomme_ood_eval.record import official_render
 
         out = official_render.render_video(raw, raw.parent.parent / "videos", episode_id=spec.ep_label,
                                            terminal=result.status, official_root=official_root)

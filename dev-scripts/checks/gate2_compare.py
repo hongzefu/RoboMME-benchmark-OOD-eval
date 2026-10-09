@@ -126,7 +126,7 @@ def _load_trace_writer():
     mod = sys.modules.get("trace_writer")
     if mod is not None and hasattr(mod, "TraceWriter"):
         return mod
-    path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "record" / "trace_writer.py"
+    path = Path(__file__).resolve().parents[2] / "src" / "robomme_ood_eval" / "record" / "trace_writer.py"
     spec = importlib.util.spec_from_file_location("trace_writer", path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules["trace_writer"] = mod
@@ -138,7 +138,7 @@ def _load_trace_writer():
     return mod
 
 
-tw = _load_trace_writer()  # 评估包 robomme_hard_eval/record/trace_writer.py（按路径加载，模块名 trace_writer）
+tw = _load_trace_writer()  # 评估包 robomme_ood_eval/record/trace_writer.py（按路径加载，模块名 trace_writer）
 
 DIVERGE_KINDS = ("obs", "state", "text", "action", "stop", "request")
 EPOCH_FIELD = "server_epoch"
@@ -160,13 +160,13 @@ def is_final(row: dict) -> bool:
 
 
 def official_defs():
-    """评估包里的别名表 ``robomme_hard_eval.models._official_defs``（旧名别名表的唯一来源；模块名 ``official_defs``，
+    """评估包里的别名表 ``robomme_ood_eval.models._official_defs``（旧名别名表的唯一来源；模块名 ``official_defs``，
     已加载则复用同一模块）。"""
     import importlib.util
 
     mod = sys.modules.get("official_defs")
     if mod is None or not hasattr(mod, "canonical_row"):
-        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_ood_eval" / "models" / "_official_defs.py"
         spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod

@@ -1,6 +1,6 @@
 """Astra 模型：把 Astra-on-RoboMME 的单局循环 ``runner.episode`` 接到评估仓「模型侧 4 个方法」上（拆分方案 §三 Astra 行）。
 
-``AstraPolicy`` 的四个方法（外层 ``load_policy``／``run_episode`` 调用，接口见 ``robomme_hard_eval.policy``）：
+``AstraPolicy`` 的四个方法（外层 ``load_policy``／``run_episode`` 调用，接口见 ``robomme_ood_eval.policy``）：
 
 - ``load()``（进程级一次）：核模型种子与两张卡；``bootstrap`` 子模块 ``examples/champ``；断言环境源是
   ``third_party/robomme_benchmark/src``；``validate_checkpoints``；查 ``group_*/STOP.json``（已停即拒，账本保留）；
@@ -57,11 +57,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from robomme_hard_eval.policy import AstraStop as _PolicyAstraStop
-from robomme_hard_eval.policy import Policy, Ready, ServerProcess, pick_port
+from robomme_ood_eval.policy import AstraStop as _PolicyAstraStop
+from robomme_ood_eval.policy import Policy, Ready, ServerProcess, pick_port
 
 HERE = Path(__file__).resolve().parent
-#: 评估仓根（``src/robomme_hard_eval/models`` 往上三层）
+#: 评估仓根（``src/robomme_ood_eval/models`` 往上三层）
 REPO_ROOT = HERE.parents[2]
 
 #: 新侧只接受这两个数据集；与每局 ``spec.max_steps`` 做配对一致性检查
@@ -107,7 +107,7 @@ ASTRA_EPISODE_WALL_S = 3600.0
 
 class AstraStop(_PolicyAstraStop):
     """Astra 报停（上游 ``main()`` 那几处 ``raise RuntimeError`` 的同义异常）；``reason`` 供测试与日志判读。
-    是 ``robomme_hard_eval.policy.AstraStop`` 的子类：外层 ``scripts/evaluate.py`` 据此整批停（退出 3）。"""
+    是 ``robomme_ood_eval.policy.AstraStop`` 的子类：外层 ``scripts/evaluate.py`` 据此整批停（退出 3）。"""
 
     def __init__(self, reason: str, message: str) -> None:
         super().__init__(message)
@@ -214,7 +214,7 @@ def check_policy_seed(value) -> int:
 def _canonical(obj: Any) -> bytes:
     """规范化字节：数组一律换成 ``array_record``（dtype、shape、sha256），其余按 JSON 排序键序列化。"""
     import numpy as np  # noqa: PLC0415
-    from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+    from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
 
     def conv(value):
         if isinstance(value, np.ndarray) or (hasattr(value, "shape") and hasattr(value, "dtype")):
@@ -271,7 +271,7 @@ class TraceContext:
 
     def frame_sha(self, phase: str, idx: int, frames) -> str | None:
         """Astra ``frames``／``demo`` 列表第 ``idx`` 帧的原像素 sha256（与 trace 的 ``front_sha256`` 同算法），按帧缓存。"""
-        from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+        from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
         key = (phase, int(idx))
         if key not in self._sha_cache:
             self._sha_cache[key] = tw.image_sha256(frames[idx]) if 0 <= idx < len(frames) else None
@@ -426,7 +426,7 @@ SHEET_PAGE = 16
 
 def language_log_cls():
     """可选探测：``trace_writer.LanguageLog``（R6）；不存在时返回 ``None``（不记语言账本、不报错）。"""
-    from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+    from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     return getattr(tw, "LanguageLog", None)
 
 
@@ -468,7 +468,7 @@ def planner_images(ctx: TraceContext, out: Path, request: dict, frames, demo, *,
                                      ctx.frame_sha("exec", int(command_start), frames), transform=PNG_TRANSFORM,
                                      encoded=path))
         elif name == "current_wrist.png":
-            from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+            from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
             images.append(_image_ref(slot, "wrist", "exec", now, "wrist",
                                      tw.image_sha256(wrist) if wrist is not None else None,
                                      transform=PNG_TRANSFORM, encoded=path))
@@ -561,7 +561,7 @@ class PlannerLanguageCall:
 
 def _monitor_images(ctx: TraceContext, ids, frames, command_start: int, wrist) -> list:
     """监视器 10 张图（``input_contract.build_input`` 顺序）：最近 8 帧、本条命令起点帧、当前腕部帧。"""
-    from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+    from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     images = [_image_ref(slot, "recent", "exec", int(fid), "front", ctx.frame_sha("exec", int(fid), frames),
                          transform=PNG_TRANSFORM) for slot, fid in enumerate(ids or [])]
     images.append(_image_ref(len(images), "command_start", "exec", int(command_start), "front",
@@ -588,7 +588,7 @@ class TracedClient:
         ctx = self._ctx
         if ctx.lang is None:
             return None
-        from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+        from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
         call_id = ctx.lang.open_call("action_model", ctx.t, params=dict(ctx.action_params))
         fields = {k: element.get(k) for k in ("prompt", "grounded_subgoal", "simple_subgoal") if k in element}
         images = [_image_ref(0, "current", "exec", ctx.t, "front", tw.image_sha256(element.get("observation/image")),
@@ -770,7 +770,7 @@ def write_exec_actions(path: Path, actions: list) -> None:
     ``arrays.npz`` 唯一允许的写法是 ``trace_writer.merge_write_npz``（与 ``TraceWriter.close`` 和外层录制器写的同键
     逐项核对后合并、原子替换）；该函数不存在时保持旧的 ``np.savez``。"""
     import numpy as np  # noqa: PLC0415
-    from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+    from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     if not actions:
         return
     mapping = {f"exec_action__{i:05d}": a for i, a in enumerate(actions)}
@@ -810,7 +810,7 @@ def run_one(args, task, ep, identity, builder, monitor, planner, client, astra, 
     """一局：建尝试目录 ``<args.output>/<task>/ep<NNN>/<key>.a<attempt>/`` 与 ``trace_dir/trace.jsonl``，经委托包装调
     Astra 的 ``runner.episode``；``finally`` 里统一收尾：写 ``arrays.npz`` → 语言账本收尾 → trace ``close`` →
     Astra ``result.json`` 追加映射。驱动异常（``runner.episode`` 自己不接的 ``BaseException``）照样收尾后再抛。"""
-    from robomme_hard_eval.record import trace_writer as tw  # noqa: PLC0415
+    from robomme_ood_eval.record import trace_writer as tw  # noqa: PLC0415
     ep_dir = Path(args.output) / task / f"ep{ep:03d}"
     key = episode_key(task, identity)
     a_dir = ep_dir / f"{key}.a{int(attempt)}"
@@ -902,10 +902,10 @@ _GUARD_MOD = None
 
 
 def guard_module():
-    """费用守卫模块 ``robomme_hard_eval.servers.astra_cost_guard``（预留协议、锁、文件名的唯一来源）。"""
+    """费用守卫模块 ``robomme_ood_eval.servers.astra_cost_guard``（预留协议、锁、文件名的唯一来源）。"""
     global _GUARD_MOD
     if _GUARD_MOD is None:
-        from robomme_hard_eval.servers import astra_cost_guard  # noqa: PLC0415
+        from robomme_ood_eval.servers import astra_cost_guard  # noqa: PLC0415
         _GUARD_MOD = astra_cost_guard
     return _GUARD_MOD
 
@@ -1467,7 +1467,7 @@ class AstraPolicy(Policy):
                                monitor_base=self.monitor_base, policy_seed=self.policy_seed, port=self.port)
 
     def play(self, session, spec, recorder) -> dict:
-        from robomme_hard_eval import episode as E  # noqa: PLC0415
+        from robomme_ood_eval import episode as E  # noqa: PLC0415
         check_pairing(spec.dataset, spec.max_steps)
         args = self.episode_args(spec)
         ep_dir = Path(args.output) / spec.task / f"ep{int(spec.episode):03d}"

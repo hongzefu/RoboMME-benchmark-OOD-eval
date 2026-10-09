@@ -3,7 +3,7 @@
     "id": "C13-SG-TRACE",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/record/trace_writer.py"
+      "src/robomme_ood_eval/record/trace_writer.py"
     ],
     "symbol": "TraceWriter / image_sha256 / array_record / bytes_record / read_trace / canonical_bytes / validate_trace / find_traces / subgoal_sequence（每局 trace.jsonl）",
     "oracle": "计划 1.7 字段约定；夹具手写数组与画面，哈希期望用 hashlib 直接对原始字节算",
@@ -28,7 +28,7 @@
     "domain": "C13",
     "source": [
       "dev-scripts/checks/gate2_compare.py",
-      "src/robomme_hard_eval/record/trace_writer.py"
+      "src/robomme_ood_eval/record/trace_writer.py"
     ],
     "symbol": "gate2_compare.compare / compare_traces / final_rows / epoch_firsts / TraceIndex / verdict_line / main（--mode astra、--groundsg、--site、--expect-total）",
     "oracle": "两侧轨迹由 TraceWriter 按生产格式写出，变异点（第几步、哪个字段）在用例里手写，首个分叉步与类型手算",

@@ -6,8 +6,8 @@ import json
 import numpy as np
 import pytest
 
-from robomme_hard_eval import report
-from robomme_hard_eval.session import EnvSession, ResetBudgetExhausted, StepCapReached
+from robomme_ood_eval import report
+from robomme_ood_eval.session import EnvSession, ResetBudgetExhausted, StepCapReached
 from tests.unit_eval import fakes
 
 

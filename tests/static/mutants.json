@@ -1,11 +1,11 @@
 [
  {
   "id": "S-M1",
-  "target": "src/robomme_hard_eval/episode.py",
+  "target": "src/robomme_ood_eval/episode.py",
   "method": "隔离副本里给生产模块加一句永不执行的 import tests（AST 仍可见），不改运行行为",
   "patch": [
    {
-    "file": "src/robomme_hard_eval/episode.py",
+    "file": "src/robomme_ood_eval/episode.py",
     "old": "import dataclasses\nimport json\n",
     "new": "import dataclasses\nimport json\n\nif False:  # 植入：生产代码依赖测试包\n    import tests  # noqa: F401\n"
    }

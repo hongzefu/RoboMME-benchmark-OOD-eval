@@ -87,11 +87,11 @@ INFRA_MARKERS = ("RecorderError", "svulkan2", "EXCLUSIVE", "Vulkan", "vk::", "ou
 
 
 #: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
-SIBLINGS = {"smvla_client": "robomme_hard_eval.models.smvla",
-            "groundsg_client": "robomme_hard_eval.models.groundsg",
-            "framesamp_modul_client": "robomme_hard_eval.models.framesamp_modul",
-            "official_defs": "robomme_hard_eval.models._official_defs",
-            "trace_writer": "robomme_hard_eval.record.trace_writer"}
+SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
+            "groundsg_client": "robomme_ood_eval.models.groundsg",
+            "framesamp_modul_client": "robomme_ood_eval.models.framesamp_modul",
+            "official_defs": "robomme_ood_eval.models._official_defs",
+            "trace_writer": "robomme_ood_eval.record.trace_writer"}
 
 
 def load_sibling(name: str):
@@ -1149,8 +1149,8 @@ def attempt_of(episode_tag: str) -> int:
 
 # ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
 
-from robomme_hard_eval import servers as _servers  # noqa: E402
-from robomme_hard_eval.episode import DATASET_MAX_STEPS  # noqa: E402
+from robomme_ood_eval import servers as _servers  # noqa: E402
+from robomme_ood_eval.episode import DATASET_MAX_STEPS  # noqa: E402
 
 #: 预热交给动作服务的合成子目标（只为让带子目标的输入形状先编译一次）
 WARMUP_SUBGOAL = "pick up the cube at <128, 128>"

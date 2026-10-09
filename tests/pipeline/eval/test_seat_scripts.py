@@ -6,7 +6,7 @@
 
 - ``run_eval_gl.sh``（新）：runbook 写法的参数原样落到 ``seat.py run``（策略、GroundSG 变体、种子、身份清单、共享账本与
   §五缺省上限 26／60／0／0／26、基础设施重试 0、``--gpus 0``、产物根缺省 ``<repo>/artifacts/<run>/gl``、透传的模型参数）；
-  ``RUN_INPUTS``（``robomme_hard_eval`` 必须来自执行副本 ``src``）；客户端以 75 退出时按 ``SERVER_LEFT`` 行停残留服务端、
+  ``RUN_INPUTS``（``robomme_ood_eval`` 必须来自执行副本 ``src``）；客户端以 75 退出时按 ``SERVER_LEFT`` 行停残留服务端、
   重起次数缺省 0 即停、给 1 次则重起；无进展看门狗（``progress.json`` 超时不动即 TERM、rc=124）；TERM 收尾只写一次；参数错误；
 - 原侧函数库 ``orig_seat_lib.sh`` 不能直接执行；``seat_media_lib.sh`` 的完整收尾链（旧 FFV1 原始帧：重绘在并入轨迹之后、
   转码之前，转码后删原始帧；新 AV1 原始帧：``permanent_raw`` 不转码不删）、``render_official_dir`` 的 KEPT／重绘／不支持
@@ -311,11 +311,11 @@ def _media_repo(repo: Path, renderer: str = STUB_RENDERER) -> Path:
         for name in names:
             shutil.copy2(DS / sub / name, d / name)
     (repo / "dev-scripts" / "media" / "render_official_video.py").write_text(renderer, encoding="utf-8")
-    pkg = repo / "src" / "robomme_hard_eval"
+    pkg = repo / "src" / "robomme_ood_eval"
     (pkg / "models").mkdir(parents=True, exist_ok=True)
     (pkg / "servers").mkdir(parents=True, exist_ok=True)
     (pkg / "__init__.py").write_text("", encoding="utf-8")
-    shutil.copy2(F.REPO / "src" / "robomme_hard_eval" / "models" / "_official_defs.py", pkg / "models" / "_official_defs.py")
+    shutil.copy2(F.REPO / "src" / "robomme_ood_eval" / "models" / "_official_defs.py", pkg / "models" / "_official_defs.py")
     (repo / "scripts").mkdir(exist_ok=True)
     (repo / "scripts" / "evaluate.py").write_text(STOP_STUB, encoding="utf-8")
     return repo
@@ -524,8 +524,8 @@ def gl_repo(rig):
     repo = rig["tmp"] / "repo"
     _media_repo(repo)
     for rel in ("dev-scripts/orig/pp_official_runner.py", "dev-scripts/orig/official_hard_runner.py",
-                "dev-scripts/gl/seat.py", "src/robomme_hard_eval/servers/pp_server_wrap.py",
-                "src/robomme_hard_eval/servers/policy_server_wrap.py"):
+                "dev-scripts/gl/seat.py", "src/robomme_ood_eval/servers/pp_server_wrap.py",
+                "src/robomme_ood_eval/servers/policy_server_wrap.py"):
         (repo / rel).write_text("# 占位：由假解释器分派到假引擎\n", encoding="utf-8")
     (repo / "third_party" / "PonderPounce").mkdir(parents=True)
     for rel in (".venv/bin/python",):
@@ -559,7 +559,7 @@ def test_gl_runbook_args_reach_seat(rig, gl_repo):
                            policies="groundsg"), rig["env"])
     assert rc == 0, out
     ri = F.verdict(out.splitlines(), "RUN_INPUTS")
-    assert ri[""] == "PASS" and ri["robomme_hard_eval"] == str(gl_repo / "src/robomme_hard_eval/__init__.py"), out
+    assert ri[""] == "PASS" and ri["robomme_ood_eval"] == str(gl_repo / "src/robomme_ood_eval/__init__.py"), out
     (argv,) = _seat_argv(rig)
     assert argv[0] == "run" and _opt(argv, "--policy") == "groundsg"
     assert _opt(argv, "--groundsg-variant") == "ground-sg-oracle" and _opt(argv, "--policy-seed") == "7"
@@ -640,7 +640,7 @@ def test_gl_run_inputs_block_when_package_not_in_repo(rig, gl_repo):
     rc, out = _run(_gl_cmd(rig, gl_repo), rig["env"])
     assert rc == 3, out
     ri = F.verdict(out.splitlines(), "RUN_INPUTS")
-    assert ri[""] == "FAIL" and "robomme_hard_eval_not_in_repo" in ri["reason"]
+    assert ri[""] == "FAIL" and "robomme_ood_eval_not_in_repo" in ri["reason"]
     assert "RUN_BLOCKED reason=run_inputs" in out and _events(rig) == []
 
 

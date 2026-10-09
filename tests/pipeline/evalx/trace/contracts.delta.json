@@ -3,8 +3,8 @@
     "id": "C13-SG-TRACE-ARRAYS",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/record/trace_writer.py",
-      "src/robomme_hard_eval/record/recorder.py",
+      "src/robomme_ood_eval/record/trace_writer.py",
+      "src/robomme_ood_eval/record/recorder.py",
       "dev-scripts/checks/trace_arrays_check.py"
     ],
     "symbol": "trace_writer.merge_write_npz / ArraysConflict / TraceWriter(arrays_path, collect_arrays, policy_seed, effective_cap) / log_step(source_call_id, chunk_index)；recorder.EpisodeRecorder._write_arrays；trace_arrays_check.check / main",
@@ -35,7 +35,7 @@
     "id": "C13-SG-LANGUAGE-LOG",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/record/trace_writer.py"
+      "src/robomme_ood_eval/record/trace_writer.py"
     ],
     "symbol": "trace_writer.LanguageLog.open_call / message / close_call / reuse / close；read_language；audit_channel_messages",
     "oracle": "冻结说明第五节的方法与行 schema（字段名与顺序）逐字手写",
@@ -55,9 +55,9 @@
     "id": "C13-SG-CLIENT-LANGUAGE",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/smvla.py",
-      "src/robomme_hard_eval/models/framesamp_modul.py",
-      "src/robomme_hard_eval/models/pp.py"
+      "src/robomme_ood_eval/models/smvla.py",
+      "src/robomme_ood_eval/models/framesamp_modul.py",
+      "src/robomme_ood_eval/models/pp.py"
     ],
     "symbol": "smvla_client.run_episode / PolicyTrace.lang_* / begin_chunk；framesamp_modul_client.TracedClient.infer / RecordingClient._roundtrip；pp_client.TracedConnection.act / _log_generation / _run_episode_async",
     "oracle": "计划八.11「一局里各路线会有什么记录」手写期望；假服务分带与不带 _sgeval_audit 两种跑同一局",
@@ -78,15 +78,15 @@
     "id": "C13-MERGE1-CROSS",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/record/trace_writer.py",
+      "src/robomme_ood_eval/record/trace_writer.py",
       "dev-scripts/orig/orig_observer/step_arrays.py",
-      "src/robomme_hard_eval/models/astra.py",
+      "src/robomme_ood_eval/models/astra.py",
       "dev-scripts/gl/budget_ledger.py",
       "dev-scripts/orig/official_hard_runner.py",
       "dev-scripts/gl/seat.py",
-      "src/robomme_hard_eval/servers/pp_server_wrap.py",
-      "src/robomme_hard_eval/models/pp.py",
-      "src/robomme_hard_eval/servers/policy_server_wrap.py"
+      "src/robomme_ood_eval/servers/pp_server_wrap.py",
+      "src/robomme_ood_eval/models/pp.py",
+      "src/robomme_ood_eval/servers/policy_server_wrap.py"
     ],
     "symbol": "merge_write_npz（目录锁超时 MERGE_LOCK_TIMEOUT_S）× StepArrays.save × write_exec_actions × TraceWriter.close；OrigBudget＋open_budget_ledger × AttemptLedger＋budget_caps × BudgetLedger；pp_server_wrap._S2Watch／_audit_block／generation_blocks × pp_client.TracedConnection._log_generation；policy_server_wrap.build_audit × trace_writer.audit_channel_messages",
     "oracle": "接口冻结说明三、四、五节；两边都用真实代码（不用替身对接），期望键集合、计数与文字在用例里手写",

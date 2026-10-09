@@ -3,8 +3,8 @@
     "id": "C13-GSG-01",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/_official_defs.py",
-      "src/robomme_hard_eval/models/groundsg.py",
+      "src/robomme_ood_eval/models/_official_defs.py",
+      "src/robomme_ood_eval/models/groundsg.py",
       "dev-scripts/orig/official_hard_runner.py"
     ],
     "symbol": "groundsg_client.run_episode（SessionRunner 委托 EnvSession）与 official_hard_runner.run_identity（官方 EnvRunner 原文 + TapRunner／EnvTap）都调官方 EpisodeEvaluator.eval_each_episode 原文",
@@ -31,8 +31,8 @@
     "id": "C13-GSG-02",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/_official_defs.py",
-      "src/robomme_hard_eval/models/groundsg.py"
+      "src/robomme_ood_eval/models/_official_defs.py",
+      "src/robomme_ood_eval/models/groundsg.py"
     ],
     "symbol": "official_defs.extract_defs / load_groundsg / make_args / build_predictor；groundsg_client.make_policy_context / close_policy_context",
     "oracle": "官方源码只读引用 SGEVAL_THIRD_PARTY，所读五个文件的 sha256 由测试独立计算并打印；Qwen 引擎为不读权重的替身，记下构造参数",
@@ -57,7 +57,7 @@
     "domain": "C13",
     "source": [
       "dev-scripts/orig/official_hard_runner.py",
-      "src/robomme_hard_eval/models/groundsg.py"
+      "src/robomme_ood_eval/models/groundsg.py"
     ],
     "symbol": "official_hard_runner：--check-imports / main 参数与分片核对 / run_identity 原始帧与结果行 / run_shard 服务不可达中止",
     "oracle": "导入断言在子进程里跑（只加官方 examples/robomme 与仓库 src）；原始帧字节数与首帧内容按假环境手算",
@@ -78,8 +78,8 @@
     "id": "C13-GSG-04",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/_official_defs.py",
-      "src/robomme_hard_eval/models/groundsg.py",
+      "src/robomme_ood_eval/models/_official_defs.py",
+      "src/robomme_ood_eval/models/groundsg.py",
       "dev-scripts/orig/official_hard_runner.py"
     ],
     "symbol": "official_defs：VARIANT_MEMER、load_memer_model／patch_memer_class（MemER 兼容层 MEMER_COMPAT_SOURCE、MEMER_COMPAT_SHA256、MemERResponseError）、make_args(model_seed=, memer_adapter_path=)、assert_one_predictor、build_predictor、seed_everything；groundsg_client／official_hard_runner 的 MemER 装配与 policy_seed 贯通",
@@ -107,7 +107,7 @@
     "id": "C13-GSG-05",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/groundsg.py",
+      "src/robomme_ood_eval/models/groundsg.py",
       "dev-scripts/orig/official_hard_runner.py",
       "dev-scripts/orig/run_official_hard.sh"
     ],

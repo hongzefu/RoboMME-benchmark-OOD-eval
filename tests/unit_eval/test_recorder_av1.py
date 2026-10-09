@@ -11,7 +11,7 @@ import time
 import numpy as np
 import pytest
 
-from robomme_hard_eval.record import recorder as R
+from robomme_ood_eval.record import recorder as R
 
 
 def _ffmpeg_or_skip() -> str:

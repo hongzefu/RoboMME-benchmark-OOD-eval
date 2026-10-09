@@ -11,8 +11,8 @@ import time
 
 import pytest
 
-from robomme_hard_eval import models
-from robomme_hard_eval.policy import (Policy, Ready, ServerDead, ServerMismatch, ServerProcess, load_policy, pick_port,
+from robomme_ood_eval import models
+from robomme_ood_eval.policy import (Policy, Ready, ServerDead, ServerMismatch, ServerProcess, load_policy, pick_port,
                                       port_busy)
 from tests.unit_eval import fakes
 
@@ -39,7 +39,7 @@ def _registry(monkeypatch):
 
 def test_registry_lists_six_models_lazily():
     assert models.MODELS == ("dummy", "perceptual-framesamp-modul", "groundsg", "smvla", "pp", "astra")
-    assert models.REGISTRY["groundsg"] == ("robomme_hard_eval.models.groundsg", "GroundSGPolicy")
+    assert models.REGISTRY["groundsg"] == ("robomme_ood_eval.models.groundsg", "GroundSGPolicy")
     assert models.REGISTRY["perceptual-framesamp-modul"][1] == "FrameSampModulPolicy"
     assert models.REGISTRY["smvla"][1] == "SmvlaPolicy" and models.REGISTRY["pp"][1] == "PPPolicy"
     assert models.REGISTRY["astra"][1] == "AstraPolicy"

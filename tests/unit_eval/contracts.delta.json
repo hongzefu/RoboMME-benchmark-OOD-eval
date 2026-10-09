@@ -3,7 +3,7 @@
   "id": "C19-RUN-EPISODE",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/episode.py"
+   "src/robomme_ood_eval/episode.py"
   ],
   "symbol": "run_episode／make_spec／EpisodeSpec／EpisodeResult／normalize_play_output／_Watchdog",
   "oracle": "假 builder（真实身份解析之外的环境全换 CPU 假）与假 Policy；次序、终态与计数手写",
@@ -42,7 +42,7 @@
   "id": "C19-ENV-SESSION",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/session.py"
+   "src/robomme_ood_eval/session.py"
   ],
   "symbol": "EnvSession.build／reset／step／close、NullRecorder、_GuardedRecorder",
   "oracle": "假 builder 与假环境的 reset／step 计划手写",
@@ -74,7 +74,7 @@
   "id": "C19-REPORT",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/report.py"
+   "src/robomme_ood_eval/report.py"
   ],
   "symbol": "report 汇总",
   "oracle": "手写结果行",
@@ -93,8 +93,8 @@
   "id": "C19-POLICY-BASE",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/policy.py",
-   "src/robomme_hard_eval/models/__init__.py"
+   "src/robomme_ood_eval/policy.py",
+   "src/robomme_ood_eval/models/__init__.py"
   ],
   "symbol": "Policy 四方法与计数器、load_policy、ServerProcess、pick_port、注册表",
   "oracle": "假服务端进程（本地子进程）与手写期望",
@@ -125,11 +125,11 @@
   "id": "C19-MODEL-POLICIES",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/models/framesamp_modul.py",
-   "src/robomme_hard_eval/models/groundsg.py",
-   "src/robomme_hard_eval/models/smvla.py",
-   "src/robomme_hard_eval/models/pp.py",
-   "src/robomme_hard_eval/servers/__init__.py"
+   "src/robomme_ood_eval/models/framesamp_modul.py",
+   "src/robomme_ood_eval/models/groundsg.py",
+   "src/robomme_ood_eval/models/smvla.py",
+   "src/robomme_ood_eval/models/pp.py",
+   "src/robomme_ood_eval/servers/__init__.py"
   ],
   "symbol": "四个服务型模型 Policy 子类与 ServedPolicy 公共件",
   "oracle": "假服务端进程与假客户端；服务端 argv、消息次序手写",
@@ -169,7 +169,7 @@
   "id": "C19-RECORDER-AV1",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/record/recorder.py"
+   "src/robomme_ood_eval/record/recorder.py"
   ],
   "symbol": "EpisodeRecorder AV1 4:4:4 编码与核对",
   "oracle": "ffmpeg 现编现解；帧 sha 与常量手写",
@@ -192,8 +192,8 @@
   "domain": "C19",
   "source": [
    "scripts/evaluate.py",
-   "src/robomme_hard_eval/models/dummy.py",
-   "src/robomme_hard_eval/record/official_render.py"
+   "src/robomme_ood_eval/models/dummy.py",
+   "src/robomme_ood_eval/record/official_render.py"
   ],
   "symbol": "scripts/evaluate.py 参数解析与本机循环、dummy 模型、官方版式渲染按 raw_codec 读帧",
   "oracle": "dummy 模型两数据集各跑一局；参数与透传手写",
@@ -217,7 +217,7 @@
   "id": "C19-FIND-FFPROBE",
   "domain": "C19",
   "source": [
-   "src/robomme_hard_eval/record/official_render.py"
+   "src/robomme_ood_eval/record/official_render.py"
   ],
   "symbol": "find_ffprobe／ENV_FFPROBE",
   "oracle": "临时目录里的假可执行文件，shutil.which 与录制器 find_ffmpeg 打桩",

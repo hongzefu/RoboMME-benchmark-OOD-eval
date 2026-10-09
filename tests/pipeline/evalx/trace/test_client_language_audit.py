@@ -100,7 +100,7 @@ class _B:
 
 def _session(plan):
     b = _B(plan)
-    from robomme_hard_eval.session import EnvSession
+    from robomme_ood_eval.session import EnvSession
 
     return EnvSession("T", 2, recorder=None, builder=b), b
 

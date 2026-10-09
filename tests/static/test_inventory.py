@@ -1,7 +1,7 @@
 """L0：契约清单元测试（计划细则 4.3、4.5.1）——把「覆盖所有部分」与「契约真被执行」变成可机检的两条判定行。
 
 期望全部来自独立来源，不读被测代码（评估仓版，拆仓 MERGE-1 按新树重切）：
-- 文件全集 = ``git ls-files src/robomme_hard_eval scripts dev-scripts``；每个现行文件必须恰在总表
+- 文件全集 = ``git ls-files src/robomme_ood_eval scripts dev-scripts``；每个现行文件必须恰在总表
   ``tests/contract/benchmark_contracts.json`` 的 ``files``（所属契约 id 列表）或 ``exempt``（豁免类别与理由）之一，
   ``files`` 里的契约 id 都必须存在于 ``entries``，不得登记已不存在的文件。以 ``/`` 结尾的键是整目录登记，要求该目录下
   确有 git 跟踪文件（评估仓目前没有整目录登记；benchmark 的 ``src/robomme/`` 整目录登记随 benchmark 仓走）。
@@ -39,7 +39,7 @@ from tests._support.loaders import REPO
 from tests._support.resource_policy import ENV_LEDGER, ENV_MODE
 
 TOTAL = REPO / "tests" / "contract" / "benchmark_contracts.json"
-ROOTS = ("src/robomme_hard_eval", "scripts", "dev-scripts")
+ROOTS = ("src/robomme_ood_eval", "scripts", "dev-scripts")
 STATUSES = ("planned", "verified", "blocked", "conditional")
 NOTE_KEYS = ("note",)  # blocked／conditional 的说明字段
 
@@ -224,8 +224,8 @@ def test_eval_package_and_entry_registered(total, collected):
     """评估包核心模块与唯一入口都挂在 C19／C18 条目上；仓库外层文件（.gitmodules）由子模块锁定条目覆盖；benchmark 侧
     迁走的契约在 relocated 里有记录、不在 entries 里重复出现。"""
     files = total["files"]
-    assert "C19-RUN-EPISODE" in files["src/robomme_hard_eval/episode.py"]
-    assert "C19-POLICY-BASE" in files["src/robomme_hard_eval/policy.py"]
+    assert "C19-RUN-EPISODE" in files["src/robomme_ood_eval/episode.py"]
+    assert "C19-POLICY-BASE" in files["src/robomme_ood_eval/policy.py"]
     assert "C18-ENTRY-SET" in files["scripts/evaluate.py"]
     entry_ids = {e["id"] for e in total["entries"]}
     assert "C18-SUBMODULE-LOCK" in entry_ids and "tests/test_episode.py::test_success_result" in collected

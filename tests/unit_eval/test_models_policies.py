@@ -1,6 +1,6 @@
 """四个普通模型的 Policy 子类（FrameSamp+Modulation、GroundSG、SimpleMemVLA、PonderPounce）：模型侧 4 个方法的契约。
 
-纯 CPU：服务端换成只记参数的 ``FakeSrv``（替换 ``robomme_hard_eval.servers.CleanServerProcess``），websocket／vla-eval
+纯 CPU：服务端换成只记参数的 ``FakeSrv``（替换 ``robomme_ood_eval.servers.CleanServerProcess``），websocket／vla-eval
 连接换成进程内替身，环境走 ``tests/unit_eval/fakes.py`` 的假 builder；外层用真实 ``episode.run_episode``。期望值一律手写。
 
 核对：
@@ -25,13 +25,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from robomme_hard_eval import episode as E
-from robomme_hard_eval import servers as S
-from robomme_hard_eval.models import framesamp_modul as FM
-from robomme_hard_eval.models import groundsg as GS
-from robomme_hard_eval.models import pp as PP
-from robomme_hard_eval.models import smvla as SM
-from robomme_hard_eval.policy import Policy, ServerDead, ServerMismatch, load_policy
+from robomme_ood_eval import episode as E
+from robomme_ood_eval import servers as S
+from robomme_ood_eval.models import framesamp_modul as FM
+from robomme_ood_eval.models import groundsg as GS
+from robomme_ood_eval.models import pp as PP
+from robomme_ood_eval.models import smvla as SM
+from robomme_ood_eval.policy import Policy, ServerDead, ServerMismatch, load_policy
 
 from . import fakes
 
@@ -565,7 +565,7 @@ def test_groundsg_label_two_evaluators_shared_predictor(tmp_path, gs_env):
         return {"status": "fail", "task_success": False, "steps": 1, "error": None, "infra": False,
                 "infra_reason": None, "decisions": 1}
 
-    import robomme_hard_eval.models.groundsg as gmod
+    import robomme_ood_eval.models.groundsg as gmod
 
     orig = gmod.run_episode
     gmod.run_episode = fake_run
@@ -602,7 +602,7 @@ def test_groundsg_end_to_end_order_and_official_video(tmp_path, gs_env):
 
 
 def test_policy_subclasses_are_registered():
-    from robomme_hard_eval.models import resolve
+    from robomme_ood_eval.models import resolve
 
     for name, cls in (("perceptual-framesamp-modul", FM.FrameSampModulPolicy), ("groundsg", GS.GroundSGPolicy),
                       ("smvla", SM.SmvlaPolicy), ("pp", PP.PPPolicy)):

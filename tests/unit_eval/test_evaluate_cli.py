@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from robomme_hard_eval import episode as E
-from robomme_hard_eval import policy as P
-from robomme_hard_eval.record import official_render, recorder
+from robomme_ood_eval import episode as E
+from robomme_ood_eval import policy as P
+from robomme_ood_eval.record import official_render, recorder
 from tests.unit_eval import fakes
 
 REPO = Path(__file__).resolve().parents[2]

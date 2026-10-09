@@ -166,7 +166,7 @@ def test_dataset_routing(tmp_path, capsys):
         default_changed += 1
     except SystemExit as e:
         default_changed += e.code != 2
-    from robomme_hard_eval.session import EnvSession
+    from robomme_ood_eval.session import EnvSession
 
     default_changed += EnvSession("T", 0).dataset != "ood"
     assert crossed == 0 and default_changed == 0

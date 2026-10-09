@@ -154,10 +154,10 @@ def test_policy_context_built_once_per_seat(tmp_path, clean_env):
     ``make_policy_context``（Qwen 引擎只构造一次），两局用同一上下文，席位收尾 ``close`` 一次（停服务端一次、释放上下文）。
     服务端只换成假进程（``load_mme_vla_server`` 替身：不起进程，记下种子元数据）；旧 ``policy_mod``／``make_policy_context
     (seat_info)`` 注入点已不存在，改在 ``load_policy`` 工厂处注入。"""
-    from robomme_hard_eval import episode as E
-    from robomme_hard_eval.models import framesamp_modul as fm
-    from robomme_hard_eval.models import groundsg as gmod
-    from robomme_hard_eval.session import NullRecorder
+    from robomme_ood_eval import episode as E
+    from robomme_ood_eval.models import framesamp_modul as fm
+    from robomme_ood_eval.models import groundsg as gmod
+    from robomme_ood_eval.session import NullRecorder
 
     from tests.pipeline.eval import eval_fakes as EF
 

@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Iterable
 
-from robomme_hard_eval.episode import TASKS
+from robomme_ood_eval.episode import TASKS
 
 SCHEMA = "robomme-ood-eval-log/1"
 

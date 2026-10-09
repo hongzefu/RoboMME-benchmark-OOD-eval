@@ -125,9 +125,9 @@
    "domain": "C13",
    "source": [
     "dev-scripts/gl/seat.py",
-    "src/robomme_hard_eval/episode.py",
-    "src/robomme_hard_eval/models/framesamp_modul.py",
-    "src/robomme_hard_eval/models/smvla.py",
+    "src/robomme_ood_eval/episode.py",
+    "src/robomme_ood_eval/models/framesamp_modul.py",
+    "src/robomme_ood_eval/models/smvla.py",
     "dev-scripts/gl/eval_report.py"
    ],
    "symbol": "SeatRunner.run_identities_v8 / run_one → framesamp_modul_client.run_episode / smvla_client.run_episode → eval_report.main",
@@ -164,7 +164,7 @@
    "domain": "C13",
    "source": [
     "dev-scripts/gl/seat.py",
-    "src/robomme_hard_eval/episode.py"
+    "src/robomme_ood_eval/episode.py"
    ],
    "symbol": "同一 SeatRunner 连续 run_one(A)、run_one(B)、run_one(A)",
    "oracle": "假 server 的动作由本局 reset 后收到的帧指纹 + 状态 + 指令确定性生成；第三局执行动作必须与第一局逐位相同",
@@ -189,7 +189,7 @@
    "domain": "C13",
    "source": [
     "dev-scripts/gl/seat.py",
-    "src/robomme_hard_eval/episode.py",
+    "src/robomme_ood_eval/episode.py",
     "dev-scripts/gl/eval_manifest.py"
    ],
    "symbol": "SeatRunner.builder_for / policy_kwargs / run_one（conn_info、step_cap）/ validate_v8_identity / check_identity（按 --dataset 的身份模式）/ eval_manifest.SHARD_ROW_KEYS",
@@ -222,7 +222,7 @@
    "domain": "C13",
    "source": [
     "dev-scripts/gl/seat.py",
-    "src/robomme_hard_eval/episode.py"
+    "src/robomme_ood_eval/episode.py"
    ],
    "symbol": "hard-verify 的步数口径（原 Q16：按档查表 TIER_MAX_STEPS['xhard0'] 与入口 max_steps 不一致，查表已删）",
    "oracle": "1003 评估计划 1.1／1.2 了结 Q16：hard-verify 由入口给 --max-steps 1300、不带 --strict-cap（手写）",
@@ -333,8 +333,8 @@
    "id": "C13-07",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/framesamp_modul.py",
-    "src/robomme_hard_eval/models/smvla.py"
+    "src/robomme_ood_eval/models/framesamp_modul.py",
+    "src/robomme_ood_eval/models/smvla.py"
    ],
    "symbol": "framesamp_modul_client.pack_state/run_loop/evaluate_one、smvla_client.step_chunk/run_episode",
    "oracle": "假环境帧值与动作序列手算；决策上限用 max_steps=32、执行段 16 手算为 4 次、64 步",
@@ -521,8 +521,8 @@
    "id": "C13-13",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/servers/smvla_server.py",
-    "src/robomme_hard_eval/models/smvla.py"
+    "src/robomme_ood_eval/servers/smvla_server.py",
+    "src/robomme_ood_eval/models/smvla.py"
    ],
    "symbol": "smvla_server._serve/_handler、SMVLAPolicyHost.new_episode/observe/infer、smvla_client.WSPolicyConn",
    "oracle": "模型三件换 CPU 替身，host 其余方法真实；回环端口真实 websocket",
@@ -547,7 +547,7 @@
    "id": "C13-14",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/record/recorder.py",
+    "src/robomme_ood_eval/record/recorder.py",
     "dev-scripts/gl/seat.py",
     "dev-scripts/gl/eval_report.py"
    ],
@@ -574,7 +574,7 @@
    "id": "C13-15",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/framesamp_modul.py"
+    "src/robomme_ood_eval/models/framesamp_modul.py"
    ],
    "symbol": "make_recording_client（真实 openpi 客户端子类）、cmd_relay（relay 子命令）、transport_check／cmd_transport_check（transport-check 子命令）、payload_digest／response_digest／summarize_timing、run_episode",
    "oracle": "回环端口上的假 FrameSamp+Modulation server（openpi msgpack_numpy 收发，动作为 rng(k) 的 50×8）＋生产中继＋真实 RecordingClient＋EnvSession（假 builder）；帧数、消息数、执行动作与计时由假环境与假 server 手算",
@@ -630,7 +630,7 @@
    "id": "C13-17",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/servers/smvla_server.py"
+    "src/robomme_ood_eval/servers/smvla_server.py"
    ],
    "symbol": "smvla_server 进程内：sha256_file／array_sha／frame_sha、make_closures、reseed／rng_digest、SMVLAPolicyHost.new_episode/observe/infer/warmup、_handler（内存假 websocket）、enable_det、main、cmd_serve、_git_head、_setup_paths",
    "oracle": "模型三件换 CPU 替身（host 用 object.__new__ 构造，其余方法真实）；_handler 喂真实 msgpack 字节，req_sha 由 hashlib 独立算；cmd_serve 的 host 与 asyncio.run 换替身（scripts 侧临时 patch）",
@@ -802,7 +802,7 @@
    "domain": "C13",
    "source": [
     "dev-scripts/gl/seat.py",
-    "src/robomme_hard_eval/episode.py",
+    "src/robomme_ood_eval/episode.py",
     "dev-scripts/gl/eval_manifest.py",
     "dev-scripts/gl/eval_report.py"
    ],
@@ -908,7 +908,7 @@
    "id": "C13-LEGACY-NAMES",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/_official_defs.py",
+    "src/robomme_ood_eval/models/_official_defs.py",
     "dev-scripts/gl/seat.py",
     "dev-scripts/gl/budget_ledger.py",
     "dev-scripts/gl/eval_report.py",
@@ -944,8 +944,8 @@
     "dev-scripts/gl/budget_ledger.py",
     "dev-scripts/orig/orig_seat_lib.sh",
     "dev-scripts/gl/run_eval_gl.sh",
-    "src/robomme_hard_eval/servers/smvla_server.py",
-    "src/robomme_hard_eval/servers/policy_server_wrap.py"
+    "src/robomme_ood_eval/servers/smvla_server.py",
+    "src/robomme_ood_eval/servers/policy_server_wrap.py"
    ],
    "symbol": "EnvSession.step（strict cap）/ SeatRunner.run_one / run_identities / entry_blockers / BudgetLedger.reserve,claim_retry,lease,_load,_append / run_seat.sh::step_cap_pairing,variant_pairing,policy_seed_check,budget_args_check,build_server_cmd,build_client_cmd,progress_idle,recovery_load / policy_server_wrap.run,AuditedPolicy,install_tokenizer_spy / SMVLAPolicyHost.infer,new_episode",
    "oracle": "手写期望：ood 1800 strict 边界、0／7／42 三个种子逐路线的服务与客户端 argv、870／50／50／821 下的预约与领取序列、三处期限的结果行与账本行、审计开关两侧回包字节",
@@ -968,15 +968,15 @@
    "source": [
     "dev-scripts/gl/seat.py",
     "dev-scripts/orig/orig_seat_lib.sh",
-    "src/robomme_hard_eval/models/framesamp_modul.py",
-    "src/robomme_hard_eval/models/smvla.py",
-    "src/robomme_hard_eval/servers/smvla_server.py",
-    "src/robomme_hard_eval/models/pp.py",
-    "src/robomme_hard_eval/models/groundsg.py",
-    "src/robomme_hard_eval/models/_official_defs.py",
-    "src/robomme_hard_eval/servers/policy_server_wrap.py",
-    "src/robomme_hard_eval/models/astra.py",
-    "src/robomme_hard_eval/record/trace_writer.py"
+    "src/robomme_ood_eval/models/framesamp_modul.py",
+    "src/robomme_ood_eval/models/smvla.py",
+    "src/robomme_ood_eval/servers/smvla_server.py",
+    "src/robomme_ood_eval/models/pp.py",
+    "src/robomme_ood_eval/models/groundsg.py",
+    "src/robomme_ood_eval/models/_official_defs.py",
+    "src/robomme_ood_eval/servers/policy_server_wrap.py",
+    "src/robomme_ood_eval/models/astra.py",
+    "src/robomme_ood_eval/record/trace_writer.py"
    ],
    "symbol": "七路线（FrameSamp+Modulation、SimpleMemVLA、PonderPounce、GroundSG Oracle／QwenVL／MemER、3-tier Astra）× --policy-seed 0／7／42：run_seat.sh::build_server_cmd → policy_server_wrap.run（create_policy 实参、服务元数据）／SMVLAPolicyHost.new_episode（reseed）／official_defs.make_args（Args.model_seed）与 seed_everything → SeatRunner.run_one 结果行 policy_seed／server_seed／budget_token 与 trace header／identity／end；run_astra.sh VLA 服务 --seed、astra_hard_runner check／run --policy-seed、trace／result／provenance；ood --max-steps 1800 --strict-cap：EnvSession.step 守卫 × 六个真实客户端循环、Astra TracedEnv 守卫；OBS_EQ：policy_server_wrap.AuditedPolicy／install_tokenizer_spy 与 SMVLAPolicyHost._watch_prompt／_audit_block",
    "oracle": "计划第二部分三节第二段与八.3：期望值在用例里手写（种子取值、1800／1801、timeout、exec_steps、trace 行数）；服务 argv 的种子按路线手写取法；OBS_EQ 比较器手写（模型实际 token id／mask、动作字节、RNG、调用次数四项）",
@@ -1003,12 +1003,12 @@
     "dev-scripts/checks/lang_io_check.py",
     "dev-scripts/gl/seat.py",
     "dev-scripts/gl/budget_ledger.py",
-    "src/robomme_hard_eval/record/trace_writer.py",
-    "src/robomme_hard_eval/models/framesamp_modul.py",
-    "src/robomme_hard_eval/models/smvla.py",
-    "src/robomme_hard_eval/models/pp.py",
-    "src/robomme_hard_eval/models/groundsg.py",
-    "src/robomme_hard_eval/models/astra.py"
+    "src/robomme_ood_eval/record/trace_writer.py",
+    "src/robomme_ood_eval/models/framesamp_modul.py",
+    "src/robomme_ood_eval/models/smvla.py",
+    "src/robomme_ood_eval/models/pp.py",
+    "src/robomme_ood_eval/models/groundsg.py",
+    "src/robomme_ood_eval/models/astra.py"
    ],
    "symbol": "六条 env_client 路线真实客户端经 SeatRunner 产出（另含 PP／GroundSG Oracle 第 5 步环境异常局与一局 Astra）→ trace_arrays_check.main／lang_io_check.main；SeatRunner 换种子（独立目录、同一共享账本）；BudgetLedger.reserve（first／recovery）／claim_retry（infra／expired）／report_lines 的上限一致性",
    "oracle": "检查器判定行的期望计数在用例里手写；小账本（轨迹 12、首试 9、恢复合计 3）的领取序列手算",
@@ -1119,8 +1119,8 @@
    "id": "C13-ASTRA-WIRING",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/astra.py",
-    "src/robomme_hard_eval/episode.py"
+    "src/robomme_ood_eval/models/astra.py",
+    "src/robomme_ood_eval/episode.py"
    ],
    "symbol": "AstraPolicy.load／reset／play／close + SessionBuilder／SessionEnv → Astra examples/champ/runner.episode（上游只读引用），外层 run_episode",
    "oracle": "手写期望：外层 BenchmarkEnvBuilder 构造参数逐项（dataset、action_space=joint_angle、gui_render=False、max_steps=1300／1800），make_env_for_episode 只传局号；hard-verify 本地局号 0 ↔ 官方 test episode 3；load 起费用守卫（--cap 5、--root group_0、--ledger、--state、--prices）与 VLA（scripts/serve_policy.py --seed=<policy_seed>，第一张卡，环境去掉 OPENAI_API_KEY）各一次、先守卫后 VLA，监视模型建在第二张卡；urlopen 替身计数为 0",
@@ -1160,8 +1160,8 @@
    "id": "C13-ASTRA-STOP",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/astra.py",
-    "src/robomme_hard_eval/servers/astra_cost_guard.py"
+    "src/robomme_ood_eval/models/astra.py",
+    "src/robomme_ood_eval/servers/astra_cost_guard.py"
    ],
    "symbol": "AstraPolicy._after_episode／reset（复刻上游 main() 第③④⑤项与局数上限，play 返回后判定、下一局 reset 抛 AstraStop）+ astra_cost_guard.cycle 写 group_*/STOP.json",
    "oracle": "手写期望表：规划替身第 k 局（k=1、2）返回 error → 规划请求恰 k 次、只开 k 局；单局规划上限 1 → 1 次请求后停；错误序列 error、success、error、error、error → 开 5 局后停、第 6 局不开；费用替身单次 20.08 美元、投影 40.16 > 30 → 只发 1 次请求、下一局前停",
@@ -1188,8 +1188,8 @@
    "id": "C13-ASTRA-COST",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/servers/astra_cost_guard.py",
-    "src/robomme_hard_eval/models/astra.py"
+    "src/robomme_ood_eval/servers/astra_cost_guard.py",
+    "src/robomme_ood_eval/models/astra.py"
    ],
    "symbol": "astra_cost_guard.price_usage / scan / cycle / main --once + astra.CostGate／GuardedResponsesClient（发送前同步预留）",
    "oracle": "手算：(10000-4000)×2 + 4000×0.5 + 1000×8 = 22000 → 0.022 美元；reasoning 另计时加 600×8/1e6；累计 2.0、最坏一次 2.016384、投影 4.016384 > 4.0 → 写 STOP",
@@ -1225,7 +1225,7 @@
    "id": "C13-ASTRA-LAUNCHER",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/astra.py",
+    "src/robomme_ood_eval/models/astra.py",
     "scripts/evaluate.py"
    ],
    "symbol": "旧 run_astra.sh 不迁移；新入口 scripts/evaluate.py --model astra --gpus 0,1 --astra-ledger … --astra-cap-usd 5 → AstraPolicy._parse_cfg／vla_argv／vla_env／VLAServerProcess.DROP_ENV",
@@ -1249,7 +1249,7 @@
    "id": "C13-ASTRA-STAGE3",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/astra.py"
+    "src/robomme_ood_eval/models/astra.py"
    ],
    "symbol": "astra.{DATASET_STEP_PAIRING,DATASET_STRICT_CAP,check_policy_seed,TracedEnv.step,TracedPlanner,PlannerLanguageCall,TracedMonitor,TracedClient,write_exec_actions,write_provenance,GuardedResponsesClient.transport_hook} + AstraPolicy.vla_argv（--seed=<policy_seed>）",
    "oracle": "手写期望：ood↔1800 strict、hard-verify↔1300 非 strict；模型种子必须是非负整数，否则 RUN_BLOCKED reason=policy_seed；VLA 服务 argv 含 --seed=<n>；language.jsonl 行结构按冻结说明第五节；planner 输入原文 = spool prompt.txt 全文，monitor system = 上游 input_contract.NORMAL",
@@ -1278,8 +1278,8 @@
    "id": "C13-GSG-01",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/_official_defs.py",
-    "src/robomme_hard_eval/models/groundsg.py",
+    "src/robomme_ood_eval/models/_official_defs.py",
+    "src/robomme_ood_eval/models/groundsg.py",
     "dev-scripts/orig/official_hard_runner.py"
    ],
    "symbol": "groundsg_client.run_episode（SessionRunner 委托 EnvSession）与 official_hard_runner.run_identity（官方 EnvRunner 原文 + TapRunner／EnvTap）都调官方 EpisodeEvaluator.eval_each_episode 原文",
@@ -1309,8 +1309,8 @@
    "id": "C13-GSG-02",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/_official_defs.py",
-    "src/robomme_hard_eval/models/groundsg.py"
+    "src/robomme_ood_eval/models/_official_defs.py",
+    "src/robomme_ood_eval/models/groundsg.py"
    ],
    "symbol": "official_defs.extract_defs / load_groundsg / make_args / build_predictor；groundsg_client.make_policy_context / close_policy_context",
    "oracle": "官方源码只读引用 SGEVAL_THIRD_PARTY，所读五个文件的 sha256 由测试独立计算并打印；Qwen 引擎为不读权重的替身，记下构造参数",
@@ -1338,7 +1338,7 @@
    "domain": "C13",
    "source": [
     "dev-scripts/orig/official_hard_runner.py",
-    "src/robomme_hard_eval/models/groundsg.py"
+    "src/robomme_ood_eval/models/groundsg.py"
    ],
    "symbol": "official_hard_runner：--check-imports / main 参数与分片核对 / run_identity 原始帧与结果行 / run_shard 服务不可达中止",
    "oracle": "导入断言在子进程里跑（只加官方 examples/robomme 与仓库 src）；原始帧字节数与首帧内容按假环境手算",
@@ -1362,8 +1362,8 @@
    "id": "C13-GSG-04",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/_official_defs.py",
-    "src/robomme_hard_eval/models/groundsg.py",
+    "src/robomme_ood_eval/models/_official_defs.py",
+    "src/robomme_ood_eval/models/groundsg.py",
     "dev-scripts/orig/official_hard_runner.py"
    ],
    "symbol": "official_defs：VARIANT_MEMER、load_memer_model／patch_memer_class（MemER 兼容层 MEMER_COMPAT_SOURCE、MEMER_COMPAT_SHA256、MemERResponseError）、make_args(model_seed=, memer_adapter_path=)、assert_one_predictor、build_predictor、seed_everything；groundsg_client／official_hard_runner 的 MemER 装配与 policy_seed 贯通",
@@ -1394,7 +1394,7 @@
    "id": "C13-GSG-05",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/groundsg.py",
+    "src/robomme_ood_eval/models/groundsg.py",
     "dev-scripts/orig/official_hard_runner.py",
     "dev-scripts/orig/run_official_hard.sh"
    ],
@@ -1486,7 +1486,7 @@
    "id": "C13-PP-PROTOCOL",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/pp.py",
+    "src/robomme_ood_eval/models/pp.py",
     "dev-scripts/orig/pp_official_runner.py"
    ],
    "symbol": "pp_client.run_episode / ObsPacker.make / exec_action8 / episode_start_payload；pp_official_runner.run_shard / make_tracing_bench_class / make_fixed_sid_recorder_class",
@@ -1514,7 +1514,7 @@
    "id": "C13-PP-SID",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/pp.py"
+    "src/robomme_ood_eval/models/pp.py"
    ],
    "symbol": "pp_client.fixed_sid / episode_idx_of",
    "oracle": "计划 1.4「固定 sid」行手写：xhard0 为 <task>|<source_episode>|<seed>，V9 为 <task>|<tier>|<seed>；eid 与 sid 相同；EPISODE_START 的 episode_idx 取官方局号 source_episode",
@@ -1536,7 +1536,7 @@
    "id": "C13-PP-STEPS-RECONNECT",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/pp.py",
+    "src/robomme_ood_eval/models/pp.py",
     "dev-scripts/orig/pp_official_runner.py"
    ],
    "symbol": "pp_client._run_episode_async 的 range(max_steps) 循环与 _act_with_reconnect；pp_official_runner.run_shard 的异常与 reconnect 分支",
@@ -1588,7 +1588,7 @@
    "id": "C13-PP-SERVER-WRAP",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/servers/pp_server_wrap.py"
+    "src/robomme_ood_eval/servers/pp_server_wrap.py"
    ],
    "symbol": "SubgoalReportingServer._fire_s1 / _dispense / latest_visible_subgoal / 入口 run_server",
    "oracle": "锁定父类真实方法 + CPU 桩，原类与外壳两套节拍各 200 步逐步比较；子目标按节拍算式独立推出",
@@ -1609,7 +1609,7 @@
    "id": "C13-SG-TRACE",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/record/trace_writer.py"
+    "src/robomme_ood_eval/record/trace_writer.py"
    ],
    "symbol": "TraceWriter / image_sha256 / array_record / bytes_record / read_trace / canonical_bytes / validate_trace / find_traces / subgoal_sequence（每局 trace.jsonl）",
    "oracle": "计划 1.7 字段约定；夹具手写数组与画面，哈希期望用 hashlib 直接对原始字节算",
@@ -1637,7 +1637,7 @@
    "domain": "C13",
    "source": [
     "dev-scripts/checks/gate2_compare.py",
-    "src/robomme_hard_eval/record/trace_writer.py"
+    "src/robomme_ood_eval/record/trace_writer.py"
    ],
    "symbol": "gate2_compare.compare / compare_traces / final_rows / epoch_firsts / TraceIndex / verdict_line / main（--mode astra、--groundsg、--site、--expect-total）",
    "oracle": "两侧轨迹由 TraceWriter 按生产格式写出，变异点（第几步、哪个字段）在用例里手写，首个分叉步与类型手算",
@@ -1856,8 +1856,8 @@
    "id": "C13-SG-TRACE-ARRAYS",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/record/trace_writer.py",
-    "src/robomme_hard_eval/record/recorder.py",
+    "src/robomme_ood_eval/record/trace_writer.py",
+    "src/robomme_ood_eval/record/recorder.py",
     "dev-scripts/checks/trace_arrays_check.py"
    ],
    "symbol": "trace_writer.merge_write_npz / ArraysConflict / TraceWriter(arrays_path, collect_arrays, policy_seed, effective_cap) / log_step(source_call_id, chunk_index)；recorder.EpisodeRecorder._write_arrays；trace_arrays_check.check / main",
@@ -1891,7 +1891,7 @@
    "id": "C13-SG-LANGUAGE-LOG",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/record/trace_writer.py"
+    "src/robomme_ood_eval/record/trace_writer.py"
    ],
    "symbol": "trace_writer.LanguageLog.open_call / message / close_call / reuse / close；read_language；audit_channel_messages",
    "oracle": "冻结说明第五节的方法与行 schema（字段名与顺序）逐字手写",
@@ -1914,9 +1914,9 @@
    "id": "C13-SG-CLIENT-LANGUAGE",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/smvla.py",
-    "src/robomme_hard_eval/models/framesamp_modul.py",
-    "src/robomme_hard_eval/models/pp.py"
+    "src/robomme_ood_eval/models/smvla.py",
+    "src/robomme_ood_eval/models/framesamp_modul.py",
+    "src/robomme_ood_eval/models/pp.py"
    ],
    "symbol": "smvla_client.run_episode / PolicyTrace.lang_* / begin_chunk；framesamp_modul_client.TracedClient.infer / RecordingClient._roundtrip；pp_client.TracedConnection.act / _log_generation / _run_episode_async",
    "oracle": "计划八.11「一局里各路线会有什么记录」手写期望；假服务分带与不带 _sgeval_audit 两种跑同一局",
@@ -1940,15 +1940,15 @@
    "id": "C13-MERGE1-CROSS",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/record/trace_writer.py",
+    "src/robomme_ood_eval/record/trace_writer.py",
     "dev-scripts/orig/orig_observer/step_arrays.py",
-    "src/robomme_hard_eval/models/astra.py",
+    "src/robomme_ood_eval/models/astra.py",
     "dev-scripts/gl/budget_ledger.py",
     "dev-scripts/orig/official_hard_runner.py",
     "dev-scripts/gl/seat.py",
-    "src/robomme_hard_eval/servers/pp_server_wrap.py",
-    "src/robomme_hard_eval/models/pp.py",
-    "src/robomme_hard_eval/servers/policy_server_wrap.py"
+    "src/robomme_ood_eval/servers/pp_server_wrap.py",
+    "src/robomme_ood_eval/models/pp.py",
+    "src/robomme_ood_eval/servers/policy_server_wrap.py"
    ],
    "symbol": "merge_write_npz（目录锁超时 MERGE_LOCK_TIMEOUT_S）× StepArrays.save × write_exec_actions × TraceWriter.close；OrigBudget＋open_budget_ledger × AttemptLedger＋budget_caps × BudgetLedger；pp_server_wrap._S2Watch／_audit_block／generation_blocks × pp_client.TracedConnection._log_generation；policy_server_wrap.build_audit × trace_writer.audit_channel_messages",
    "oracle": "接口冻结说明三、四、五节；两边都用真实代码（不用替身对接），期望键集合、计数与文字在用例里手写",
@@ -3149,7 +3149,7 @@
    "id": "C18-NO-TESTS-IMPORT",
    "domain": "C18",
    "source": [
-    "src/robomme_hard_eval/**/*.py",
+    "src/robomme_ood_eval/**/*.py",
     "scripts/evaluate.py",
     "dev-scripts/**/*.py"
    ],
@@ -3182,8 +3182,8 @@
    "source": [
     "pyproject.toml"
    ],
-   "symbol": "robomme-hard-eval wheel（hatch packages=src/robomme_hard_eval）",
-   "oracle": "git ls-files src/robomme_hard_eval 为期望文件集合；pyproject 的 name／version",
+   "symbol": "robomme-ood-eval wheel（hatch packages=src/robomme_ood_eval）",
+   "oracle": "git ls-files src/robomme_ood_eval 为期望文件集合；pyproject 的 name／version",
    "positive": "wheel 文件集合等于跟踪文件、安装后逐字节相同、子包齐全、dist-info 名与版本一致且非 editable、仓库外导入落在 tmp 环境",
    "negative": "tmp 环境里有指回仓库的 .pth 或 editable 安装即失败",
    "boundaries": "离线构建／建环境／安装失败记 skip（未验证），不记 PASS",
@@ -3204,11 +3204,11 @@
    "id": "C13-OFFICIAL-NAMES",
    "domain": "C13",
    "source": [
-    "src/robomme_hard_eval/models/_official_defs.py"
+    "src/robomme_ood_eval/models/_official_defs.py"
    ],
    "symbol": "scan_text／scan_repo／别名表段",
    "oracle": "旧名正则由测试独立列出，不读被测代码",
-   "positive": "评估仓 scripts／src/robomme_hard_eval／dev-scripts／tests 的活代码零旧名残留；别名表段只在 _official_defs.py 且成对",
+   "positive": "评估仓 scripts／src/robomme_ood_eval／dev-scripts／tests 的活代码零旧名残留；别名表段只在 _official_defs.py 且成对",
    "negative": "PATTERNS 列出的每种旧写法（标签、标识符、驼峰、旧数据集接口名与常量）都被抓到",
    "boundaries": "官方家族名 mme-vla／MME-VLA／MMEVLAWebsocket、标注历史目录名／历史数据键的行不误报",
    "nodeids": [
@@ -3230,7 +3230,7 @@
    "id": "C19-RUN-EPISODE",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/episode.py"
+    "src/robomme_ood_eval/episode.py"
    ],
    "symbol": "run_episode／make_spec／EpisodeSpec／EpisodeResult／normalize_play_output／_Watchdog",
    "oracle": "假 builder（真实身份解析之外的环境全换 CPU 假）与假 Policy；次序、终态与计数手写",
@@ -3272,7 +3272,7 @@
    "id": "C19-ENV-SESSION",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/session.py"
+    "src/robomme_ood_eval/session.py"
    ],
    "symbol": "EnvSession.build／reset／step／close、NullRecorder、_GuardedRecorder",
    "oracle": "假 builder 与假环境的 reset／step 计划手写",
@@ -3307,7 +3307,7 @@
    "id": "C19-REPORT",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/report.py"
+    "src/robomme_ood_eval/report.py"
    ],
    "symbol": "report 汇总",
    "oracle": "手写结果行",
@@ -3329,8 +3329,8 @@
    "id": "C19-POLICY-BASE",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/policy.py",
-    "src/robomme_hard_eval/models/__init__.py"
+    "src/robomme_ood_eval/policy.py",
+    "src/robomme_ood_eval/models/__init__.py"
    ],
    "symbol": "Policy 四方法与计数器、load_policy、ServerProcess、pick_port、注册表",
    "oracle": "假服务端进程（本地子进程）与手写期望",
@@ -3364,11 +3364,11 @@
    "id": "C19-MODEL-POLICIES",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/models/framesamp_modul.py",
-    "src/robomme_hard_eval/models/groundsg.py",
-    "src/robomme_hard_eval/models/smvla.py",
-    "src/robomme_hard_eval/models/pp.py",
-    "src/robomme_hard_eval/servers/__init__.py"
+    "src/robomme_ood_eval/models/framesamp_modul.py",
+    "src/robomme_ood_eval/models/groundsg.py",
+    "src/robomme_ood_eval/models/smvla.py",
+    "src/robomme_ood_eval/models/pp.py",
+    "src/robomme_ood_eval/servers/__init__.py"
    ],
    "symbol": "四个服务型模型 Policy 子类与 ServedPolicy 公共件",
    "oracle": "假服务端进程与假客户端；服务端 argv、消息次序手写",
@@ -3411,7 +3411,7 @@
    "id": "C19-RECORDER-AV1",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/record/recorder.py"
+    "src/robomme_ood_eval/record/recorder.py"
    ],
    "symbol": "EpisodeRecorder AV1 4:4:4 编码与核对",
    "oracle": "ffmpeg 现编现解；帧 sha 与常量手写",
@@ -3437,8 +3437,8 @@
    "domain": "C19",
    "source": [
     "scripts/evaluate.py",
-    "src/robomme_hard_eval/models/dummy.py",
-    "src/robomme_hard_eval/record/official_render.py"
+    "src/robomme_ood_eval/models/dummy.py",
+    "src/robomme_ood_eval/record/official_render.py"
    ],
    "symbol": "scripts/evaluate.py 参数解析与本机循环、dummy 模型、官方版式渲染按 raw_codec 读帧",
    "oracle": "dummy 模型两数据集各跑一局；参数与透传手写",
@@ -3465,7 +3465,7 @@
    "id": "C19-FIND-FFPROBE",
    "domain": "C19",
    "source": [
-    "src/robomme_hard_eval/record/official_render.py"
+    "src/robomme_ood_eval/record/official_render.py"
    ],
    "symbol": "find_ffprobe／ENV_FFPROBE",
    "oracle": "临时目录里的假可执行文件，shutil.which 与录制器 find_ffmpeg 打桩",
@@ -3781,7 +3781,7 @@
    "C18-NO-TESTS-IMPORT",
    "C19-EVALUATE-CLI"
   ],
-  "src/robomme_hard_eval/episode.py": [
+  "src/robomme_ood_eval/episode.py": [
    "C13-01",
    "C13-02",
    "C13-03",
@@ -3790,10 +3790,10 @@
    "C13-ASTRA-WIRING",
    "C19-RUN-EPISODE"
   ],
-  "src/robomme_hard_eval/models/__init__.py": [
+  "src/robomme_ood_eval/models/__init__.py": [
    "C19-POLICY-BASE"
   ],
-  "src/robomme_hard_eval/models/_official_defs.py": [
+  "src/robomme_ood_eval/models/_official_defs.py": [
    "C13-LEGACY-NAMES",
    "C13-R4-SEVEN-ROUTES",
    "C13-GSG-01",
@@ -3801,7 +3801,7 @@
    "C13-GSG-04",
    "C13-OFFICIAL-NAMES"
   ],
-  "src/robomme_hard_eval/models/astra.py": [
+  "src/robomme_ood_eval/models/astra.py": [
    "C13-R4-SEVEN-ROUTES",
    "C13-R4-CROSS-CHECKERS",
    "C13-ASTRA-WIRING",
@@ -3811,10 +3811,10 @@
    "C13-ASTRA-STAGE3",
    "C13-MERGE1-CROSS"
   ],
-  "src/robomme_hard_eval/models/dummy.py": [
+  "src/robomme_ood_eval/models/dummy.py": [
    "C19-EVALUATE-CLI"
   ],
-  "src/robomme_hard_eval/models/framesamp_modul.py": [
+  "src/robomme_ood_eval/models/framesamp_modul.py": [
    "C13-01",
    "C13-07",
    "C13-15",
@@ -3823,7 +3823,7 @@
    "C13-SG-CLIENT-LANGUAGE",
    "C19-MODEL-POLICIES"
   ],
-  "src/robomme_hard_eval/models/groundsg.py": [
+  "src/robomme_ood_eval/models/groundsg.py": [
    "C13-R4-SEVEN-ROUTES",
    "C13-R4-CROSS-CHECKERS",
    "C13-GSG-01",
@@ -3833,7 +3833,7 @@
    "C13-GSG-05",
    "C19-MODEL-POLICIES"
   ],
-  "src/robomme_hard_eval/models/pp.py": [
+  "src/robomme_ood_eval/models/pp.py": [
    "C13-R4-SEVEN-ROUTES",
    "C13-R4-CROSS-CHECKERS",
    "C13-PP-PROTOCOL",
@@ -3843,7 +3843,7 @@
    "C13-MERGE1-CROSS",
    "C19-MODEL-POLICIES"
   ],
-  "src/robomme_hard_eval/models/smvla.py": [
+  "src/robomme_ood_eval/models/smvla.py": [
    "C13-01",
    "C13-07",
    "C13-13",
@@ -3852,18 +3852,18 @@
    "C13-SG-CLIENT-LANGUAGE",
    "C19-MODEL-POLICIES"
   ],
-  "src/robomme_hard_eval/policy.py": [
+  "src/robomme_ood_eval/policy.py": [
    "C19-POLICY-BASE"
   ],
-  "src/robomme_hard_eval/record/official_render.py": [
+  "src/robomme_ood_eval/record/official_render.py": [
    "C19-EVALUATE-CLI"
   ],
-  "src/robomme_hard_eval/record/recorder.py": [
+  "src/robomme_ood_eval/record/recorder.py": [
    "C13-14",
    "C13-SG-TRACE-ARRAYS",
    "C19-RECORDER-AV1"
   ],
-  "src/robomme_hard_eval/record/trace_writer.py": [
+  "src/robomme_ood_eval/record/trace_writer.py": [
    "C13-R4-SEVEN-ROUTES",
    "C13-R4-CROSS-CHECKERS",
    "C13-SG-TRACE",
@@ -3872,32 +3872,32 @@
    "C13-SG-LANGUAGE-LOG",
    "C13-MERGE1-CROSS"
   ],
-  "src/robomme_hard_eval/report.py": [
+  "src/robomme_ood_eval/report.py": [
    "C19-REPORT"
   ],
-  "src/robomme_hard_eval/servers/__init__.py": [
+  "src/robomme_ood_eval/servers/__init__.py": [
    "C19-MODEL-POLICIES"
   ],
-  "src/robomme_hard_eval/servers/astra_cost_guard.py": [
+  "src/robomme_ood_eval/servers/astra_cost_guard.py": [
    "C13-ASTRA-STOP",
    "C13-ASTRA-COST"
   ],
-  "src/robomme_hard_eval/servers/policy_server_wrap.py": [
+  "src/robomme_ood_eval/servers/policy_server_wrap.py": [
    "C13-R3-STAGE3",
    "C13-R4-SEVEN-ROUTES",
    "C13-MERGE1-CROSS"
   ],
-  "src/robomme_hard_eval/servers/pp_server_wrap.py": [
+  "src/robomme_ood_eval/servers/pp_server_wrap.py": [
    "C13-PP-SERVER-WRAP",
    "C13-MERGE1-CROSS"
   ],
-  "src/robomme_hard_eval/servers/smvla_server.py": [
+  "src/robomme_ood_eval/servers/smvla_server.py": [
    "C13-13",
    "C13-17",
    "C13-R3-STAGE3",
    "C13-R4-SEVEN-ROUTES"
   ],
-  "src/robomme_hard_eval/session.py": [
+  "src/robomme_ood_eval/session.py": [
    "C19-ENV-SESSION"
   ]
  },
@@ -3946,11 +3946,11 @@
    "category": "一次性出图／留档脚本",
    "reason": "sg-eval-gl-20261006-03 第三阶段 OOD 视频站的建目录与托管脚本，复用已受 C17 覆盖的 site_server.py；本轮以 STAGE3_SITE、MEDIA_FETCH 与 Playwright STAGE3_SITE_BROWSER 判定行留档于 docs/validation/sg-eval-gl-20261006-03/result.md。"
   },
-  "src/robomme_hard_eval/__init__.py": {
+  "src/robomme_ood_eval/__init__.py": {
    "category": "包标记与路径设置 shim",
    "reason": "只有一行模块文档字符串的包标记；包内容由 C19-* 条目覆盖，wheel 由 C18-WHEEL 核对。"
   },
-  "src/robomme_hard_eval/record/__init__.py": {
+  "src/robomme_ood_eval/record/__init__.py": {
    "category": "包标记与路径设置 shim",
    "reason": "子包标记，只有文档字符串、不做任何导入（各模块按路径加载）；recorder／trace_writer／official_render 由各自条目覆盖。"
   },
@@ -3977,5 +3977,5 @@
   "C18-EPISODE-LIMITS": "run_example.EPISODE_LIMITS 与官方元数据：随 benchmark 仓"
  },
  "merge_rule": "entries 由各测试块 contracts.delta.json 规整合入（增量文件保留作来源记录）：统一 entry_keys、source 统一为列表；同一 id 出现在多个增量时取更强状态（verified > conditional > blocked > planned）的条目为主体，nodeids／mutants／source 取并集，merged_from 记来源；同 id 跨块且 source 不相交时视为两份不同契约撞号，报冲突、不拼接；多路径 source 字符串在每段都是单个路径时拆成列表；blocked／conditional 必有 note 说明。",
- "files_rule": "files：git 跟踪的 src/robomme_hard_eval、scripts、dev-scripts 下每个现行文件 → 所属契约 id 列表（由条目 source 精确路径反推，旧总表经 tests/_support/loaders.py::LEGACY_PATHS 翻译的归属沿用）；file_notes 写归属理由；exempt 写豁免类别与理由。由 tests/static/test_inventory.py 机检。"
+ "files_rule": "files：git 跟踪的 src/robomme_ood_eval、scripts、dev-scripts 下每个现行文件 → 所属契约 id 列表（由条目 source 精确路径反推，旧总表经 tests/_support/loaders.py::LEGACY_PATHS 翻译的归属沿用）；file_notes 写归属理由；exempt 写豁免类别与理由。由 tests/static/test_inventory.py 机检。"
 }

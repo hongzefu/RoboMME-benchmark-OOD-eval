@@ -154,7 +154,7 @@ def test_reset_registers_episode_without_server_messages(tmp_path, monkeypatch):
 
 
 def test_reset_dead_server_raises_server_dead(tmp_path, monkeypatch):
-    from robomme_hard_eval.policy import ServerDead
+    from robomme_ood_eval.policy import ServerDead
 
     with astra_session() as (mod, astra):
         h = Harness(tmp_path, monkeypatch, mod, astra)
@@ -212,7 +212,7 @@ def test_close_stops_real_process_groups(tmp_path, monkeypatch):
     """真实子进程：守卫用真实 ``astra_cost_guard.py``（``GuardProcess``，就绪 = 心跳新鲜）；VLA 位置放一个会再起子进程
     的假服务（``VLAServerProcess``，环境里无密钥、``CUDA_VISIBLE_DEVICES`` 为第一张卡）。``close`` 先停 VLA 进程组
     （连同孙进程）、再停守卫（守卫写 ``exited=true``），两份元数据删除。"""
-    from robomme_hard_eval import policy as P
+    from robomme_ood_eval import policy as P
 
     monkeypatch.setattr(P, "wait_gpu_free", lambda pid, **k: True)  # 不查 nvidia-smi
     monkeypatch.setenv("OPENAI_API_KEY", FAKE_KEY)

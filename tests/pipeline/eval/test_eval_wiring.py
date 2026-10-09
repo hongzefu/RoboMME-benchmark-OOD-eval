@@ -6,8 +6,8 @@
 - 原侧席位函数库 ``dev-scripts/orig/orig_seat_lib.sh``（被 source 时只定义函数；新侧客户端构造 ``build_client_cmd`` 已停用，
   调用即 ``RUN_BLOCKED reason=legacy_client``）：10 条服务路线（smvla、perceptual-framesamp-modul 走 ood；groundsg 三个
   变体与 pp 各走 hard-verify 与 ood）的服务 argv——perceptual-framesamp-modul／groundsg 走外壳
-  ``src/robomme_hard_eval/servers/policy_server_wrap.py --seed=<种子>``、``--policy.dir`` 与 history_config 期望，pp 的
-  ``-m ponderpounce.eval.robomme_server --args.seed <种子>``，smvla 的 ``src/robomme_hard_eval/servers/smvla_server.py
+  ``src/robomme_ood_eval/servers/policy_server_wrap.py --seed=<种子>``、``--policy.dir`` 与 history_config 期望，pp 的
+  ``-m ponderpounce.eval.robomme_server --args.seed <种子>``，smvla 的 ``src/robomme_ood_eval/servers/smvla_server.py
   --policy-seed <种子>``，均带服务元数据路径；端口策略号。
 - 原侧 3 条路线（groundsg 两个变体、pp，hard-verify）：驱动脚本 ``dev-scripts/orig/<驱动>``、``--max-steps 1300``、
   ``--attempt``／``--only``、``--variant``、adapter 只在 QwenVL 变体。
@@ -31,7 +31,7 @@ import eval_fakes as F
 
 EO = F.REPO / "dev-scripts" / "orig"
 GL = F.REPO / "dev-scripts" / "gl"
-SERVERS = F.REPO / "src" / "robomme_hard_eval" / "servers"
+SERVERS = F.REPO / "src" / "robomme_ood_eval" / "servers"
 
 if shutil.which("bash") is None:  # pragma: no cover
     pytest.skip("未验证：缺 bash", allow_module_level=True)
@@ -134,7 +134,7 @@ def _check_new_route(pol, variant, dataset, adapter_dir) -> tuple[int, int, list
                 or _opt(srv, "--port") != "18123" or not r["SRVDIR"].endswith("/third_party/PonderPounce"):
             var_bad += 1; why.append(f"pp 服务 {srv}")
     else:
-        if srv[:2] != ["/py/smvla", "src/robomme_hard_eval/servers/smvla_server.py"] or _opt(srv, "--policy-seed") != SEED \
+        if srv[:2] != ["/py/smvla", "src/robomme_ood_eval/servers/smvla_server.py"] or _opt(srv, "--policy-seed") != SEED \
                 or _opt(srv, "--metadata_out") != "/o/smvla/server-metadata-18123.json":
             var_bad += 1; why.append(f"smvla 服务 {srv}")
     return ds_bad, var_bad, why

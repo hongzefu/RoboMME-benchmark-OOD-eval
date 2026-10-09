@@ -407,11 +407,11 @@ def summarize_timing(timing: dict) -> dict:
 
 
 #: 旧仓同目录模块名 → 评估包内模块（拆仓后不再按文件路径互相加载）
-SIBLINGS = {"smvla_client": "robomme_hard_eval.models.smvla",
-            "groundsg_client": "robomme_hard_eval.models.groundsg",
-            "framesamp_modul_client": "robomme_hard_eval.models.framesamp_modul",
-            "official_defs": "robomme_hard_eval.models._official_defs",
-            "trace_writer": "robomme_hard_eval.record.trace_writer"}
+SIBLINGS = {"smvla_client": "robomme_ood_eval.models.smvla",
+            "groundsg_client": "robomme_ood_eval.models.groundsg",
+            "framesamp_modul_client": "robomme_ood_eval.models.framesamp_modul",
+            "official_defs": "robomme_ood_eval.models._official_defs",
+            "trace_writer": "robomme_ood_eval.record.trace_writer"}
 
 
 def _load_sibling(name: str):
@@ -742,8 +742,8 @@ def main(argv: list[str] | None = None) -> int:
 
 # ── 新接口：模型侧 4 个方法（拆分方案 §三「五个模型各自怎么落」） ─────────────────────
 
-from robomme_hard_eval import servers as _servers  # noqa: E402
-from robomme_hard_eval.policy import Ready  # noqa: E402
+from robomme_ood_eval import servers as _servers  # noqa: E402
+from robomme_ood_eval.policy import Ready  # noqa: E402
 
 #: 预热用的合成画面尺寸（RoboMME 两路相机都是 256×256）与帧数（稳态每次 add_buffer 交 16 帧）
 WARMUP_HW = (256, 256)

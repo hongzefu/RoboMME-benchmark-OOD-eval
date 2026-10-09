@@ -3,8 +3,8 @@
     "id": "C13-ASTRA-WIRING",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/astra.py",
-      "src/robomme_hard_eval/episode.py"
+      "src/robomme_ood_eval/models/astra.py",
+      "src/robomme_ood_eval/episode.py"
     ],
     "symbol": "AstraPolicy.load／reset／play／close + SessionBuilder／SessionEnv → Astra examples/champ/runner.episode（上游只读引用），外层 run_episode",
     "oracle": "手写期望：外层 BenchmarkEnvBuilder 构造参数逐项（dataset、action_space=joint_angle、gui_render=False、max_steps=1300／1800），make_env_for_episode 只传局号；hard-verify 本地局号 0 ↔ 官方 test episode 3；load 起费用守卫（--cap 5、--root group_0、--ledger、--state、--prices）与 VLA（scripts/serve_policy.py --seed=<policy_seed>，第一张卡，环境去掉 OPENAI_API_KEY）各一次、先守卫后 VLA，监视模型建在第二张卡；urlopen 替身计数为 0",
@@ -41,8 +41,8 @@
     "id": "C13-ASTRA-STOP",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/astra.py",
-      "src/robomme_hard_eval/servers/astra_cost_guard.py"
+      "src/robomme_ood_eval/models/astra.py",
+      "src/robomme_ood_eval/servers/astra_cost_guard.py"
     ],
     "symbol": "AstraPolicy._after_episode／reset（复刻上游 main() 第③④⑤项与局数上限，play 返回后判定、下一局 reset 抛 AstraStop）+ astra_cost_guard.cycle 写 group_*/STOP.json",
     "oracle": "手写期望表：规划替身第 k 局（k=1、2）返回 error → 规划请求恰 k 次、只开 k 局；单局规划上限 1 → 1 次请求后停；错误序列 error、success、error、error、error → 开 5 局后停、第 6 局不开；费用替身单次 20.08 美元、投影 40.16 > 30 → 只发 1 次请求、下一局前停",
@@ -66,8 +66,8 @@
     "id": "C13-ASTRA-COST",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/servers/astra_cost_guard.py",
-      "src/robomme_hard_eval/models/astra.py"
+      "src/robomme_ood_eval/servers/astra_cost_guard.py",
+      "src/robomme_ood_eval/models/astra.py"
     ],
     "symbol": "astra_cost_guard.price_usage / scan / cycle / main --once + astra.CostGate／GuardedResponsesClient（发送前同步预留）",
     "oracle": "手算：(10000-4000)×2 + 4000×0.5 + 1000×8 = 22000 → 0.022 美元；reasoning 另计时加 600×8/1e6；累计 2.0、最坏一次 2.016384、投影 4.016384 > 4.0 → 写 STOP",
@@ -100,7 +100,7 @@
     "id": "C13-ASTRA-LAUNCHER",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/astra.py",
+      "src/robomme_ood_eval/models/astra.py",
       "scripts/evaluate.py"
     ],
     "symbol": "旧 run_astra.sh 不迁移；新入口 scripts/evaluate.py --model astra --gpus 0,1 --astra-ledger … --astra-cap-usd 5 → AstraPolicy._parse_cfg／vla_argv／vla_env／VLAServerProcess.DROP_ENV",
@@ -121,7 +121,7 @@
     "id": "C13-ASTRA-STAGE3",
     "domain": "C13",
     "source": [
-      "src/robomme_hard_eval/models/astra.py"
+      "src/robomme_ood_eval/models/astra.py"
     ],
     "symbol": "astra.{DATASET_STEP_PAIRING,DATASET_STRICT_CAP,check_policy_seed,TracedEnv.step,TracedPlanner,PlannerLanguageCall,TracedMonitor,TracedClient,write_exec_actions,write_provenance,GuardedResponsesClient.transport_hook} + AstraPolicy.vla_argv（--seed=<policy_seed>）",
     "oracle": "手写期望：ood↔1800 strict、hard-verify↔1300 非 strict；模型种子必须是非负整数，否则 RUN_BLOCKED reason=policy_seed；VLA 服务 argv 含 --seed=<n>；language.jsonl 行结构按冻结说明第五节；planner 输入原文 = spool prompt.txt 全文，monitor system = 上游 input_contract.NORMAL",

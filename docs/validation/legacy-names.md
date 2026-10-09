@@ -40,6 +40,7 @@
 | 结果行／配置键 `mme_variant` | `groundsg_variant` |
 | `cap_probe.py --loop mme` | `--loop mme-vla`（测的是两模型共用的官方 `eval.py` 循环） |
 | 日志标记 `MMEVLA_ORIG_XHARD0_OBSERVED` | `FRAMESAMP_MODUL_ORIG_XHARD0_OBSERVED` |
+| 评估包 `robomme_hard_eval`（发行名 `robomme-hard-eval`，目录 `src/robomme_hard_eval/`） | `robomme_ood_eval`（`robomme-ood-eval`，`src/robomme_ood_eval/`；2026-10-09 版本 1.22 改名，不留兼容层） |
 
 ## 保留原样的历史名（代码里以「历史目录名」或「历史数据键」行标注）
 

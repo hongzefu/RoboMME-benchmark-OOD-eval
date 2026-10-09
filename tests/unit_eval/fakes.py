@@ -9,7 +9,7 @@ import time
 
 import numpy as np
 
-from robomme_hard_eval.policy import Policy
+from robomme_ood_eval.policy import Policy
 
 EVENTS: list[str] = []
 H = W = 256
@@ -170,7 +170,7 @@ class FakePolicy(Policy):
         session.reset()
         steps = 0
         if b in ("stepcap", "swallow_cap"):
-            from robomme_hard_eval.session import StepCapReached
+            from robomme_ood_eval.session import StepCapReached
 
             try:
                 while True:

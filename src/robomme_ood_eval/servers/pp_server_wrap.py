@@ -34,7 +34,7 @@
 
 启动（参数与原服务完全相同，cwd 在第三方 PonderPounce 目录，脚本用绝对路径）::
 
-    python /abs/path/src/robomme_hard_eval/servers/pp_server_wrap.py --args.seed 0 --args.checkpoint_path ... --port 8000
+    python /abs/path/src/robomme_ood_eval/servers/pp_server_wrap.py --args.seed 0 --args.checkpoint_path ... --port 8000
 
 ``python -m`` 会把 cwd 放在 ``sys.path`` 首位，而按路径运行脚本放的是脚本目录；为了与原命令的导入环境一致，
 入口先把本目录移出 ``sys.path``、把 cwd 放到首位，再导入 ``ponderpounce``。

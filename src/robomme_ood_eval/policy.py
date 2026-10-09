@@ -167,7 +167,7 @@ def load_policy(model: str, policy_seed: int, **cfg: Any) -> Policy:
     """按 ``models`` 注册表构造子类并调 ``load()``（进程级一次）。可作上下文管理器，``with`` 退出即 ``close()``。
 
     ``load()`` 抛异常时先 ``close()``（停掉可能已起的服务端）再原样上抛。"""
-    from robomme_hard_eval import models
+    from robomme_ood_eval import models
 
     cls = models.resolve(model)
     policy = cls(policy_seed=policy_seed, **cfg)
@@ -562,4 +562,4 @@ __all__ = ["Policy", "load_policy", "ServerProcess", "Ready", "ServerDead", "Ast
            "wait_gpu_free", "METHODS"]
 
 if sys.version_info < (3, 10):  # pragma: no cover
-    raise RuntimeError("robomme_hard_eval.policy 需要 Python ≥ 3.10")
+    raise RuntimeError("robomme_ood_eval.policy 需要 Python ≥ 3.10")

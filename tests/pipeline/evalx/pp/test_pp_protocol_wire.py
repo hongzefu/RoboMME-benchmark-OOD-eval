@@ -487,7 +487,7 @@ def _load_base_pp(tmp_path):
     BASE 版按同目录取 ``trace_writer``，这里把**当前** ``record/trace_writer.py`` 放在它旁边（与旧仓里的情形相同）。"""
     repo = os.environ.get("SGEVAL_PP_BASE_REPO")
     if repo:
-        old_rel = "scripts/" + next(k for k, v in LEGACY_PATHS.items() if v == "src/robomme_hard_eval/models/pp.py")
+        old_rel = "scripts/" + next(k for k, v in LEGACY_PATHS.items() if v == "src/robomme_ood_eval/models/pp.py")
         out = subprocess.run(["git", "show", f"{BASE_SHA}:{old_rel}"], cwd=repo,
                              capture_output=True, timeout=60)
         assert out.returncode == 0, out.stderr.decode(errors="replace")

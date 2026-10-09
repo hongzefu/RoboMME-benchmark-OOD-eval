@@ -20,7 +20,7 @@
 #     [--qwenvl-groundsg-adapter D] [--memer-adapter D] [其余 --<名> <值> 原样透传给 seat.py（模型参数）]
 # 预算缺省值即拆分方案 §五预算表（身份执行 26、计量 60 两个硬上限，基础设施重试 0）；共享账本 config 行会与之比对，
 # 本机 Astra 等其他入口必须给同一组上限。
-# 解释器：BENCH_PY（缺省 <repo>/.venv/bin/python）；起跑前打印 RUN_INPUTS 行，robomme_hard_eval 不在 <repo>/src 下、
+# 解释器：BENCH_PY（缺省 <repo>/.venv/bin/python）；起跑前打印 RUN_INPUTS 行，robomme_ood_eval 不在 <repo>/src 下、
 # robomme_hard 导入失败、身份清单不存在即 RUN_BLOCKED reason=run_inputs（退出 3）。
 # 末尾三行：每个策略 GL_POLICY_DONE policy= rc= restarts= noprog=，GL_SEAT_DONE outcome=pass|fail|aborted rc=，
 # EXIT_CODE=<rc>。退出码：0 全部策略 rc=0；参数错 2；输入不全／运行阻塞 3；其余取首个非零策略 rc（124 = 无进展）；
@@ -174,13 +174,13 @@ why=()
 [[ -x "$BENCH_PY" ]] || why+=("bench_py_missing")
 [[ -f "$IDENTITIES" ]] || why+=("identities_missing")
 [[ -f "$REPO/dev-scripts/gl/seat.py" ]] || why+=("seat_missing")
-pkg="$( cd "$REPO" && "$BENCH_PY" -c 'import robomme_hard_eval, robomme_hard; print(robomme_hard_eval.__file__, robomme_hard.__file__)' 2>/dev/null | tail -n 1)"
+pkg="$( cd "$REPO" && "$BENCH_PY" -c 'import robomme_ood_eval, robomme_hard; print(robomme_ood_eval.__file__, robomme_hard.__file__)' 2>/dev/null | tail -n 1)"
 eval_file="${pkg%% *}" ; hard_file="${pkg##* }"
-[[ "$eval_file" == "$REPO/src/robomme_hard_eval/__init__.py" ]] || why+=("robomme_hard_eval_not_in_repo")
+[[ "$eval_file" == "$REPO/src/robomme_ood_eval/__init__.py" ]] || why+=("robomme_ood_eval_not_in_repo")
 [[ "$hard_file" == */robomme_hard/__init__.py ]] || why+=("robomme_hard_import")
 CPUS="$("$BENCH_PY" -c 'import os;print(",".join(map(str,sorted(os.sched_getaffinity(0)))))' 2>/dev/null)"
 verdict=PASS; (( ${#why[@]} == 0 )) || verdict=FAIL
-echo "RUN_INPUTS=$verdict repo=$REPO bench_py=$BENCH_PY robomme_hard_eval=${eval_file:-IMPORT_FAIL} \
+echo "RUN_INPUTS=$verdict repo=$REPO bench_py=$BENCH_PY robomme_ood_eval=${eval_file:-IMPORT_FAIL} \
 robomme_hard=${hard_file:-IMPORT_FAIL} identities=$IDENTITIES out=$OUT host=$(hostname) cpus=${CPUS:-?} \
 slurm_job=${SLURM_JOB_ID:-none} cuda_visible=${CUDA_VISIBLE_DEVICES:-unset}${why:+ reason=$(IFS=,; echo "${why[*]}")}"
 if [[ "$verdict" != PASS ]]; then

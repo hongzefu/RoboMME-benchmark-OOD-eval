@@ -56,7 +56,7 @@ from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
-#: 评估仓根（本文件在 src/robomme_hard_eval/models/ 下）
+#: 评估仓根（本文件在 src/robomme_ood_eval/models/ 下）
 REPO = Path(__file__).resolve().parents[3]
 #: 三个变体（接口冻结说明 2.3；env_client.GROUNDSG_VARIANTS 由 R3 同步放行 MemER）
 VARIANT_ORACLE = "ground-sg-oracle"

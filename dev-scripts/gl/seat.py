@@ -19,7 +19,7 @@
 
 本文件只保留席位层：``SeatRunner``（领局、结算、恢复）、持久尝试账本 ``AttemptLedger``、动态队列 ``DynamicQueue``、
 本席位 lease、``progress.json``、``recover_dangling``／``recover_crash_window``。``EnvSession``、单局流程与看门狗在
-``robomme_hard_eval.session``／``robomme_hard_eval.episode``，模型在 ``robomme_hard_eval.models``（经 ``load_policy``）。
+``robomme_ood_eval.session``／``robomme_ood_eval.episode``，模型在 ``robomme_ood_eval.models``（经 ``load_policy``）。
 
 **动态队列**（``<queue>/``，缺省 ``<out>/queue/<标签>/seed<n>/``；同一策略同一种子的全部席位共用一份）：
 
@@ -156,11 +156,11 @@ def load_sibling(name: str, alias: str | None = None):
 
 
 def official_defs():
-    """评估包的别名表 ``robomme_hard_eval/models/_official_defs.py``（模块名 ``official_defs``，已加载则复用）。"""
+    """评估包的别名表 ``robomme_ood_eval/models/_official_defs.py``（模块名 ``official_defs``，已加载则复用）。"""
     mod = sys.modules.get("official_defs")
     if mod is not None and hasattr(mod, "canonical_row"):
         return mod
-    path = REPO / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+    path = REPO / "src" / "robomme_ood_eval" / "models" / "_official_defs.py"
     spec = importlib.util.spec_from_file_location("official_defs", path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules["official_defs"] = mod
@@ -902,7 +902,7 @@ def git_info() -> dict:
 def package_info() -> dict:
     """评估包与子模块包的实际来源（editable 指向核对）。"""
     out = {"python": sys.version.split()[0], "executable": sys.executable}
-    for name in ("robomme_hard_eval", "robomme_hard", "robomme"):
+    for name in ("robomme_ood_eval", "robomme_hard", "robomme"):
         spec = importlib.util.find_spec(name)
         out[f"{name}_file"] = None if spec is None else spec.origin
     return out
@@ -938,7 +938,7 @@ class SeatRunner:
         self.proc_info = proc_info or {}
         self.now = now
         retries = int(getattr(args, "infra_retries", DEFAULT_INFRA_RETRIES) or 0)
-        from robomme_hard_eval import episode as E
+        from robomme_ood_eval import episode as E
 
         self.E = E
         wall = getattr(args, "wall_s", None)
@@ -995,7 +995,7 @@ class SeatRunner:
     def load(self):
         factory = self.policy_factory
         if factory is None:
-            from robomme_hard_eval.policy import load_policy as factory  # noqa: N813
+            from robomme_ood_eval.policy import load_policy as factory  # noqa: N813
         return factory(self.args.policy, self.policy_seed, **self.policy_cfg())
 
     # ── 共享账本、lease、路线 ──────────────────────────────────────────
@@ -1235,7 +1235,7 @@ class SeatRunner:
     def run_claim(self, policy, c: Claim) -> dict:
         """跑一次领取；返回本席位结果行。运行阻塞／额度不足抛 ``SeatStop``（已记录）。"""
         E = self.E
-        from robomme_hard_eval.policy import AstraStop, ServerDead, ServerMismatch
+        from robomme_ood_eval.policy import AstraStop, ServerDead, ServerMismatch
 
         ident = c.ident
         ds, task, ep = ident["dataset"], ident["task"], int(ident["builder_episode"])
@@ -1437,7 +1437,7 @@ def parse_extra(tokens: list[str]) -> dict:
 
 def model_choices() -> tuple[str, ...]:
     try:
-        from robomme_hard_eval.models import MODELS
+        from robomme_ood_eval.models import MODELS
 
         return tuple(MODELS)
     except Exception:  # noqa: BLE001  pragma: no cover
@@ -1522,7 +1522,7 @@ def cmd_run(args) -> int:
     runner = SeatRunner(args, proc_info=proc)
     print(f"CLIENT_READY policy={args.policy} variant={policy_variant_of(args)} seat={runner.seat} "
           f"policy_seed={args.policy_seed} route={runner.route} identities={len(rows)} host={socket.gethostname()} "
-          f"gpu={proc.get('gpu_name')} robomme_hard_eval={proc.get('robomme_hard_eval_file')} "
+          f"gpu={proc.get('gpu_name')} robomme_ood_eval={proc.get('robomme_ood_eval_file')} "
           f"robomme_hard={proc.get('robomme_hard_file')} git={str(proc.get('git_commit'))[:12]} "
           f"dirty={proc.get('git_dirty')}", flush=True)
     write_json_atomic(runner.seat_dir / f"process-{os.getpid()}.json", proc)

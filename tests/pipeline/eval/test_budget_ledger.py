@@ -239,7 +239,7 @@ class _Builder:
 
 def test_two_failed_resets_then_success_counts_six(tmp_path):
     """前两次尝试 reset 失败、第三次成功：每次尝试 build 与 reset 各领 1 次 → 共享账本记满 6（= 原侧每局预约数）。"""
-    from robomme_hard_eval.session import EnvSession
+    from robomme_ood_eval.session import EnvSession
 
     bm = bl_mod()
     led = bm.BudgetLedger(tmp_path / "b.jsonl")
@@ -264,7 +264,7 @@ def test_two_failed_resets_then_success_counts_six(tmp_path):
 
 
 def test_envsession_default_does_not_touch_budget(tmp_path):
-    from robomme_hard_eval.session import EnvSession
+    from robomme_ood_eval.session import EnvSession
 
     s = EnvSession("PickXtimes", 0, builder=_Builder(fails=0))
     assert s.budget_claim is None

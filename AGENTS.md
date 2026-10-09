@@ -2,7 +2,7 @@
 
 本文件由三部分构成：①下面的「运行环境判定」与本段头部；②标记块 `common-agents`——[AgentMetaRules-hongzefu](https://github.com/hongzefu/AgentMetaRules-hongzefu) 正本 `AGENTS.md`「强制规则」第 1–26 条与附录 A 的逐字副本（**块内禁止手改**；同步核对命令 `uv run --no-project python /data/hongzefu/AgentMetaRules-hongzefu/scripts/sync_rules.py check --repo eval-ood`）；③标记块之后的项目专属规则、覆盖项、占位符取值与规则来源。优先级：系统 / 开发者 / 用户当前指令 > 标记块外明确写出的覆盖项 > 标记块内的正本条目。
 
-本仓库是 RoboMME OOD 的私有评估仓：外层 `load_policy` / `run_episode` 与五个模型 Policy（`src/robomme_hard_eval/`）、本机入口 `scripts/evaluate.py`、GL 席位与原侧对照、对拍工具（`dev-scripts/`）、三个模型客户端子环境（`envs/`）与评估留档（`docs/validation/`）。环境包经 submodule `third_party/robomme_benchmark`（= `hongzefu/RoboMME-benchmark-OOD`，钉 40 位 sha）调用；四个模型仓 `third_party/{mme-vla,SimpleMemVLA,PonderPounce,Astra-on-RoboMME}` 以 gitlink 锁定，本仓不改模型代码。拆分来源：2026-10-08 按旧仓 `hongzefu/robomme_benchmark_MotionJEPA`（分支 `newtaskRelease-taskV9`，源码锚 `SRC=fd0017d6`）的计划 `docs/plans/1008-split-benchmark-eval-repos-plan.html`（第四稿）拆出；旧仓打归档 tag `archive-newtask-v9-20261008` 后只读保留，历史账本与执行日志都在旧仓 `docs/ledger/`。
+本仓库是 RoboMME OOD 的私有评估仓：外层 `load_policy` / `run_episode` 与五个模型 Policy（`src/robomme_ood_eval/`）、本机入口 `scripts/evaluate.py`、GL 席位与原侧对照、对拍工具（`dev-scripts/`）、三个模型客户端子环境（`envs/`）与评估留档（`docs/validation/`）。环境包经 submodule `third_party/robomme_benchmark`（= `hongzefu/RoboMME-benchmark-OOD`，钉 40 位 sha）调用；四个模型仓 `third_party/{mme-vla,SimpleMemVLA,PonderPounce,Astra-on-RoboMME}` 以 gitlink 锁定，本仓不改模型代码。拆分来源：2026-10-08 按旧仓 `hongzefu/robomme_benchmark_MotionJEPA`（分支 `newtaskRelease-taskV9`，源码锚 `SRC=fd0017d6`）的计划 `docs/plans/1008-split-benchmark-eval-repos-plan.html`（第四稿）拆出；旧仓打归档 tag `archive-newtask-v9-20261008` 后只读保留，历史账本与执行日志都在旧仓 `docs/ledger/`。
 
 ## 0. 运行环境判定（每次开工第一步）
 

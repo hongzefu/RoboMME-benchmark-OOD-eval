@@ -45,7 +45,7 @@
   "id": "C18-NO-TESTS-IMPORT",
   "domain": "C18",
   "source": [
-   "src/robomme_hard_eval/**/*.py",
+   "src/robomme_ood_eval/**/*.py",
    "scripts/evaluate.py",
    "dev-scripts/**/*.py"
   ],
@@ -75,8 +75,8 @@
   "source": [
    "pyproject.toml"
   ],
-  "symbol": "robomme-hard-eval wheel（hatch packages=src/robomme_hard_eval）",
-  "oracle": "git ls-files src/robomme_hard_eval 为期望文件集合；pyproject 的 name／version",
+  "symbol": "robomme-ood-eval wheel（hatch packages=src/robomme_ood_eval）",
+  "oracle": "git ls-files src/robomme_ood_eval 为期望文件集合；pyproject 的 name／version",
   "positive": "wheel 文件集合等于跟踪文件、安装后逐字节相同、子包齐全、dist-info 名与版本一致且非 editable、仓库外导入落在 tmp 环境",
   "negative": "tmp 环境里有指回仓库的 .pth 或 editable 安装即失败",
   "boundaries": "离线构建／建环境／安装失败记 skip（未验证），不记 PASS",
@@ -94,11 +94,11 @@
   "id": "C13-OFFICIAL-NAMES",
   "domain": "C13",
   "source": [
-   "src/robomme_hard_eval/models/_official_defs.py"
+   "src/robomme_ood_eval/models/_official_defs.py"
   ],
   "symbol": "scan_text／scan_repo／别名表段",
   "oracle": "旧名正则由测试独立列出，不读被测代码",
-  "positive": "评估仓 scripts／src/robomme_hard_eval／dev-scripts／tests 的活代码零旧名残留；别名表段只在 _official_defs.py 且成对",
+  "positive": "评估仓 scripts／src/robomme_ood_eval／dev-scripts／tests 的活代码零旧名残留；别名表段只在 _official_defs.py 且成对",
   "negative": "PATTERNS 列出的每种旧写法（标签、标识符、驼峰、旧数据集接口名与常量）都被抓到",
   "boundaries": "官方家族名 mme-vla／MME-VLA／MMEVLAWebsocket、标注历史目录名／历史数据键的行不误报",
   "nodeids": [

@@ -627,5 +627,5 @@ def test_episode_cap_two_across_runs(tmp_path):
         with pytest.raises(mod.AstraStop) as info2:
             mod.check_episode_cap(fx.state)
         assert info2.value.reason == "episode_cap"
-        from robomme_hard_eval.policy import AstraStop as BaseStop
+        from robomme_ood_eval.policy import AstraStop as BaseStop
         assert isinstance(info.value, BaseStop), "外层 evaluate.py 按基类整批停"

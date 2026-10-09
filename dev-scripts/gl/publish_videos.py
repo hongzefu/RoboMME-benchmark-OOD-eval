@@ -98,12 +98,12 @@ def _load(name: str, filename):
 
 
 def official_defs():
-    """评估包 ``robomme_hard_eval/models/_official_defs.py``（旧名别名表的唯一来源；模块名 ``official_defs``，已加载则复用）。"""
+    """评估包 ``robomme_ood_eval/models/_official_defs.py``（旧名别名表的唯一来源；模块名 ``official_defs``，已加载则复用）。"""
     mod = sys.modules.get("official_defs")
     if mod is not None and hasattr(mod, "canonical_row"):
         return mod
     sys.modules.pop("official_defs", None)
-    return _load("official_defs", HERE.parents[1] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py")
+    return _load("official_defs", HERE.parents[1] / "src" / "robomme_ood_eval" / "models" / "_official_defs.py")
 
 
 def safe_filename(full_name: str) -> str:
@@ -111,7 +111,7 @@ def safe_filename(full_name: str) -> str:
     src = str(HERE.parents[1] / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
-    from robomme_hard_eval.record.official_render import safe_filename as _safe
+    from robomme_ood_eval.record.official_render import safe_filename as _safe
 
     return _safe(full_name)
 

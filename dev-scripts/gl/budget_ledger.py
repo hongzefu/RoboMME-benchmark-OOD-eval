@@ -130,13 +130,13 @@ def make_token(route: str, key: str, attempt_no: int) -> str:
 
 
 def _canonical_row(row: Any) -> Any:
-    """历史账本行的旧路线名映射成官方名（别名表在评估包 ``robomme_hard_eval/models/_official_defs.py``，模块名
+    """历史账本行的旧路线名映射成官方名（别名表在评估包 ``robomme_ood_eval/models/_official_defs.py``，模块名
     ``official_defs``，已加载则复用同一模块）。"""
     mod = sys.modules.get("official_defs")
     if mod is None or not hasattr(mod, "canonical_row"):
         import importlib.util
 
-        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_ood_eval" / "models" / "_official_defs.py"
         spec = importlib.util.spec_from_file_location("official_defs", path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["official_defs"] = mod

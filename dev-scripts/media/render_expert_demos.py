@@ -51,7 +51,7 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
 
-from robomme_hard_eval.record import official_render as R  # noqa: E402
+from robomme_ood_eval.record import official_render as R  # noqa: E402
 
 DATASET = "ood"
 FPS = 30
@@ -152,7 +152,7 @@ def official_video_recorder():
     """从官方 ``scripts/evaluation.py`` 原文只取 ``VideoRecorder`` 类执行（不导入整模块，不拉起 torch／仿真）。"""
     import cv2
 
-    from robomme_hard_eval.models import _official_defs as D
+    from robomme_ood_eval.models import _official_defs as D
 
     torch_stub = types.SimpleNamespace(Tensor=type("Tensor", (), {}))
     ns = D.extract_defs(official_eval_script(), ["VideoRecorder"], {"cv2": cv2, "torch": torch_stub})

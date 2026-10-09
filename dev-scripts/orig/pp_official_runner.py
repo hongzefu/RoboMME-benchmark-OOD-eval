@@ -101,9 +101,9 @@ def _load_eval(name: str, path: Path):
     return mod
 
 
-trace_writer = _load_eval("trace_writer", EVAL_SRC / "robomme_hard_eval" / "record" / "trace_writer.py")
+trace_writer = _load_eval("trace_writer", EVAL_SRC / "robomme_ood_eval" / "record" / "trace_writer.py")
 TraceWriter = trace_writer.TraceWriter
-pp_client = _load_eval("pp_client", EVAL_SRC / "robomme_hard_eval" / "models" / "pp.py")
+pp_client = _load_eval("pp_client", EVAL_SRC / "robomme_ood_eval" / "models" / "pp.py")
 
 MAX_STEPS = 1300
 DATASET = "hard-verify"

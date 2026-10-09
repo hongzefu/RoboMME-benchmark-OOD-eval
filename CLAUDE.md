@@ -128,7 +128,7 @@
 
 ## 项目专属补充
 
-- **worktree 内验收的环境取法**（计划执行模式）：worktree 是干净检出，没有 `.venv`、`artifacts/`，子模块目录为空。写入型子代理在 worktree 内一律用 `UV_PROJECT_ENVIRONMENT=/data/hongzefu/RoboMME-benchmark-OOD-eval/.venv PYTHONPATH=<worktree>/src:/data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src uv run --no-sync python -m pytest <定向测试> -q`（worktree 里子模块为空，借主检出已检出的固定 sha），先打印 `robomme_hard_eval.__file__` 确认以 `<worktree>/src/` 开头；只跑 CPU 定向测试，仿真、GPU、`artifacts/` 相关验收留给合并后主会话。
+- **worktree 内验收的环境取法**（计划执行模式）：worktree 是干净检出，没有 `.venv`、`artifacts/`，子模块目录为空。写入型子代理在 worktree 内一律用 `UV_PROJECT_ENVIRONMENT=/data/hongzefu/RoboMME-benchmark-OOD-eval/.venv PYTHONPATH=<worktree>/src:/data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src uv run --no-sync python -m pytest <定向测试> -q`（worktree 里子模块为空，借主检出已检出的固定 sha），先打印 `robomme_ood_eval.__file__` 确认以 `<worktree>/src/` 开头；只跑 CPU 定向测试，仿真、GPU、`artifacts/` 相关验收留给合并后主会话。
 - **Monitor 过滤词表补充**（标记块 Monitor 第 7 条）：`EXIT_CODE=`、`Traceback`、`RUN_BLOCKED`、`INFRA_TIMEOUT`、`SERVER_LEFT`、`BUDGET_`、`ASTRA_COST`、`NO RECORD`、`svulkan2`、`EXCLUSIVE`；完成行 `全部完成`。
 - **Skill 调用**：本机 sled-vail 有集群访问，查 `chaijy2` 占用先调 `greatlakes-usage`。
 - 主检出 clean 判定用 `git status --short --ignore-submodules=dirty -- . ':!docs/subagent-stats'`。

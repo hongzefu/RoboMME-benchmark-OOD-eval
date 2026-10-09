@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from robomme_hard_eval.record import official_render as R
-from robomme_hard_eval.record import recorder as REC
+from robomme_ood_eval.record import official_render as R
+from robomme_ood_eval.record import recorder as REC
 
 
 def _exe(path: Path) -> Path:

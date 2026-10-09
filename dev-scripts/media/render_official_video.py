@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""官方版式重绘的命令行入口：评估包 ``robomme_hard_eval.record.official_render`` 的薄 CLI。
+"""官方版式重绘的命令行入口：评估包 ``robomme_ood_eval.record.official_render`` 的薄 CLI。
 
 拆仓（1008 拆分方案第二部分 §二 ``dev-scripts/media/`` 行）后，来源选择 → 解码 → 核验 → 官方录像器逐帧绘制 → 编码 →
 复核的全部实现都在库里（R3：官方 ``RolloutRecorder`` 只从锁定的 ``third_party/mme-vla/examples/robomme/utils.py``
@@ -33,8 +33,8 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
 
-from robomme_hard_eval.record import official_render as _lib  # noqa: E402
-from robomme_hard_eval.record.official_render import (  # noqa: E402,F401  重新导出：旧调用方按模块属性取用
+from robomme_ood_eval.record import official_render as _lib  # noqa: E402
+from robomme_ood_eval.record.official_render import (  # noqa: E402,F401  重新导出：旧调用方按模块属性取用
     FPS, RAW_KINDS, SCHEMA, SOURCE_MODES, STREAMS, TERMINALS, WEB_ENCODE_ARGS, Source, TraceData, decode_mp4,
     decode_raw_new, decode_raw_orig, default_official_root, encode_web_mp4, f32_from_record, feed_official_recorder,
     find_ffprobe, fingerprint, load_official, load_trace, official_episode_id, probe_stream, probe_video,

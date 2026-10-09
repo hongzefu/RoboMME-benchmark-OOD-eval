@@ -38,11 +38,11 @@ import uuid
 
 import numpy as np
 
-from robomme_hard_eval.record import trace_writer as _tw
-from robomme_hard_eval.record.recorder import AV1_DECODE_FILTER, LEGACY_RAW_CODEC, RAW_CODEC, find_ffmpeg
+from robomme_ood_eval.record import trace_writer as _tw
+from robomme_ood_eval.record.recorder import AV1_DECODE_FILTER, LEGACY_RAW_CODEC, RAW_CODEC, find_ffmpeg
 
 PKG_ROOT = Path(__file__).resolve().parents[1]
-#: eval 仓根（src/robomme_hard_eval/record/ 往上三级）；官方 RolloutRecorder 在其 third_party/mme-vla 下
+#: eval 仓根（src/robomme_ood_eval/record/ 往上三级）；官方 RolloutRecorder 在其 third_party/mme-vla 下
 REPO = Path(__file__).resolve().parents[3]
 OFFICIAL_UTILS_REL = "third_party/mme-vla/examples/robomme/utils.py"
 OFFICIAL_EVAL_REL = "third_party/mme-vla/examples/robomme/eval.py"

@@ -236,8 +236,8 @@ def test_trace_path_resolution(tmp_path):
 
 
 def test_module_import_does_not_require_vla_eval():
-    """拆仓后 pp 客户端是评估包模块 ``robomme_hard_eval.models.pp``：导入不需要 vla_eval，也不拉进仿真包。"""
-    code = ("import sys; sys.modules['vla_eval'] = None; sys.path.insert(0, %r); import robomme_hard_eval.models.pp; "
+    """拆仓后 pp 客户端是评估包模块 ``robomme_ood_eval.models.pp``：导入不需要 vla_eval，也不拉进仿真包。"""
+    code = ("import sys; sys.modules['vla_eval'] = None; sys.path.insert(0, %r); import robomme_ood_eval.models.pp; "
             "assert 'robomme_hard' not in sys.modules; print('PP_IMPORT_OK')" % str(REPO / "src"))
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
     assert out.returncode == 0 and "PP_IMPORT_OK" in out.stdout, out.stderr

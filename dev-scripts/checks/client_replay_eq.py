@@ -20,10 +20,10 @@
 
 **两种布局、三种接口**（按检出里实际存在的文件判定）：
 
-* 拆仓后的评估仓（``pkg``）：四个模型客户端在 ``src/robomme_hard_eval/models/{framesamp_modul,groundsg,smvla,pp}.py``、
-  SimpleMemVLA 服务在 ``src/robomme_hard_eval/servers/smvla_server.py``，按包名导入（原模块级函数 ``run_episode``／
+* 拆仓后的评估仓（``pkg``）：四个模型客户端在 ``src/robomme_ood_eval/models/{framesamp_modul,groundsg,smvla,pp}.py``、
+  SimpleMemVLA 服务在 ``src/robomme_ood_eval/servers/smvla_server.py``，按包名导入（原模块级函数 ``run_episode``／
   ``make_policy_context`` 保留，本工具调的就是它们）；``src`` 与 benchmark 子模块的 ``src`` 置于 ``sys.path`` 最前，
-  子进程先核对 ``robomme_hard_eval.__file__`` 落在该检出的 ``src`` 下（子模块未检出时用 ``--bench-src``）；
+  子进程先核对 ``robomme_ood_eval.__file__`` 落在该检出的 ``src`` 下（子模块未检出时用 ``--bench-src``）；
 * 旧仓（``scripts``）：模块从该检出的旧评估目录按路径加载（官方名接口或改名前接口，后者的模块名、配置键、数据集名
   取自别名表 ``LEGACY_*``），子进程核对 ``robomme_hard.__file__`` 落在该检出的 ``src`` 下。
 
@@ -41,7 +41,7 @@
 任一用例缺失、任一侧崩溃（**两侧同样崩溃也算 FAIL**）、任一侧零环境 step 事件或零服务事件，都计 ``control_diff``。
 
 ``astra``（3-tier Astra）是零外联探针：两侧各自在禁网（``socket.connect``／``create_connection`` 一律记录并拒绝）的子进程里
-导入 Astra 驱动模块（``pkg``：``robomme_hard_eval.models.astra``；``scripts``：旧 ``astra_hard_runner``），以旧的模块级
+导入 Astra 驱动模块（``pkg``：``robomme_ood_eval.models.astra``；``scripts``：旧 ``astra_hard_runner``），以旧的模块级
 函数为准调 ``check_pairing``（两数据集 × 两步数）与 ``check_policy_seed``（合法与非法输入），比较结果；任一侧有外联尝试
 即 FAIL。Astra 的完整一局（规划／监视／VLA）需要真实服务与计费接口，不在本工具里跑。
 
@@ -84,9 +84,9 @@ CASES = (("success", ("success", "success")), ("env_error", ("env_error", "succe
 #: Astra 零外联探针的用例名
 ASTRA_CASES = ("probe",)
 #: 拆仓后评估仓的模块（按包名导入）
-PKG_MODULES = {"fsm": "robomme_hard_eval.models.framesamp_modul", "gsg": "robomme_hard_eval.models.groundsg",
-               "smvla_client": "robomme_hard_eval.models.smvla", "smvla_server": "robomme_hard_eval.servers.smvla_server",
-               "pp_client": "robomme_hard_eval.models.pp", "astra": "robomme_hard_eval.models.astra"}
+PKG_MODULES = {"fsm": "robomme_ood_eval.models.framesamp_modul", "gsg": "robomme_ood_eval.models.groundsg",
+               "smvla_client": "robomme_ood_eval.models.smvla", "smvla_server": "robomme_ood_eval.servers.smvla_server",
+               "pp_client": "robomme_ood_eval.models.pp", "astra": "robomme_ood_eval.models.astra"}
 TAMPERS = ("action", "request", "order")
 H = W = 256  # 与真实环境同尺寸（官方录像器在小图上拼字条会尺寸不一致）
 DEMO = 3
@@ -264,11 +264,11 @@ _TOOL_DEFS = "_client_replay_tool_official_defs"
 
 
 def official_defs():
-    """本工具所在评估仓的别名表 ``src/robomme_hard_eval/models/_official_defs.py``（官方名与 ``LEGACY_*`` 别名表；
+    """本工具所在评估仓的别名表 ``src/robomme_ood_eval/models/_official_defs.py``（官方名与 ``LEGACY_*`` 别名表；
     不从被比较的检出里取，模块名 ``_TOOL_DEFS``）。"""
     mod = sys.modules.get(_TOOL_DEFS)
     if mod is None:
-        path = Path(__file__).resolve().parents[2] / "src" / "robomme_hard_eval" / "models" / "_official_defs.py"
+        path = Path(__file__).resolve().parents[2] / "src" / "robomme_ood_eval" / "models" / "_official_defs.py"
         spec = importlib.util.spec_from_file_location(_TOOL_DEFS, path)
         mod = importlib.util.module_from_spec(spec)
         sys.modules[_TOOL_DEFS] = mod
@@ -280,7 +280,7 @@ def side_interface(root: Path) -> dict:
     """按检出里实际存在的文件判定该侧接口：拆仓后的包布局优先，其次旧评估目录的官方名、改名前的名字（取自别名表）；
     都不全即 ValueError。"""
     defs = official_defs()
-    models = Path(root) / "src" / "robomme_hard_eval" / "models"
+    models = Path(root) / "src" / "robomme_ood_eval" / "models"
     if (models / "framesamp_modul.py").is_file() and (models / "groundsg.py").is_file():
         return {"name": "pkg", "layout": "pkg", "fsm_module": "fsm", "gsg_module": "gsg",
                 "variant_key": "groundsg_variant", "dataset": defs.DATASET_HARD_VERIFY}
@@ -538,10 +538,10 @@ def worker(args) -> int:
     sys.path.insert(2, str(tp / "mme-vla" / "packages" / "openpi-client" / "src"))
     try:
         if iface["layout"] == "pkg":
-            import robomme_hard_eval
-            out["robomme_hard_eval"] = robomme_hard_eval.__file__
-            if not str(Path(robomme_hard_eval.__file__).resolve()).startswith(str(root / "src")):
-                out["import_error"] = f"robomme_hard_eval 来自 {robomme_hard_eval.__file__}，不在 {root}/src"
+            import robomme_ood_eval
+            out["robomme_ood_eval"] = robomme_ood_eval.__file__
+            if not str(Path(robomme_ood_eval.__file__).resolve()).startswith(str(root / "src")):
+                out["import_error"] = f"robomme_ood_eval 来自 {robomme_ood_eval.__file__}，不在 {root}/src"
         else:
             import robomme_hard
             out["robomme_hard"] = robomme_hard.__file__

@@ -74,7 +74,7 @@ ART8 = REPO_ROOT / "artifacts/newtask-v8"
 #: benchmark 子模块的源码根（``robomme``／``robomme_hard`` 两个包）
 BENCHMARK_SRC = REPO_ROOT / "third_party/robomme_benchmark/src"
 #: 旧名别名表（原评估目录的 ``official_defs.py``，现为评估包内模块）
-OFFICIAL_DEFS_PATH = REPO_ROOT / "src/robomme_hard_eval/models/_official_defs.py"
+OFFICIAL_DEFS_PATH = REPO_ROOT / "src/robomme_ood_eval/models/_official_defs.py"
 ART7 = REPO_ROOT / "artifacts/newtask-v7"
 TIERS = ("xhard0", "xhard1", "xhard2", "xhard3", "xhard4", "xhard5")
 NEW_TIERS = TIERS[1:]
@@ -85,7 +85,7 @@ EVAL_POLICY = {"smvla": "simplememvla", "perceptual-framesamp-modul": "mmevla"} 
 
 
 def official_defs():
-    """``src/robomme_hard_eval/models/_official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
+    """``src/robomme_ood_eval/models/_official_defs.py``（旧名别名表的唯一来源；已加载则复用同一模块）。"""
     mod = sys.modules.get("official_defs")
     if mod is None:
         spec = importlib.util.spec_from_file_location("official_defs", OFFICIAL_DEFS_PATH)

@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from robomme_hard_eval import episode as E
-from robomme_hard_eval import models
-from robomme_hard_eval.policy import load_policy
+from robomme_ood_eval import episode as E
+from robomme_ood_eval import models
+from robomme_ood_eval.policy import load_policy
 from tests.unit_eval import fakes
 
 SPEC_FIELDS = ("dataset", "task", "episode", "source_episode", "tier", "seed", "candidate", "spec_sha256", "key",
@@ -238,7 +238,7 @@ def test_identity_match_passes(tmp_path):
 
 
 def test_reset_refusal_propagates_without_result(tmp_path):
-    from robomme_hard_eval.policy import ServerDead
+    from robomme_ood_eval.policy import ServerDead
 
     p = load_policy("fake", 7)
 
@@ -252,7 +252,7 @@ def test_reset_refusal_propagates_without_result(tmp_path):
 
 
 def test_budget_exhausted_records_then_raises(tmp_path):
-    from robomme_hard_eval.session import ResetBudgetExhausted
+    from robomme_ood_eval.session import ResetBudgetExhausted
 
     class Ledger:
         def __init__(self, cap):

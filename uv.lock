@@ -1786,7 +1786,7 @@ server = [
 ]
 
 [[package]]
-name = "robomme-hard-eval"
+name = "robomme-ood-eval"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [

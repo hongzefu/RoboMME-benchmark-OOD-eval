@@ -39,7 +39,7 @@ except ModuleNotFoundError:  # pragma: no cover - 子进程
     pytest = type("pytest", (), {"mark": _NoMark()})
 
 REPO = Path(__file__).resolve().parents[4]
-WRAP = REPO / "src" / "robomme_hard_eval" / "servers" / "pp_server_wrap.py"  # 拆仓后外壳在评估包里
+WRAP = REPO / "src" / "robomme_ood_eval" / "servers" / "pp_server_wrap.py"  # 拆仓后外壳在评估包里
 PP_GITLINK = "723df35762bb641e1d520e4fa9359b98644adc21"
 PARENT_REL = "ponderpounce/eval/robomme_server.py"
 PARENT_SHA256 = "0664c0abc1598c68f75a8f2eaf2889062a34e39d4e1d75269512907a8f1cb135"
