@@ -1,11 +1,14 @@
-"""Astra 测试的公共替身：规划、监视、VLA、环境、两个服务端全部替身，零外联、零费用、零 GPU。
+"""Shared fakes for the Astra tests: planner, monitor, VLA, environment and both servers are all faked.
+No network access, no cost, no GPU.
 
-被测对象是评估仓的 ``robomme_ood_eval.models.astra.AstraPolicy``（模型侧 4 方法），外层用真实的
-``robomme_ood_eval.episode.run_episode``（builder 是真实 ``BenchmarkEnvBuilder`` 的子类，只把
-``make_env_for_episode`` 打桩成 ``FakeEnv``；录制器是 ``FakeRecorder``，不出网站视频）。
+The unit under test is the eval repo's ``robomme_ood_eval.models.astra.AstraPolicy`` (the 4 model-side methods).
+The outer layer is the real ``robomme_ood_eval.episode.run_episode`` (the builder is a subclass of the real
+``BenchmarkEnvBuilder`` with only ``make_env_for_episode`` stubbed to return ``FakeEnv``; the recorder is
+``FakeRecorder`` and produces no site videos).
 
-Astra 上游源码只读引用 ``$SGEVAL_THIRD_PARTY/Astra-on-RoboMME``；未设时取当前检出的 ``third_party``，worktree 里
-子模块为空时退回主检出（``git rev-parse --git-common-dir`` 的上一层）；都不在时直接失败（不 skip）。
+Astra upstream sources are referenced read-only from ``$SGEVAL_THIRD_PARTY/Astra-on-RoboMME``. When unset, the
+current checkout's ``third_party`` is used; if the submodule is empty (e.g. inside a worktree), fall back to the main
+checkout (the parent of ``git rev-parse --git-common-dir``). If none exists, fail outright (no skip).
 """
 from __future__ import annotations
 
@@ -27,7 +30,7 @@ import numpy as np
 from tests._support.loaders import REPO
 
 ASTRA_MODULES = ("runner", "core", "api_client", "release_utils", "input_contract", "train_entry")
-#: 上游 runner.episode 默认的单局规划次数上限
+#: Upstream runner.episode default cap on planner calls per episode
 MAX_PLANNER_CALLS = 24
 FAKE_KEY = "sk-test-placeholder-not-a-real-key"
 PRICES = {"unit": "usd_per_1m_tokens", "input": 2.0, "cached_input": 0.5, "output": 8.0}
@@ -43,7 +46,8 @@ def _main_checkout() -> Path | None:
 
 
 def third_party_dir() -> Path:
-    """第三方子模块目录：``SGEVAL_THIRD_PARTY`` > 当前检出 ``third_party``（子模块已初始化时）> 主检出 ``third_party``。"""
+    """Third-party submodule dir: ``SGEVAL_THIRD_PARTY`` > current checkout ``third_party`` (if the submodule is
+    initialized) > main checkout ``third_party``."""
     value = os.environ.get("SGEVAL_THIRD_PARTY")
     if value:
         return Path(value)
@@ -56,7 +60,7 @@ def third_party_dir() -> Path:
 
 def third_party() -> Path:
     root = third_party_dir() / "Astra-on-RoboMME"
-    assert (root / "examples" / "champ" / "runner.py").is_file(), f"Astra 上游源码不在 {root}"
+    assert (root / "examples" / "champ" / "runner.py").is_file(), f"Astra upstream sources not found at {root}"
     return root
 
 
@@ -85,8 +89,9 @@ def load_guard():
 
 @contextlib.contextmanager
 def astra_session():
-    """导入 Astra 上游模块并在退出时恢复 ``sys.path`` 与 ``sys.modules``，避免污染同一 pytest 会话的其他测试。
-    ``SGEVAL_THIRD_PARTY`` 在会话内指向 ``third_party_dir()``（被测模块按它找子模块与环境源）。"""
+    """Import the Astra upstream modules and restore ``sys.path`` and ``sys.modules`` on exit, so other tests in
+    the same pytest session are not polluted. Inside the session ``SGEVAL_THIRD_PARTY`` points at
+    ``third_party_dir()`` (the module under test uses it to locate submodules and environment sources)."""
     saved_path = list(sys.path)
     saved_mods = {name: sys.modules.get(name) for name in (*ASTRA_MODULES, "openpi_client")}
     saved_env = os.environ.get("SGEVAL_THIRD_PARTY")
@@ -109,7 +114,7 @@ def astra_session():
 
 
 class NetCounter:
-    """把 ``urllib.request.urlopen`` 换成计数后抛错的替身：``api_calls`` 由它实测。"""
+    """Replace ``urllib.request.urlopen`` with a fake that counts and then raises; ``api_calls`` is measured by it."""
 
     def __init__(self, raise_exc=None) -> None:
         self.calls = 0
@@ -119,21 +124,21 @@ class NetCounter:
         self.calls += 1
         if self.raise_exc is not None:
             raise self.raise_exc()
-        raise RuntimeError("测试中禁止外联：urlopen 被调用")
+        raise RuntimeError("network access is forbidden in tests: urlopen was called")
 
     def install(self, monkeypatch):
         monkeypatch.setattr(urllib.request, "urlopen", self)
         return self
 
 
-# ── 环境替身 ─────────────────────────────────────────────────────────────
+# -- Environment fakes ---------------------------------------------------
 
 def _frame(value: int) -> np.ndarray:
     return np.full((256, 256, 3), value % 251, dtype=np.uint8)
 
 
 class FakeEnv:
-    """最小 RoboMME 环境：``terminal_step`` 步后 success；``None`` 则永不结束（由循环上限截住）。"""
+    """Minimal RoboMME env: success after ``terminal_step`` steps; ``None`` never ends (cut off by the loop cap)."""
 
     def __init__(self, terminal_step: int | None = 40, demo_frames: int = 3, step_error_at: int | None = None) -> None:
         self.t = 0
@@ -169,9 +174,10 @@ class FakeEnv:
 
 
 def recording_builder_cls(env_plan=None):
-    """真实 ``BenchmarkEnvBuilder`` 的子类：构造参数照常走真实校验并被记录；``make_env_for_episode`` 打桩。
+    """Subclass of the real ``BenchmarkEnvBuilder``: constructor args go through real validation and are
+    recorded; ``make_env_for_episode`` is stubbed.
 
-    ``env_plan``：可调用 ``(builder, episode) -> FakeEnv``，或抛异常模拟基础设施故障。
+    ``env_plan``: callable ``(builder, episode) -> FakeEnv``, or raise to simulate an infrastructure failure.
     """
     from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
 
@@ -197,7 +203,7 @@ def recording_builder_cls(env_plan=None):
 
 
 class FakeRecorder:
-    """外层录制器替身（接口同 ``record.recorder.EpisodeRecorder``）：只计数。"""
+    """Fake outer recorder (same interface as ``record.recorder.EpisodeRecorder``): only counts."""
 
     instances: list = []
 
@@ -228,7 +234,7 @@ class FakeRecorder:
 
 
 class NullWriter:
-    """``imageio.get_writer`` 替身（Astra 自写的 rollout.mp4 不真编码）。"""
+    """Fake ``imageio.get_writer`` (Astra's own rollout.mp4 is not actually encoded)."""
 
     def append_data(self, frame):
         pass
@@ -237,10 +243,11 @@ class NullWriter:
         pass
 
 
-# ── 监视器、VLA、规划应答替身 ───────────────────────────────────────────
+# -- Monitor, VLA and planner-responder fakes ------------------------------
 
 class FakeMonitor:
-    """与 Astra ``Monitor.predict`` 同签名；写 ``input.json`` 与一张图，按序列返回布尔预测（默认恒 False）。"""
+    """Same signature as Astra ``Monitor.predict``; writes ``input.json`` and one image, returns boolean
+    predictions in sequence (always False by default)."""
 
     def __init__(self, predictions=None) -> None:
         self.calls = 0
@@ -253,7 +260,7 @@ class FakeMonitor:
         (out / "input.json").write_text(json.dumps({"task": task, "goal": goal, "subgoal": subgoal,
                                                     "command_start": command_start, "images": [str(out / "0.png")]}))
         pred = self.predictions[self.calls] if self.calls < len(self.predictions) else False
-        # 与上游 Monitor.predict 同：回复原文写 response.json（语言账本读它）
+        # Same as upstream Monitor.predict: raw reply goes to response.json (the language log reads it)
         (out / "response.json").write_text(json.dumps({"text": "true" if pred else "false"}))
         self.calls += 1
         return pred, [0], 0.0
@@ -284,17 +291,18 @@ def template_text(champ: Path, task: str) -> str:
 
 
 class FakeResponder:
-    """Astra ``Planner`` 的 ``responder`` 替身：直接写 ``response.json``（OpenAI usage 原样结构），不联网。
+    """Fake ``responder`` for the Astra ``Planner``: writes ``response.json`` directly (OpenAI usage structure
+    verbatim), no network.
 
-    ``fail_on_episode_index``：第 k 次出现的新局号（按请求顺序，从 1 计）上返回 ``status=error``。
-    ``after_write``：每次写完后的回调（模拟同时在跑的费用守卫）。
+    ``fail_on_episode_index``: return ``status=error`` on the k-th distinct episode seen (request order, 1-based).
+    ``after_write``: callback after every write (simulates a concurrently running cost guard).
     """
 
     def __init__(self, champ: Path, usage=None, fail_on_episode_index: int | None = None, after_write=None,
                  raise_on_send: BaseException | None = None, texts: list | None = None) -> None:
         self.champ = champ
-        self.raise_on_send = raise_on_send  # 「发送时」抛异常（不写 response.json），验发送前落盘
-        self.texts = list(texts or [])  # 依次替换回复原文（用完回落模板句）
+        self.raise_on_send = raise_on_send  # raise "at send time" (no response.json written) to verify persist-before-send
+        self.texts = list(texts or [])  # replace reply texts in order (falls back to the template sentence when exhausted)
         self.calls = 0
         self.usage = usage or {"input_tokens": 1000, "output_tokens": 100,
                                "input_tokens_details": {"cached_tokens": 0},
@@ -323,10 +331,11 @@ class FakeResponder:
             self.after_write(out)
 
 
-# ── 两个服务端替身 ─────────────────────────────────────────────────────────
+# -- Fakes for the two servers --------------------------------------------
 
 class FakeServer:
-    """``ServerProcess`` 替身：只记构造参数与 start／check／stop 次数，不起进程。``LOG`` 记全局先后次序。"""
+    """Fake ``ServerProcess``: records constructor args and start/check/stop counts, spawns no process.
+    ``LOG`` records the global order of events."""
 
     instances: list = []
     LOG: list = []
@@ -356,7 +365,7 @@ class FakeServer:
         self.checks += 1
         if self.dead:
             from robomme_ood_eval.policy import ServerDead
-            raise ServerDead(f"{self.name} 服务端已退出（替身）")
+            raise ServerDead(f"{self.name} server has exited (fake)")
 
     def stop(self, **k):
         self.stops += 1
@@ -372,9 +381,10 @@ def _argv_value(argv: list, flag: str) -> str:
 
 
 class FakeGuardServer(FakeServer):
-    """费用守卫替身：不起进程，``start``／``check`` 在进程内跑一轮真实 ``guard_round``（扫 spool、写心跳状态与
-    STOP），等同于一个刚好在这一刻扫过一轮的守卫。参数从守卫 argv 里取（``--root``／``--prices``／``--ledger``／
-    ``--state``／``--cap``），因此同时核对了 argv 的形状。"""
+    """Fake cost guard: spawns no process; ``start``/``check`` run one real ``guard_round`` in-process (scan the
+    spool, write heartbeat state and STOP), equivalent to a guard that happened to sweep exactly at this moment.
+    Parameters are read from the guard argv (``--root``/``--prices``/``--ledger``/``--state``/``--cap``), which
+    also checks the argv shape."""
 
     def start(self):
         super().start()
@@ -399,13 +409,14 @@ class FakeGuardServer(FakeServer):
         self.round()
 
 
-# ── AstraPolicy 夹具 ────────────────────────────────────────────────────────
+# -- AstraPolicy harness --------------------------------------------------
 
 class Harness:
-    """搭一个全替身的 ``AstraPolicy``（经 ``load_policy("astra", …)``）与外层 ``run_episode``。
+    """Build a fully faked ``AstraPolicy`` (via ``load_policy("astra", ...)``) plus the outer ``run_episode``.
 
-    替身：两个服务端（``FakeServer``／``FakeGuardServer``）、``validate_checkpoints``、监视器、VLA 客户端、规划应答
-    （``responder=None`` 时不替换，用真实 ``GuardedResponsesClient``，须配 ``NetCounter``）、外层 builder 与录制器。"""
+    Fakes: both servers (``FakeServer``/``FakeGuardServer``), ``validate_checkpoints``, monitor, VLA client, planner
+    responder (with ``responder=None`` it is not replaced and the real ``GuardedResponsesClient`` is used, which must
+    be paired with ``NetCounter``), outer builder and recorder."""
 
     def __init__(self, tmp_path: Path, monkeypatch, mod, astra, *, env_plan=None, monitor=None, vla=None,
                  responder="fake", prices=None, max_episodes: int | None = None, **cfg) -> None:
@@ -475,7 +486,8 @@ class Harness:
                                   recorder_factory=FakeRecorder, render=False)
 
     def batch(self, dataset: str, tasks: list, episode: int = 0):
-        """仿 ``scripts/evaluate.py`` 主循环：逐局 ``run_episode``，``AstraStop`` 即整批停。返回 (结果列表, 停机异常)。"""
+        """Mimic the ``scripts/evaluate.py`` main loop: ``run_episode`` per episode, ``AstraStop`` stops the whole
+        batch. Returns (results, stop exception)."""
         from robomme_ood_eval.policy import AstraStop
 
         results = []
@@ -503,10 +515,11 @@ def read_trace(path) -> list[dict]:
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-# ── 语言账本 ────────────────────────────────────────────────────────────
+# -- Language log ----------------------------------------------------------
 
 def ensure_language_log(monkeypatch) -> str:
-    """评估仓的 ``trace_writer.LanguageLog`` 恒存在：返回 ``real``（保留旧接口以免改动调用点）。"""
+    """The eval repo's ``trace_writer.LanguageLog`` always exists: returns ``real`` (old interface kept so call
+    sites need not change)."""
     from robomme_ood_eval.record import trace_writer as tw
 
     assert getattr(tw, "LanguageLog", None) is not None
@@ -517,14 +530,16 @@ def read_language(path) -> list[dict]:
     return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-# ── 费用硬上限：零外联夹具（由 test_astra_wiring.py 移来，test_astra_stage3.py 共用；PRICES 见文件头） ──────────
+# -- Hard cost cap: zero-network fixtures (moved from test_astra_wiring.py, shared with test_astra_stage3.py;
+#    PRICES is at the top of the file) ----------------------------------------------------------------------
 
-#: 2048 个输出 token 的最坏价：2048 × 8 / 1e6
+#: Worst-case price of 2048 output tokens: 2048 * 8 / 1e6
 OUT_WORST = 2048 * 8.0 / 1e6
 
 
 class FakeUrlopen:
-    """``urllib.request.urlopen`` 的替身：计数，按序返回 Responses API 样式的回包（或抛 HTTPError）。"""
+    """Fake ``urllib.request.urlopen``: counts calls and returns Responses-API-style replies in order (or raises
+    HTTPError)."""
 
     def __init__(self, plan=None) -> None:
         self.calls = 0
@@ -567,7 +582,8 @@ def _http_429():
 
 
 class Clock:
-    """假单调钟：``sleep`` 只推进时间并执行回调（模拟等待期间守卫写 STOP）。"""
+    """Fake monotonic clock: ``sleep`` only advances time and runs a callback (simulates the guard writing STOP
+    while waiting)."""
 
     def __init__(self) -> None:
         self.now = 1000.0
@@ -599,7 +615,7 @@ class GuardFixture:
         return self.guard.guard_round([self.group], self.ledger, self.prices, 5.0, 2048, self.state)
 
     def request(self, text_bytes: int, images: int = 0) -> Path:
-        """仿 Astra ``Planner`` 的 spool 布局写一份请求（文本 + 256×256 PNG）。"""
+        """Write one request in the Astra ``Planner`` spool layout (text + 256x256 PNGs)."""
         from PIL import Image
         self.n += 1
         out = self.spool / f"{self.n:032x}"

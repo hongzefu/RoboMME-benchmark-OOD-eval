@@ -1,24 +1,29 @@
-"""PonderPounce 服务外壳 ``pp_server_wrap.py``（S5）的等价性与子目标语义（日常门禁，CPU）。
+"""Equivalence and subgoal semantics of the PonderPounce server wrapper ``pp_server_wrap.py`` (S5) (daily gate, CPU).
 
-外壳子类化 ``ponderpounce.eval.robomme_server.PonderPounceRoboMMEServer``（子模块 ``723df357``，文件 sha256 钉死）。
-本测试用**父类真实方法**（``on_episode_start``／``on_observation``／``_fire_s2``／``_visible_cognition``／``_fire_s1``／
-``_dispense``／``_hold`` 原文）驱动原类与外壳各跑一局，只把两处重模型换成 CPU 桩：
+The wrapper subclasses ``ponderpounce.eval.robomme_server.PonderPounceRoboMMEServer`` (submodule ``723df357``, file
+sha256 pinned). This test drives one episode each through the original class and the wrapper using the **real parent
+methods** (``on_episode_start``/``on_observation``/``_fire_s2``/``_visible_cognition``/``_fire_s1``/``_dispense``/
+``_hold`` verbatim), replacing only the two heavy models with CPU stubs:
 
-- System 2：替换模块全局 ``SoftS2SessionContext`` 为脚本化桩（按触发序号给 cognition 张量与子目标文本），
-  父类 ``_fire_s2`` 的计时、``ready_at_ns``、``cognitions`` 截断逻辑照常运行；
-- System 1：``_s1`` 换成确定性桩（``noise_spec``、``null_cognition``、``predict_action``），父类照常用本局
-  ``noise_rng`` 抽噪声。
+- System 2: the module-global ``SoftS2SessionContext`` is replaced by a scripted stub (cognition tensor and subgoal
+  text by fire index); the parent ``_fire_s2`` timing, ``ready_at_ns`` and ``cognitions`` truncation run as usual;
+- System 1: ``_s1`` becomes a deterministic stub (``noise_spec``, ``null_cognition``, ``predict_action``); the parent
+  still draws noise from this episode's ``noise_rng``.
 
-逐步比较两者的动作（dtype／shape／字节）、随机数发生器状态、``cursor``、chunk 内容、触发计数与节拍；除外壳新增
-的 ``subgoal`` 与 ``_sgeval_audit`` 键外必须一致，打印 ``PP_SERVER_ACTION_EQ=PASS``。第三阶段另核：``SGEVAL_AUDIT=0``
-时回包没有审计键、其余与开启时逐项相同；开启时审计键里的 System 2 生成块逐次对上桩的真实 ``fire`` 结果（不多一次、
-不少一次），打印 ``PP_AUDIT_OBS_EQ=PASS``。外壳回传的子目标与测试按节拍算式独立推出的期望
-逐步比对（首个子目标可见前为 ``None``、``ready_at_ns`` 之前仍回旧子目标、chunk 用尽后不变）。
+Per step it compares actions (dtype/shape/bytes), RNG state, ``cursor``, chunk contents, fire counts and timing; apart
+from the wrapper's added ``subgoal`` and ``_sgeval_audit`` keys everything must match, printing
+``PP_SERVER_ACTION_EQ=PASS``. Stage 3 additionally checks: with ``SGEVAL_AUDIT=0`` replies carry no audit key and are
+otherwise identical to the enabled run; when enabled, the System 2 generation blocks in the audit key match the stub's
+real ``fire`` results one to one (none extra, none missing), printing ``PP_AUDIT_OBS_EQ=PASS``. The subgoals returned by
+the wrapper are compared step by step against expectations derived independently from the timing formula (``None``
+before the first subgoal is visible, the old subgoal before ``ready_at_ns``, unchanged after the chunk is exhausted).
 
-父类依赖 vla-eval、torch、transformers，主检出 ``.venv`` 没有 vla-eval，故等价部分在子进程里用主检出 client-env
-的解释器（``envs/client-env/.venv``，含 vla-eval 0.7.0 与 torch，CPU）跑本文件的 ``--child`` 分支，
-PonderPounce 源码只读引用主检出 ``third_party/PonderPounce``（可用 ``SGEVAL_PP_PYTHON``／``SGEVAL_THIRD_PARTY`` 覆盖）。
-解释器或源码缺失时测试失败，不跳过。子进程沿用本进程的 ``PYTHONPATH``（资源守卫的 sitecustomize 随之生效）。
+The parent depends on vla-eval, torch and transformers; the main checkout's ``.venv`` lacks vla-eval, so the
+equivalence part runs this file's ``--child`` branch in a subprocess with the main checkout's client-env interpreter
+(``envs/client-env/.venv``, with vla-eval 0.7.0 and torch, CPU). PonderPounce sources are referenced read-only from the
+main checkout's ``third_party/PonderPounce`` (override with ``SGEVAL_PP_PYTHON``/``SGEVAL_THIRD_PARTY``). A missing
+interpreter or source fails the test, no skip. The subprocess inherits this process's ``PYTHONPATH`` (so the resource
+guard's sitecustomize applies too).
 """
 from __future__ import annotations
 
@@ -29,9 +34,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-try:  # 子进程（client-env 解释器）没有 pytest，slow 标记只在 pytest 一侧需要
+try:  # the subprocess (client-env interpreter) has no pytest; the slow marker is only needed on the pytest side
     import pytest
-except ModuleNotFoundError:  # pragma: no cover - 子进程
+except ModuleNotFoundError:  # pragma: no cover - subprocess
     class _NoMark:
         def __getattr__(self, name):
             return lambda f: f
@@ -39,30 +44,31 @@ except ModuleNotFoundError:  # pragma: no cover - 子进程
     pytest = type("pytest", (), {"mark": _NoMark()})
 
 REPO = Path(__file__).resolve().parents[4]
-WRAP = REPO / "src" / "robomme_ood_eval" / "servers" / "pp_server_wrap.py"  # 拆仓后外壳在评估包里
+WRAP = REPO / "src" / "robomme_ood_eval" / "servers" / "pp_server_wrap.py"  # after the repo split the wrapper lives in the eval package
 PP_GITLINK = "723df35762bb641e1d520e4fa9359b98644adc21"
 PARENT_REL = "ponderpounce/eval/robomme_server.py"
 PARENT_SHA256 = "0664c0abc1598c68f75a8f2eaf2889062a34e39d4e1d75269512907a8f1cb135"
-CLIENT_ENV_PY = "envs/client-env/.venv/bin/python"  # 拆仓后客户端扩展环境在 envs/client-env/.venv
+CLIENT_ENV_PY = "envs/client-env/.venv/bin/python"  # after the repo split the client extension env is envs/client-env/.venv
 
-# 节拍（毫秒）与 System 2 桩的子目标脚本；dt = 1000/20 = 50 ms
+# Timing (ms) and the System 2 stub's subgoal scripts; dt = 1000/20 = 50 ms
 DT_MS = 50
 CHUNK = 5
 N_STEPS = 200
 SCHEDULES = [
-    # 默认节拍：Ponder／Pounce 各 1000 ms，计算延迟 400 ms
+    # default timing: Ponder/Pounce 1000 ms each, compute delay 400 ms
     {"name": "p1000_s1000_d400", "s2_ms": 1000, "s1_ms": 1000, "delay_ms": 400,
      "subgoals": ["", "", "pick up the cube at [612, 247]", "", "put it at [10, 990]", "", "", "press at [500, 500]"]},
-    # 节拍不等、延迟长于周期：同一时刻有多条未可见 cognition，最新可见的可能是空子目标
+    # unequal timing, delay longer than the period: several invisible cognitions at once, the newest visible one may
+    # have an empty subgoal
     {"name": "p500_s1000_d1300", "s2_ms": 500, "s1_ms": 1000, "delay_ms": 1300,
      "subgoals": ["", "open the drawer", "", "", "", "grab at [100, 900]", "", "", "", "", "", "lift"]},
 ]
 
 
-# ── 子进程：在有 vla-eval／torch 的解释器里驱动父类真实方法 ─────────────────────────────
+# -- Subprocess: drive the real parent methods in an interpreter with vla-eval/torch ----------------
 
 
-def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
+def _child_main(mode: str) -> None:  # pragma: no cover - runs in the subprocess
     if mode == "s2input":
         return _child_s2input()
     import asyncio
@@ -83,7 +89,7 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
     ns = rs.NS_PER_MS
 
     class StubS2Context:
-        """``SoftS2SessionContext`` 的桩：第 n 次 ``fire`` 给 ``subgoals[n % L]`` 与确定性 cognition。"""
+        """Stub of ``SoftS2SessionContext``: the n-th ``fire`` yields ``subgoals[n % L]`` and a deterministic cognition."""
 
         subgoals: list = []
 
@@ -99,7 +105,7 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
                                       gate_score=None, n_input_frames=1)
 
     class StubS1:
-        """``LocalSystem1`` 的桩：动作块只由输入与父类抽出的噪声决定。"""
+        """Stub of ``LocalSystem1``: the action chunk depends only on the inputs and the noise drawn by the parent."""
 
         action_chunk_size, action_dim = CHUNK, 8
         noise_spec = (CHUNK, 8)
@@ -136,7 +142,7 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
         srv._s1_tokenizer, srv._s1_max_token_len, srv._s1_num_camera_slots = None, 0, 0
         return srv
 
-    # 父类 __init__ 设的属性必须全部由桩设好（上游加字段时这里先报）
+    # every attribute set by the parent __init__ must be set by the stub (fails here first when upstream adds fields)
     init_src = inspect.getsource(rs.PonderPounceRoboMMEServer.__init__)
     init_attrs = sorted(set(re.findall(r"self\.(_\w+)\s*(?::[^=\n]+)?=", init_src)))
 
@@ -206,7 +212,8 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
                "subgoals": [s["subgoal"] for s in wrap_steps], "cursor": [s["cursor"] for s in wrap_steps],
                "n_s1": [s["n_s1"] for s in wrap_steps], "n_s2": [s["n_s2"] for s in wrap_steps],
                "s1_started": [s["s1_started"] for s in wrap_steps], "rng_final": wrap_steps[-1]["rng"]}
-        # 观察开关对照：SGEVAL_AUDIT=0 时外壳不加审计键，其余（动作、随机数、游标、计数、子目标）与开启时逐项相同
+        # Observation switch control: with SGEVAL_AUDIT=0 the wrapper adds no audit key; everything else (actions, RNG,
+        # cursor, counts, subgoals) matches the enabled run item by item
         prev = os.environ.get("SGEVAL_AUDIT")
         os.environ["SGEVAL_AUDIT"] = "0"
         try:
@@ -221,7 +228,8 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
         rec["audit_on_all_keyed"] = all("_sgeval_audit" in x["keys"] for x in wrap_steps)
         rec["audit_on_off_mismatch"] = sum(int(a_ != b_) for a_, b_ in zip(strip(off_steps), strip(wrap_steps))) \
             + abs(len(off_steps) - len(wrap_steps))
-        # pp_generation：每次 fire 一块的列表，没有 fire 为 None（MERGE-1 对齐客户端语言账本读的键）
+        # pp_generation: a list with one block per fire, None when no fire (MERGE-1 aligns with the keys the client
+        # language log reads)
         fires = [f for x in wrap_steps for f in (x["audit"]["pp_generation"] or [])]
         rec["audit_gen_keys_ok"] = all(f["subgoal_raw"] == f["subgoal_text"] and f["reasoning"] == f["reasoning_text"]
                                        and f["params"]["fire_index"] == f["fire_index"] for f in fires)
@@ -230,7 +238,7 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
         rec["audit_fire_subgoals"] = [f["subgoal_text"] for f in fires]
         rec["audit_fire_index"] = [f["fire_index"] for f in fires]
         rec["audit_kinds"] = sorted({f["kind"] for f in fires})
-        if mode == "mutant":  # 比较器自检：多抽一次随机数的「坏外壳」必须被查出
+        if mode == "mutant":  # comparator self-check: a "bad wrapper" that draws one extra random number must be caught
             class RngMutant(wrap.SubgoalReportingServer):
                 def _fire_s1(self, ep, obs, now):
                     torch.randn(1, generator=ep.noise_rng)
@@ -249,18 +257,20 @@ def _child_main(mode: str) -> None:  # pragma: no cover - 在子进程里运行
     print("CHILD_RESULT " + json.dumps(out), flush=True)
 
 
-# ── FIX-3：真实上游 SoftS2SessionContext + CPU 假 System 2／假分词器，核 S2 输入解码 ──────────────────────
+# -- FIX-3: real upstream SoftS2SessionContext + CPU fake System 2 / fake tokenizer, checks S2 input decoding --
 
 S2IN_STEPS = 120
 S2IN_SPECIAL = ["<|im_start|>", "<|vision_start|>", "<|image_pad|>", "<|vision_end|>", "<|fim_pad|>", "<|fim_prefix|>"]
 S2IN_SCRIPTS = ["pick up the cube at [612, 247]", None, ("think", "put it at [10, 990]"), "ROLLBACK"]
 
 
-def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
-    """父类真实 ``on_observation``／``_fire_s2``，上下文用**真实上游** ``SoftS2SessionContext``（fire／_append／_restore
-    原文），只把 System 2 的 VLM 前向换成 CPU 假模型（隐状态 = 上下文里已见 token 的确定性函数）、分词器换成逐字符的
-    假分词器。原类、外壳审计开、外壳审计关三套各跑一局，逐步比较动作／RNG／节拍／假模型调用次数与最终上下文 token；
-    外壳生成块里的 ``input_text`` 与测试从假模型自己记下的上下文 token 独立解码的期望逐 fire 比对。"""
+def _child_s2input() -> None:  # pragma: no cover - runs in the subprocess
+    """Real parent ``on_observation``/``_fire_s2`` with the **real upstream** ``SoftS2SessionContext`` (fire/_append/
+    _restore verbatim) as context; only the System 2 VLM forward becomes a CPU fake model (hidden state = deterministic
+    function of the tokens seen in context) and the tokenizer a per-character fake. The original class, wrapper with
+    audit on, and wrapper with audit off each run one episode; actions/RNG/timing/fake-model call counts and final
+    context tokens are compared per step. The ``input_text`` in the wrapper's generation blocks is compared per fire
+    against the expectation decoded independently from the context tokens the fake model recorded itself."""
     import asyncio
     import contextlib
     import importlib.util
@@ -345,9 +355,10 @@ def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
             return torch.arange(n, dtype=torch.long).view(1, -1).expand(3, -1) + int(start)
 
     class FakeS2:
-        """假 System 2：前向把 token 写进 cache.buf（按 cumulative_length 截断，与真实回滚一致），隐状态编码
-        ``[视觉段数, 最近视觉段之后的 token 数]``；lm_head 按「第几个观测」选脚本：transition／nontransition／
-        reasoning+transition／永不收尾（触发 max_new_tokens 回滚）。"""
+        """Fake System 2: the forward writes tokens into cache.buf (truncated at cumulative_length, consistent with a
+        real rollback); the hidden state encodes ``[number of vision segments, tokens after the latest vision
+        segment]``; lm_head picks a script by observation index: transition / nontransition / reasoning+transition /
+        never terminates (triggers the max_new_tokens rollback)."""
 
         num_cognition_tokens = 2
         effective_context_cap = 10 ** 6
@@ -356,7 +367,7 @@ def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
             self.current_obs_only = current_obs_only
             self._subgoal_trigger_id, self._cognition_token_id = TRIG, COG
             self.n_forward = self.n_lm_head = 0
-            self.decision_ctx = []  # 每次观测追加后（k==0）的完整上下文 token
+            self.decision_ctx = []  # full context tokens after each observation is appended (k==0)
             self.last_cache = None
             outer = self
 
@@ -394,7 +405,7 @@ def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
             k = len(c.buf) - 1 - last_ve
             feat = torch.tensor([float(n_vend), float(k)], dtype=torch.float32)
             c.n_fwd += 1
-            if k == 0 and c.n_fwd > 1:  # 第一次前向是 reset() 追加的前缀（以演示图结尾），不是观测决策点
+            if k == 0 and c.n_fwd > 1:  # the first forward is the prefix appended by reset() (ending in demo images), not an observation decision point
                 self.decision_ctx.append(list(c.buf))
             return types.SimpleNamespace(last_hidden_state=feat.view(1, 1, 2).expand(1, len(ids), 2).clone())
 
@@ -515,7 +526,7 @@ def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
         return "".join(out)
 
     class ExtraHeadMutant(wrap.SubgoalReportingServer):
-        """坏外壳：每次 S2 后多调一次 lm_head（多一次模型调用）——比较器必须查出。"""
+        """Bad wrapper: calls lm_head once more after every S2 (one extra model call) -- the comparator must catch it."""
 
         def _fire_s2(self, ep, obs, now):
             super()._fire_s2(ep, obs, now)
@@ -545,11 +556,11 @@ def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
                 os.environ["SGEVAL_AUDIT"] = prev
         mut = asyncio.run(run(ExtraHeadMutant, coo))
         dctx = on["decision_ctx"]
-        prefix_len = len(dctx[0]) - 2 * (4 + 2)  # 首个决策点 = 前缀 + 一个观测段（2 图 ×（4 个 pad + 首尾标记））
+        prefix_len = len(dctx[0]) - 2 * (4 + 2)  # first decision point = prefix + one observation segment (2 images x (4 pads + start/end markers))
         checks = []
         for j, f in enumerate(on["fires"]):
             if j >= len(dctx):
-                checks.append({"j": j, "ok": False, "why": "决策点不足"})
+                checks.append({"j": j, "ok": False, "why": "not enough decision points"})
                 continue
             want_base = 0 if j == 0 else (prefix_len if coo else len(dctx[j - 1]))
             want = oracle_decode(dctx[j][want_base:])
@@ -577,7 +588,7 @@ def _child_s2input() -> None:  # pragma: no cover - 在子进程里运行
     print("CHILD_RESULT " + json.dumps(out), flush=True)
 
 
-# ── pytest 一侧 ─────────────────────────────────────────────────────────────
+# -- pytest side ------------------------------------------------------------
 
 
 def _main_checkout() -> Path:
@@ -589,13 +600,13 @@ def _main_checkout() -> Path:
 def _pp_root() -> Path:
     tp = os.environ.get("SGEVAL_THIRD_PARTY")
     root = Path(tp) / "PonderPounce" if tp else _main_checkout() / "third_party" / "PonderPounce"
-    assert (root / PARENT_REL).is_file(), f"PonderPounce 源码不在场（设 SGEVAL_THIRD_PARTY）：{root}"
+    assert (root / PARENT_REL).is_file(), f"PonderPounce sources not found (set SGEVAL_THIRD_PARTY): {root}"
     return root
 
 
 def _pp_python() -> str:
     py = os.environ.get("SGEVAL_PP_PYTHON") or str(_main_checkout() / CLIENT_ENV_PY)
-    assert Path(py).exists(), f"带 vla-eval／torch 的解释器不在场（设 SGEVAL_PP_PYTHON）：{py}"
+    assert Path(py).exists(), f"interpreter with vla-eval/torch not found (set SGEVAL_PP_PYTHON): {py}"
     return py
 
 
@@ -615,16 +626,19 @@ def _child(mode: str) -> dict:
         out = subprocess.run([_pp_python(), str(Path(__file__).resolve()), "--child", mode], cwd=REPO,
                              env=_child_env(), capture_output=True, text=True, timeout=240)
         lines = [ln for ln in out.stdout.splitlines() if ln.startswith("CHILD_RESULT ")]
-        assert out.returncode == 0 and lines, f"子进程失败 rc={out.returncode}\n{out.stdout[-3000:]}\n{out.stderr[-3000:]}"
+        assert out.returncode == 0 and lines, f"subprocess failed rc={out.returncode}\n{out.stdout[-3000:]}\n{out.stderr[-3000:]}"
         _CACHE[mode] = json.loads(lines[-1][len("CHILD_RESULT "):])
     return _CACHE[mode]
 
 
 def _expected_subgoals(sch: dict, n_steps: int) -> tuple[list, list]:
-    """按父类节拍算式独立推出每步应回的子目标（不读被测代码）。返回 ``(逐步期望, S1 触发步号)``。
+    """Independently derive, from the parent timing formula, the subgoal each step should return (without reading
+    the code under test). Returns ``(per-step expectations, S1 fire step numbers)``.
 
-    Ponder 第 j 次在 ``dt + j*P2`` 触发、``+ delay`` 后可见；Pounce 在首条可见后的第一个控制步起每 ``P1`` 触发；
-    触发时取「已可见且非空」的最新子目标（没有则沿用上次，局初为 None）；两次触发之间回同一个值，未起步时 None。"""
+    Ponder's j-th fire happens at ``dt + j*P2`` and becomes visible after ``+ delay``; Pounce fires every ``P1``
+    starting from the first control step after the first visible one. On a fire it takes the newest subgoal that is
+    "visible and non-empty" (otherwise keeps the previous one, None at episode start); between fires it returns the
+    same value, and None before starting."""
     dt, p2, p1, delay = DT_MS, sch["s2_ms"], sch["s1_ms"], sch["delay_ms"]
     subs = sch["subgoals"]
     fire_t = lambda j: dt + j * p2  # noqa: E731
@@ -668,7 +682,7 @@ def test_wrapper_actions_rng_cursor_counts_identical_to_parent():
         assert rec["missing_attrs"] == [], rec["missing_attrs"]
         assert rec["base_has_subgoal_key"] is False
         assert rec["mismatch"] == 0, rec["name"]
-        assert rec["n_s1"][-1] >= 5 and rec["n_s2"][-1] >= 9  # 非空跑：两套节拍都触发了多次
+        assert rec["n_s1"][-1] >= 5 and rec["n_s2"][-1] >= 9  # not an empty run: both timings fired several times
         total += len(rec["subgoals"])
     print(f"PP_SERVER_ACTION_EQ=PASS schedules={len(res['schedules'])} steps={total} mismatch=0 "
           f"parent_sha256={PARENT_SHA256[:12]}")
@@ -682,20 +696,22 @@ def test_wrapper_subgoal_semantics_match_schedule():
         got = rec["subgoals"]
         want, fires = _expected_subgoals(sch, N_STEPS)
         assert got == want, (sch["name"], [(i + 1, g, w) for i, (g, w) in enumerate(zip(got, want)) if g != w][:5])
-        # S1 触发步与父类计数一致（期望推导本身没错位）
+        # S1 fire steps agree with the parent counter (the expectation derivation itself is not off)
         n_s1 = rec["n_s1"]
         assert [i + 1 for i in range(N_STEPS) if n_s1[i] != (n_s1[i - 1] if i else 0)] == fires
-        # 首个子目标前为 None：起步前（hold）与「首条可见 cognition 子目标为空」的触发都回 None
+        # None before the first subgoal: both before starting (hold) and on fires where "the first visible cognition has
+        # an empty subgoal" return None
         first_fire = fires[0]
         assert all(g is None for g in got[:first_fire])
         assert got[first_fire - 1] is None and rec["s1_started"][first_fire - 1] is True
-        # chunk 用尽（cursor == CHUNK）后子目标不变：等于该 chunk 触发那一步的值
+        # after the chunk is exhausted (cursor == CHUNK) the subgoal is unchanged: equal to the value at that chunk's fire step
         exhausted = [i for i, c in enumerate(rec["cursor"]) if c == CHUNK]
         assert exhausted
         for i in exhausted:
             k = max(f for f in fires if f <= i + 1)
             assert got[i] == got[k - 1]
-        # ready_at_ns 之前回旧子目标：新子目标已由 Ponder 产出、但还未可见时，回的仍是更早的子目标
+        # old subgoal before ready_at_ns: when Ponder has produced a new subgoal that is not yet visible, the earlier one is
+        # still returned
         subs = sch["subgoals"]
         stale = 0
         for i, g in enumerate(got):
@@ -704,7 +720,8 @@ def test_wrapper_subgoal_semantics_match_schedule():
             if produced and g is not None and subs[max(produced) % len(subs)] != g:
                 stale += 1
         assert stale > 0, sch["name"]
-    # 第二套节拍专门覆盖「触发时最新可见的 cognition 子目标为空，仍沿用更早的非空子目标」
+    # the second timing specifically covers "at fire time the newest visible cognition has an empty subgoal, so the
+    # earlier non-empty subgoal is kept"
     sch_b = SCHEDULES[1]
     _, fires_b = _expected_subgoals(sch_b, N_STEPS)
     newest_visible_empty = 0
@@ -724,7 +741,8 @@ def test_comparator_detects_rng_and_cursor_mutants():
 
 
 def test_entrypoint_accepts_same_args_as_original_server():
-    """按绝对路径、cwd 在第三方目录启动：jsonargparse 识别与原服务相同的 ``--args.*``（只看 --help，不加载权重）。"""
+    """Launched by absolute path with cwd in the third-party dir: jsonargparse recognizes the same ``--args.*`` as the
+    original server (only --help is checked, no weights loaded)."""
     root = _pp_root()
     out = subprocess.run([_pp_python(), str(WRAP), "--help"], cwd=root, env=_child_env(), capture_output=True,
                          text=True, timeout=180)
@@ -739,9 +757,10 @@ if __name__ == "__main__" and len(sys.argv) >= 3 and sys.argv[1] == "--child":
 
 
 def test_audit_switch_and_generation_blocks_observe_only():
-    """第三阶段（接口冻结说明五节）：SGEVAL_AUDIT=0 时没有审计键、其余逐项与开启时相同；开启时每次回包都带审计键，
-    且审计里的 System 2 生成块与桩的真实 fire 一一对应（第 j 次 fire 的子目标 = 脚本第 j % L 条，序号连续、总数等于
-    父类 Ponder 计数）——外壳不多推理、不少记。"""
+    """Stage 3 (interface freeze notes, section 5): with SGEVAL_AUDIT=0 there is no audit key and everything else
+    matches the enabled run; when enabled every reply carries the audit key, and the System 2 generation blocks in the
+    audit map one to one onto the stub's real fires (the j-th fire's subgoal = script entry j % L, indices contiguous,
+    total equal to the parent's Ponder count) -- the wrapper neither infers more nor records less."""
     res = _child("eq")
     for sch in SCHEDULES:
         rec = next(r for r in res["schedules"] if r["name"] == sch["name"])
@@ -756,14 +775,17 @@ def test_audit_switch_and_generation_blocks_observe_only():
     print(f"PP_AUDIT_OBS_EQ=PASS schedules={len(SCHEDULES)} audit_on_off_mismatch=0")
 
 
-@pytest.mark.slow  # 核心短测时长控制（主会话 2026-10-07）：在 -m "" 下跑
+@pytest.mark.slow  # keeps the core short tests fast (main session 2026-10-07): runs under -m ""
 def test_s2_input_decoded_from_real_context_tokens_observe_only():
-    """FIX-3（计划八.11 PonderPounce 行「S2 完整上下文含回灌历史、增量图文片段、附图引用」）：真实上游
-    ``SoftS2SessionContext`` + 假 System 2。每次 fire 的 ``input_text`` 等于测试从假模型记下的上下文 token 独立解码的
-    「上次 fire 观测段之后 → 本次观测段」（append 模式；current_obs_only 为前缀之后的本次观测段并标
-    ``input_context_restored``）；第一次含任务前缀与 3 张演示图，之后含回灌的上一子目标与 cognition 占位；附图来源、
-    相机与像素哈希逐张对上。OBS_EQ：外壳审计开／关与原类之间动作、RNG、节拍、假模型前向与 lm_head 次数、最终上下文
-    token 逐项相同；多调一次 lm_head 的坏外壳必须被查出。"""
+    """FIX-3 (plan 8.11, PonderPounce row: "full S2 context including fed-back history, incremental image/text
+    segments, attached image refs"): real upstream ``SoftS2SessionContext`` + fake System 2. Each fire's
+    ``input_text`` equals what the test decodes independently from the context tokens recorded by the fake model:
+    "after the previous fire's observation segment -> this observation segment" (append mode; for current_obs_only
+    it is this observation segment after the prefix, flagged ``input_context_restored``). The first fire includes the
+    task prefix and 3 demo images, later ones the fed-back previous subgoal and the cognition placeholder; image
+    sources, cameras and pixel hashes match one by one. OBS_EQ: between wrapper audit on/off and the original class,
+    actions, RNG, timing, fake-model forward and lm_head counts and final context tokens are identical; a bad wrapper
+    calling lm_head once more must be caught."""
     res = _child("s2input")
     fires = nonempty = mism = 0
     for v in res["variants"]:
@@ -782,13 +804,14 @@ def test_s2_input_decoded_from_real_context_tokens_observe_only():
         else:
             kinds = {(c["kind"], c["committed"], c["rolled_back"]) for c in v["checks"]}
             assert ("transition", True, False) in kinds and ("nontransition", False, False) in kinds
-            assert ("nontransition", False, True) in kinds  # 生成到上限未收尾 → 回滚
+            assert ("nontransition", False, True) in kinds  # generation hit the cap without terminating -> rollback
             for prev, cur in zip(v["checks"], v["checks"][1:]):
                 assert cur["restored"] is False
-                if prev["committed"]:  # 回灌：上一 fire 提交的生成块（含子目标原文）出现在本次输入里
+                if prev["committed"]:  # feedback: the generation block committed by the previous fire (incl. raw subgoal) appears in this input
                     assert cur["segments"][0] == "generated" and prev["subgoal"] in cur["input_text"]
                     assert cur["input_text"].startswith("<|fim_prefix|>")
-                else:  # 未提交（含回滚）：只有 cognition 占位 + 本次观测，回滚的 token 不在输入里
+                else:  # not committed (incl. rollback): only the cognition placeholder + this observation; rolled-back tokens are
+                    # not in the input
                     assert cur["segments"] == ["cog", "obs"] and "xxx" not in cur["input_text"]
                 assert cur["input_text"].endswith("<image:0><image:1>")
         fires += len(v["checks"])

@@ -1,11 +1,14 @@
-"""旧启动器 ``run_astra.sh`` 不迁移（职责已进 ``AstraPolicy.load``／``close`` 与 ``ServerProcess``）；本文件把它原来钉的
-几条口径改成对新入口 ``scripts/evaluate.py --model astra --gpus 0,1 --astra-ledger … --astra-cap-usd 5`` 的等价断言：
+"""The old launcher ``run_astra.sh`` is not migrated (its duties moved into ``AstraPolicy.load``/``close`` and
+``ServerProcess``); this file turns the conventions it used to pin into equivalent assertions on the new entry point
+``scripts/evaluate.py --model astra --gpus 0,1 --astra-ledger ... --astra-cap-usd 5``:
 
-- 新入口的 Astra 参数原样透传为 ``load_policy(**cfg)`` 的键，``AstraPolicy`` 据此解析出两张卡、账本、上限；
-- 照抄上游 ``examples/champ/run.sh`` 的项：VLA 启动命令（只把 ``--seed=42`` 换成模型种子）、环境变量逐项、
-  PYTHONPATH 前三段（第四段环境源换成评估仓的 ``third_party/robomme_benchmark/src``）、``env -u OPENAI_API_KEY``、
-  两张卡必须不同、端口缺省 18762；
-- 旧启动器的拒绝行为：同一张卡、``group_*`` 布局、缺密钥、费用上限超过 5 美元——都在起任何服务之前拒绝，且不读密钥文件。
+- the entry point's Astra args are passed through verbatim as ``load_policy(**cfg)`` keys, from which
+  ``AstraPolicy`` resolves the two GPUs, the ledger and the cap;
+- items copied from upstream ``examples/champ/run.sh``: the VLA launch command (only ``--seed=42`` is replaced by the
+  model seed), each env var, the first three PYTHONPATH entries (the fourth, the env source, becomes the eval repo's
+  ``third_party/robomme_benchmark/src``), ``env -u OPENAI_API_KEY``, the two GPUs must differ, default port 18762;
+- the old launcher's refusals: same GPU twice, ``group_*`` layout, missing key, cost cap above 5 USD -- all refused
+  before any server starts, without reading a key file.
 """
 from __future__ import annotations
 
@@ -46,7 +49,8 @@ def test_evaluate_cli_astra_args_map_to_policy_cfg():
 
 
 def test_vla_command_and_env_copied_from_upstream_run_sh():
-    """照抄上游 run.sh：VLA 启动命令只换种子；环境变量逐项同值；PYTHONPATH 前三段同、第四段换成评估仓的环境源。"""
+    """Copied from upstream run.sh: the VLA launch command only swaps the seed; env vars match one by one; the first
+    three PYTHONPATH entries are identical, the fourth becomes the eval repo's env source."""
     upstream = (third_party() / "examples" / "champ" / "run.sh").read_text()
     up_cmd = '--port="$PORT" --seed=42 policy:checkpoint --policy.config=mme_vla_suite'
     assert up_cmd in upstream and 'env -u OPENAI_API_KEY CUDA_VISIBLE_DEVICES="$VLA_GPU"' in upstream
@@ -62,16 +66,16 @@ def test_vla_command_and_env_copied_from_upstream_run_sh():
         assert mod.VLAServerProcess.DROP_ENV == ("OPENAI_API_KEY",)
         exports = dict(kv.split("=", 1) for line in re.findall(r"^export ((?:[A-Z_]+=[^\s\"$]+ ?)+)$", upstream, re.M)
                        for kv in line.split())
-        assert exports, "上游 run.sh 的固定导出项没解析到"
+        assert exports, "no fixed exports parsed from upstream run.sh"
         for k, v in exports.items():
-            assert env[k] == v, f"{k}: 上游 {v} ≠ 新 {env.get(k)}"
+            assert env[k] == v, f"{k}: upstream {v} != new {env.get(k)}"
         up_pp = re.search(r'export PYTHONPATH="([^"]+)"', upstream).group(1).split(":")
         new_pp = env["PYTHONPATH"].split(":")
         root = str(third_party())
         assert [x.replace("$REPO", root) for x in up_pp[:3]] == new_pp[:3]
         assert up_pp[3] == "$REPO/third_party/robomme_benchmark/src" and new_pp[3] == str(mod.benchmark_src())
         src = inspect.getsource(mod)
-        assert "openai.key" not in src and "from_key_file" not in src, "密钥只从环境变量读"
+        assert "openai.key" not in src and "from_key_file" not in src, "the key is read only from env vars"
 
 
 @pytest.mark.parametrize("cfg,match", [
@@ -81,7 +85,8 @@ def test_vla_command_and_env_copied_from_upstream_run_sh():
     ({"_no_key": True}, "OPENAI_API_KEY"),
 ])
 def test_old_launcher_refusals_now_in_load(tmp_path, monkeypatch, cfg, match):
-    """旧启动器的四项拒绝（同卡、布局、费用上限、缺密钥）现在由 ``load`` 在起任何服务之前做，且不泄漏密钥。"""
+    """The old launcher's four refusals (same GPU, layout, cost cap, missing key) are now done by ``load`` before any
+    server starts, without leaking the key."""
     with astra_session() as (mod, astra):
         h = Harness(tmp_path, monkeypatch, mod, astra)
         if cfg.pop("_no_key", False):
