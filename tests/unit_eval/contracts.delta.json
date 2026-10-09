@@ -1,0 +1,216 @@
+[
+ {
+  "id": "C19-RUN-EPISODE",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/episode.py"
+  ],
+  "symbol": "run_episode／make_spec／EpisodeSpec／EpisodeResult／normalize_play_output／_Watchdog",
+  "oracle": "假 builder（真实身份解析之外的环境全换 CPU 假）与假 Policy；次序、终态与计数手写",
+  "positive": "reset→build→play→close 次序；身份核对通过；成功局结果字段齐全、计数显式写 0；常驻 Policy 两局 load 一次；首局墙钟放宽",
+  "negative": "身份不符写 IDENTITY_MISMATCH 并抛；局前拒绝不写结果原样上抛；构建失败记 infra env_build 不进 play；play 异常记 error 并入 fail、下一局照跑；PlayOutput 缺字段记错；步数到顶（抛出或被模型吞掉）都改记 timeout；额度耗尽先写结果再抛；看门狗到点写 INFRA_TIMEOUT 并退 75",
+  "boundaries": "hard-verify 不 strict；未知数据集 ValueError；builder 按 (task, dataset) 缓存",
+  "nodeids": [
+   "tests/test_episode.py::test_episode_spec_fields_and_frozen",
+   "tests/test_episode.py::test_dataset_max_steps_and_invalid_dataset",
+   "tests/test_episode.py::test_make_spec_from_resolve_identity",
+   "tests/test_episode.py::test_builder_cached_per_task_dataset",
+   "tests/test_episode.py::test_play_output_contract_required_fields",
+   "tests/test_episode.py::test_call_order_reset_build_play_close",
+   "tests/test_episode.py::test_load_once_two_episodes_resident",
+   "tests/test_episode.py::test_result_fields_and_explicit_zero_counters",
+   "tests/test_episode.py::test_success_result",
+   "tests/test_episode.py::test_play_exception_recorded_and_next_episode_runs",
+   "tests/test_episode.py::test_build_failure_is_infra_and_skips_play",
+   "tests/test_episode.py::test_step_cap_raised_becomes_timeout",
+   "tests/test_episode.py::test_step_cap_swallowed_by_model_still_timeout",
+   "tests/test_episode.py::test_hard_verify_has_no_strict_cap",
+   "tests/test_episode.py::test_error_status_merged_into_fail",
+   "tests/test_episode.py::test_bad_play_output_is_error",
+   "tests/test_episode.py::test_identity_mismatch_writes_and_stops",
+   "tests/test_episode.py::test_identity_match_passes",
+   "tests/test_episode.py::test_reset_refusal_propagates_without_result",
+   "tests/test_episode.py::test_budget_exhausted_records_then_raises",
+   "tests/test_episode.py::test_watchdog_wall_timeout_writes_and_exits",
+   "tests/test_episode.py::test_first_episode_wall_extension"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified"
+ },
+ {
+  "id": "C19-ENV-SESSION",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/session.py"
+  ],
+  "symbol": "EnvSession.build／reset／step／close、NullRecorder、_GuardedRecorder",
+  "oracle": "假 builder 与假环境的 reset／step 计划手写",
+  "positive": "build／reset／step 计数与只读属性；reset 原样返回、动作原样交给环境并记 exec_action；close 幂等",
+  "negative": "额度被拒时不进环境并标 budget_exhausted（含外部异常带 budget_exhausted 属性）；录制器异常转 RecorderError；strict_cap 第 max+1 步不进环境",
+  "boundaries": "未知数据集 ValueError；自建 builder 缺 max_steps 拒绝",
+  "nodeids": [
+   "tests/unit_eval/test_session_report.py::test_dataset_must_be_known",
+   "tests/unit_eval/test_session_report.py::test_build_reset_step_counts_and_readonly_props",
+   "tests/unit_eval/test_session_report.py::test_strict_cap_blocks_next_step",
+   "tests/unit_eval/test_session_report.py::test_ledger_claim_before_build_and_reset",
+   "tests/unit_eval/test_session_report.py::test_external_exception_with_budget_attr_marks_exhausted",
+   "tests/pipeline/eval/test_env_session.py::test_reset_returns_env_output_unchanged_and_switches_phase",
+   "tests/pipeline/eval/test_env_session.py::test_step_passes_action_unchanged_and_records_exec_action",
+   "tests/pipeline/eval/test_env_session.py::test_step_exception_propagates_and_counts_step",
+   "tests/pipeline/eval/test_env_session.py::test_step_cap_stops_before_env",
+   "tests/pipeline/eval/test_env_session.py::test_success_on_last_allowed_step_is_returned",
+   "tests/pipeline/eval/test_env_session.py::test_claim_reset_order_and_budget_flag",
+   "tests/pipeline/eval/test_env_session.py::test_recorder_failure_becomes_recorder_error",
+   "tests/pipeline/eval/test_env_session.py::test_obs_none_step_is_recorded_without_frames",
+   "tests/pipeline/eval/test_env_session.py::test_close_is_safe_and_releases_env",
+   "tests/pipeline/eval/test_env_session.py::test_own_builder_uses_dataset_and_max_steps"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified"
+ },
+ {
+  "id": "C19-REPORT",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/report.py"
+  ],
+  "symbol": "report 汇总",
+  "oracle": "手写结果行",
+  "positive": "汇总计数与成功率",
+  "negative": "空输入不报错、计数显式 0",
+  "boundaries": "—",
+  "nodeids": [
+   "tests/unit_eval/test_session_report.py::test_report_summarize",
+   "tests/unit_eval/test_session_report.py::test_report_empty"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified"
+ },
+ {
+  "id": "C19-POLICY-BASE",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/policy.py",
+   "src/robomme_hard_eval/models/__init__.py"
+  ],
+  "symbol": "Policy 四方法与计数器、load_policy、ServerProcess、pick_port、注册表",
+  "oracle": "假服务端进程（本地子进程）与手写期望",
+  "positive": "load_policy 只 load 一次、上下文退出 close；注册表六个模型懒加载；server_seed 取服务端元数据；服务端起停、attach、stop_by_metadata",
+  "negative": "load 失败即 close；服务端就绪前死亡、运行中死亡被检出；stop 超时升级 kill；pid 复用拒停；元数据不符拒接",
+  "boundaries": "计数器只计最外层调用",
+  "nodeids": [
+   "tests/unit_eval/test_policy.py::test_registry_lists_six_models_lazily",
+   "tests/unit_eval/test_policy.py::test_counters_count_outermost_call_only",
+   "tests/unit_eval/test_policy.py::test_reset_contract_in_docstring",
+   "tests/unit_eval/test_policy.py::test_load_policy_calls_load_once_and_context_closes",
+   "tests/unit_eval/test_policy.py::test_load_failure_closes",
+   "tests/unit_eval/test_policy.py::test_server_seed_from_metadata",
+   "tests/unit_eval/test_policy.py::test_pick_port_free_and_skips_busy",
+   "tests/unit_eval/test_policy.py::test_server_start_metadata_attach_mismatch_stop",
+   "tests/unit_eval/test_policy.py::test_server_dead_detected",
+   "tests/unit_eval/test_policy.py::test_server_dies_before_ready",
+   "tests/unit_eval/test_policy.py::test_stop_escalates_to_kill",
+   "tests/unit_eval/test_policy.py::test_stop_by_metadata_and_attach_stale",
+   "tests/unit_eval/test_policy.py::test_stop_by_metadata_refuses_pid_reuse",
+   "tests/unit_eval/test_policy.py::test_policy_close_stops_server"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified"
+ },
+ {
+  "id": "C19-MODEL-POLICIES",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/models/framesamp_modul.py",
+   "src/robomme_hard_eval/models/groundsg.py",
+   "src/robomme_hard_eval/models/smvla.py",
+   "src/robomme_hard_eval/models/pp.py",
+   "src/robomme_hard_eval/servers/__init__.py"
+  ],
+  "symbol": "四个服务型模型 Policy 子类与 ServedPolicy 公共件",
+  "oracle": "假服务端进程与假客户端；服务端 argv、消息次序手写",
+  "positive": "load 只起一次服务端、argv 逐项、close 停一次；reset 不发消息不碰环境；play 次序（FrameSamp／GroundSG 先服务端 reset，SimpleMemVLA／PonderPounce 先环境）；GroundSG 双评估器共用预测器；PonderPounce sid 重用才重起；预热消息序列",
+  "negative": "负种子、缺 ckpt、缺变体、服务日志缺 history_config、外壳元数据种子不符均拒绝",
+  "boundaries": "编译缓存与确定性环境变量按开关透传",
+  "nodeids": [
+   "tests/unit_eval/test_models_policies.py::test_clean_server_process_drops_determinism_vars",
+   "tests/unit_eval/test_models_policies.py::test_policy_seed_must_be_non_negative",
+   "tests/unit_eval/test_models_policies.py::test_choose_port_reuses_left_server_metadata",
+   "tests/unit_eval/test_models_policies.py::test_variant_pairing_and_gates",
+   "tests/unit_eval/test_models_policies.py::test_framesamp_load_once_server_argv_and_close",
+   "tests/unit_eval/test_models_policies.py::test_framesamp_compile_cache_and_det_env",
+   "tests/unit_eval/test_models_policies.py::test_framesamp_server_config_missing_blocks_and_stops",
+   "tests/unit_eval/test_models_policies.py::test_wrap_metadata_seed_mismatch_is_server_mismatch",
+   "tests/unit_eval/test_models_policies.py::test_framesamp_reset_sends_nothing_and_play_order",
+   "tests/unit_eval/test_models_policies.py::test_framesamp_reset_raises_server_dead",
+   "tests/unit_eval/test_models_policies.py::test_warmup_reset_add_buffer_infer",
+   "tests/unit_eval/test_models_policies.py::test_framesamp_load_runs_warmup_once",
+   "tests/unit_eval/test_models_policies.py::test_smvla_server_argv_and_play_order",
+   "tests/unit_eval/test_models_policies.py::test_smvla_det_flag",
+   "tests/unit_eval/test_models_policies.py::test_session_no_close_blocks_env_close",
+   "tests/unit_eval/test_models_policies.py::test_pp_requires_ckpt",
+   "tests/unit_eval/test_models_policies.py::test_pp_server_argv_wrap_and_plain",
+   "tests/unit_eval/test_models_policies.py::test_pp_play_order_and_sid",
+   "tests/unit_eval/test_models_policies.py::test_pp_restarts_server_only_when_sid_reused",
+   "tests/unit_eval/test_models_policies.py::test_groundsg_needs_variant",
+   "tests/unit_eval/test_models_policies.py::test_groundsg_label_two_evaluators_shared_predictor",
+   "tests/unit_eval/test_models_policies.py::test_groundsg_end_to_end_order_and_official_video",
+   "tests/unit_eval/test_models_policies.py::test_policy_subclasses_are_registered"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified"
+ },
+ {
+  "id": "C19-RECORDER-AV1",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/record/recorder.py"
+  ],
+  "symbol": "EpisodeRecorder AV1 4:4:4 编码与核对",
+  "oracle": "ffmpeg 现编现解；帧 sha 与常量手写",
+  "positive": "AV1 yuv444p 编码可解且核对通过；常量为 R8 口径",
+  "negative": "帧数不符被检出；编码器卡住时收尾有期限不挂死；旧 meta 无 raw_codec 视为 FFV1",
+  "boundaries": "—",
+  "nodeids": [
+   "tests/unit_eval/test_recorder_av1.py::test_constants_are_r8",
+   "tests/unit_eval/test_recorder_av1.py::test_encode_av1_yuv444p_and_verify",
+   "tests/unit_eval/test_recorder_av1.py::test_legacy_meta_without_raw_codec_is_ffv1",
+   "tests/unit_eval/test_recorder_av1.py::test_verify_detects_frame_count_mismatch",
+   "tests/unit_eval/test_recorder_av1.py::test_close_deadline_does_not_hang_when_encoder_stuck"
+  ],
+  "resource": "cpu（ffmpeg）",
+  "mutants": [],
+  "status": "verified"
+ },
+ {
+  "id": "C19-EVALUATE-CLI",
+  "domain": "C19",
+  "source": [
+   "scripts/evaluate.py",
+   "src/robomme_hard_eval/models/dummy.py",
+   "src/robomme_hard_eval/record/official_render.py"
+  ],
+  "symbol": "scripts/evaluate.py 参数解析与本机循环、dummy 模型、官方版式渲染按 raw_codec 读帧",
+  "oracle": "dummy 模型两数据集各跑一局；参数与透传手写",
+  "positive": "--help 可打印；参数解析与 --cfg 透传；dummy 两数据集常驻跑通；--stop-server 按元数据停服务；官方渲染按 raw_codec 读帧、网页尺寸与 imageio 宏块对齐",
+  "negative": "scripts/ 多出文件即失败",
+  "boundaries": "—",
+  "nodeids": [
+   "tests/unit_eval/test_evaluate_cli.py::test_help_prints",
+   "tests/unit_eval/test_evaluate_cli.py::test_scripts_dir_has_only_evaluate",
+   "tests/unit_eval/test_evaluate_cli.py::test_parse_args_and_cfg_passthrough",
+   "tests/unit_eval/test_evaluate_cli.py::test_stop_server_flag",
+   "tests/unit_eval/test_evaluate_cli.py::test_dummy_end_to_end_two_datasets_resident",
+   "tests/unit_eval/test_evaluate_cli.py::test_official_render_reads_by_raw_codec",
+   "tests/unit_eval/test_evaluate_cli.py::test_web_size_matches_imageio_macro_block"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified"
+ }
+]

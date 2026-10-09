@@ -72,7 +72,7 @@
       "target": "dev-scripts/gl/export_eval_identities.py::check_rows",
       "method": "判定忽略 delivery_mismatch",
       "expect_fail": [
-        "tests/pipeline/gen/test_eval_identities.py::test_export_detects_delivery_mismatch"
+        "tests/pipeline/gen/test_eval_identities.py::test_full_export_detects_delivery_mismatch"
       ]
     }
   ]

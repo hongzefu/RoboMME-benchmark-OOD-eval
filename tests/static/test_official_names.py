@@ -1,20 +1,22 @@
 """L0：官方名残留检查 ``OFFICIAL_NAMES``（1006-rename-official-names-and-stage3-eval-plan.md 第一部分一、第二部分八.2）。
 
 仓库自造名一律换成官方名：FrameSamp+Modulation 的策略标签 ``perceptual-framesamp-modul``（标识符 ``framesamp_modul``）、
-GroundSG 的 ``groundsg``、数据集接口 ``hard-verify``（原第二阶段接口）与 ``ood``（原第三阶段接口）。本测试扫描
-``scripts/``、``src/robomme_hard/``、``tests/`` 下 git 跟踪的活代码，旧名出现即失败。
+GroundSG 的 ``groundsg``、数据集接口 ``hard-verify``（原第二阶段接口）与 ``ood``（原第三阶段接口）。本测试扫描评估仓
+``scripts/``、``src/robomme_hard_eval/``、``dev-scripts/``、``tests/`` 下 git 跟踪的活代码，旧名出现即失败（benchmark 包
+``robomme_hard`` 的官方名检查随 benchmark 仓走，本仓不扫子模块）。
 
 旧名的写法由本文件独立列出（不读被测代码），见 ``PATTERNS``；豁免（白名单）只有：
 
 - 官方家族名形式：``mme-vla``、``mme_vla``、``MME-VLA``、``MME_VLA``、上游类名前缀 ``MMEVLAWebsocket``、``mme_vla_suite``
   （正则本身不匹配这些写法）；
-- 别名表本身：``scripts/eval-official/official_defs.py`` 里 ``# >>> LEGACY_NAMES`` 与 ``# <<< LEGACY_NAMES`` 之间的行；
+- 别名表本身：``src/robomme_hard_eval/models/_official_defs.py`` 里 ``# >>> LEGACY_NAMES`` 与 ``# <<< LEGACY_NAMES`` 之间的行；
 - 标注「历史目录名」（磁盘／NFS 真实路径）或「历史数据键」（已发布数据文件里的键）的行；
 - ``XHARD0_IN_TEST_HARD`` 系列（与冻结配置互相引用，正则不匹配）；
 - 本文件自身。
 
-不扫：冻结配置 ``scripts/configs/``、vendored 官方源码 ``scripts/parity/official/``、三个上游原样入口、包内规格数据
-``src/robomme_hard/env_metadata/``、上游字节清单 ``UPSTREAM.json``、说明文档 ``*.md``（现行文档由主会话另改）。
+不扫：vendored 官方源码 ``dev-scripts/parity/official/``、PonderPounce BASE 版客户端的逐字节夹具
+``tests/pipeline/evalx/pp/base_pp_client_b869a3df.py.txt``（sha256 钉死、不得改）、说明文档 ``*.md``（现行文档由主会话
+另改）。
 
 判定行：``OFFICIAL_NAMES=PASS|FAIL files=<n> hits=<n>``，失败时逐条列出 ``<路径>:<行号>: <命中>``。
 """
@@ -28,12 +30,11 @@ import pytest
 
 from tests._support.loaders import REPO
 
-ROOTS = ("scripts", "src/robomme_hard", "tests")
-SKIP_PREFIX = ("scripts/configs/", "scripts/parity/official/", "src/robomme_hard/env_metadata/")
-SKIP_FILES = {"scripts/dataset_replay.py", "scripts/evaluation.py", "scripts/run_example.py",
-              "src/robomme_hard/UPSTREAM.json", "tests/static/test_official_names.py"}
+ROOTS = ("scripts", "src/robomme_hard_eval", "dev-scripts", "tests")
+SKIP_PREFIX = ("dev-scripts/parity/official/",)
+SKIP_FILES = {"tests/static/test_official_names.py", "tests/pipeline/evalx/pp/base_pp_client_b869a3df.py.txt"}
 SKIP_SUFFIX = (".md", ".png", ".jpg", ".jpeg", ".gif", ".mp4", ".mkv", ".npz", ".h5", ".pkl", ".ico", ".woff", ".woff2")
-ALIAS_FILE = "scripts/eval-official/official_defs.py"
+ALIAS_FILE = "src/robomme_hard_eval/models/_official_defs.py"
 ALIAS_BEGIN, ALIAS_END = "# >>> LEGACY_NAMES", "# <<< LEGACY_NAMES"
 LINE_MARKERS = ("历史目录名", "历史数据键")
 
@@ -115,7 +116,7 @@ def test_official_names_no_legacy_residue():
 
 
 def test_alias_block_present_and_closed():
-    """别名表段必须存在、成对、且只在 official_defs.py 里出现（全仓别名表只此一份）。"""
+    """别名表段必须存在、成对、且只在 _official_defs.py 里出现（全仓别名表只此一份）。"""
     text = (REPO / ALIAS_FILE).read_text(encoding="utf-8")
     assert text.count(ALIAS_BEGIN) == 1 and text.count(ALIAS_END) == 1
     assert text.index(ALIAS_BEGIN) < text.index(ALIAS_END)

@@ -1,12 +1,15 @@
-"""L0（慢）：打包与来源（C18）。
+"""L0（慢）：评估包 ``robomme-hard-eval`` 的打包与来源（C18-WHEEL）。
+
+拆仓后本仓只打评估包 ``src/robomme_hard_eval``（``[tool.hatch.build.targets.wheel] packages``）；``robomme``／
+``robomme_hard`` 的 wheel 由 benchmark 仓自己的同名测试守护。
 
 构建 wheel → 在 tmp 新建 uv 环境 → 非 editable 安装（``--no-deps``，依赖借当前解释器的 site-packages 只读挂在
-``PYTHONPATH`` 上；该目录里 editable 安装的 ``.pth`` 不会被处理，因此 ``robomme``／``robomme_hard`` 只能来自 tmp 环境）→
+``PYTHONPATH`` 上；该目录里 editable 安装的 ``.pth`` 不会被处理，因此 ``robomme_hard_eval`` 只能来自 tmp 环境）→
 在仓库外的 cwd 里导入，核：
 
-- 两个包的模块实际位置在 tmp 环境的 site-packages 里，tmp 环境里没有指回仓库的 ``.pth``；
-- wheel 内文件集合 = git 跟踪的 ``src/robomme``、``src/robomme_hard`` 文件集合，安装后逐字节等于源码树（含规格 jsonl、
-  元数据 json、``UPSTREAM.json``）；
+- 评估包的模块实际位置在 tmp 环境的 site-packages 里，tmp 环境里没有指回仓库的 ``.pth``；
+- wheel 内文件集合 = git 跟踪的 ``src/robomme_hard_eval`` 文件集合，安装后逐字节等于源码树（含 ``models``、``record``、
+  ``servers`` 子包）；
 - dist-info 的 Name／Version 与 ``pyproject.toml`` 一致，且不是 editable 安装。
 
 网络受限：构建、建环境、安装一律 ``--offline``；装不了就 ``pytest.skip("未验证：<原因>")``，不记 PASS。
@@ -30,7 +33,7 @@ from tests._support.resource_policy import SITE_DIR
 
 pytestmark = pytest.mark.slow
 
-PACKAGES = ("robomme", "robomme_hard")
+PACKAGES = ("robomme_hard_eval",)
 
 
 def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -88,17 +91,17 @@ def test_installed_files_byte_identical_to_source(installed):
     bad = [rel for rel in _tracked_sources()
            if (site / rel.removeprefix("src/")).read_bytes() != (REPO / rel).read_bytes()]
     assert bad == []
-    # 规格与元数据资源确实在包内（不是只装了 .py）。
-    assert list((site / "robomme_hard" / "env_metadata" / "ood").rglob("specs.jsonl"))
-    assert list((site / "robomme" / "env_metadata").rglob("*_metadata.json"))
-    assert (site / "robomme_hard" / "UPSTREAM.json").is_file()
+    # 子包都在（不是只装了顶层 __init__）。
+    for sub in ("models", "record", "servers"):
+        assert (site / "robomme_hard_eval" / sub / "__init__.py").is_file(), sub
+    assert (site / "robomme_hard_eval" / "episode.py").is_file() and (site / "robomme_hard_eval" / "policy.py").is_file()
 
 
 def test_dist_info_metadata_and_not_editable(installed):
     site = installed["site"]
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     infos = list(site.glob("*.dist-info"))
-    mine = [d for d in infos if d.name.startswith(f"{project['name']}-")]
+    mine = [d for d in infos if d.name.startswith(f"{project['name'].replace('-', '_')}-")]  # dist-info 名把 - 规范成 _
     assert len(mine) == 1, infos
     meta = (mine[0] / "METADATA").read_text(encoding="utf-8").splitlines()
     assert f"Name: {project['name']}" in meta
@@ -115,11 +118,12 @@ def test_import_resolves_to_tmp_env_outside_repo(installed):
     deps = sysconfig.get_paths()["purelib"]  # 只借依赖；其中的 editable .pth 不经 PYTHONPATH 处理
     env = dict(installed["env"])
     env["PYTHONPATH"] = os.pathsep.join([str(SITE_DIR), deps])
-    code = ("import json, robomme, robomme_hard, robomme_hard.env_record_wrapper.hard_specs as hs\n"
-            "print(json.dumps({'robomme': robomme.__file__, 'robomme_hard': robomme_hard.__file__,"
-            " 'hard_specs': hs.__file__}))\n")
+    code = ("import json, robomme_hard_eval, robomme_hard_eval.episode as ep, robomme_hard_eval.policy as pol\n"
+            "print(json.dumps({'robomme_hard_eval': robomme_hard_eval.__file__, 'episode': ep.__file__,"
+            " 'policy': pol.__file__}))\n")
     r = _run([str(installed["py"]), "-c", code], cwd=installed["cwd"], env=env)
-    if r.returncode != 0 and "No module named" in r.stderr and "robomme" not in r.stderr.split("No module named")[-1]:
+    if r.returncode != 0 and "No module named" in r.stderr \
+            and "robomme_hard_eval" not in r.stderr.split("No module named")[-1]:
         pytest.skip(f"未验证：借用依赖导入失败：{r.stderr.strip()[-300:]}")
     assert r.returncode == 0, r.stderr[-2000:]
     files = json.loads(r.stdout.strip().splitlines()[-1])

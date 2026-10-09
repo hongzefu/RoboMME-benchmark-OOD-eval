@@ -1,148 +1,108 @@
-"""L0：顶层入口（C18 入口白名单、生产不依赖 tests、``run_example.EPISODE_LIMITS`` 与官方元数据一致）。
+"""L0：评估仓入口与目录布局（C18 入口白名单、生产代码不依赖 tests、dev-scripts 不走 ``scripts.`` 包式导入）。
 
-- ``evaluation_hard.py`` 与上游 ``evaluation.py`` 恰好差 3 个单行 hunk 加 1 个纯插入块：import、``dataset=DATASET``、
-  ``max_steps=DATASET_MAX_STEPS[DATASET]``，以及 ``TASKS`` 之前插入的数据集选择块（两个接口 ``hard-verify``↔1300、
-  ``ood``↔1600，默认 ``ood``；1006 改名计划 R1：示例改成两段）。
-- ``scripts/*.py`` 恰好四个入口（AGENTS.md P1）。
-- ``scripts/`` 与 ``challenge_interface/`` 的生产代码不 import ``tests``（AST 收集 import 语句，L0 允许）。
+拆仓后（1008 拆分方案第二部分 §二）评估仓的入口约定：
+
+- ``scripts/`` 只有 ``evaluate.py`` 一个文件（本机入口；benchmark 的五个入口在子模块 ``third_party/robomme_benchmark``
+  里，由 benchmark 仓自己的同名测试守护）；
+- ``dev-scripts/`` 顶层只有 ``gl``、``orig``、``checks``、``media``、``parity``、``site`` 六个子目录，没有文件；
+- 生产代码（``src/``、``scripts/``、``dev-scripts/``）不 import ``tests``（AST 收集 import 语句）；
+- ``dev-scripts/`` 下的脚本不按包导入 ``scripts``（``from scripts.…``／``import scripts.…``）：``scripts/`` 不是包，
+  脚本之间一律按路径加载或经评估包导入。
+
+拆仓前本文件另有 ``evaluation_hard.py`` 与上游 ``evaluation.py`` 的差异形态、``run_example.EPISODE_LIMITS`` 与官方元数据
+一致两组用例，它们守护的是 benchmark 仓内容，已随 benchmark 仓的同名测试迁走，本仓不再测。
 """
 from __future__ import annotations
 
 import ast
-import difflib
-import json
-import re
-import typing
 from pathlib import Path
 
 import pytest
 
-from tests._support.loaders import REPO, load_script
+from tests._support.loaders import REPO
 
 SCRIPTS = REPO / "scripts"
-ENTRY_SET = {"dataset_replay.py", "evaluation.py", "run_example.py", "evaluation_hard.py"}
-PRODUCTION_DIRS = (REPO / "scripts", REPO / "challenge_interface")
+DEV_SCRIPTS = REPO / "dev-scripts"
+ENTRY_SET = {"evaluate.py"}
+DEV_SUBDIRS = {"gl", "orig", "checks", "media", "parity", "site"}
+PRODUCTION_DIRS = (REPO / "src", REPO / "scripts", REPO / "dev-scripts")
 
 
-# ---------------------------------------------------------------- evaluation_hard 与 evaluation 的差异
-
-
-def single_line_hunks(old: str, new: str, *, allow_insert: bool = False):
-    """逐行差异；每块必须是「一行换一行」（插入块之前行号相同，之后按插入行数平移），否则返回 None 表示形态不合。
-
-    ``allow_insert`` 为假时返回 [(新文件行号(1 起), 旧行, 新行)]，且不允许任何插入；为真时最多允许一个纯插入块，
-    返回 (单行替换列表, 插入块 (新文件起始行号(1 起), [插入的行]) 或 None)。
-    """
-    a, b = old.splitlines(), new.splitlines()
-    out, insert = [], None
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
-        if tag == "equal":
+def _listing(d: Path) -> tuple[set[str], set[str]]:
+    """目录顶层的 (文件名集合, 子目录名集合)；忽略 ``__pycache__``。"""
+    files, dirs = set(), set()
+    for p in d.iterdir():
+        if p.name == "__pycache__":
             continue
-        if tag == "insert" and allow_insert and insert is None:
-            insert = (j1 + 1, b[j1:j2])
-            continue
-        shift = len(insert[1]) if insert else 0
-        if tag != "replace" or i2 - i1 != 1 or j2 - j1 != 1 or j1 != i1 + shift:
-            return None
-        out.append((j1 + 1, a[i1], b[j1]))
-    return (out, insert) if allow_insert else out
+        (dirs if p.is_dir() else files).add(p.name)
+    return files, dirs
 
 
-def _builder_call(tree: ast.AST) -> ast.Call:
-    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
-             and isinstance(n.func, ast.Name) and n.func.id == "BenchmarkEnvBuilder"]
-    assert len(calls) == 1
-    return calls[0]
+# ---------------------------------------------------------------- 入口清单与目录布局
 
 
-def test_evaluation_hard_diff_is_three_single_line_hunks_and_dataset_block():
-    old = (SCRIPTS / "evaluation.py").read_text(encoding="utf-8")
-    new = (SCRIPTS / "evaluation_hard.py").read_text(encoding="utf-8")
-    res = single_line_hunks(old, new, allow_insert=True)
-    assert res is not None, "差异形态不合"
-    hunks, insert = res
-    assert len(hunks) == 3 and insert is not None, res
-    (l1, o1, n1), (l2, o2, n2), (l3, o3, n3) = hunks
-    # 1) import：只把包名换成 robomme_hard。
-    assert o1 == "from robomme.env_record_wrapper import BenchmarkEnvBuilder"
-    assert n1 == "from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder"
-    tree = ast.parse(new)
-    first_def = min(n.lineno for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef)))
-    assert l1 < first_def
-    # 2) dataset：test → DATASET，缩进不变。
-    assert o2.strip() == 'dataset="test",' and n2.strip() == 'dataset=DATASET,'
-    assert o2[: len(o2) - len(o2.lstrip())] == n2[: len(n2) - len(n2.lstrip())]
-    # 3) max_steps：整数字面值 → 按数据集查 DATASET_MAX_STEPS，缩进不变。
-    mo = re.match(r"^(\s*)max_steps=\d+,", o3)
-    mn = re.match(r"^(\s*)max_steps=DATASET_MAX_STEPS\[DATASET\],", n3)
-    assert mo and mn and mo.group(1) == mn.group(1)
-    # 位置：后两处恰是 BenchmarkEnvBuilder(...) 调用的 dataset／max_steps 关键字参数。
-    kw = {k.arg: k for k in _builder_call(tree).keywords}
-    assert kw["dataset"].value.lineno == l2
-    assert isinstance(kw["dataset"].value, ast.Name) and kw["dataset"].value.id == "DATASET"
-    assert kw["max_steps"].value.lineno == l3
-    assert isinstance(kw["max_steps"].value, ast.Subscript)
-    # 4) 插入块：只在 TASKS 之前、只含注释与两个赋值——两个接口与步数配对（本阶段 ood 仍 1600），默认 ood。
-    start, block = insert
-    assert block[-1].startswith("DATASET = ") and new.splitlines()[start - 1 + len(block)].startswith("TASKS = ")
-    code = [ln for ln in block if not ln.startswith("#")]
-    assigns = {n.targets[0].id: ast.literal_eval(n.value) for n in ast.parse("\n".join(code)).body}
-    assert assigns == {"DATASET_MAX_STEPS": {"hard-verify": 1300, "ood": 1600}, "DATASET": "ood"}, assigns
+def test_scripts_top_level_has_only_evaluate():
+    files, dirs = _listing(SCRIPTS)
+    assert files == ENTRY_SET and dirs == set(), (files, dirs)
 
 
-def test_single_line_hunks_negatives():
-    base = "a\nb\nc\n"
-    assert single_line_hunks(base, base) == []
-    assert single_line_hunks(base, "a\nB\nc\n") == [(2, "b", "B")]
-    assert single_line_hunks(base, "a\nb\nx\nc\n") is None  # 多一行
-    assert single_line_hunks(base, "a\nc\n") is None  # 少一行
-    assert single_line_hunks(base, "a\nB\nC\n") is None  # 两行连成一块
-    # 允许一个插入块：插入后的单行替换按插入行数平移；两个插入块、删行仍判不合
-    assert single_line_hunks(base, "a\nx\ny\nb\nC\n", allow_insert=True) == ([(5, "c", "C")], (2, ["x", "y"]))
-    assert single_line_hunks(base, "x\na\nb\ny\nc\n", allow_insert=True) is None
-    assert single_line_hunks(base, "a\nc\n", allow_insert=True) is None
+def test_dev_scripts_has_only_six_subdirs_and_no_top_level_files():
+    files, dirs = _listing(DEV_SCRIPTS)
+    assert files == set(), files
+    assert dirs == DEV_SUBDIRS, dirs
 
 
-# ---------------------------------------------------------------- 入口清单
+# ---------------------------------------------------------------- 生产代码不 import tests、不把 scripts 当包
 
 
-def test_scripts_top_level_has_exactly_four_entries():
-    assert {p.name for p in SCRIPTS.glob("*.py")} == ENTRY_SET
-
-
-# ---------------------------------------------------------------- 生产代码不 import tests
-
-
-def imports_of_tests(source: str) -> list[str]:
-    """源码中指向 ``tests`` 包的导入（import／from-import／importlib.import_module／__import__ 字面值）。"""
+def _imports_of(source: str, pkg: str) -> list[str]:
     hits = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
-            hits += [a.name for a in node.names if a.name == "tests" or a.name.startswith("tests.")]
+            hits += [a.name for a in node.names if a.name == pkg or a.name.startswith(pkg + ".")]
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            if node.module == "tests" or node.module.startswith("tests."):
+            if node.module == pkg or node.module.startswith(pkg + "."):
                 hits.append(node.module)
         elif isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
             fn = node.func
             name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
             arg = node.args[0].value
             if name in ("import_module", "__import__") and isinstance(arg, str) \
-                    and (arg == "tests" or arg.startswith("tests.")):
+                    and (arg == pkg or arg.startswith(pkg + ".")):
                 hits.append(arg)
     return hits
 
 
-def _production_py() -> list[Path]:
+def imports_of_tests(source: str) -> list[str]:
+    """源码中指向 ``tests`` 包的导入（import／from-import／importlib.import_module／__import__ 字面值）。"""
+    return _imports_of(source, "tests")
+
+
+def imports_of_scripts_pkg(source: str) -> list[str]:
+    """源码中把 ``scripts`` 当包导入的语句（``from scripts.x import y``、``import scripts.x``、``from scripts import x``、
+    ``import_module('scripts.x')``）。"""
+    return _imports_of(source, "scripts")
+
+
+def _py_under(*dirs: Path) -> list[Path]:
     out = []
-    for d in PRODUCTION_DIRS:
+    for d in dirs:
         out += [p for p in d.rglob("*.py") if "__pycache__" not in p.parts]
     return sorted(out)
 
 
 def test_production_code_does_not_import_tests():
-    files = _production_py()
-    assert files
+    files = _py_under(*PRODUCTION_DIRS)
+    assert len(files) > 50, len(files)
     bad = {str(p.relative_to(REPO)): h for p in files if (h := imports_of_tests(p.read_text(encoding="utf-8")))}
+    assert bad == {}
+
+
+def test_dev_scripts_do_not_import_scripts_as_package():
+    files = _py_under(DEV_SCRIPTS)
+    assert files
+    bad = {str(p.relative_to(REPO)): h for p in files
+           if (h := imports_of_scripts_pkg(p.read_text(encoding="utf-8")))}
     assert bad == {}
 
 
@@ -168,22 +128,21 @@ def test_imports_of_tests_ignores_non_tests(src):
     assert imports_of_tests(src) == []
 
 
-# ---------------------------------------------------------------- run_example.EPISODE_LIMITS
+@pytest.mark.parametrize("src", [
+    "from scripts.parity import hard_parity\n",
+    "import scripts.evaluate\n",
+    "from scripts import evaluate\n",
+    "import importlib\nimportlib.import_module('scripts.parity._common')\n",
+])
+def test_imports_of_scripts_pkg_catches(src):
+    assert imports_of_scripts_pkg(src)
 
 
-def test_episode_limits_match_official_metadata():
-    run_example = load_script("run_example.py")
-    limits = run_example.EPISODE_LIMITS
-    meta_root = REPO / "src" / "robomme" / "env_metadata"
-    assert set(limits) == {p.name for p in meta_root.iterdir() if p.is_dir()}
-    assert set(typing.get_args(run_example.DatasetType)) == set(limits)
-    tasks = set(typing.get_args(run_example.TaskID)) - {"All"}
-    for split, limit in limits.items():
-        files = sorted((meta_root / split).glob("record_dataset_*_metadata.json"))
-        seen = set()
-        for f in files:
-            d = json.loads(f.read_text(encoding="utf-8"))
-            seen.add(d["env_id"])
-            assert d["record_count"] == limit, (split, f.name)
-            assert sorted(r["episode"] for r in d["records"]) == list(range(limit)), (split, f.name)
-        assert seen == tasks, split
+@pytest.mark.parametrize("src", [
+    "import scriptsy\n",
+    "from .scripts import x\n",
+    "p = REPO / 'scripts' / 'evaluate.py'\n",
+    "s = 'from scripts.x import y'\n",
+])
+def test_imports_of_scripts_pkg_ignores_paths_and_strings(src):
+    assert imports_of_scripts_pkg(src) == []

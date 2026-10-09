@@ -3,9 +3,9 @@
     "id": "C13-GSG-01",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/official_defs.py",
-      "scripts/eval-official/groundsg_client.py",
-      "scripts/eval-official/official_hard_runner.py"
+      "src/robomme_hard_eval/models/_official_defs.py",
+      "src/robomme_hard_eval/models/groundsg.py",
+      "dev-scripts/orig/official_hard_runner.py"
     ],
     "symbol": "groundsg_client.run_episode（SessionRunner 委托 EnvSession）与 official_hard_runner.run_identity（官方 EnvRunner 原文 + TapRunner／EnvTap）都调官方 EpisodeEvaluator.eval_each_episode 原文",
     "oracle": "两侧同一组假环境（下一帧由所执行动作决定）、各自一个同实现的假服务（动作块由本局请求指纹决定，指纹函数手写）、各自一份 swift 替身；手写期望：消息顺序 reset→(add_buffer→infer)×3、首批 3 帧且 exec_start_idx=2、之后每批 16 帧且 exec_start_idx=0、提示词=任务目标、Oracle 子目标取决策时 info 的 grounded_subgoal_online、执行动作=各动作块前 16 行",
@@ -31,8 +31,8 @@
     "id": "C13-GSG-02",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/official_defs.py",
-      "scripts/eval-official/groundsg_client.py"
+      "src/robomme_hard_eval/models/_official_defs.py",
+      "src/robomme_hard_eval/models/groundsg.py"
     ],
     "symbol": "official_defs.extract_defs / load_groundsg / make_args / build_predictor；groundsg_client.make_policy_context / close_policy_context",
     "oracle": "官方源码只读引用 SGEVAL_THIRD_PARTY，所读五个文件的 sha256 由测试独立计算并打印；Qwen 引擎为不读权重的替身，记下构造参数",
@@ -56,8 +56,8 @@
     "id": "C13-GSG-03",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/official_hard_runner.py",
-      "scripts/eval-official/groundsg_client.py"
+      "dev-scripts/orig/official_hard_runner.py",
+      "src/robomme_hard_eval/models/groundsg.py"
     ],
     "symbol": "official_hard_runner：--check-imports / main 参数与分片核对 / run_identity 原始帧与结果行 / run_shard 服务不可达中止",
     "oracle": "导入断言在子进程里跑（只加官方 examples/robomme 与仓库 src）；原始帧字节数与首帧内容按假环境手算",
@@ -78,9 +78,9 @@
     "id": "C13-GSG-04",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/official_defs.py",
-      "scripts/eval-official/groundsg_client.py",
-      "scripts/eval-official/official_hard_runner.py"
+      "src/robomme_hard_eval/models/_official_defs.py",
+      "src/robomme_hard_eval/models/groundsg.py",
+      "dev-scripts/orig/official_hard_runner.py"
     ],
     "symbol": "official_defs：VARIANT_MEMER、load_memer_model／patch_memer_class（MemER 兼容层 MEMER_COMPAT_SOURCE、MEMER_COMPAT_SHA256、MemERResponseError）、make_args(model_seed=, memer_adapter_path=)、assert_one_predictor、build_predictor、seed_everything；groundsg_client／official_hard_runner 的 MemER 装配与 policy_seed 贯通",
     "oracle": "真实摘取的官方 Qwen3VLModelMemER（套兼容层与官方原文两份）配假 PtEngine（FakeSwift 逐次脚本回复，不读权重）；提醒句、温度 0.7、日志 retry 行、隔一张取帧下标、关键帧合并结果（3、5、20 → 5、20）全部手写；compat=False 的官方原文做 B 情形与 1／≥15 帧的逐字节对照",
@@ -107,9 +107,9 @@
     "id": "C13-GSG-05",
     "domain": "C13",
     "source": [
-      "scripts/eval-official/groundsg_client.py",
-      "scripts/eval-official/official_hard_runner.py",
-      "scripts/eval-official/run_official_hard.sh"
+      "src/robomme_hard_eval/models/groundsg.py",
+      "dev-scripts/orig/official_hard_runner.py",
+      "dev-scripts/orig/run_official_hard.sh"
     ],
     "symbol": "groundsg_client：LangTap／install_language／open_language_log／TracingClient 审计键 pop／EpisodeTap source_call_id；official_hard_runner：OrigBudget（reserve／claim_reset／claim_retry／commit／release、route、token）、run_shard(budget=)、main 参数核对；run_official_hard.sh：check_stage3_args、build_runner_cmd 转发",
     "oracle": "LanguageLog 按接口冻结说明第五节签名手写严格替身（关键字名错即 TypeError）；动作服务替身回包带冻结格式的 _sgeval_audit；共享账本按冻结说明三写假账本（调用顺序记账、token 幂等）；期望调用序列、retry、温度、reuse 步号、route／token 字符串全部手写",

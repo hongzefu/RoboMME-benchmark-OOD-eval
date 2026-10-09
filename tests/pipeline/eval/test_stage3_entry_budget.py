@@ -27,11 +27,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
-import re
-import subprocess
-import sys
 import threading
-import time
 import types
 from pathlib import Path
 
@@ -45,7 +41,6 @@ from tests._support.loaders import load_script
 
 #: 旧仓 run_seat.sh 不迁（拆分方案第二部分 §二）：起服务端的命令与种子核对改由 ``robomme_hard_eval.servers`` 与各模型
 #: Policy 子类承担，本文件对应断言改接到那里；席位脚本的预算参数核对与无进展检测归 GL 席位（dev-scripts/gl）。
-EO = F.REPO / "scripts" / "eval-official"
 CAPS = {"trajectory_cap": 870, "shared_infra_cap": 50, "expired_cap": 50, "planned_first_tries": 821}
 CAP_ARGV = ["--trajectory-cap", "870", "--shared-infra-cap", "50", "--expired-cap", "50", "--planned-first-tries", "821"]
 SEEDS = (0, 7, 42)
@@ -54,12 +49,6 @@ HARD0_TASK = "PickXtimes"
 
 def bl():
     return load_script("eval-official/budget_ledger.py")
-
-
-def _bash(script: str, **env) -> subprocess.CompletedProcess:
-    e = dict(os.environ, EO=str(EO), **{k: str(v) for k, v in env.items()})
-    e.pop("POLICY_SEED", None)
-    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=e, timeout=60)
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +129,7 @@ def test_eval_cap_1800_strict_and_hard_verify_not_strict(tmp_path):
         bad += int(E.DATASET_MAX_STEPS[d] != ms or (spec.max_steps, spec.strict_cap) != (ms, strict)
                    or (conn["max_steps"], conn["strict_cap"], conn["effective_cap"]) != (ms, strict, eff))
     with pytest.raises(ValueError):
-        E.EpisodeSpec(**{**vars(_fake_spec("ood", pol, tmp_path)), "dataset": "test-hard"})
+        E.EpisodeSpec(**{**vars(_fake_spec("ood", pol, tmp_path)), "dataset": "test"})  # 官方 test 不是评估数据集名
     assert bad == 0 and set(E.DATASET_MAX_STEPS) == set(want)
     # SeatRunner（拆仓后常驻 Policy + 动态队列）：ood 1800 strict → timeout、cap_hit、第 1801 步不进环境；局结果
     # result.json 记 max_steps=1800、strict_cap=true。拆仓后席位不再有 effective_cap／seat_info（步数口径归 EpisodeSpec），
@@ -454,8 +443,8 @@ def test_budget_enforcement_counterexamples(tmp_path, monkeypatch, capsys):
         assert blk is not None and blk[0] == "budget_args", argv
         assert ec.main(argv) == 3
         assert "RUN_BLOCKED reason=budget_args" in capsys.readouterr().out
-    # 旧 run_seat.sh::budget_args_check 的同项核对（不迁，席位入口只剩上面的 entry_blockers）见
-    # test_seat_shell_budget_args_check（待 GL 席位脚本合并后改接）
+    # 旧 run_seat.sh::budget_args_check 不迁：GL 外壳只核必需参数（test_seat_scripts::test_gl_required_args_exit_2），
+    # 六个预算参数一律由上面的 entry_blockers 拦
     cases += 1
     # 8 不给 --reset-budget：只计量（reset_claim 照写、budget 行 reset_budget=null），多局多次 reset 也不停；给 1 仍硬拦
     rows = [F.packaged_identity(task, tier, k) for k in range(3)]
@@ -609,33 +598,11 @@ def test_progress_phases_and_seat_idle_reads_named_progress(tmp_path, monkeypatc
     print("DEADLINES=PASS phases=first_infer,media_finalize exit_code=75 retry_ok=1 named_progress=1")
 
 
-@pytest.mark.skip(reason="旧 run_seat.sh 不迁（拆分方案第二部分 §二）；席位脚本的无进展检测归 dev-scripts/gl，待其合并后改接")
-def test_seat_shell_idle_reads_named_progress(tmp_path):
-    """席位脚本的无进展计时只认 phase／identity／step 变化（原断言原样保留，等 GL 席位脚本给出新落点后改接）。"""
-    d = tmp_path / "seat"
-    d.mkdir()
-    pj, log = d / "progress.json", d / "client.log"
-    script = r'''
-source "$EO/run_seat.sh"; TOOL_PY="$PY"
-PROG_FLOOR=$(( $(ts) - 1000 ))
-w() { printf '{"phase": "%s", "identity": "k", "attempt_no": 1, "step": %s, "episodes_done": 0, "t": %s}' "$1" "$2" "$3" > "$PJ"; }
-w episode 16 $(( $(ts) - 500 )); progress_idle "$PJ"; echo "A=$IDLE"
-w episode 16 $(ts); touch "$LOG"; progress_idle "$PJ"; echo "B=$IDLE"
-w episode 32 $(( $(ts) - 5 )); progress_idle "$PJ"; echo "C=$IDLE"
-echo "S=$(idle_s "$PJ")"
-'''
-    p = _bash(script, PY=sys.executable, PJ=pj, LOG=log)
-    vals = dict(re.findall(r"^([ABCS])=(\d+)$", p.stdout, re.M))
-    assert {k: int(v) for k, v in vals.items()}.keys() == {"A", "B", "C", "S"}, p.stdout + p.stderr
-    a, b, c = int(vals["A"]), int(vals["B"]), int(vals["C"])
-    assert 495 <= a <= 520 and b >= a and 4 <= c <= 30  # 同签名重写不重计时；步数变化才算进展
-
-
-@pytest.mark.skip(reason="旧 run_seat.sh 不迁；预算参数核对的席位脚本版归 dev-scripts/gl，待其合并后改接")
-def test_seat_shell_budget_args_check():
-    p = _bash('source "$EO/run_seat.sh"; BUDGET_LEDGER=/b; TRAJECTORY_CAP=870; SHARED_INFRA_CAP=50; EXPIRED_CAP=""; '
-              'PLANNED_FIRST_TRIES=821; budget_args_check; echo "RC=$?"')
-    assert "RC=3" in p.stdout and "RUN_BLOCKED reason=budget_args" in p.stdout and "--expired-cap" in p.stdout
+# 旧 run_seat.sh 的两段 bash 断言（progress_idle 只认 phase／identity／step 签名、budget_args_check）已删：拆仓后 run_seat.sh
+# 不迁，GL 席位外壳 dev-scripts/gl/run_eval_gl.sh 的无进展检测改按本席位 progress.json 修改时间
+# （test_seat_scripts.py::test_gl_noprogress_watchdog_kills_hung_client），缺必需参数退出 2
+# （test_seat_scripts.py::test_gl_required_args_exit_2），六个预算参数缺任一由 seat.py::entry_blockers 拦为
+# RUN_BLOCKED reason=budget_args（本文件 BUDGET_ENFORCEMENT 第 7 例）。
 
 
 # ═════════════════════════════════ OBS_EQ ═════════════════════════════════

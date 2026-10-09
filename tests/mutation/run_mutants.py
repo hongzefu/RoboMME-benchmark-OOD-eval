@@ -47,7 +47,9 @@ from tests.mutation.recipes import RECIPES  # noqa: E402
 
 OUT_DIR = REPO / "artifacts" / "maint-regress" / "mutation"
 #: 隔离副本只复制这些（与各块作者自检时的副本口径一致）。
-COPY_ITEMS = ("src", "scripts", "tests", "challenge_interface", "pyproject.toml")
+#: 拆仓后（评估仓）：评估包 src/、入口 scripts/、开发脚本 dev-scripts/；benchmark 包经子模块与 venv 的 editable 安装解析，
+#: 不复制。
+COPY_ITEMS = ("src", "scripts", "dev-scripts", "tests", "pyproject.toml")
 #: 受保护：只许进程内植入，不得落盘（AGENTS.md P2／计划红线 R9）。
 PROTECTED_PREFIX = "src/robomme/"
 UPSTREAM_ENTRIES = {"scripts/dataset_replay.py", "scripts/evaluation.py", "scripts/run_example.py"}
@@ -243,10 +245,12 @@ def make_copy(dest: Path) -> Path:
         elif src.exists():
             shutil.copy2(src, dest / name)
     env = dict(os.environ, UV_PROJECT_ENVIRONMENT=_venv(), PYTHONPATH=f"{dest}/src:{dest}", PYTHONDONTWRITEBYTECODE="1")
-    out = subprocess.run(["uv", "run", "--no-sync", "python", "-c", "import robomme_hard, robomme; "
-                          "print(robomme_hard.__file__); print(robomme.__file__)"],
+    out = subprocess.run(["uv", "run", "--no-sync", "python", "-c", "import robomme_hard_eval, robomme_hard, robomme; "
+                          "print(robomme_hard_eval.__file__); print(robomme_hard.__file__); print(robomme.__file__)"],
                          cwd=dest, env=env, capture_output=True, text=True, check=True).stdout.split()
-    if not all(p.startswith(f"{dest}/src/") for p in out):
+    # 评估包必须来自副本；benchmark 两个包来自子模块（不在副本、也不在本仓 src/ 下）
+    if not (out and out[0].startswith(f"{dest}/src/robomme_hard_eval/")
+            and all("/third_party/robomme_benchmark/src/" in p for p in out[1:])):
         raise SystemExit(f"隔离副本导入指向不对：{out}")
     return dest
 

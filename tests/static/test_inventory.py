@@ -1,13 +1,13 @@
 """L0：契约清单元测试（计划细则 4.3、4.5.1）——把「覆盖所有部分」与「契约真被执行」变成可机检的两条判定行。
 
-期望全部来自独立来源，不读被测代码：
-- 文件全集 = ``git ls-files src/robomme_hard scripts challenge_interface``；每个现行文件必须恰在总表
+期望全部来自独立来源，不读被测代码（评估仓版，拆仓 MERGE-1 按新树重切）：
+- 文件全集 = ``git ls-files src/robomme_hard_eval scripts dev-scripts``；每个现行文件必须恰在总表
   ``tests/contract/benchmark_contracts.json`` 的 ``files``（所属契约 id 列表）或 ``exempt``（豁免类别与理由）之一，
-  ``files`` 里的契约 id 都必须存在于 ``entries``，不得登记已不存在的文件。以 ``/`` 结尾的键是整目录登记
-  （``src/robomme/`` 冻结官方包，由 C18 上游字节守卫整体覆盖），要求该目录下确有 git 跟踪文件。
-- 用例全集 = 两个子进程的实际收集结果之并（比解析 ``def`` 名准：能看到参数化、条件跳过模块与 slow 用例）：
-  ``pytest --collect-only -q tests``（实测约 7 s；资源守卫在这里跳过 ``tests/sim``）与
-  ``pytest --collect-only -q --allow-sim-reset tests/sim``（只收集、不 reset，L4 仿真冒烟条目的 nodeid 由此核对）。
+  ``files`` 里的契约 id 都必须存在于 ``entries``，不得登记已不存在的文件。以 ``/`` 结尾的键是整目录登记，要求该目录下
+  确有 git 跟踪文件（评估仓目前没有整目录登记；benchmark 的 ``src/robomme/`` 整目录登记随 benchmark 仓走）。
+  总表由各目录 ``contracts.delta.json`` 汇总生成，benchmark 侧契约迁走的记录在总表 ``relocated``。
+- 用例全集 = ``pytest --collect-only -q tests`` 子进程的实际收集结果（比解析 ``def`` 名准：能看到参数化、条件跳过模块与
+  slow 用例）；评估仓没有 ``tests/sim``（仿真冒烟随 benchmark 仓）。
 - 契约 id 撞号：同一 id 出现在多份 ``contracts.delta.json`` 且两边 source 涉及的文件名不相交，视为两份不同契约，
   报冲突（总表合并时不拼接，见总表 ``merge_rule``）。
 
@@ -39,7 +39,7 @@ from tests._support.loaders import REPO
 from tests._support.resource_policy import ENV_LEDGER, ENV_MODE
 
 TOTAL = REPO / "tests" / "contract" / "benchmark_contracts.json"
-ROOTS = ("src/robomme_hard", "scripts", "challenge_interface")
+ROOTS = ("src/robomme_hard_eval", "scripts", "dev-scripts")
 STATUSES = ("planned", "verified", "blocked", "conditional")
 NOTE_KEYS = ("note",)  # blocked／conditional 的说明字段
 
@@ -75,8 +75,8 @@ def _collect(*args: str) -> set[str]:
 
 
 def collect_nodeids() -> set[str]:
-    """全部用例（不加 -m，slow 也在内）∪ tests/sim（带 --allow-sim-reset 只收集）。"""
-    return _collect("tests") | _collect("--allow-sim-reset", "tests/sim")
+    """全部用例（不加 -m，slow 也在内）。"""
+    return _collect("tests")
 
 
 _FILE_TOKEN = re.compile(r"[\w.-]+\.(?:py|jsonl|json|sh|html|toml)\b")
@@ -220,15 +220,16 @@ def test_contracts_nodeids_collected(total, collected, deltas):
                                        "verified_empty", "undocumented", "conflicts", "missing")}
 
 
-def test_sim_nodeids_collected_without_reset(collected):
-    """L4 条目的 nodeid 来自 --allow-sim-reset 的纯收集子进程；只收集，不触发 reset。"""
-    assert "tests/sim/test_reset_matrix.py::test_reset_cell" in collected
-    assert "tests/sim/test_official_one_reset.py::test_official_reset_and_unreachable_ee_step" in collected
-
-
-def test_src_robomme_registered_as_directory(total):
-    """冻结官方包整目录登记一条，且挂在上游字节守卫上。"""
-    assert "C18-UPSTREAM-BYTES" in total["files"].get("src/robomme/", [])
+def test_eval_package_and_entry_registered(total, collected):
+    """评估包核心模块与唯一入口都挂在 C19／C18 条目上；仓库外层文件（.gitmodules）由子模块锁定条目覆盖；benchmark 侧
+    迁走的契约在 relocated 里有记录、不在 entries 里重复出现。"""
+    files = total["files"]
+    assert "C19-RUN-EPISODE" in files["src/robomme_hard_eval/episode.py"]
+    assert "C19-POLICY-BASE" in files["src/robomme_hard_eval/policy.py"]
+    assert "C18-ENTRY-SET" in files["scripts/evaluate.py"]
+    entry_ids = {e["id"] for e in total["entries"]}
+    assert "C18-SUBMODULE-LOCK" in entry_ids and "tests/test_episode.py::test_success_result" in collected
+    assert total["relocated"] and not (set(total["relocated"]) & entry_ids)
 
 
 # ---------------------------------------------------------------- 负例：tmp 副本改坏后必须 FAIL
@@ -252,12 +253,12 @@ def test_negative_unregistered_file_fails(total, tracked, tmp_path):
 def test_negative_stale_and_unknown_id_fail(total, tracked, tmp_path):
     bad = _tmp_copy(total, tmp_path)
     bad["files"]["scripts/不存在的文件.py"] = ["C18-ENTRY-SET"]
-    bad["files"]["scripts/run_example.py"] = ["C99-不存在"]
-    bad["files"]["no/such/dir/"] = ["C18-UPSTREAM-BYTES"]
+    bad["files"]["scripts/evaluate.py"] = ["C99-不存在"]
+    bad["files"]["no/such/dir/"] = ["C18-SUBMODULE-LOCK"]
     r = check_inventory(bad, tracked)
     assert not r["ok"]
     assert "scripts/不存在的文件.py" in r["stale"] and "no/such/dir/" in r["stale"]
-    assert ("scripts/run_example.py", "C99-不存在") in r["unknown"]
+    assert ("scripts/evaluate.py", "C99-不存在") in r["unknown"]
 
 
 def test_negative_nodeid_not_collected_fails(total, collected, tmp_path):
@@ -314,10 +315,10 @@ def test_negative_bad_exempt_and_both_fail(total, tracked, tmp_path):
 def test_negative_delta_id_collision_fails(total, collected):
     """同 id 跨块且 source 不相交（两份不同契约撞号）必须报冲突；source 相交的同 id 只是同一契约的补充。"""
     fake = {
-        "tests/a/contracts.delta.json": [{"id": "C16.99", "source": ["scripts/injection-dev/site_build.py"]}],
-        "tests/b/contracts.delta.json": [{"id": "C16.99", "source": "scripts/parity/noise_run_gl.sh"}],
-        "tests/c/contracts.delta.json": [{"id": "C08.98", "source": ["src/robomme/x/A.py", "src/robomme/x/B.py"]}],
-        "tests/d/contracts.delta.json": [{"id": "C08.98", "source": "src/robomme/x/B.py、src/robomme/x/C.py"}],
+        "tests/a/contracts.delta.json": [{"id": "C16.99", "source": ["dev-scripts/site/site_build.py"]}],
+        "tests/b/contracts.delta.json": [{"id": "C16.99", "source": "dev-scripts/parity/noise_run_gl.sh"}],
+        "tests/c/contracts.delta.json": [{"id": "C08.98", "source": ["src/x/A.py", "src/x/B.py"]}],
+        "tests/d/contracts.delta.json": [{"id": "C08.98", "source": "src/x/B.py、src/x/C.py"}],
     }
     assert delta_conflicts(fake) == [("C16.99", "tests/a/contracts.delta.json", "tests/b/contracts.delta.json")]
     r = check_contracts(total, collected, fake)

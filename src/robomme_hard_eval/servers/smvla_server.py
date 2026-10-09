@@ -1,6 +1,6 @@
 """SimpleMemVLA 推理 server（v7.5eval 方案 §2.3；新接口的策略侧）。
 
-运行在独立子项目 venv（artifacts/v7.5eval/venvs/smvla-env，由 scripts/eval-official/smvla-env/ 锁定；Python 3.10、torch 2.4.1+cu121），
+运行在独立子项目 venv（envs/smvla-env/ 的 pyproject.toml 与 uv.lock 锁定；Python 3.10、torch 2.4.1+cu121），
 PYTHONPATH 指子模块 third_party/SimpleMemVLA（c564c17）根目录；环境不在本进程（口径 3）。
 
 策略构建直接 import 上游 ``robomme_sim.eval_success.build_policy``：该模块顶层只 import
