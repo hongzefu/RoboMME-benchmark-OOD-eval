@@ -18,6 +18,10 @@
 #     [--trajectory-cap 26 --reset-cap 60 --shared-infra-cap 0 --expired-cap 0 --planned-first-tries 26] \
 #     [--infra-retries 0] [--client-restarts 0] [--noprog-s 2700] [--poll-s 30] [--term-grace-s 90] \
 #     [--qwenvl-groundsg-adapter D] [--memer-adapter D] [其余 --<名> <值> 原样透传给 seat.py（模型参数）]
+# ckpt（1009 拆分计划：评估包不再内置缺省 ckpt）：透传参数里没有 --ckpt（或 --cfg ckpt=…）时，按策略从
+# dev-scripts/gl/ckpt_paths.sh 取缺省路径（`bash ckpt_paths.sh <模型>`，可用 FRAMESAMP_MODUL_CKPT／GROUNDSG_CKPT／
+# SMVLA_CKPT 覆盖）显式传 --ckpt，并打印 GL_CKPT 行；这三个模型取不到路径即 RUN_INPUTS=FAIL reason=ckpt_missing_<模型>。
+# 没有缺省的模型（pp 等）不补，仍须调用方自己给 --ckpt。
 # 预算缺省值即拆分方案 §五预算表（身份执行 26、计量 60 两个硬上限，基础设施重试 0）；共享账本 config 行会与之比对，
 # 本机 Astra 等其他入口必须给同一组上限。
 # 解释器：BENCH_PY（缺省 <repo>/.venv/bin/python）；起跑前打印 RUN_INPUTS 行，robomme_ood_eval 不在 <repo>/src 下、
@@ -178,6 +182,25 @@ pkg="$( cd "$REPO" && "$BENCH_PY" -c 'import robomme_ood_eval, robomme_hard; pri
 eval_file="${pkg%% *}" ; hard_file="${pkg##* }"
 [[ "$eval_file" == "$REPO/src/robomme_ood_eval/__init__.py" ]] || why+=("robomme_ood_eval_not_in_repo")
 [[ "$hard_file" == */robomme_hard/__init__.py ]] || why+=("robomme_hard_import")
+# ckpt：调用方已给（--ckpt V、--ckpt=V、--cfg ckpt=V）则原样透传；否则按策略取 ckpt_paths.sh 的缺省路径
+PASS_HAS_CKPT=0
+for ((_i = 0; _i < ${#PASS[@]}; _i++)); do
+  case "${PASS[$_i]}" in
+    --ckpt|--ckpt=*) PASS_HAS_CKPT=1;;
+    --cfg) [[ "${PASS[$((_i + 1))]:-}" == ckpt=* ]] && PASS_HAS_CKPT=1;;
+    --cfg=ckpt=*) PASS_HAS_CKPT=1;;
+  esac
+done
+declare -A POL_CKPT=()
+if (( PASS_HAS_CKPT == 0 )); then
+  for pol in "${POLS[@]}"; do
+    case "$pol" in
+      perceptual-framesamp-modul|groundsg|smvla)
+        POL_CKPT[$pol]="$(bash "$HERE/ckpt_paths.sh" "$pol" 2>/dev/null)"
+        [[ -n "${POL_CKPT[$pol]}" ]] || why+=("ckpt_missing_$pol");;
+    esac
+  done
+fi
 CPUS="$("$BENCH_PY" -c 'import os;print(",".join(map(str,sorted(os.sched_getaffinity(0)))))' 2>/dev/null)"
 verdict=PASS; (( ${#why[@]} == 0 )) || verdict=FAIL
 echo "RUN_INPUTS=$verdict repo=$REPO bench_py=$BENCH_PY robomme_ood_eval=${eval_file:-IMPORT_FAIL} \
@@ -191,6 +214,15 @@ echo "GL_SEAT_START run=$RUN_NAME policies=$POLICIES variant=${GROUNDSG_VARIANT:
 budget_ledger=$BUDGET_LEDGER caps=$TRAJECTORY_CAP/$RESET_CAP/$SHARED_INFRA_CAP/$EXPIRED_CAP/$PLANNED_FIRST_TRIES \
 infra_retries=$INFRA_RETRIES client_restarts=$CLIENT_RESTARTS noprog_s=$NOPROG_S poll_s=$POLL_S gpus=$GPUS \
 seat=${SEAT:-auto} passthrough=${PASS[*]:-none} $(ts_iso)"
+for pol in "${POLS[@]}"; do
+  if (( PASS_HAS_CKPT == 1 )); then
+    echo "GL_CKPT policy=$pol source=passthrough"
+  elif [[ -n "${POL_CKPT[$pol]:-}" ]]; then
+    echo "GL_CKPT policy=$pol source=ckpt_paths.sh ckpt=${POL_CKPT[$pol]}"
+  else
+    echo "GL_CKPT policy=$pol source=none（该模型无缺省 ckpt，须调用方给 --ckpt）"
+  fi
+done
 
 # ---------------- 主流程 ----------------
 for pol in "${POLS[@]}"; do
@@ -203,6 +235,7 @@ for pol in "${POLS[@]}"; do
           --planned-first-tries "$PLANNED_FIRST_TRIES" --infra-retries "$INFRA_RETRIES" --gpus "$GPUS")
     [[ "$pol" == "groundsg" ]] && args+=(--groundsg-variant "$GROUNDSG_VARIANT")
     [[ -n "$SEAT" ]] && args+=(--seat "$SEAT")
+    [[ -n "${POL_CKPT[$pol]:-}" ]] && args+=(--ckpt "${POL_CKPT[$pol]}")
     args+=("${PASS[@]}")
     CUR_LOG="$OUT/logs/client-$lab-$(hostname)-$$-r$restarts.log"
     echo "GL_CLIENT_START policy=$lab restart=$restarts log=$CUR_LOG $(ts_iso)"
