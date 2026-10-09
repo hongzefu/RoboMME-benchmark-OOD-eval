@@ -43,6 +43,14 @@ def env_client():
     return load_script("eval-official/env_client.py")
 
 
+def env_session():
+    """拆仓后 ``EnvSession``、``NullRecorder``、``StepCapReached``、``RecorderError``、``ResetBudgetExhausted`` 在评估包
+    ``robomme_hard_eval.session``（原在 env_client.py；``env_client()`` 现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
+    from robomme_hard_eval import session
+
+    return session
+
+
 def framesamp_modul_client():
     return load_script("eval-official/framesamp_modul_client.py")
 
@@ -481,18 +489,27 @@ def _make_policy_classes():
             super().__init__(policy_seed, **cfg)
             self.mod, self.policy_name = mod, policy_name
             self.ctx = None
+            # 模块可带 conn_extra（如 GroundSG 的变体与 adapter），并入每局 conn_info 与 make_policy_context 的入参
+            self.conn_extra = dict(getattr(mod, "conn_extra", None) or {})
 
         def play(self, session, spec, recorder) -> dict:
             make = getattr(self.mod, "make_policy_context", None)
             if self.ctx is None:
-                self.ctx = make({"policy": self.policy_name, "max_steps": spec.max_steps,
-                                 "policy_seed": self.policy_seed, "dataset": spec.dataset}) if callable(make) else {}
+                self.ctx = make({"policy": self.policy_name, "max_steps": spec.max_steps, "host": "127.0.0.1",
+                                 "port": 1, "policy_seed": self.policy_seed, "dataset": spec.dataset,
+                                 **self.conn_extra}) if callable(make) else {}
             ident = dict(spec.identity())
+            # 与 servers.ServedPolicy._conn_info 同口径：effective_cap 只在 strict 时给；轨迹落在本局 raw 目录
             conn_info = {"host": "127.0.0.1", "port": 1, "max_steps": spec.max_steps, "policy": self.policy_name,
                          "dataset": spec.dataset, "strict_cap": spec.strict_cap, "policy_seed": self.policy_seed,
+                         "effective_cap": spec.max_steps if spec.strict_cap else None,
                          "trace_dir": spec.out_dir, "episode_tag": Path(spec.out_dir).name, "rec_dir": spec.out_dir,
-                         "policy_context": self.ctx}
-            res = dict(self.mod.run_episode(session, ident, conn_info, recorder))
+                         "policy_context": self.ctx, **self.conn_extra}
+            # 旧 SeatRunner 的口径：模块的 run_episode 接受 max_steps／reset_retries 关键字时显式传本局上限与 0 次 reset 重试
+            # （SimpleMemVLA 的 hard_bound 由 max_steps 算）；只读 conn_info 的模块不传
+            kw = {k: v for k, v in (("max_steps", spec.max_steps), ("reset_retries", 0))
+                  if _accepts(self.mod.run_episode, k)}
+            res = dict(self.mod.run_episode(session, ident, conn_info, recorder, **kw))
             res.setdefault("error", None)
             res.setdefault("infra", False)
             res.setdefault("infra_reason", None)
@@ -501,6 +518,15 @@ def _make_policy_classes():
             return res
 
     return FakeSeatPolicy, ModulePolicy
+
+
+def _accepts(fn, name: str) -> bool:
+    import inspect
+
+    try:
+        return name in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 def fake_seat_policy(server: "FakePolicyServer | None" = None, seed: int = 7):

@@ -404,5 +404,6 @@ def test_orig_runner_imports_only_official_robomme():
     assert out.returncode == 0, out.stdout + out.stderr
     line = [x for x in out.stdout.splitlines() if x.startswith("OFFICIAL_IMPORTS=")][-1]
     assert line.startswith("OFFICIAL_IMPORTS=PASS") and line.endswith("robomme_hard_imported=0")
-    assert f"robomme={REPO / 'src' / 'robomme'}" in line
+    # 拆仓后 robomme 只在 benchmark 子模块里（评估仓没有 src/robomme 副本）
+    assert f"robomme={REPO / 'third_party' / 'robomme_benchmark' / 'src' / 'robomme'}" in line
     print(f"PP_ORIG_IMPORTS=PASS {line}")

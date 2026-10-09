@@ -8,8 +8,9 @@ runbook」第二段（cap 在 reserve／retry／report 三入口一致读取、�
 
 已有用例覆盖的反例（见交回报告的覆盖审计表）不在此重复；这里只补：
 
-1. 各块的检查器（``trace_arrays_check``、``lang_io_check``）此前只喂手写夹具。本文件让六条 env_client 路线的**真实客户端**
-   经 ``SeatRunner`` 产出 trace／arrays.npz／language.jsonl（另加 3-tier Astra 一局），不做任何规范化直接判 PASS，再在
+1. 各块的检查器（``trace_arrays_check``、``lang_io_check``）此前只喂手写夹具。本文件让六条席位路线的**真实客户端**
+   经 GL 席位 ``SeatRunner``（常驻 Policy）产出 trace／arrays.npz／language.jsonl（另加 3-tier Astra 一局，经
+   ``AstraPolicy``），不做任何规范化直接判 PASS，再在
    副本上逐个注入：篡改一个动作字节、给缺观测步补零、删一个观测步的状态、改一个附图引用哈希、删一个调用的关闭行，
    各自被对应计数拦下。
 2. 换种子：同一身份在种子 7 已 accepted，种子 42 用独立目录与同一共享预算账本时照常重新跑（账本 token 路线各带种子）；
@@ -83,26 +84,19 @@ def _run_routes(tmp: Path, monkeypatch) -> tuple[Path, dict]:
             ident = R.ood_identity()
             assert F.run_rows(runner, [ident]) == 0
         (row,) = F.read_jsonl(runner.results_path)
-        assert row["status"] == ("success" if tag == "ok" else "error"), (route, tag, row.get("error"))
-        src = Path(runner.trace_root) / f"{ident['key']}.a1"
-        dst = root / route / tag / src.name
+        # 拆仓后 error 并入 fail、原终态记 error_kind（已定口径第 5 条）
+        want = ("success", None) if tag == "ok" else ("fail", "error")
+        assert (row["status"], row.get("error_kind")) == want, (route, tag, row.get("error"))
+        src = R.raw_dir(runner, ident)  # 本局 raw 目录：trace.jsonl、arrays.npz、language.jsonl 都在这里
+        dst = root / route / tag / f"{ident['key']}.a1"
         shutil.copytree(src, dst)
         where[(route, tag)] = dst
-    # 3-tier Astra：零外联夹具跑一局（hard-verify BinFill，20 步成功），局目录同样收进根
+    # 3-tier Astra：零外联全替身 AstraPolicy 跑一局（hard-verify BinFill，20 步成功），本局 raw 目录同样收进根
     with monkeypatch.context() as mp:
-        net = R.A.NetCounter().install(mp)
-        with R.A.astra_session() as (mod, astra):
-            cls = R.A.recording_builder_cls(lambda b, ep: R.A.FakeEnv(terminal_step=20))
-            doc = mod.prepare_cases(cls, "hard-verify", ["BinFill"], source_episodes=[3])
-            args = R.A.make_args(tmp / "astra", R.A.write_cases(tmp / "astra" / "c.json", doc), max_steps=1300)
-            mp.setattr(astra.runner.imageio, "get_writer", lambda *a, **k: R._NullWriter())
-            deps = R.A.make_deps(astra, cls, monitor=R.A.FakeMonitor(), vla=R.A.FakeVLA(),
-                                 responder=R.A.FakeResponder(astra.champ), check_calls=[])
-            (result,) = mod.run_cases(args, deps)["results"]
-        assert result["status"] == "success" and net.calls == 0
-    src = R._a_dir(Path(args.output), "BinFill", 0)
-    dst = root / "astra" / "ok" / src.name
-    shutil.copytree(src, dst)
+        h, r, net = R.astra_run(tmp / "astra", mp, seed=7, dataset="hard-verify", task="BinFill")
+        assert r.status == "success" and net.calls == 0
+    dst = root / "astra" / "ok" / f"{r.key}.a1"
+    shutil.copytree(h.raw(r), dst)
     where[("astra", "ok")] = dst
     return root, where
 

@@ -166,8 +166,8 @@
     ],
     "resource": "cpu",
     "mutants": [],
-    "status": "planned",
-    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，待主会话合并后跑通再改 verified。"
+    "status": "verified",
+    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，旧仓主会话合并后实跑通过、总表已记 verified；拆仓后在评估仓日常门禁（MERGE-1，not slow）里照样收集并通过。"
   },
   {
     "id": "C13-SG-LANG-IO",
@@ -194,8 +194,8 @@
     ],
     "resource": "cpu",
     "mutants": [],
-    "status": "planned",
-    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，待主会话合并后跑通再改 verified。"
+    "status": "verified",
+    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，旧仓主会话合并后实跑通过、总表已记 verified；拆仓后在评估仓日常门禁（MERGE-1，not slow）里照样收集并通过。"
   },
   {
     "id": "C13-SG-GATE2-HOST-LANG",
@@ -216,7 +216,7 @@
     ],
     "resource": "cpu",
     "mutants": [],
-    "status": "planned",
-    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，待主会话合并后跑通再改 verified。"
+    "status": "verified",
+    "note": "R7（1006 第三阶段）写成；R7 worktree 内 pytest 被宿主拦截未能执行，旧仓主会话合并后实跑通过、总表已记 verified；拆仓后在评估仓日常门禁（MERGE-1，not slow）里照样收集并通过。"
   }
 ]

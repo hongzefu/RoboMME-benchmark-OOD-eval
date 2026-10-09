@@ -4,17 +4,21 @@
 判定行（本文件打印原文）：
 
 * ``EVAL_CAP=PASS``：ood 严格上限 1800——第 1800 次 step 照常进环境、第 1801 次在进入环境前被拒（``cap_hit``、终态
-  timeout、``effective_cap=1800``）；hard-verify 不 strict（第 1301 次照常进环境，``effective_cap`` 为 null）；席位脚本
-  只放行 ``ood↔1800 strict``、``hard-verify↔1300``。
+  timeout，局结果 ``max_steps=1800 strict_cap=true``）；hard-verify 不 strict（第 1301 次照常进环境，局结果
+  ``max_steps=1300 strict_cap=false``）；步数口径只由数据集决定（``EpisodeSpec``），没有可配错的参数。
 * ``POLICY_SEEDS=PASS``：种子 0／7／42 贯通到四类服务命令（MME-VLA 外壳 ``--seed=``、MemER 同一命令、smvla
-  ``--policy-seed``、pp ``--args.seed``）、客户端 argv、``seat_info``、结果行 ``policy_seed``／``server_seed``（从服务元数据
-  反查）、账本路线 ``…/seed<n>/new``；缺失即 ``RUN_BLOCKED reason=policy_seed``；smvla 每局 reseed 用该种子。
+  ``--policy-seed``、pp ``--args.seed``）、席位交给 ``load_policy`` 的种子与变体参数、结果行 ``policy_seed``／
+  ``server_seed``（从服务元数据反查）、账本路线 ``…/seed<n>/new``；缺失即 ``RUN_BLOCKED reason=policy_seed``；smvla 每局
+  reseed 用该种子。
 * ``BUDGET_ENFORCEMENT=PASS``：坏行即拒、补换行、config 不一致拒、同 token 幂等不重复扣、恢复挤占首试额度被拒
   （``planned_first_tries=821, trajectory_cap=870`` 下第 50 次恢复被拒、821 份首试仍全部可预约）、lease 被占
   ``RUN_BLOCKED``、缺预算参数 ``RUN_BLOCKED``、不给 ``--reset-budget`` 时只计量不拦、retry／reserve／attempt_start 共用
   同一 token。
-* ``DEADLINES=PASS``：上下文加载、首推、媒体收尾三处期限到时以 ``infra_reason=deadline_<phase>`` 结束本局、退出码 75，
-  续跑重试一次即成功；``progress.json`` 记具名阶段；席位脚本的无进展只认 phase／identity／step 变化。
+* ``DEADLINES=PASS``：首推、媒体收尾两处期限到时以 ``infra_reason=deadline_<phase>`` 记局结果、席位先结算
+  （``watchdog_exit``）再退 75，重起客户端重试一次即成功；席位与单局两份 ``progress.json`` 都记具名阶段。拆仓后上下文
+  加载（``load_policy``）不再有单独期限。
+* ``LEASE_BY_DATASET=PASS``：lease 按「路线 + 席位名」，两个席位同路线可并行、同席位名重复启动被拦；两个数据集同在
+  一个动态队列里，靠队列键区分。
 * ``OBS_EQ=PASS``：``SGEVAL_AUDIT=0/1`` 两种下 MME-VLA 外壳（假模型）与 smvla 服务的回包除审计键外逐字节相同、随机数
   状态相同、推理次数相同；多推理一次的坏外壳被比较器查出；审计里的通道原文、token id、mask、截断与真实分词一致。
 """
@@ -23,11 +27,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
-import re
-import subprocess
-import sys
 import threading
-import time
 import types
 from pathlib import Path
 
@@ -41,7 +41,6 @@ from tests._support.loaders import load_script
 
 #: 旧仓 run_seat.sh 不迁（拆分方案第二部分 §二）：起服务端的命令与种子核对改由 ``robomme_hard_eval.servers`` 与各模型
 #: Policy 子类承担，本文件对应断言改接到那里；席位脚本的预算参数核对与无进展检测归 GL 席位（dev-scripts/gl）。
-EO = F.REPO / "scripts" / "eval-official"
 CAPS = {"trajectory_cap": 870, "shared_infra_cap": 50, "expired_cap": 50, "planned_first_tries": 821}
 CAP_ARGV = ["--trajectory-cap", "870", "--shared-infra-cap", "50", "--expired-cap", "50", "--planned-first-tries", "821"]
 SEEDS = (0, 7, 42)
@@ -50,12 +49,6 @@ HARD0_TASK = "PickXtimes"
 
 def bl():
     return load_script("eval-official/budget_ledger.py")
-
-
-def _bash(script: str, **env) -> subprocess.CompletedProcess:
-    e = dict(os.environ, EO=str(EO), **{k: str(v) for k, v in env.items()})
-    e.pop("POLICY_SEED", None)
-    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=e, timeout=60)
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +73,7 @@ def _step_until_cap_policy():
         try:
             while True:
                 session.step(np.zeros(8, dtype=np.float32))
-        except F.env_client().StepCapReached:
+        except F.env_session().StepCapReached:
             pass
         return {"status": "fail", "steps": session.steps, "infra": False, "error": None}
     return types.SimpleNamespace(run_episode=run_episode)
@@ -107,7 +100,7 @@ def _short_policy():
 
 
 def test_eval_cap_1800_strict_and_hard_verify_not_strict(tmp_path):
-    ec = F.env_client()
+    ec = F.env_session()
     world = F.World(default=F.Plan())  # 永不终止
     a = np.zeros(8, dtype=np.float32)
     s = ec.EnvSession("T", 0, builder=_Builder(world), step_cap=1800)
@@ -136,19 +129,26 @@ def test_eval_cap_1800_strict_and_hard_verify_not_strict(tmp_path):
         bad += int(E.DATASET_MAX_STEPS[d] != ms or (spec.max_steps, spec.strict_cap) != (ms, strict)
                    or (conn["max_steps"], conn["strict_cap"], conn["effective_cap"]) != (ms, strict, eff))
     with pytest.raises(ValueError):
-        E.EpisodeSpec(**{**vars(_fake_spec("ood", pol, tmp_path)), "dataset": "test-hard"})
+        E.EpisodeSpec(**{**vars(_fake_spec("ood", pol, tmp_path)), "dataset": "test"})  # 官方 test 不是评估数据集名
     assert bad == 0 and set(E.DATASET_MAX_STEPS) == set(want)
-    # SeatRunner：ood 1800 strict → timeout、cap_hit、effective_cap=1800；结果行与 progress 都记 effective_cap
+    # SeatRunner（拆仓后常驻 Policy + 动态队列）：ood 1800 strict → timeout、cap_hit、第 1801 步不进环境；局结果
+    # result.json 记 max_steps=1800、strict_cap=true。拆仓后席位不再有 effective_cap／seat_info（步数口径归 EpisodeSpec），
+    # 改核局结果里的 max_steps／strict_cap 两键
     task, tier = F.v9_cells_sorted()[0]
     ident = F.packaged_identity(task, tier, 0)
-    runner = F.make_runner(tmp_path / "ood", "pp", _step_until_cap_policy(), F.World(default=F.Plan()),
-                           max_steps=1800, policy_seed=7)
+    world_ood = F.World(default=F.Plan())
+    runner = F.make_runner(tmp_path / "ood", "pp", _step_until_cap_policy(), world_ood, policy_seed=7)
     assert F.run_rows(runner, [ident]) == 0
     (row,) = F.read_jsonl(runner.results_path)
-    assert (row["status"], row["cap_hit"], row["exec_steps"], row["effective_cap"]) == ("timeout", True, 1800, 1800)
-    assert json.loads(runner.progress_path.read_text())["effective_cap"] == 1800
-    hv = F.make_runner(tmp_path / "hv", "pp", _short_policy(), F.World(), dataset="hard-verify", policy_seed=7)
-    assert hv.effective_cap is None and hv.seat_info()["effective_cap"] is None
+    assert (row["status"], row["cap_hit"], row["exec_steps"]) == ("timeout", True, 1800)
+    assert world_ood.envs[-1].n == 1800
+    res = json.loads(Path(row["result"]).read_text())
+    assert (res["max_steps"], res["strict_cap"], res["status"], res["cap_hit"]) == (1800, True, "timeout", True)
+    hv = F.make_runner(tmp_path / "hv", "pp", _short_policy(), F.World(), policy_seed=7)
+    assert F.run_rows(hv, [F.hard0_identity(HARD0_TASK, 0)]) == 0
+    (hrow,) = F.read_jsonl(hv.results_path)
+    hres = json.loads(Path(hrow["result"]).read_text())
+    assert (hres["max_steps"], hres["strict_cap"], hres["dataset"]) == (1300, False, "hard-verify")
 
     print(f"EVAL_CAP=PASS ood_cap=1800 step_1800_entered=1 step_1801_entered=0 hard_verify_strict=0 pairing_cases={len(want)}")
 
@@ -239,12 +239,9 @@ def test_policy_seeds_reach_servers_clients_seat_info_and_results(tmp_path):
                     and p.label == f"groundsg-{variant}"
             mismatches += int(not good)
             assert good, (pol, variant, wrap_on, seed, srv, conn)
-        # 进程内：seat_info、conn_info、结果行、账本路线、server_seed 反查（MemER 变体走同一套）
-        calls = {"seat": [], "conn": []}
-
-        def make_policy_context(seat_info):
-            calls["seat"].append(dict(seat_info))
-            return {}
+        # 进程内（拆仓后）：种子与变体经 load_policy(model, seed, **cfg) 交给常驻 Policy；conn_info、结果行、账本路线、
+        # server_seed 反查（服务端元数据的 policy_seed，Policy.server_seed）。旧 make_policy_context(seat_info) 已不存在。
+        calls = {"factory": [], "conn": []}
 
         def run_episode(session, identity, conn_info, recorder):
             calls["conn"].append({k: v for k, v in conn_info.items() if k != "policy_context"})
@@ -256,23 +253,30 @@ def test_policy_seeds_reach_servers_clients_seat_info_and_results(tmp_path):
         adapter.mkdir()
         ledger = tmp_path / f"budget-{seed}.jsonl"
         stage = tmp_path / f"stage-{seed}"
-        runner = F.make_runner(stage, "groundsg", types.SimpleNamespace(make_policy_context=make_policy_context,
-                                                                         run_episode=run_episode), F.World(),
-                               dataset="hard-verify", policy_dir="groundsg-ground-sg-memer",
+        runner = F.make_runner(stage, "groundsg", types.SimpleNamespace(run_episode=run_episode), F.World(),
                                groundsg_variant="ground-sg-memer", memer_adapter=str(adapter), policy_seed=seed,
                                budget_ledger=str(ledger), **CAPS)
-        (runner.out / "server-metadata-1.json").write_text(json.dumps({"policy_seed": seed, "argv": ["x"]}))
+        pol = runner.fake_policy
+        srv = types.SimpleNamespace(metadata={"policy_seed": seed}, left_line=lambda: "", check=lambda: None,
+                                    stop=lambda **k: "stopped")  # 假服务端：只带元数据（种子反查用）
+        pol.servers = lambda srv=srv: [srv]
+
+        def factory(model, pseed, **cfg):
+            calls["factory"].append((model, pseed, cfg))
+            return pol
+        runner.policy_factory = factory
         ident = F.hard0_identity(HARD0_TASK, 0)
         assert F.run_rows(runner, [ident]) == 0
         runner.close()
-        si = calls["seat"][0]
-        assert (si["policy_seed"], si["groundsg_variant"], si["memer_adapter_path"], si["budget_ledger"],
-                si["effective_cap"]) == (seed, "ground-sg-memer", str(adapter), str(ledger), None)
-        assert calls["conn"][0]["policy_seed"] == seed and calls["conn"][0]["memer_adapter_path"] == str(adapter)
+        assert calls["factory"] == [("groundsg", seed, {"groundsg_variant": "ground-sg-memer",
+                                                         "memer_adapter": str(adapter)})]
+        assert calls["conn"][0]["policy_seed"] == seed and calls["conn"][0]["dataset"] == "hard-verify"
         (row,) = F.read_jsonl(runner.results_path)
         route = f"groundsg/ground-sg-memer/seed{seed}/new"
-        assert (row["policy_seed"], row["server_seed"], row["policy_variant"], row["memer_compat_sha256"]) == \
-            (seed, seed, "ground-sg-memer", "c" * 64)
+        assert runner.route == route and runner.label == "groundsg-ground-sg-memer"
+        res = json.loads(Path(row["result"]).read_text())
+        assert (row["policy_seed"], res["policy_seed"], res["server_seed"], res["memer_compat_sha256"]) == \
+            (seed, seed, seed, "c" * 64)
         assert row["budget_token"] == f"{route}|{ident['key']}|a1" and row["error_kind"] is None
         res = [r for r in F.read_jsonl(ledger) if r["kind"] == "reserve"]
         assert [(r["route"], r["token"], r["kind_of_try"]) for r in res] == [(route, row["budget_token"], "first")]
@@ -285,9 +289,8 @@ def test_policy_seeds_reach_servers_clients_seat_info_and_results(tmp_path):
         srv_mod.reseed(seed)
         assert got == srv_mod.rng_digest()
     # 缺失 → RUN_BLOCKED reason=policy_seed（CLI 与席位脚本两处）
-    base = ["run", "--identities", "x.json", "--cond", "c", "--seat", "s", "--port", "1", "--out", str(tmp_path / "o"),
-            "--policy", "pp", "--dataset", "hard-verify", "--max-steps", "1300", "--ledger", "l.jsonl",
-            "--infra-retry-budget", "1", "--budget-ledger", "b.jsonl", *CAP_ARGV]
+    base = ["run", "--identities", "x.json", "--seat", "s", "--out", str(tmp_path / "o"), "--policy", "pp",
+            "--budget-ledger", "b.jsonl", "--reset-cap", "20", *CAP_ARGV]
     assert ec.entry_blockers(ec.build_parser().parse_args(base))[0] == "policy_seed"
     assert ec.entry_blockers(ec.build_parser().parse_args(base + ["--policy-seed", "-1"]))[0] == "policy_seed"
     assert ec.entry_blockers(ec.build_parser().parse_args(base + ["--policy-seed", "42"])) is None
@@ -306,9 +309,8 @@ def test_variant_pairing_memer_cli(tmp_path, capsys):
     ec = F.env_client()
     adapter = tmp_path / "memer"
     adapter.mkdir()
-    base = ["run", "--identities", "x.json", "--cond", "c", "--seat", "s", "--port", "1", "--out", str(tmp_path / "o"),
-            "--policy", "groundsg", "--dataset", "hard-verify", "--max-steps", "1300", "--ledger", "l.jsonl",
-            "--infra-retry-budget", "1", "--budget-ledger", "b.jsonl", *CAP_ARGV, "--policy-seed", "7"]
+    base = ["run", "--identities", "x.json", "--seat", "s", "--out", str(tmp_path / "o"), "--policy", "groundsg",
+            "--budget-ledger", "b.jsonl", "--reset-cap", "20", *CAP_ARGV, "--policy-seed", "7"]
     cases = {
         "memer_no_adapter": (["--groundsg-variant", "ground-sg-memer"], "--memer-adapter"),
         "memer_missing_dir": (["--groundsg-variant", "ground-sg-memer", "--memer-adapter", str(tmp_path / "nope")], "目录不存在"),
@@ -317,11 +319,11 @@ def test_variant_pairing_memer_cli(tmp_path, capsys):
         "oracle_with_memer": (["--groundsg-variant", "ground-sg-oracle", "--memer-adapter", str(adapter)], "--memer-adapter"),
     }
     for name, (extra, why) in cases.items():
-        rc = ec.cmd_run(ec.build_parser().parse_args(base + extra))
+        rc = ec.main(base + extra)
         out = capsys.readouterr().out
         assert rc == 3 and "RUN_BLOCKED reason=variant_pairing" in out and why in out, (name, out)
     ok = ec.build_parser().parse_args(base + ["--groundsg-variant", "ground-sg-memer", "--memer-adapter", str(adapter)])
-    assert ec.check_run_args(ok, need_identities=True) is None and ec.entry_blockers(ok) is None
+    assert ec.entry_blockers(ok) is None and ec.variant_problems(ok, check_dirs=True) == []
 
 
 # ═════════════════════════════════ BUDGET_ENFORCEMENT ═════════════════════════════════
@@ -358,7 +360,7 @@ def test_budget_enforcement_counterexamples(tmp_path, monkeypatch, capsys):
     p3 = tmp_path / "cfg.jsonl"
     bm.BudgetLedger(p3, **CAPS).check()
     (cfg,) = [r for r in F.read_jsonl(p3) if r["kind"] == "config"]
-    assert {k: cfg[k] for k in CAPS} == CAPS and cfg["schema"] == "sgeval-budget/2"
+    assert {k: cfg[k] for k in CAPS} == CAPS and cfg["schema"] == "sgeval-budget/3"
     for k in CAPS:
         with pytest.raises(bm.BudgetConfigMismatch):
             bm.BudgetLedger(p3, **dict(CAPS, **{k: CAPS[k] + 1})).reserve(resets=1)
@@ -424,26 +426,25 @@ def test_budget_enforcement_counterexamples(tmp_path, monkeypatch, capsys):
     ident = F.packaged_identity(task, tier, 0)
     runner = F.make_runner(tmp_path / "lease-stage", "pp", _short_policy(), world, policy_seed=7,
                            budget_ledger=str(p6), **CAPS)
-    sid = ec.shard_id_of(runner.ledger.route, None, "s00")
+    sid = ec.shard_id_of(runner.ledger.route, "s00")
     with led6.lease(sid):
         assert F.run_rows(runner, [ident]) == 3
     assert "RUN_BLOCKED reason=lease_held" in capsys.readouterr().out and world.envs == []
     assert not runner.results_path.exists()
     cases += 1
     # 7 缺预算参数：CLI 拦 reason=budget_args（不回落常量默认值）；席位脚本同样拦
-    base = ["run", "--identities", "x.json", "--cond", "c", "--seat", "s", "--port", "1", "--out", str(tmp_path / "o7"),
-            "--policy", "pp", "--dataset", "hard-verify", "--max-steps", "1300", "--ledger", "l.jsonl",
-            "--infra-retry-budget", "1", "--policy-seed", "7"]
-    full = base + ["--budget-ledger", "b.jsonl", *CAP_ARGV]
+    base = ["run", "--identities", "x.json", "--seat", "s", "--out", str(tmp_path / "o7"), "--policy", "pp",
+            "--policy-seed", "7"]
+    full = base + ["--budget-ledger", "b.jsonl", "--reset-cap", "20", *CAP_ARGV]
     assert ec.entry_blockers(ec.build_parser().parse_args(full)) is None
     for i in range(0, len(full) - len(base), 2):
         argv = full[:len(base) + i] + full[len(base) + i + 2:]
         blk = ec.entry_blockers(ec.build_parser().parse_args(argv))
         assert blk is not None and blk[0] == "budget_args", argv
-        assert ec.cmd_run(ec.build_parser().parse_args(argv)) == 3
+        assert ec.main(argv) == 3
         assert "RUN_BLOCKED reason=budget_args" in capsys.readouterr().out
-    # 旧 run_seat.sh::budget_args_check 的同项核对（不迁，席位入口只剩上面的 entry_blockers）见
-    # test_seat_shell_budget_args_check（待 GL 席位脚本合并后改接）
+    # 旧 run_seat.sh::budget_args_check 不迁：GL 外壳只核必需参数（test_seat_scripts::test_gl_required_args_exit_2），
+    # 六个预算参数一律由上面的 entry_blockers 拦
     cases += 1
     # 8 不给 --reset-budget：只计量（reset_claim 照写、budget 行 reset_budget=null），多局多次 reset 也不停；给 1 仍硬拦
     rows = [F.packaged_identity(task, tier, k) for k in range(3)]
@@ -503,107 +504,105 @@ def test_budget_enforcement_counterexamples(tmp_path, monkeypatch, capsys):
 # ═════════════════════════════════ DEADLINES ═════════════════════════════════
 
 
-def _deadline_runner(tmp_path, phase: str, world=None):
-    """第一次尝试在指定阶段卡住（等事件），期限 0.3 s；替换 _hard_exit 记下退出码并放行卡住的线程。"""
+class _Died(SystemExit):
+    """模拟看门狗 ``os._exit(75)`` 之后进程已死：被卡住的主线程醒来即退出，不再走后续收尾。"""
+
+
+def _deadline_runner(tmp_path, phase: str, world=None, *, stage=None):
+    """第一次尝试在指定阶段卡住（等事件），期限 0.3 s；注入的 hard_exit 记下退出码、放行卡住的线程，卡住处醒来后抛
+    ``_Died``（等价于进程已被 ``os._exit`` 杀掉）。拆仓后单局看门狗只管首推理与媒体收尾两个阶段期限（另有整局墙钟），
+    上下文加载（``load_policy``）不再有单独期限。"""
     ev = threading.Event()
     exits: list[int] = []
     calls = {"n": 0}
-
-    def make_policy_context(seat_info):
-        if phase == "context_load":
-            assert ev.wait(10)
-        return {}
 
     def run_episode(session, identity, conn_info, recorder):
         calls["n"] += 1
         session.reset()
         if phase == "first_infer" and calls["n"] == 1:
             assert ev.wait(10)
+            raise _Died(75)
         *_, info = session.step([0.0] * 8)
         return {"status": "fail", "steps": 1, "infra": False, "error": None}
 
-    mod = types.SimpleNamespace(make_policy_context=make_policy_context, run_episode=run_episode)
+    mod = types.SimpleNamespace(run_episode=run_episode)
     world = world or F.World()
-    runner = F.make_runner(tmp_path, "pp", mod, world, dataset="hard-verify", policy_seed=7,
-                           context_deadline_s=0.3, first_infer_deadline_s=0.3, media_deadline_s=0.3)
-    if phase == "media_finalize":
-        class _Slow(F.FakeRecorder):
-            n = 0
 
-            def close(self, summary):
-                _Slow.n += 1
-                if _Slow.n == 1:
-                    assert ev.wait(10)
-                return super().close(summary)
-        runner.recorder_factory = lambda d, m: _Slow(d, m, world)
-    runner._hard_exit = lambda code: (exits.append(code), ev.set())
+    class _Slow(F.FakeRecorder):
+        n = 0
+
+        def close(self, summary):
+            _Slow.n += 1
+            if phase == "media_finalize" and _Slow.n == 1:
+                assert ev.wait(10)
+                raise _Died(75)
+            return super().close(summary)
+
+    runner = F.make_runner(stage or tmp_path, "pp", mod, world, policy_seed=7,
+                           recorder_factory=lambda d, m: _Slow(d, m, world),
+                           hard_exit=lambda code: (exits.append(code), ev.set()))
+    runner.episode_kwargs.update(first_infer_s=0.3, media_s=0.3)
     return runner, exits
 
 
-@pytest.mark.parametrize("phase", ["context_load", "first_infer", "media_finalize"])
+@pytest.mark.parametrize("phase", ["first_infer", "media_finalize"])
 def test_deadline_ends_episode_as_infra_and_retry_succeeds(tmp_path, capsys, phase):
-    runner, exits = _deadline_runner(tmp_path, phase)
+    world = F.World()
+    runner, exits = _deadline_runner(tmp_path, phase, world)
     ident = F.hard0_identity(HARD0_TASK, 0)
-    assert F.run_rows(runner, [ident]) == 0
-    rows = F.read_jsonl(runner.results_path)
-    assert [(r["attempt_no"], r["status"], r["infra"], r.get("infra_reason")) for r in rows] == \
-        [(1, "error", True, f"deadline_{phase}"), (2, "fail", False, None)]
-    assert exits == [75] and f"DEADLINE_EXCEEDED phase={phase} policy=pp key={ident['key']}" in capsys.readouterr().out
-    led = F.read_jsonl(runner.ledger.path)
+    with pytest.raises(_Died):  # 第一次进程：看门狗到点、席位先结算再退 75
+        F.run_rows(runner, [ident])
+    assert exits == [75]
+    out = capsys.readouterr().out
+    assert f"INFRA_TIMEOUT phase={phase} key={ident['key']}" in out and "SEAT_WATCHDOG_EXIT" in out
+    # 重起客户端（同一席位名）：上一次尝试已由 _hard_exit 写 attempt_end，不算悬空；按 1 次基础设施重试再跑一次即成功
+    again, exits2 = _deadline_runner(tmp_path, "none", world)
+    assert F.run_rows(again, [ident]) == 0 and exits2 == []
+    rows = F.read_jsonl(again.results_path)
+    assert [(r["attempt"], r["status"], r["infra"], r.get("infra_reason")) for r in rows] == \
+        [(1, "error", True, "watchdog_exit"), (2, "fail", False, None)]
+    ep_rows = F.read_jsonl(Path(rows[-1]["result"]).parents[2] / "results.jsonl")
+    assert [(r["attempt"], r["status"], r["infra"], r["infra_reason"], r["error_kind"]) for r in ep_rows] == \
+        [(1, "fail", True, f"deadline_{phase}", "error"), (2, "fail", False, None, None)]
+    led = F.read_jsonl(again.ledger.path)
     assert [r["kind"] for r in led if r["kind"] in ("attempt_start", "attempt_end", "accept")] == \
         ["attempt_start", "attempt_end", "attempt_start", "attempt_end", "accept"]
-    prog = json.loads(runner.progress_path.read_text())
-    assert prog["phase"] == "done" and prog["identity"] == ident["key"] and prog["policy_seed"] == 7
+    prog = json.loads(again.progress_path.read_text())
+    assert prog["phase"] == "claim" and prog["episodes_done"] == 1 and prog["policy_seed"] == 7
 
 
-def test_progress_phases_and_seat_idle_reads_named_progress(tmp_path):
-    """progress.json 依次经过具名阶段；席位脚本的无进展计时只认 phase／identity／step 变化：同一签名重写（只刷新 t）
-    不重新计时，client.log 刷新也不算进展；签名一变即从该行的 t 重新计时。"""
-    seen = []
-    runner = F.make_runner(tmp_path / "p", "pp", _short_policy(), F.World(default=F.Plan(fail_at=3)),
-                           dataset="hard-verify", policy_seed=7)
+def test_progress_phases_and_seat_idle_reads_named_progress(tmp_path, monkeypatch):
+    """两份 progress.json 都经过具名阶段：席位层（``seats/…/progress.json``）context_load → claim → episode → done →
+    claim（再扫一遍无可领），单局层（``rollouts/…/progress.json``）reset → first_infer → episode → media_finalize → done。"""
+    seen, ep_seen = [], []
+    runner = F.make_runner(tmp_path / "p", "pp", _short_policy(), F.World(default=F.Plan(fail_at=3)), policy_seed=7)
     orig = runner.progress
 
-    def spy(step=0, **kw):
-        orig(step, **kw)
+    def spy(phase, **kw):
+        orig(phase, **kw)
         seen.append(json.loads(runner.progress_path.read_text())["phase"])
     runner.progress = spy
+    orig_ep = E._progress
+
+    def ep_spy(spec, phase, step=0):
+        orig_ep(spec, phase, step)
+        ep_seen.append(phase)
+    monkeypatch.setattr(E, "_progress", ep_spy)
     assert F.run_rows(runner, [F.hard0_identity(HARD0_TASK, 0)]) == 0
     dedup = [p for i, p in enumerate(seen) if i == 0 or p != seen[i - 1]]
-    assert dedup == ["context_load", "first_infer", "episode", "media_finalize", "done"]
+    assert dedup == ["context_load", "claim", "episode", "done", "claim"]
     assert set(seen) <= set(F.env_client().PHASES)
+    ep_dedup = [p for i, p in enumerate(ep_seen) if i == 0 or p != ep_seen[i - 1]]
+    assert ep_dedup == ["reset", "first_infer", "episode", "media_finalize", "done"]
 
-    print("DEADLINES=PASS phases=context_load,first_infer,media_finalize exit_code=75 retry_ok=1 "
-          "idle_named_progress=1 log_refresh_ignored=1")
-
-
-@pytest.mark.skip(reason="旧 run_seat.sh 不迁（拆分方案第二部分 §二）；席位脚本的无进展检测归 dev-scripts/gl，待其合并后改接")
-def test_seat_shell_idle_reads_named_progress(tmp_path):
-    """席位脚本的无进展计时只认 phase／identity／step 变化（原断言原样保留，等 GL 席位脚本给出新落点后改接）。"""
-    d = tmp_path / "seat"
-    d.mkdir()
-    pj, log = d / "progress.json", d / "client.log"
-    script = r'''
-source "$EO/run_seat.sh"; TOOL_PY="$PY"
-PROG_FLOOR=$(( $(ts) - 1000 ))
-w() { printf '{"phase": "%s", "identity": "k", "attempt_no": 1, "step": %s, "episodes_done": 0, "t": %s}' "$1" "$2" "$3" > "$PJ"; }
-w episode 16 $(( $(ts) - 500 )); progress_idle "$PJ"; echo "A=$IDLE"
-w episode 16 $(ts); touch "$LOG"; progress_idle "$PJ"; echo "B=$IDLE"
-w episode 32 $(( $(ts) - 5 )); progress_idle "$PJ"; echo "C=$IDLE"
-echo "S=$(idle_s "$PJ")"
-'''
-    p = _bash(script, PY=sys.executable, PJ=pj, LOG=log)
-    vals = dict(re.findall(r"^([ABCS])=(\d+)$", p.stdout, re.M))
-    assert {k: int(v) for k, v in vals.items()}.keys() == {"A", "B", "C", "S"}, p.stdout + p.stderr
-    a, b, c = int(vals["A"]), int(vals["B"]), int(vals["C"])
-    assert 495 <= a <= 520 and b >= a and 4 <= c <= 30  # 同签名重写不重计时；步数变化才算进展
+    print("DEADLINES=PASS phases=first_infer,media_finalize exit_code=75 retry_ok=1 named_progress=1")
 
 
-@pytest.mark.skip(reason="旧 run_seat.sh 不迁；预算参数核对的席位脚本版归 dev-scripts/gl，待其合并后改接")
-def test_seat_shell_budget_args_check():
-    p = _bash('source "$EO/run_seat.sh"; BUDGET_LEDGER=/b; TRAJECTORY_CAP=870; SHARED_INFRA_CAP=50; EXPIRED_CAP=""; '
-              'PLANNED_FIRST_TRIES=821; budget_args_check; echo "RC=$?"')
-    assert "RC=3" in p.stdout and "RUN_BLOCKED reason=budget_args" in p.stdout and "--expired-cap" in p.stdout
+# 旧 run_seat.sh 的两段 bash 断言（progress_idle 只认 phase／identity／step 签名、budget_args_check）已删：拆仓后 run_seat.sh
+# 不迁，GL 席位外壳 dev-scripts/gl/run_eval_gl.sh 的无进展检测改按本席位 progress.json 修改时间
+# （test_seat_scripts.py::test_gl_noprogress_watchdog_kills_hung_client），缺必需参数退出 2
+# （test_seat_scripts.py::test_gl_required_args_exit_2），六个预算参数缺任一由 seat.py::entry_blockers 拦为
+# RUN_BLOCKED reason=budget_args（本文件 BUDGET_ENFORCEMENT 第 7 例）。
 
 
 # ═════════════════════════════════ OBS_EQ ═════════════════════════════════
@@ -810,54 +809,49 @@ def test_obs_eq_policy_server_wrap_and_smvla(tmp_path, monkeypatch):
 
 
 def test_lease_id_includes_dataset_and_shard_content(tmp_path, capsys):
-    """lease id 并入数据集名与清单内容短哈希：同路线、不同数据集、同名 ``shard-00.json`` 两边都拿得到 lease；同路线、
-    同数据集、同一份分片清单重复启动，第二个 ``RUN_BLOCKED reason=lease_held``、退出 3、不建环境。"""
+    """拆仓后身份不再按分片切给席位（共享动态队列），lease 只保证「同一路线同一席位名同时只有一个客户端」：lease id 为
+    ``<路线>--seat-<席位名>``；两个数据集同在一个队列里，靠队列键 ``<数据集>__<key>`` 区分。同路线不同席位两边都拿得到
+    lease、都能跑；同一席位名重复启动，第二个 ``RUN_BLOCKED reason=lease_held``、退出 3、不建环境。（用例名沿用旧口径，
+    契约总表按 nodeid 引用。）"""
     bm, ec = bl(), F.env_client()
     route = "groundsg/ground-sg-memer/seed7/new"
-    ood_dir, hv_dir, ood_copy_dir = tmp_path / "ood", tmp_path / "hard-verify", tmp_path / "ood-other"
-    for d, body in ((ood_dir, '{"rows": ["ood"]}'), (hv_dir, '{"rows": ["hv"]}'), (ood_copy_dir, '{"rows": ["x"]}')):
-        d.mkdir()
-        (d / "shard-00.json").write_text(body, encoding="utf-8")
-    sid_ood = ec.shard_id_of(route, ood_dir / "shard-00.json", "s00", "ood")
-    sid_hv = ec.shard_id_of(route, hv_dir / "shard-00.json", "s00", "hard-verify")
-    assert sid_ood != sid_hv
-    assert re.fullmatch(r"groundsg_ground-sg-memer_seed7_new--ood--shard-00-h[0-9a-f]{10}", sid_ood), sid_ood
-    assert "--hard-verify--shard-00-h" in sid_hv
-    # 同一份清单同数据集：id 稳定（与席位无关）；别处同名不同内容：id 不同
-    assert ec.shard_id_of(route, ood_dir / "shard-00.json", "s01", "ood") == sid_ood
-    assert ec.shard_id_of(route, ood_copy_dir / "shard-00.json", "s00", "ood") != sid_ood
-    # 旧形（无清单，只出现在进程内调用）不变：既有用例按它取 lease
-    assert ec.shard_id_of("pp/seed7/new", None, "s00") == "pp_seed7_new--seat-s00"
-
-    # 账本层：两个数据集的同名分片可同时持有
-    p = tmp_path / "shared" / "budget.jsonl"
-    with bm.BudgetLedger(p, **CAPS).lease(sid_hv):
-        with bm.BudgetLedger(p, **CAPS).lease(sid_ood):
-            pass
-
-    # SeatRunner 层：hard-verify 席位持有 lease 时，ood 同名分片照常跑完
+    assert ec.shard_id_of(route, "s00") == "groundsg_ground-sg-memer_seed7_new--seat-s00"
+    assert ec.shard_id_of(route, "s01") != ec.shard_id_of(route, "s00")
+    assert ec.shard_id_of("pp/seed7/new", "host a/1") == "pp_seed7_new--seat-host_a_1"
+    # 两个数据集同 key 的身份在同一队列里互不相撞
     task, tier = F.v9_cells_sorted()[0]
     ident = F.packaged_identity(task, tier, 0)
-    hv = F.make_runner(tmp_path / "hv-stage", "pp", _short_policy(), F.World(), policy_seed=7, dataset="hard-verify",
-                       identities=str(hv_dir / "shard-00.json"), budget_ledger=str(p), **CAPS)
-    hv._open_shared_budget()
+    hv_ident = F.hard0_identity(HARD0_TASK, 0)
+    assert ec.queue_key(ident).startswith("ood__") and ec.queue_key(dict(ident, dataset="hard-verify")) != ec.queue_key(ident)
+
+    # 账本层：同路线两个席位的 lease 可同时持有
+    p = tmp_path / "shared" / "budget.jsonl"
+    with bm.BudgetLedger(p, **CAPS).lease(ec.shard_id_of("pp/seed7/new", "s01")):
+        with bm.BudgetLedger(p, **CAPS).lease(ec.shard_id_of("pp/seed7/new", "s00")):
+            pass
+
+    # SeatRunner 层：s01 持有 lease 时，s00 照常跑完（同一队列，两数据集各一局）
+    stage = tmp_path / "stage"
+    s01 = F.make_runner(stage, "pp", _short_policy(), F.World(), seat_dir="s01", policy_seed=7, budget_ledger=str(p),
+                        **CAPS)
+    s01._open_shared_budget()
     try:
         world_a = F.World()
-        a = F.make_runner(tmp_path / "ood-a", "pp", _short_policy(), world_a, policy_seed=7,
-                          identities=str(ood_dir / "shard-00.json"), budget_ledger=str(p), **CAPS)
-        assert F.run_rows(a, [ident]) == 0
+        a = F.make_runner(stage, "pp", _short_policy(), world_a, seat_dir="s00", policy_seed=7, budget_ledger=str(p),
+                          **CAPS)
+        assert F.run_rows(a, [ident, hv_ident]) == 0
         out = capsys.readouterr().out
-        want = ec.shard_id_of("pp/seed7/new", ood_dir / "shard-00.json", "s00", "ood")
+        want = ec.shard_id_of("pp/seed7/new", "s00")
         assert "RUN_BLOCKED" not in out and f"BUDGET_LEASE shard={want}" in out
-        assert world_a.envs
-        # 同数据集同一分片重复启动：a 仍持有（席位未 close），第二个被拦
-        world_b = F.World()
-        b = F.make_runner(tmp_path / "ood-b", "pp", _short_policy(), world_b, policy_seed=7,
-                          identities=str(ood_dir / "shard-00.json"), budget_ledger=str(p), **CAPS)
-        assert F.run_rows(b, [ident]) == 3
-        assert "RUN_BLOCKED reason=lease_held" in capsys.readouterr().out and world_b.envs == []
-        assert not b.results_path.exists()
-        a._release_lease()
+        assert len(world_a.envs) == 2
+        # 同一席位名 s00 重复启动：a 的 lease 已在 run 结束时释放；另起一个持有者占住 s00，再起 b 即被拦
+        with bm.BudgetLedger(p, **CAPS).lease(want):
+            world_b = F.World()
+            b = F.make_runner(tmp_path / "stage-b", "pp", _short_policy(), world_b, seat_dir="s00", policy_seed=7,
+                              budget_ledger=str(p), **CAPS)
+            assert F.run_rows(b, [ident]) == 3
+            assert "RUN_BLOCKED reason=lease_held" in capsys.readouterr().out and world_b.envs == []
+            assert not b.results_path.exists()
     finally:
-        hv._release_lease()
-    print("LEASE_BY_DATASET=PASS cross_dataset_same_name=both_ok same_shard_dup=blocked")
+        s01._release_lease()
+    print("LEASE_BY_DATASET=PASS two_seats_same_route=both_ok same_seat_dup=blocked queue_key_by_dataset=1")

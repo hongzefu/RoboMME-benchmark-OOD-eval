@@ -228,16 +228,16 @@
     "source": [
       "dev-scripts/gl/seat.py"
     ],
-    "symbol": "run_identities_v8（普通失败不重试）/ load_identities / check_run_args / build_parser",
+    "symbol": "SeatRunner.run／load_identities／entry_blockers／variant_problems／build_parser（拆仓后席位层）",
     "oracle": "每身份尝试数手写",
-    "positive": "干净身份清单按 --only 过滤；perceptual-framesamp-modul／smvla／pp／groundsg 两个变体的合法参数组合都通过、默认不带 --strict-cap",
-    "negative": "fail 与非 infra error 只尝试一次、一条 accept；身份行缺 spec_sha256、key 重复、seed 为浮点 → RUN_BLOCKED 退出 3；--dataset／--max-steps 缺任一 → 参数错误退出 2；缺账本三参、groundsg 缺 --groundsg-variant、qwenvl 缺 adapter、变体或 adapter 用错策略、--max-steps 非正 → RUN_BLOCKED reason=args 退出 3",
+    "positive": "干净身份清单按 --only 过滤、--dataset 补行内数据集；perceptual-framesamp-modul／smvla／pp／groundsg 两个变体的合法参数组合 entry_blockers 为 None；步数上限只由数据集决定（hard-verify 1300、ood 1800）",
+    "negative": "fail 与非 infra error 只尝试一次、一条 accept、队列恰一个领取与一份 accepted；身份行缺 spec_sha256、key 重复、seed 为浮点、无数据集 → SeatStop(EXIT_BLOCKED) 与 RUN_BLOCKED reason=identities；缺预算参数 → reason=budget_args，groundsg 缺变体、qwenvl 缺 adapter、变体或 adapter 用错策略 → reason=variant_pairing，--infra-retries 为负 → reason=args，均退出 3",
     "boundaries": "—",
     "nodeids": [
       "tests/pipeline/eval/test_policy_clients.py::test_ordinary_failure_is_not_retried",
       "tests/pipeline/eval/test_policy_clients.py::test_load_identities_blocks_on_bad_rows",
       "tests/pipeline/eval/test_policy_clients.py::test_load_identities_accepts_clean_rows_and_only_filter",
-      "tests/pipeline/eval/test_policy_clients.py::test_dataset_and_max_steps_have_no_default",
+      "tests/pipeline/eval/test_policy_clients.py::test_dataset_has_no_default_and_max_steps_follow_dataset",
       "tests/pipeline/eval/test_policy_clients.py::test_run_args_blocked",
       "tests/pipeline/eval/test_policy_clients.py::test_run_args_accept_all_four_policies"
     ],
@@ -837,7 +837,7 @@
   },
   {
     "id": "C13-SEAT-QUEUE",
-    "domain": "eval-seat",
+    "domain": "C13",
     "source": [
       "dev-scripts/gl/seat.py",
       "dev-scripts/gl/budget_ledger.py"
@@ -867,6 +867,28 @@
       "S2-D5",
       "T8b-K1"
     ],
-    "status": "active"
+    "status": "verified"
+  },
+  {
+    "id": "C13-EXPERT-DEMOS",
+    "domain": "C13",
+    "source": [
+      "dev-scripts/media/render_expert_demos.py"
+    ],
+    "symbol": "render_expert_demos：读 h5 逐 timestep 出原始版与官方版式两版专家演示视频",
+    "oracle": "合成 h5（字段名照录制器 RobommeRecordWrapper 的写法）；帧数、排序、文件名、红框位置手写",
+    "positive": "timestep 按数值排序；状态与动作、文件名 <Task>_ep<N>_<task_goal>_<tier>[_annotation].mp4；演示段红框只在 is_video_demo 帧；两版帧数都等于 h5 帧数；续跑跳过",
+    "negative": "缺 h5 记失败",
+    "boundaries": "timestep_10 排在 timestep_9 之后（字符串排序会错）",
+    "nodeids": [
+      "tests/pipeline/eval/test_render_expert_demos.py::test_timestep_numeric_order_and_meta",
+      "tests/pipeline/eval/test_render_expert_demos.py::test_state_action_and_names",
+      "tests/pipeline/eval/test_render_expert_demos.py::test_official_video_recorder_border_only_on_demo",
+      "tests/pipeline/eval/test_render_expert_demos.py::test_end_to_end_two_versions_frames_match_and_resume",
+      "tests/pipeline/eval/test_render_expert_demos.py::test_missing_h5_fails"
+    ],
+    "resource": "cpu（ffmpeg）",
+    "mutants": [],
+    "status": "verified"
   }
 ]

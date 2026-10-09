@@ -32,10 +32,10 @@ import numpy as np
 import pytest
 
 from pp_fakes import REPO, FakeConn, FakeEnv, FakeSession, action_for, compare_frames
-from tests._support.loaders import load_script, script_path
+from tests._support.loaders import LEGACY_PATHS, load_script, script_path
 from tests.pipeline.evalx.report import trace_contract as tc
 
-CLIENT_ENV_SITE = "artifacts/sg-evaluation/venvs/client-env/lib/python3.11/site-packages"
+CLIENT_ENV_SITE = "envs/client-env/.venv/lib/python3.11/site-packages"  # 拆仓后客户端扩展环境位置
 TASK, SRC, SEED = "VideoUnmask", 5, 98765
 XH = {"task": TASK, "tier": "xhard0", "seed": SEED, "source_episode": SRC, "builder_episode": 0,
       "key": f"{TASK}_xhard0_{SEED}", "candidate": None, "spec_sha256": None}
@@ -242,7 +242,7 @@ def test_new_and_orig_frames_identical_to_vla_eval_sync_runner(vla, monkeypatch,
 
 BASE_SHA = os.environ.get("SGEVAL_PP_BASE", "b869a3df9e7406b8f5458697f22656165b9c50b3")
 #: BASE 版 pp_client 的逐字节副本（拆仓后新仓没有旧仓历史，改从测试夹具读；内容即旧仓
-#: ``git show b869a3df:scripts/eval-official/pp_client.py``，sha256 钉死防误改）
+#: ``git show b869a3df:<旧仓 pp_client 路径>``，旧仓路径由 ``LEGACY_PATHS`` 反查，sha256 钉死防误改）
 BASE_PP_FIXTURE = Path(__file__).resolve().parent / "base_pp_client_b869a3df.py.txt"
 BASE_PP_SHA256 = "e04cc60458e388a46feed5718c5a6261391267b3875ec771c12d23d1159589c0"
 PH_TASK, PH_SRC, PH_SEED = "PickXtimes", 7, 123457
@@ -482,12 +482,13 @@ def _load_pp_from(path: Path):
 
 
 def _load_base_pp(tmp_path):
-    """BASE 版 pp_client（旧仓 ``git show <BASE>:scripts/eval-official/pp_client.py`` 的逐字节副本，见
+    """BASE 版 pp_client（旧仓 ``git show <BASE>:<旧仓 pp_client 路径>`` 的逐字节副本，见
     ``BASE_PP_FIXTURE``；设 ``SGEVAL_PP_BASE_REPO`` 时改从该仓 ``git show``）写到临时目录后按模块名 ``pp_client`` 载入。
     BASE 版按同目录取 ``trace_writer``，这里把**当前** ``record/trace_writer.py`` 放在它旁边（与旧仓里的情形相同）。"""
     repo = os.environ.get("SGEVAL_PP_BASE_REPO")
     if repo:
-        out = subprocess.run(["git", "show", f"{BASE_SHA}:scripts/eval-official/pp_client.py"], cwd=repo,
+        old_rel = "scripts/" + next(k for k, v in LEGACY_PATHS.items() if v == "src/robomme_hard_eval/models/pp.py")
+        out = subprocess.run(["git", "show", f"{BASE_SHA}:{old_rel}"], cwd=repo,
                              capture_output=True, timeout=60)
         assert out.returncode == 0, out.stderr.decode(errors="replace")
         src = out.stdout

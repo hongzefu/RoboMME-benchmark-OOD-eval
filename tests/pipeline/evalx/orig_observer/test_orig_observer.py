@@ -808,18 +808,12 @@ def test_launcher_blocks_on_commit_mismatch_or_dirty(tmp_path, launcher, repo_va
         assert "RUN_BLOCKED reason=orig_submodule_mismatch" in r.stdout
 
 
-LEDGER_SHA = "345606ec"  # S8 合入 budget_ledger.py 的提交（仓库里没有该文件时从这里取，真实 CLI 语义）
-
-
 def _real_ledger(tmp_path: Path) -> Path:
+    """真实 CLI 语义的预算账本：评估仓 ``dev-scripts/gl/budget_ledger.py``（拆仓前「文件不在时从旧仓某提交 git show」的
+    回退分支已删：评估仓里该文件一定在，旧仓提交在本仓不可解析）。"""
     p = REPO / "dev-scripts" / "gl" / "budget_ledger.py"
-    if p.is_file():
-        return p
-    out = subprocess.run(["git", "-C", str(REPO), "show", f"{LEDGER_SHA}:scripts/eval-official/budget_ledger.py"],
-                         capture_output=True, text=True, check=True).stdout
-    q = tmp_path / "budget_ledger.py"
-    q.write_text(out, encoding="utf-8")
-    return q
+    assert p.is_file(), p
+    return p
 
 
 def _ledger_rows(path: Path) -> list[dict]:

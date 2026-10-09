@@ -221,7 +221,7 @@ class _Empty(Exception):
 
 
 class _BoundedQueue:
-    """有界阻塞队列（不用标准库 queue：同目录的 scripts/eval-official/queue.py 在 sys.path[0] 时会遮蔽它）。"""
+    """有界阻塞队列（不用标准库 queue：拆仓前旧评估脚本目录里的同名 queue.py 在 sys.path[0] 时会遮蔽它，沿用此写法）。"""
 
     def __init__(self, maxsize: int):
         self.maxsize = maxsize

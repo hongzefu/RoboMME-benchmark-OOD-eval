@@ -98,7 +98,7 @@ class FakeSrv:
         return f"SERVER_LEFT pid={self.pid} port={self.port}"
 
 
-class FakeMMEClient:
+class FakeMMEVLAWebsocketClient:
     """MME-VLA websocket 客户端替身（reset／add_buffer／infer）：每条消息记进 ``EVENTS``。"""
 
     log: list = []
@@ -108,15 +108,15 @@ class FakeMMEClient:
 
     def reset(self):
         fakes.EVENTS.append("server.reset")
-        FakeMMEClient.log.append(("reset", None))
+        FakeMMEVLAWebsocketClient.log.append(("reset", None))
         return {"reset_finished": True}
 
     def add_buffer(self, buf):
-        FakeMMEClient.log.append(("add_buffer", np.asarray(buf["images"]).shape))
+        FakeMMEVLAWebsocketClient.log.append(("add_buffer", np.asarray(buf["images"]).shape))
         return {"add_buffer_finished": True}
 
     def infer(self, obs):
-        FakeMMEClient.log.append(("infer", {k: v for k, v in obs.items() if isinstance(v, str)}))
+        FakeMMEVLAWebsocketClient.log.append(("infer", {k: v for k, v in obs.items() if isinstance(v, str)}))
         return {"actions": np.zeros((20, 8), np.float32)}
 
 
@@ -217,12 +217,12 @@ def _fresh(monkeypatch):
     FakeSrv.instances.clear()
     FakeSrv.log_text = "history_config='perceptual-framesamp-modul.yaml'\n"
     FakeSrv.wrap_seed = None
-    FakeMMEClient.log.clear()
+    FakeMMEVLAWebsocketClient.log.clear()
     FakePPConn.starts.clear()
     E.clear_builders()
     monkeypatch.setattr(E, "BUILDER_FACTORY", fakes.FakeBuilder)
     monkeypatch.setattr(S, "CleanServerProcess", FakeSrv)
-    monkeypatch.setattr(FM, "make_recording_client", FakeMMEClient)
+    monkeypatch.setattr(FM, "make_recording_client", FakeMMEVLAWebsocketClient)
     monkeypatch.setattr(SM, "WSPolicyConn", FakeSmvlaConn)
     monkeypatch.delenv("SGEVAL_PP_SERVER_WRAP", raising=False)
     yield
@@ -365,13 +365,13 @@ def test_framesamp_reset_sends_nothing_and_play_order(tmp_path):
     spec = _spec(p, tmp_path)
     fakes.EVENTS.clear()
     p.reset(spec)
-    assert fakes.EVENTS == [] and FakeMMEClient.log == []  # reset 不发消息、不碰环境
+    assert fakes.EVENTS == [] and FakeMMEVLAWebsocketClient.log == []  # reset 不发消息、不碰环境
     fakes.EVENTS.clear()
     res = _run(p, tmp_path)
     ev = fakes.EVENTS
     assert ev.index("builder.make_env") < ev.index("server.reset") < ev.index("env.reset")  # 先服务端 reset 再环境
     assert res.status == "success" and res.task_success == 1 and res.exec_steps == 4 and res.decisions == 1
-    assert [k for k, _ in FakeMMEClient.log] == ["reset", "add_buffer", "infer"]
+    assert [k for k, _ in FakeMMEVLAWebsocketClient.log] == ["reset", "add_buffer", "infer"]
     trace = tmp_path / "out" / "rollouts" / "perceptual-framesamp-modul" / "hard-verify" / "seed7" / res.raw_dir
     rows = [json.loads(x) for x in (trace / "trace.jsonl").read_text().splitlines()]
     assert rows[0]["route"] == "perceptual-framesamp-modul/new" and rows[0]["identity"]["attempt"] == 1
@@ -391,10 +391,10 @@ def test_framesamp_reset_raises_server_dead(tmp_path):
 
 
 def test_warmup_reset_add_buffer_infer(tmp_path):
-    out = FM.warmup_server("127.0.0.1", 1, subgoal="pick up the cube at <1, 2>", client_factory=FakeMMEClient)
-    assert [k for k, _ in FakeMMEClient.log] == ["reset", "add_buffer", "infer"]
-    assert FakeMMEClient.log[1][1] == (16, 1, 256, 256, 3)
-    assert FakeMMEClient.log[2][1] == {"prompt": "warm up", "simple_subgoal": "pick up the cube at <1, 2>",
+    out = FM.warmup_server("127.0.0.1", 1, subgoal="pick up the cube at <1, 2>", client_factory=FakeMMEVLAWebsocketClient)
+    assert [k for k, _ in FakeMMEVLAWebsocketClient.log] == ["reset", "add_buffer", "infer"]
+    assert FakeMMEVLAWebsocketClient.log[1][1] == (16, 1, 256, 256, 3)
+    assert FakeMMEVLAWebsocketClient.log[2][1] == {"prompt": "warm up", "simple_subgoal": "pick up the cube at <1, 2>",
                                        "grounded_subgoal": "pick up the cube at <1, 2>"}
     assert out["frames"] == 16 and out["actions_shape"] == [20, 8]
 
@@ -535,7 +535,7 @@ def gs_env(monkeypatch):
 
 def _gs(tmp_path, **kw):
     return load_policy("groundsg", 7, **_cfg(tmp_path, groundsg_variant="ground-sg-oracle",
-                                             client_factory=lambda h, p, ep: FakeMMEClient(),
+                                             client_factory=lambda h, p, ep: FakeMMEVLAWebsocketClient(),
                                              work_dir=str(tmp_path / "work"), **kw))
 
 
@@ -596,7 +596,7 @@ def test_groundsg_end_to_end_order_and_official_video(tmp_path, gs_env):
     assert d["policy_variant"] == "ground-sg-oracle" and d["official_source"] == "official"
     raw = tmp_path / "out" / "rollouts" / "groundsg-ground-sg-oracle" / "hard-verify" / "seed7" / res.raw_dir
     assert (raw / "trace.jsonl").is_file() and len(list((raw / "official").glob("*.mp4"))) == 1
-    infers = [x for k, x in FakeMMEClient.log if k == "infer"]
+    infers = [x for k, x in FakeMMEVLAWebsocketClient.log if k == "infer"]
     assert infers and infers[0]["grounded_subgoal"] == "pick up the cube at <10, 20>"
     p.close()
 

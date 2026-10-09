@@ -1,4 +1,4 @@
-"""C13 ``env_client.EnvSession``：一局环境的 build／reset／step／close 与录制、额度、步数上限。
+"""C13 ``robomme_hard_eval.session.EnvSession``（拆仓前在 env_client.py）：一局环境的 build／reset／step／close 与录制、额度、步数上限。
 
 假环境与假 builder 的行为由本文件手写；核对的是 EnvSession 交给环境与录制器的东西。
 """
@@ -23,7 +23,7 @@ class _Builder:
 
 
 def _session(**kw):
-    ec = F.env_client()
+    ec = F.env_session()
     b = kw.pop("builder", None) or _Builder(kw.pop("plan", None))
     rec = kw.pop("recorder", None) or F.FakeRecorder("/nonexistent-not-written", {})
     return ec.EnvSession("T", 5, builder=b, recorder=rec, **kw), b, rec
@@ -64,7 +64,7 @@ def test_step_exception_propagates_and_counts_step():
 
 
 def test_step_cap_stops_before_env():
-    ec = F.env_client()
+    ec = F.env_session()
     s, b, rec = _session(plan=F.Plan(), step_cap=4)
     s.reset()
     for _ in range(4):
@@ -84,7 +84,7 @@ def test_success_on_last_allowed_step_is_returned():
 
 
 def test_claim_reset_order_and_budget_flag():
-    ec = F.env_client()
+    ec = F.env_session()
     claims = []
 
     def claim(what):
@@ -100,7 +100,7 @@ def test_claim_reset_order_and_budget_flag():
 
 
 def test_recorder_failure_becomes_recorder_error():
-    ec = F.env_client()
+    ec = F.env_session()
     rec = F.FakeRecorder("/nonexistent-not-written", {}, fail_on="add_frames")
     s, b, _ = _session(recorder=rec)
     with pytest.raises(ec.RecorderError, match="No space left"):
@@ -135,10 +135,11 @@ def test_close_is_safe_and_releases_env():
 
 def test_own_builder_uses_dataset_and_max_steps():
     """不注入 builder 时按 dataset 与 max_steps 自建真实 builder（只解析身份，不建场景）；缺 max_steps 即拒绝。"""
-    ec = F.env_client()
+    ec = F.env_session()
     s = ec.EnvSession("PickXtimes", 0, max_steps=1300, dataset="hard-verify")
     assert s.builder.dataset == "hard-verify"
-    assert s.identity()["tier"] == "xhard0"
+    # 拆仓后 EnvSession 不再有 identity()（身份解析归 episode.make_spec），直接核自建 builder 的解析结果
+    assert s.builder.resolve_identity(0)["tier"] == "xhard0"
     s9 = ec.EnvSession("PickXtimes", 0, max_steps=1600)  # 默认 ood（V9 不变）
     assert s9.builder.dataset == "ood"
     with pytest.raises(ValueError, match="max_steps"):

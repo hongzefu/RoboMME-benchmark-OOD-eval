@@ -211,6 +211,9 @@ def test_smvla_reset_failure_with_vulkan_marker_is_infra_and_retries_count():
 
 
 # ---------------------------------------------------------------- 席位层：普通失败不重试、必填身份
+#
+# 拆仓后席位层是 ``dev-scripts/gl/seat.py``（常驻 Policy + 动态队列）：账本在 ``seats/<标签>/seed<n>/<席位>/``，
+# 身份清单坏行抛 ``SeatStop(EXIT_BLOCKED)``（由 ``cmd_run`` 转成退出码 3），入口拦截改为 ``entry_blockers``。
 
 
 @pytest.mark.parametrize("plan", [F.Plan(fail_at=1), F.Plan(raise_at=1, raise_exc=lambda: RuntimeError("IK"))],
@@ -223,15 +226,18 @@ def test_ordinary_failure_is_not_retried(tmp_path, monkeypatch, policy, plan):
     runner = F.make_runner(tmp_path, policy, F.policy_module(policy, monkeypatch, F.FakePolicyServer()), world)
     assert F.run_rows(runner, [ident]) == 0
     assert len(world.envs) == 1
-    ledger = F.read_jsonl(tmp_path / "s00" / policy / f"{policy}.ledger.jsonl")
+    ledger = F.seat_ledger(tmp_path, policy)
     assert [x["kind"] for x in ledger].count("attempt_start") == 1
     assert [x["kind"] for x in ledger].count("accept") == 1
+    # 队列里该身份恰有一次领取、一份 accepted 标记（跨席位的唯一接受）
+    q = F.queue_dir(tmp_path, policy)
+    assert len(list((q / "claims").glob("*.json"))) == 1 and len(list((q / "accepted").glob("*.json"))) == 1
 
 
-def _args_for_identities(tmp_path, rows):
+def _args_for_identities(tmp_path, rows, **kw):
     p = tmp_path / "shard-00.json"
     p.write_text(json.dumps(rows), encoding="utf-8")
-    return F.seat_args(tmp_path / "out", "perceptual-framesamp-modul", ledger=tmp_path / "l.jsonl", identities=str(p))
+    return F.seat_args(tmp_path / "out", "perceptual-framesamp-modul", identities=str(p), **kw)
 
 
 @pytest.mark.parametrize("mutate", ["drop_spec", "dup_key", "float_seed"])
@@ -246,7 +252,7 @@ def test_load_identities_blocks_on_bad_rows(tmp_path, capsys, mutate):
         rows = [a, dict(a)]
     else:
         rows = [a, dict(b, seed=float(b["seed"]))]
-    with pytest.raises(SystemExit) as ei:
+    with pytest.raises(ec.SeatStop) as ei:
         ec.load_identities(_args_for_identities(tmp_path, rows))
     assert ei.value.code == ec.EXIT_BLOCKED
     assert "RUN_BLOCKED reason=identities" in capsys.readouterr().out
@@ -262,55 +268,64 @@ def test_load_identities_accepts_clean_rows_and_only_filter(tmp_path):
     assert [r["key"] for r in ec.load_identities(args)] == [b["key"]]
 
 
-_BASE = ["run", "--identities", "x.json", "--cond", "c", "--seat", "s", "--port", "1", "--out", "o"]
-_LEDGER = ["--ledger", "l.jsonl", "--reset-budget", "10", "--infra-retry-budget", "1"]
-
-
-@pytest.mark.parametrize("drop", ["--dataset", "--max-steps"])
-def test_dataset_and_max_steps_have_no_default(drop):
-    """--dataset 与 --max-steps 都必填、无默认值：缺任一即参数错误（argparse 退出 2）。"""
+def test_dataset_has_no_default_and_max_steps_follow_dataset(tmp_path, capsys):
+    """数据集无缺省：身份行不带 ``dataset`` 且不给 ``--dataset`` 即 RUN_BLOCKED（不会默默落到某一档）；给了 ``--dataset``
+    才补进行内。步数上限不再是 CLI 参数，由数据集决定（hard-verify 1300 不截断、ood 1800 严格截断，手写常量）。"""
     ec = F.env_client()
-    argv = _BASE + ["--policy", "perceptual-framesamp-modul", "--dataset", "hard-verify", "--max-steps", "1300"] + _LEDGER
-    i = argv.index(drop)
-    with pytest.raises(SystemExit) as ei:
-        ec.build_parser().parse_args(argv[:i] + argv[i + 2:])
+    task, tier = F.v9_cells_sorted()[0]
+    a = {k: v for k, v in F.packaged_identity(task, tier, 0).items() if k != "dataset"}
+    with pytest.raises(ec.SeatStop) as ei:
+        ec.load_identities(_args_for_identities(tmp_path, [a]))
+    assert ei.value.code == ec.EXIT_BLOCKED and "RUN_BLOCKED reason=identities" in capsys.readouterr().out
+    assert [r["dataset"] for r in ec.load_identities(_args_for_identities(tmp_path, [a], dataset="ood"))] == ["ood"]
+    E = F.episode_mod()
+    assert E.DATASET_MAX_STEPS == {"hard-verify": F.HARD0_MAX_STEPS, "ood": F.V9_MAX_STEPS}
+    with pytest.raises(SystemExit) as ei:  # --dataset 只认 ood／hard-verify 两个名字（旧名 test 已退场）
+        ec.build_parser().parse_args(["run", "--policy", "dummy", "--identities", "x", "--out", "o", "--dataset", "test"])
     assert ei.value.code == 2
 
 
-@pytest.mark.parametrize("extra,why", [
-    (["--policy", "perceptual-framesamp-modul", "--dataset", "ood", "--max-steps", "1600"], "必须给 --ledger"),
-    (["--policy", "groundsg", "--dataset", "hard-verify", "--max-steps", "1300", *_LEDGER], "--groundsg-variant"),
-    (["--policy", "groundsg", "--dataset", "hard-verify", "--max-steps", "1300", "--groundsg-variant", "ground-sg-qwenvl",
-      *_LEDGER], "--qwenvl-groundsg-adapter"),
-    (["--policy", "perceptual-framesamp-modul", "--dataset", "hard-verify", "--max-steps", "1300", "--groundsg-variant", "ground-sg-oracle",
-      *_LEDGER], "只能与 --policy groundsg"),
-    (["--policy", "groundsg", "--dataset", "hard-verify", "--max-steps", "1300", "--groundsg-variant", "ground-sg-oracle",
-      "--qwenvl-groundsg-adapter", "a", *_LEDGER], "只能与 --groundsg-variant ground-sg-qwenvl"),
-    (["--policy", "pp", "--dataset", "hard-verify", "--max-steps", "0", *_LEDGER], "--max-steps 必须是正整数"),
-], ids=["no_ledger", "groundsg_no_variant", "qwenvl_no_adapter", "variant_on_framesamp_modul", "adapter_on_oracle", "zero_steps"])
-def test_run_args_blocked(capsys, extra, why):
+_BUDGET = ["--budget-ledger", "l.jsonl", "--trajectory-cap", "10", "--reset-cap", "20", "--shared-infra-cap", "1",
+           "--expired-cap", "1", "--planned-first-tries", "10"]
+_BASE = ["run", "--identities", "x.json", "--seat", "s", "--out", "o", "--policy-seed", "0"]
+
+
+@pytest.mark.parametrize("extra,reason,why", [
+    (["--policy", "perceptual-framesamp-modul"], "budget_args", "--budget-ledger"),
+    (["--policy", "groundsg", *_BUDGET], "variant_pairing", "--groundsg-variant"),
+    (["--policy", "groundsg", "--groundsg-variant", "ground-sg-qwenvl", *_BUDGET], "variant_pairing",
+     "--qwenvl-groundsg-adapter"),
+    (["--policy", "perceptual-framesamp-modul", "--groundsg-variant", "ground-sg-oracle", *_BUDGET], "variant_pairing",
+     "只能与 --policy groundsg"),
+    (["--policy", "groundsg", "--groundsg-variant", "ground-sg-oracle", "--qwenvl-groundsg-adapter", "a", *_BUDGET],
+     "variant_pairing", "只能与 --groundsg-variant ground-sg-qwenvl"),
+    (["--policy", "pp", "--infra-retries", "-1", *_BUDGET], "args", "--infra-retries 须为非负整数"),
+], ids=["no_ledger", "groundsg_no_variant", "qwenvl_no_adapter", "variant_on_framesamp_modul", "adapter_on_oracle",
+        "negative_retries"])
+def test_run_args_blocked(capsys, extra, reason, why):
     ec = F.env_client()
-    args = ec.build_parser().parse_args(_BASE + extra)
-    assert ec.cmd_run(args) == 3
+    assert ec.main(_BASE + extra) == ec.EXIT_BLOCKED
     out = capsys.readouterr().out
-    assert "RUN_BLOCKED reason=args" in out and why in out
+    assert f"RUN_BLOCKED reason={reason}" in out and why in out
 
 
-def test_run_args_accept_all_four_policies():
+def test_run_args_accept_all_four_policies(tmp_path):
     ec = F.env_client()
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
     for pol, extra in (("perceptual-framesamp-modul", []), ("smvla", []), ("pp", []),
                        ("groundsg", ["--groundsg-variant", "ground-sg-oracle"]),
-                       ("groundsg", ["--groundsg-variant", "ground-sg-qwenvl", "--qwenvl-groundsg-adapter", "/x"])):
-        args = ec.build_parser().parse_args(_BASE + ["--policy", pol, "--dataset", "hard-verify", "--max-steps",
-                                                     "1300", *_LEDGER, *extra])
-        assert ec.check_run_args(args, need_identities=True) is None, pol
-        assert args.strict_cap is False
+                       ("groundsg", ["--groundsg-variant", "ground-sg-qwenvl", "--qwenvl-groundsg-adapter",
+                                     str(adapter)])):
+        args = ec.build_parser().parse_args(_BASE + ["--policy", pol, *_BUDGET, *extra])
+        assert ec.entry_blockers(args) is None, pol
+        assert ec.variant_problems(args, check_dirs=True) == [], pol
 
 
 # ---------------------------------------------------------------- S4：两条新侧路线的逐步轨迹（契约 C1～C11）
 #
 # 期望一律由假环境的计划手算（步数、帧数、终态）；契约判据交 S0 的 trace_contract 助手。
-# 环境会话用真实 env_client.EnvSession（假 builder），步数口径（异常步计步、strict-cap 不进环境）与生产相同。
+# 环境会话用真实 robomme_hard_eval.session.EnvSession（假 builder），步数口径（异常步计步、strict-cap 不进环境）与生产相同。
 
 IDENT = {"task": "T", "tier": "xhard0", "seed": 1, "source_episode": 2, "builder_episode": 2, "key": "T_xhard0_1"}
 
@@ -327,7 +342,7 @@ class _B:
 
 def _env_session(plan, *, cap=None, recorder=None):
     b = _B(plan)
-    return F.env_client().EnvSession("T", 2, recorder=recorder, builder=b, step_cap=cap), b
+    return F.env_session().EnvSession("T", 2, recorder=recorder, builder=b, step_cap=cap), b
 
 
 def _conn(tmp_path, attempt=1, **kw):

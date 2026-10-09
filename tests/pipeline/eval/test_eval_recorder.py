@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -117,22 +118,28 @@ def test_level2_keeps_head_and_tail_only(tmp_path, rec_mod):
 
 
 def test_seat_runner_with_real_recorder_feeds_report(tmp_path, monkeypatch, capsys, rec_mod):
+    """拆仓后：GL 席位（常驻 Policy + 动态队列）用真实 AV1 录制器跑一局：局结果 ``recorder_verify=PASS``、录制器
+    ``summary.json`` 帧数 = 两路 ×（reset 帧 + 20 步各 1 帧）；本局结果行喂评估包汇总 ``robomme_hard_eval.report``
+    （拆仓后的汇总入口，读 ``rollouts/<模型>/<数据集>/seed<n>/results.jsonl``；旧 ``eval_report`` 读的 ``sNN/<policy>/``
+    布局新席位不再产出）。"""
+    from robomme_hard_eval import report
+
     task, tier = F.v9_cells_sorted()[0]
     ident = F.packaged_identity(task, tier, 0)
     world = F.World({(task, ident["builder_episode"]): [F.Plan(success_at=20)]})
-    ec = F.env_client()
-    out = tmp_path / "stage" / "s00" / "perceptual-framesamp-modul"
-    args = F.seat_args(out, "perceptual-framesamp-modul", ledger=out / "perceptual-framesamp-modul.ledger.jsonl")
-    runner = ec.SeatRunner(args, policy_mod=F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()),
-                           recorder_factory=lambda d, m: rec_mod.EpisodeRecorder(d, m, free_gib_fn=lambda p: 1e6),
-                           builder_factory=lambda t, ms: F.HybridBuilder(t, ms, world),
-                           proc_info={"init_timing": {}})
+    runner = F.make_runner(tmp_path / "stage", "perceptual-framesamp-modul",
+                           F.framesamp_modul_policy(monkeypatch, F.FakePolicyServer()), world,
+                           recorder_factory=lambda d, m: rec_mod.EpisodeRecorder(d, m, free_gib_fn=lambda p: 1e6))
     assert F.run_rows(runner, [ident]) == 0
-    (row,) = F.read_jsonl(out / "results.jsonl")
-    assert row["status"] == "success" and row["recorder_verify"] == "PASS"
-    summary = json.loads((out / "rec" / f"{ident['key']}.a1" / "summary.json").read_text())
-    # reset 3 帧 + 20 步各 1 帧
-    assert summary["frames"] == 2 * (F.N_RESET_FRAMES + 20)
-    manifest = F.write_manifest(tmp_path / "m" / "manifest.json", [ident])
-    rc, lines, rep = F.run_report(capsys, manifest, tmp_path / "stage", ["perceptual-framesamp-modul"], tmp_path / "rep", "--expect-total", "1")
-    assert rc == 0 and F.verdict(lines, "V8_EVAL_REPORT")["media_unexplained"] == "0"
+    (row,) = F.read_jsonl(runner.results_path)
+    raw = Path(row["result"]).parent
+    res = json.loads((raw / "result.json").read_text())
+    assert row["status"] == "success" and res["recorder_verify"] == "PASS"
+    summary = json.loads((raw / "summary.json").read_text())
+    # reset 3 帧 + 20 步各 1 帧，front、wrist 两路
+    assert summary["frames"] == 2 * (F.N_RESET_FRAMES + 20) and summary["RECORDER_VERIFY"] == "PASS"
+    capsys.readouterr()
+    log = report.summarize(raw.parent.parent)
+    assert (log["episodes"], log["counted"], log["success"], log["infra"]) == (1, 1, 1, 0)
+    assert log["tasks"][task]["success_rate"] == 1.0 and log["total_success_rate"] == 1.0
+    assert "EVAL_LOG " in capsys.readouterr().out and (raw.parent.parent / "log.json").is_file()

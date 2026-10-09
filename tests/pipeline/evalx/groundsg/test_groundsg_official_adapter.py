@@ -203,7 +203,7 @@ def test_unknown_is_error_and_does_not_stop_seat(tmp_path, variant):
 
 def test_trace_location_fallbacks(tmp_path):
     """轨迹位置：trace_dir → recorder.out_dir → 不写（此时临时区用后即删）。"""
-    ec = F.env_client()
+    ec = F.env_session()
     world = F.World(default=F.Plan(success_at=5))
     side = F.NewSide(F.ORACLE, 60, tmp_path, world)
     ident = F.identity()

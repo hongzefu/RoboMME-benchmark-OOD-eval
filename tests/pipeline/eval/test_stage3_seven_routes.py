@@ -5,15 +5,15 @@ CPU runbook」第二段（七路线都进 1800 边界与 0／7／42 参数化测
 ``docs/plans/1006-stage3-interface-freeze.md`` 2.1、2.2、四、七节。
 
 七路线：FrameSamp+Modulation、SimpleMemVLA、PonderPounce、GroundSG Oracle、GroundSG QwenVL、MemER（GroundSG 第三变体）、
-3-tier Astra。前六条走生产 ``env_client.SeatRunner``（真实 ``EnvSession``、真实客户端模块，只把服务连接、swift 与环境换成
-CPU 替身）；Astra 不经过 ``EnvSession``，走 ``astra_hard_runner.run_cases``（真实 ``TracedEnv`` 守卫）与 ``run_astra.sh``
-（服务与仿真解释器是只记参数的桩）。全部零 GPU、零外联、零费用、不加载权重。
+3-tier Astra。前六条走生产 GL 席位 ``dev-scripts/gl/seat.py::SeatRunner``（常驻 Policy，真实 ``EnvSession``、真实客户端
+模块经 ``eval_fakes.ModulePolicy`` 包成 Policy，只把服务连接、swift 与环境换成 CPU 替身）；Astra 走 ``load_policy("astra")``
+的 ``AstraPolicy``（真实 ``TracedEnv`` 守卫，服务端与 VLA 等为 ``astra_fakes.Harness`` 的替身，拆仓后 ``run_astra.sh`` 不迁）。全部零 GPU、零外联、零费用、不加载权重。
 
 每条路线、每个种子核三处（期望值由本文件手写，不调用被测函数生成）：
 
 1. **服务命令**：各模型 Policy 的服务端命令（``models/*::*_server_spec``，即旧 ``run_seat.sh::build_server_cmd`` 的
    Python 版；``run_seat.sh`` 不迁）的 argv 里种子取值等于 ``policy_seed``（MME-VLA 外壳
-   ``--seed=<s>``、smvla ``--policy-seed <s>``、pp ``--args.seed <s>``；Astra 由 ``run_astra.sh`` 起的 VLA 服务 ``--seed=<s>``），
+   ``--seed=<s>``、smvla ``--policy-seed <s>``、pp ``--args.seed <s>``；Astra 由 ``AstraPolicy.load`` 起的 VLA 服务 ``--seed=<s>``），
    且没有残留旧常量（7／0／42）；
 2. **该路线真正用的随机状态**：MME-VLA 外壳把 argv 的 ``--seed`` 交给三方 ``create_policy``（假 ``serve_policy`` 记下实参）
    并写服务元数据；GroundSG 三变体 ``Args.model_seed``、QwenVL／MemER 构造预测器前 ``seed_everything(<s>)``（Oracle 不调）；
@@ -21,8 +21,9 @@ CPU 替身）；Astra 不经过 ``EnvSession``，走 ``astra_hard_runner.run_cas
 3. **结果与 trace**：结果行 ``policy_seed``、``server_seed``（服务元数据反查）、``budget_token`` 的路线含 ``seed<s>``；
    trace header／identity／end 都记 ``policy_seed``。
 
-1800 边界：``ood``、``--max-steps 1800 --strict-cap``、环境永不终止；第 1800 步进入真实（假）环境，第 1801 步不进入；
-结果行 ``status=timeout``、``exec_steps=1800``、``effective_cap=1800``；trace 恰 1800 个 step 行、end 行
+1800 边界：``ood``（拆仓后上限与 strict 只由数据集决定）、环境永不终止；第 1800 步进入真实（假）环境，第 1801 步不进入；
+席位结果行 ``status=timeout``、``exec_steps=1800``，局结果 ``max_steps=1800``、``strict_cap=true``，trace 头
+``effective_cap=1800``；trace 恰 1800 个 step 行、end 行
 ``steps_attempted=1800``（有该字段的路线）。PonderPounce 自身循环在 1800 退出，可以不置 ``cap_hit``（计划八.3 末段）；
 SimpleMemVLA 的理论循环上界 ``115×16=1840`` 越过 1800，由 ``EnvSession`` 守卫拒第 1801 步。
 
@@ -38,8 +39,6 @@ from __future__ import annotations
 import functools
 import json
 import os
-import subprocess
-import sys
 import types
 from pathlib import Path
 
@@ -52,7 +51,6 @@ from tests.pipeline.evalx.astra import astra_fakes as A
 from tests.pipeline.evalx.groundsg import groundsg_fakes as G
 from tests.pipeline.evalx.pp import pp_fakes as P
 
-EO = F.REPO / "scripts" / "eval-official"
 SEEDS = (0, 7, 42)
 CAP = 1800
 CAPS = {"trajectory_cap": 870, "shared_infra_cap": 50, "expired_cap": 50, "planned_first_tries": 821}
@@ -222,16 +220,24 @@ def policy_module(route: str, monkeypatch, spy: dict):
         spy["model_seed"] = ctx["args"].model_seed
         return ctx
 
-    return types.SimpleNamespace(make_policy_context=make_policy_context, run_episode=mc.run_episode)
+    # 拆仓后经 eval_fakes.ModulePolicy 包成常驻 Policy：变体与 adapter 由 conn_extra 并入上下文入参与每局 conn_info
+    # （与真实 GroundSGPolicy.load／play 交给官方代码的键相同）
+    extra = {"groundsg_variant": variant,
+             "qwenvl_groundSG_adapter_path": G.ADAPTER if variant == G.QWENVL else None,
+             "memer_adapter_path": G.MEMER_ADAPTER if variant == G.MEMER else None}
+    return types.SimpleNamespace(make_policy_context=make_policy_context, run_episode=mc.run_episode,
+                                 conn_extra=extra)
 
 
 def seat_runner(route: str, tmp: Path, world: World, monkeypatch, *, seed: int, max_steps: int, spy: dict,
-                budget_ledger: Path | None = None, strict_cap: bool = True):
+                budget_ledger: Path | None = None):
+    """拆仓后的 GL 席位（常驻 Policy + 动态队列）。步数上限与是否 strict 只由身份行的数据集决定（ood 1800 strict、
+    hard-verify 1300 不 strict），``max_steps`` 只作调用方核对用。"""
     pol, variant = ROUTES[route]
-    kw: dict = dict(dataset="ood", max_steps=max_steps, strict_cap=strict_cap, policy_seed=seed,
-                    trace_root=str(tmp / "trace"), reset_budget=None)
+    assert max_steps == CAP
+    kw: dict = dict(policy_seed=seed, reset_budget=None)
     if pol == "groundsg":
-        kw.update(groundsg_variant=variant, policy_dir=f"groundsg-{variant}",
+        kw.update(groundsg_variant=variant,
                   qwenvl_groundsg_adapter=G.ADAPTER if variant == G.QWENVL else None,
                   memer_adapter=G.MEMER_ADAPTER if variant == G.MEMER else None)
     if budget_ledger is not None:
@@ -245,9 +251,19 @@ def ood_identity() -> dict:
     return F.packaged_identity(task, tier, 0)
 
 
+def raw_dir(runner, ident: dict, attempt: int = 1) -> Path:
+    """该身份该次尝试的本局 raw 目录（拆仓后轨迹、录制器产物与 result.json 都在这里）。"""
+    rows = [r for r in F.read_jsonl(runner.results_path) if r["key"] == ident["key"] and r["attempt"] == attempt]
+    assert rows, (ident["key"], attempt)
+    return Path(rows[-1]["result"]).parent
+
+
+def read_result(runner, ident: dict) -> dict:
+    return json.loads((raw_dir(runner, ident) / "result.json").read_text(encoding="utf-8"))
+
+
 def read_trace(runner, ident: dict) -> list[dict]:
-    p = Path(runner.trace_root) / f"{ident['key']}.a1" / "trace.jsonl"
-    return F.read_jsonl(p)
+    return F.read_jsonl(raw_dir(runner, ident) / "trace.jsonl")
 
 
 def route_label(route: str, seed: int) -> str:
@@ -270,8 +286,7 @@ def _seat_seed_case(route: str, seed: int, tmp: Path, monkeypatch) -> list[str]:
     world = World(G.Plan(success_at=20))
     ledger = tmp / "budget.jsonl"
     runner = seat_runner(route, tmp, world, monkeypatch, seed=seed, max_steps=CAP, spy=spy, budget_ledger=ledger)
-    meta = runner.server_metadata_path()
-    meta.parent.mkdir(parents=True, exist_ok=True)
+    meta = tmp / "server-metadata.json"  # 拆仓后服务端元数据由 Policy 持有的服务端进程读，这里按其格式写一份交给假服务端
     if pol in ("perceptual-framesamp-modul", "groundsg"):
         if wrap_create_policy_seed(argv, meta) != seed:
             bad.append("wrap.create_policy seed")
@@ -279,6 +294,9 @@ def _seat_seed_case(route: str, seed: int, tmp: Path, monkeypatch) -> list[str]:
         meta.write_text(json.dumps({"policy_seed": seed_in_server_argv(route, argv), "argv": argv}))
     if pol == "smvla" and not smvla_reseed_matches(seed):
         bad.append("smvla reseed")
+    srv = types.SimpleNamespace(metadata=json.loads(meta.read_text(encoding="utf-8")), check=lambda: None,
+                                stop=lambda **k: "stopped", left_line=lambda: "")
+    runner.fake_policy.servers = lambda: [srv]  # Policy.server_seed 从服务端元数据反查
     ident = ood_identity()
     rc = F.run_rows(runner, [ident])
     runner.close()
@@ -289,12 +307,15 @@ def _seat_seed_case(route: str, seed: int, tmp: Path, monkeypatch) -> list[str]:
     if row["status"] != "success":
         bad.append(f"status={row['status']} error={row.get('error')}")
     route_name = route_label(route, seed)
-    want = {"policy_seed": seed, "server_seed": seed, "budget_token": f"{route_name}|{ident['key']}|a1",
-            "effective_cap": CAP}
+    want = {"policy_seed": seed, "budget_token": f"{route_name}|{ident['key']}|a1"}
     bad += [f"row.{k}={row.get(k)!r}" for k, v in want.items() if row.get(k) != v]
+    # 局结果 result.json：种子与服务端反查种子、步数口径（拆仓后 effective_cap 不进结果行，改核 max_steps／strict_cap）
+    res = read_result(runner, ident)
+    want_res = {"policy_seed": seed, "server_seed": seed, "max_steps": CAP, "strict_cap": True}
+    bad += [f"result.{k}={res.get(k)!r}" for k, v in want_res.items() if res.get(k) != v]
     if pol == "groundsg":
-        if row.get("policy_variant") != variant:
-            bad.append(f"row.policy_variant={row.get('policy_variant')}")
+        if res.get("policy_variant") != variant:
+            bad.append(f"result.policy_variant={res.get('policy_variant')}")
         if spy.get("model_seed") != seed:
             bad.append(f"Args.model_seed={spy.get('model_seed')}")
         want_se = [] if variant == G.ORACLE else [seed]
@@ -314,94 +335,61 @@ def _seat_seed_case(route: str, seed: int, tmp: Path, monkeypatch) -> list[str]:
     return bad
 
 
-class _NullWriter:
-    def append_data(self, frame):
-        pass
-
-    def close(self):
-        pass
-
-
-STUB_SIM = r"""#!/usr/bin/env bash
-for a in "$@"; do
-  if [[ "$a" == *astra_hard_runner.py ]]; then printf '%s\n' "$*" >> "$STUB_LOG"; exit 0; fi
-done
-if [[ "${1:-}" == "-" && "${2:-}" =~ ^[0-9]+$ ]]; then cat >/dev/null; exit 0; fi
-exec "$REAL_PY" "$@"
-"""
-STUB_VLA = r"""#!/usr/bin/env bash
-if [[ "${1:-}" == "-" ]]; then cat >/dev/null; exit 0; fi
-printf '%s\n' "$*" > "$VLA_LOG"
-"""
+def find_episode(builder_cls, task: str, dataset: str, *, tier: str | None = None) -> int:
+    """真实身份解析里第一个符合档位的 builder 局号（ood 的 xhard1 局用）。"""
+    b = builder_cls(task, dataset=dataset, action_space="joint_angle", gui_render=False,
+                    max_steps={"hard-verify": 1300, "ood": CAP}[dataset])
+    for ep in range(b.get_episode_num()):
+        if tier is None or b.resolve_identity(ep)["tier"] == tier:
+            return ep
+    raise AssertionError(f"{task} {dataset} 找不到 tier={tier}")
 
 
-def astra_launch(tmp: Path, seed: int) -> tuple[subprocess.CompletedProcess, Path, Path, Path]:
-    """``run_astra.sh`` 以桩解释器起：VLA 服务只记 argv、runner 只记命令行；零外联（假 key 不会被用到）。"""
-    stubs = tmp / "stubs"
-    stubs.mkdir(parents=True, exist_ok=True)
-    sim, vla, lib = stubs / "sim.sh", stubs / "vla.sh", stubs / "lib.sh"
-    sim.write_text(STUB_SIM)
-    vla.write_text(STUB_VLA)
-    lib.write_text("render_official_dir() { :; }\ntranscode_episode_dir() { :; }\n")
-    sim.chmod(0o755)
-    vla.chmod(0o755)
-    (tmp / "astra-root").mkdir(exist_ok=True)
-    cases = A.write_cases(tmp / "cases.json", {"dataset": "ood", "cases": []})
-    run = tmp / "group_0" / "run"
-    log, vla_log = tmp / "runner-argv.log", tmp / "vla-argv.log"
-    env = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
-    env.update(VLA_PYTHON=str(vla), SIM_PYTHON=str(sim), REAL_PY=sys.executable, STUB_LOG=str(log),
-               VLA_LOG=str(vla_log), VLA_CHECKPOINT=str(tmp / "ckpt"), MONITOR_BASE=str(tmp / "base"),
-               MONITOR_ADAPTER=str(tmp / "adapter"), MAX_STEPS=str(CAP),
-               OPENAI_API_KEY="sk-test-placeholder-not-a-real-key", ASTRA_GUARD_STATE=str(tmp / "g.json"),
-               ASTRA_ROOT=str(tmp / "astra-root"), SEAT_MEDIA_LIB=str(lib), VLA_GPU="0", MONITOR_GPU="1",
-               PORT="18999")
-    proc = subprocess.run(["bash", str(EO / "run_astra.sh"), "--policy-seed", str(seed), str(cases), str(run)],
-                          capture_output=True, text=True, env=env, timeout=120)
-    return proc, run, log, vla_log
+def astra_run(tmp: Path, monkeypatch, *, seed: int, dataset: str, task: str, tier: str | None = None,
+              env_plan=None, overrun: int | None = None):
+    """拆仓后的 Astra 路线：经 ``load_policy("astra", seed)`` 建全替身 ``AstraPolicy``（服务端、VLA、规划、监视都是
+    ``astra_fakes.Harness`` 的替身，零外联、零 GPU），外层 ``run_episode`` 跑一局。``overrun`` 给出时把 Astra 自己的循环
+    上限改大（模拟越界）。返回 (harness, 结果, 外联计数器)。旧 ``run_astra.sh``／``astra_hard_runner.run_cases`` 已不迁。"""
+    net = A.NetCounter().install(monkeypatch)
+    with A.astra_session() as (mod, astra):
+        h = A.Harness(tmp, monkeypatch, mod, astra, env_plan=env_plan or (lambda b, ep: A.FakeEnv(terminal_step=20)))
+        if overrun is not None:
+            real_episode = astra.runner.episode
+
+            def over(run_args, *rest):
+                return real_episode(types.SimpleNamespace(**{**vars(run_args), "max_steps": overrun}), *rest)
+
+            monkeypatch.setattr(astra.runner, "episode", over)
+        h.load(seed=seed)
+        ep = find_episode(h.cls, task, dataset, tier=tier) if tier else 0
+        r = h.run(dataset, task, ep)
+        h.policy.close()
+    return h, r, net
 
 
-def _a_dir(output: Path, task: str, ep: int) -> Path:
-    dirs = [p for p in (Path(output) / task / f"ep{ep:03d}").iterdir() if p.is_dir() and ".a" in p.name]
-    assert len(dirs) == 1, dirs
-    return dirs[0]
+# ═════════════════════════════════ POLICY_SEEDS（Astra） ═════════════════════════════════
 
 
 def _astra_seed_case(seed: int, tmp: Path, monkeypatch) -> list[str]:
     bad: list[str] = []
-    proc, run, log, vla_log = astra_launch(tmp, seed)
-    if proc.returncode != 0:
-        return [f"run_astra.sh rc={proc.returncode} {proc.stderr[-300:]}"]
-    argv = vla_log.read_text().split()
-    seeds = [a for a in argv if a.startswith("--seed=")]
+    h, r, net = astra_run(tmp, monkeypatch, seed=seed, dataset="hard-verify", task="BinFill")
+    vla = h.servers()["astra-vla"]
+    seeds = [x for x in vla.argv if str(x).startswith("--seed=")]
     if seeds != [f"--seed={seed}"]:
         bad.append(f"vla argv seeds={seeds}")
-    calls = log.read_text().splitlines()
-    seeded = [c for c in calls if f" check " in f" {c} " or f" run " in f" {c} "]  # summarize 不读种子
-    if len(seeded) != 2 or not all(c.endswith(f"--policy-seed {seed}") or f"--policy-seed {seed} " in c
-                                   for c in seeded):
-        bad.append(f"runner check/run calls={seeded}")
-    meta = json.loads((run / "server-metadata-18999.json").read_text())
-    if meta.get("policy_seed") != seed or meta.get("cloud_seed") is not None:
-        bad.append(f"server meta={meta}")
-    net = A.NetCounter().install(monkeypatch)
-    with A.astra_session() as (mod, astra):
-        cls = A.recording_builder_cls(lambda b, ep: A.FakeEnv(terminal_step=20))
-        doc = mod.prepare_cases(cls, "hard-verify", ["BinFill"], source_episodes=[3])
-        args = A.make_args(tmp, A.write_cases(tmp / "c.json", doc), max_steps=1300, policy_seed=seed)
-        monkeypatch.setattr(astra.runner.imageio, "get_writer", lambda *a, **k: _NullWriter())
-        deps = A.make_deps(astra, cls, monitor=A.FakeMonitor(), vla=A.FakeVLA(),
-                           responder=A.FakeResponder(astra.champ), check_calls=[])
-        (result,) = mod.run_cases(args, deps)["results"]
-    a_dir = _a_dir(Path(args.output), "BinFill", 0)
-    rows = F.read_jsonl(a_dir / "trace.jsonl")
+    if vla.metadata.get("policy_seed") != seed or vla.metadata.get("cloud_seed") is not None:
+        bad.append(f"server meta={vla.metadata}")
+    if r.server_seed != seed or r.policy_seed != seed:
+        bad.append(f"result server_seed={r.server_seed} policy_seed={r.policy_seed}")
+    rows = F.read_jsonl(h.raw(r) / "trace.jsonl")
     if rows[0]["identity"].get("policy_seed") != seed or rows[-1].get("policy_seed") != seed:
         bad.append("astra trace policy_seed")
     if rows[0].get("policy_seed", seed) != seed:
         bad.append("astra trace header policy_seed")
-    if result.get("policy_seed") != seed or result.get("cloud_seed") is not None:
-        bad.append(f"astra result policy_seed={result.get('policy_seed')}")
-    prov = json.loads((a_dir / "provenance.json").read_text())
+    saved = json.loads((h.astra_ep_dir(r) / "result.json").read_text())
+    if saved.get("policy_seed") != seed or saved.get("cloud_seed") is not None:
+        bad.append(f"astra result policy_seed={saved.get('policy_seed')}")
+    prov = json.loads((h.attempt_dir(r) / "provenance.json").read_text())
     if prov.get("server_seed") != seed:
         bad.append(f"astra provenance server_seed={prov.get('server_seed')}")
     if net.calls != 0:
@@ -444,11 +432,13 @@ def _seat_cap_case(route: str, tmp: Path, monkeypatch) -> tuple[list[str], dict]
         return [f"rc={rc} rows={[(r.get('status'), r.get('error')) for r in rows]}"], {}
     row = rows[0]
     (env,) = world.envs
+    res = read_result(runner, ident)
     info = {"env_steps": len(env.actions), "status": row["status"], "exec_steps": row["exec_steps"],
-            "cap_hit": row["cap_hit"], "effective_cap": row["effective_cap"]}
+            "cap_hit": row["cap_hit"], "max_steps": res.get("max_steps"), "strict_cap": res.get("strict_cap")}
     if len(env.actions) != CAP:
         bad.append(f"环境实收 {len(env.actions)} 步（应恰 {CAP}：第 {CAP} 步进入、第 {CAP + 1} 步不进入）")
-    if (row["status"], row["exec_steps"], row["effective_cap"], row["infra"]) != ("timeout", CAP, CAP, False):
+    if (row["status"], row["exec_steps"], res.get("max_steps"), res.get("strict_cap"), row["infra"]) != \
+            ("timeout", CAP, CAP, True, False):
         bad.append(f"row={info} infra={row['infra']} error={row.get('error')}")
     if pol != "pp" and not row["cap_hit"]:  # PP 自身循环在 1800 退出、不触发守卫（计划八.3）
         bad.append("cap_hit=False（第 1801 步应被 EnvSession 守卫拒绝）")
@@ -468,36 +458,25 @@ def _seat_cap_case(route: str, tmp: Path, monkeypatch) -> tuple[list[str], dict]
 
 def _astra_cap_case(tmp: Path, monkeypatch) -> tuple[list[str], dict]:
     """Astra：自身循环被改成以为上限 1900（模拟越界），入口守卫在第 1801 步前拒绝。"""
-    net = A.NetCounter().install(monkeypatch)
-    with A.astra_session() as (mod, astra):
-        envs = []
+    envs: list = []
 
-        def plan(builder, ep):
-            envs.append(A.FakeEnv(terminal_step=None))
-            return envs[-1]
+    def plan(builder, ep):
+        envs.append(A.FakeEnv(terminal_step=None))
+        return envs[-1]
 
-        cls = A.recording_builder_cls(plan)
-        doc = mod.prepare_cases(cls, "ood", ["VideoUnmask"], tier="xhard1", index=0)
-        args = A.make_args(tmp, A.write_cases(tmp / "cases.json", doc), max_steps=CAP, policy_seed=7)
-        monkeypatch.setattr(astra.runner.imageio, "get_writer", lambda *a, **k: _NullWriter())
-        real_episode = astra.runner.episode
-
-        def overrun(run_args, *rest):
-            return real_episode(types.SimpleNamespace(**{**vars(run_args), "max_steps": CAP + 100}), *rest)
-
-        monkeypatch.setattr(astra.runner, "episode", overrun)
-        deps = A.make_deps(astra, cls, monitor=A.FakeMonitor(), vla=A.FakeVLA(),
-                           responder=A.FakeResponder(astra.champ), check_calls=[])
-        (result,) = mod.run_cases(args, deps)["results"]
-    info = {"env_steps": envs[0].steps_taken, "status": result["status"], "exec_steps": result["exec_steps"],
-            "cap_hit": result["cap_hit"], "effective_cap": result["effective_cap"]}
+    h, r, net = astra_run(tmp, monkeypatch, seed=7, dataset="ood", task="VideoUnmask", tier="xhard1", env_plan=plan,
+                          overrun=CAP + 100)
+    tr = F.read_jsonl(h.raw(r) / "trace.jsonl")
+    info = {"env_steps": envs[0].steps_taken, "status": r.status, "exec_steps": r.exec_steps, "cap_hit": r.cap_hit,
+            "max_steps": r.max_steps, "strict_cap": r.strict_cap, "trace_effective_cap": tr[-1].get("effective_cap")}
     bad = []
     if envs[0].steps_taken != CAP:
         bad.append(f"环境实收 {envs[0].steps_taken} 步")
-    if (result["status"], result["exec_steps"], result["cap_hit"], result["effective_cap"]) != ("timeout", CAP, True, CAP):
+    if (r.status, r.exec_steps, r.cap_hit, r.max_steps, r.strict_cap) != ("timeout", CAP, True, CAP, True):
         bad.append(f"result={info}")
-    a_dir = _a_dir(Path(args.output), "VideoUnmask", doc["cases"][0]["episode"])
-    steps = [r for r in F.read_jsonl(a_dir / "trace.jsonl") if r["kind"] == "step"]
+    if tr[-1].get("effective_cap") != CAP:
+        bad.append(f"trace end effective_cap={tr[-1].get('effective_cap')}")
+    steps = [x for x in tr if x["kind"] == "step"]
     if len(steps) != CAP:
         bad.append(f"trace step rows={len(steps)}")
     if net.calls:
@@ -518,14 +497,16 @@ def test_eval_cap_1800_seven_routes(tmp_path, monkeypatch):
         if bad:
             failures[route] = bad
     assert not failures, failures
-    # 对照（证明本判据有区分力）：同一 FrameSamp+Modulation 路线去掉 strict cap，客户端自己的循环会把第 1801 步送进环境
+    # 对照（证明本判据有区分力）：同一 FrameSamp+Modulation 路线跑不 strict 的 hard-verify（上限 1300），客户端自己的
+    # 循环会把第 1301 步送进环境（拆仓后 strict 只由数据集决定，不再有单独的开关）
+    hv_cap = 1300
     ctl_world = World(G.Plan())
     ctl = seat_runner("perceptual-framesamp-modul", tmp_path / "control", ctl_world, monkeypatch, seed=7,
-                      max_steps=CAP, spy={}, strict_cap=False)
-    assert F.run_rows(ctl, [ood_identity()]) == 0
-    assert len(ctl_world.envs[0].actions) == CAP + 1, "对照失效：不带 strict cap 时第 1801 步应进入环境"
+                      max_steps=CAP, spy={})
+    assert F.run_rows(ctl, [F.hard0_identity("PickXtimes", 0)]) == 0
+    assert len(ctl_world.envs[0].actions) == hv_cap + 1, "对照失效：不 strict 时第 1301 步应进入环境"
     print(f"EVAL_CAP=PASS models={len(ROUTES)} dataset=ood max_steps={CAP} rejected_step={CAP + 1} "
-          f"control_without_strict_cap_entered={CAP + 1}")
+          f"control_hard_verify_not_strict_entered={hv_cap + 1}")
 
 
 # ═════════════════════════════════ OBS_EQ（观察关闭／开启等价 + 三类突变被拒） ═════════════════════════════════

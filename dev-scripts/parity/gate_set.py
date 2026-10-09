@@ -64,7 +64,7 @@ N_TASKS = 16
 DEFAULT_PATH = _common.CONFIGS / "gate-set-v9-129.json"
 ROW_KEYS = ("task", "tier", "candidate", "seed", "spec_sha256", "builder_episode")
 #: 与冻结配置 gate-set-v9-129.json 的 rule 字段逐字节相同。拆仓时随 xhard0 前置开关删除改写（编号本身不变：
-#: 原「开关为 0 时的 test-hard 编号」就是现在 dataset="ood" 的局号），并按 canonical JSON 重签该文件与噪声参照
+#: 原「开关为 0 时的旧第三阶段接口编号」就是现在 dataset="ood" 的局号），并按 canonical JSON 重签该文件与噪声参照
 RULE = ("V9 包内规格交付行（hard_specs.delivered），每个交付格（任务, 档）取 candidate 升序最小的 3 个；"
         "builder_episode 按 dataset=ood（不含 xhard0）的局号")
 
@@ -289,7 +289,7 @@ def to_env_digest_identities(rows: Iterable[dict[str, Any]]) -> list[dict[str, A
 
 
 def to_legacy_identities(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    """``scripts/eval-official/env_client.py`` 旧路线（非 ``--v8``）的 ``--identities``：与 small48 同格式的列表
+    """旧仓评估客户端 ``env_client.py`` 旧路线（非 ``--v8``）的 ``--identities``：与 small48 同格式的列表
     ``[{task, source_episode, seed, builder_episode}]``。旧路线只读这四个字段（``check_identity`` 核 tier=xhard0、
     seed、source_episode；``order_identities`` 按 task、source_episode 排），``e0_*`` 排序字段不需要，故不输出。
     只接受 xhard0 行。"""
@@ -303,7 +303,7 @@ def to_legacy_identities(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def to_eval_keys(rows: Iterable[dict[str, Any]]) -> set[str]:
-    """V8 评估链路身份键 ``<task>_<tier>_<seed>``（与 ``scripts/eval-official/env_client.py::v8_key`` 同式）。"""
+    """V8 评估链路身份键 ``<task>_<tier>_<seed>``（与 ``dev-scripts/gl/seat.py::v8_key`` 同式）。"""
     return {f"{r['task']}_{r['tier']}_{int(r['seed'])}" for r in rows}
 
 

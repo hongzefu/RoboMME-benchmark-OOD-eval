@@ -3,7 +3,7 @@
 键为 ``<块>:<编号>``，块 = mutants.json 相对 ``tests/`` 的目录（如 ``pipeline/eval``）。三种形态：
 
 - ``{"kind": "text", "patch": [{"file", "old", "new"}, ...]}``：A 类，在隔离副本里逐字替换，每个 old 必须恰好命中 1 次；
-- ``{"kind": "transform", "func": <可调用>, "files": [...]}``：A 类，在隔离副本里按函数改写数据文件（如规格 jsonl 重签）；
+- ``{"kind": "transform", "func": <可调用>, "files": [...]}``：A 类，在隔离副本里按函数改写数据文件（拆仓后本表已无此类）；
   ``files`` 列出会被改写的相对路径，执行器据此备份与还原；
 - 进程内植入（B 类）不在本表，见 ``plugins/mut_inproc.py`` 的 ``SUPPORTED`` 与 ``tests/unit/hard/mutants_plugin.py``。
 
@@ -11,69 +11,24 @@
 """
 from __future__ import annotations
 
-import importlib.util
-import json
-from pathlib import Path
 
 
 def _t(*patches: tuple[str, str, str]) -> dict:
     return {"kind": "text", "patch": [{"file": f, "old": o, "new": n} for f, o, n in patches]}
 
 
-# ─────────────────────────────── 挑战接口块（tests/pipeline/challenge） ───────────────────────────────
-_P1 = "challenge_interface/scripts/phase1_eval.py"
-CHALLENGE = {
-    "pipeline/challenge:M19b": _t((_P1, '    return s == "success" or ("success" in s and "fail" not in s)\n',
-                                   "    return True\n")),
-    "pipeline/challenge:M19c": _t(("challenge_interface/msgpack_numpy.py",
-                                   '            b"data": obj.tobytes(),\n            b"dtype": obj.dtype.str,',
-                                   '            b"data": obj.tobytes(),\n            b"dtype": obj.dtype.newbyteorder("=").str,')),
-    "pipeline/challenge:M19d": _t(("challenge_interface/server.py", "                    self._policy.reset()\n",
-                                   "                    pass\n")),
-    "pipeline/challenge:M19e": _t((_P1, "total_episodes = len(task_list) * args.num_episodes",
-                                   "total_episodes = len(task_list)")),
-    "pipeline/challenge:M19f": _t(("challenge_interface/client.py", "if isinstance(response, str):", "if False:")),
-    "pipeline/challenge:M19g": _t((_P1, 'buffer["is_first_step"] = False', 'buffer["is_first_step"] = True')),
-}
-
-# ─────────────────────────────── 评估块（tests/pipeline/eval） ───────────────────────────────
-_EO = "scripts/eval-official/"
-EVAL = {
-    "pipeline/eval:M13a": _t((_EO + "framesamp_modul_client.py", "    resp = client.reset()\n", '    resp = {"reset_finished": True}\n')),
-    "pipeline/eval:M13b": _t((_EO + "smvla_client.py",
-                              '            reply = call("reset", {"reset": {"episode_key": episode_key(identity)}})\n',
-                              "            reply = {}\n")),
-    "pipeline/eval:M16a": _t((_EO + "env_client.py",
-                              '                record.update(status="timeout", infra=False, infra_reason=None, client_status',
-                              '                record.update(status="fail", infra=False, infra_reason=None, client_status')),
-    "pipeline/eval:M16b": _t((_EO + "env_client.py", "        if status in TERMINAL_STATUSES:\n            return True\n",
-                              '        if status in ("success", "timeout"):\n            return True\n')),
-    "pipeline/eval:M16c": _t((_EO + "framesamp_modul_client.py", 'INFRA_MARKERS = ("RecorderError",',
-                              'INFRA_MARKERS = ("Error", "RecorderError",')),
-    "pipeline/eval:M17a": _t((_EO + "eval_report.py", '            "denominator": len(mkeys), "outcomes"',
-                              '            "denominator": len(an["rows"]), "outcomes"')),
-    "pipeline/eval:M17b": _t((_EO + "eval_report.py",
-                              '"outcomes": {s: oc[s] for s in (*TERMINAL, "error", "missing", "conflict")},\n            "accepted"',
-                              '"outcomes": dict(oc),\n            "accepted"')),
-    "pipeline/eval:F3": _t((_EO + "eval_report.py", "            if have_cells.get(cell, 0) != want_cells.get(cell, 0):",
-                            "            if False:")),
-    "pipeline/eval:F2": _t((_EO + "eval_manifest.py", "    xhard0_expected = len(hs.ALL_TASKS) * hs.xhard0_prefix()",
-                            "    xhard0_expected = len(hs.ALL_TASKS) * hs.XHARD0_PER_TASK")),
-    "pipeline/eval:T8b-K1": _t((_EO + "env_client.py",
-                                '            if rec.get("status") == "error" and rec.get("infra") and led.attempts_used(k) < V8_MAX_ATTEMPTS:',
-                                "            if False:")),
-    "pipeline/eval:T8b-K2": _t((_EO + "smvla_client.py", "    return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 2",
-                                "    return max(1, -(-int(max_steps) // max(1, execute_horizon))) + 3")),
-    "pipeline/eval:T8b-K3": _t((_EO + "eval_report.py", "    if len(mrows) != expect_total:", "    if False:")),
-}
+# 拆仓后（评估仓）：挑战接口块（tests/pipeline/challenge）与契约块（tests/contract 的规格 jsonl／builder 植入）随 benchmark
+# 仓走，配方已删；评估块（tests/pipeline/eval）的 mutants.json 每条自带内联 patch（指向 dev-scripts／src/robomme_hard_eval
+# 新位置），不再依赖本表，旧评估目录（eval-official）的配方一并删去。
 
 # ─────────────────────────────── 生成块（tests/pipeline/gen）与站点块（tests/pipeline/site） ───────────────────────────────
-_R = "scripts/injection-dev/_rollout.py"
-_FZ = "scripts/injection-dev/_freeze.py"
-_SBD = "scripts/injection-dev/site_build.py"
-_EX = "scripts/injection-dev/export_eval_identities.py"
-_SV = "scripts/injection-dev/site/site_server.py"
-_CT = "scripts/injection-dev/site/site_catalog.py"
+# 拆仓后各文件的新位置（见 tests/_support/loaders.py::LEGACY_PATHS）；_freeze 的两条（T7-F1／F2）已不在 gen 的
+# mutants.json 里（gen 只留 _freeze_min 的测试），对应配方删去
+_R = "dev-scripts/parity/_rollout.py"
+_SBD = "dev-scripts/site/site_build.py"
+_EX = "dev-scripts/gl/export_eval_identities.py"
+_SV = "dev-scripts/site/site_server.py"
+_CT = "dev-scripts/site/site_catalog.py"
 GEN_SITE = {
     "pipeline/gen:M17a": _t((_R, '            "expected": expected,\n',
                              '            "expected": sum(hard_specs.delivered(r) for r in mine),\n')),
@@ -87,10 +42,6 @@ GEN_SITE = {
                               "infra_retries.get(key, 0) <= max_infra_retries")),
     "pipeline/gen:T7-G3": _t((_R, "if int(steps) > int(exec_cap):", "if int(steps) >= int(exec_cap):")),
     "pipeline/gen:T7-G4": _t((_R, 'if row["task"] in same_way_tasks:', "if False:")),
-    "pipeline/gen:T7-F1": _t((_FZ, "for ep in by_way.get(way, [])[:quota_by_way[way]])",
-                              "for ep in by_way.get(way, [])[-quota_by_way[way]:])")),
-    "pipeline/gen:T7-F2": _t((_FZ, "return {key: int(n) for key, n in cells.items()}",
-                              "return {key: int(n) + 1 for key, n in cells.items()}")),
     "pipeline/gen:T7-S1": _t((_SBD, 'prev.get("sha256s") == [sha256_file(p) for p in paths]', "True")),
     "pipeline/gen:T7-S2": _t((_SBD, 'if old.get("fingerprint") != runner.fingerprint:', "if False:")),
     "pipeline/gen:T7-E1": _t((_EX, 'and facts.get("delivery_mismatch", 0) == 0)', ")")),
@@ -101,67 +52,4 @@ GEN_SITE = {
     "pipeline/site:T7-C1": _t((_CT, "if not table1_ok(task, dim, tier, value):", "if False:")),
 }
 
-# ─────────────────────────────── 契约块（tests/contract）：规格 jsonl 与 builder ───────────────────────────────
-_SPECS = "src/robomme_hard/env_metadata/ood/xhard1/specs.jsonl"
-
-
-def _load_hs(root: Path):
-    """从隔离副本里按文件加载 hard_specs（用副本自己的签名函数重签）。"""
-    spec = importlib.util.spec_from_file_location("_mut_hs", root / "src/robomme_hard/env_record_wrapper/hard_specs.py")
-    hs = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(hs)
-    return hs
-
-
-def _resign_write(path: Path, hs, records: list[dict]) -> None:
-    header, rows = records[0], records[1:]
-    header["sampling_config_sha256"] = hs.digest(header["sampling_config"])
-    header["identity_sha256"] = hs.identity_sha256(header, rows)
-    header["delivery_sha256"] = hs.delivery_sha256(rows)
-    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in [header, *rows]), encoding="utf-8")
-
-
-def contract_m04(root: Path) -> None:
-    """xhard1 第一个 selected 行 seed 加 1，只改这一行、不重签。"""
-    path = root / _SPECS
-    lines = path.read_text(encoding="utf-8").splitlines()
-    i = next(i for i, ln in enumerate(lines[1:], 1) if json.loads(ln)["selected"])
-    row = json.loads(lines[i])
-    row["seed"] += 1
-    lines[i] = json.dumps(row, ensure_ascii=False)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def contract_m05(root: Path) -> None:
-    """第一个 PickXtimes selected 行 num_repeats 加 1，重算 spec_sha256 与 header 三个散列（validate_specs 仍通过）。"""
-    hs = _load_hs(root)
-    path = root / _SPECS
-    records = [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines()]
-    row = next(r for r in records[1:] if r["task"] == "PickXtimes" and r["selected"])
-    row["spec"]["objects"]["num_repeats"] += 1
-    row["spec_sha256"] = hs.spec_sha256(row["spec"])
-    _resign_write(path, hs, records)
-    hs.validate_specs(records[0], records[1:])  # 植入后签名与校验器自洽，证明挡住它的是取值核对而不是签名
-
-
-def contract_m06(root: Path) -> None:
-    """candidate==1 的行改 True、candidate==2 的行 attempt 改浮点，重算 header 三个散列。"""
-    hs = _load_hs(root)
-    path = root / _SPECS
-    records = [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines()]
-    row = next(r for r in records[1:] if r["candidate"] == 1)
-    row["candidate"] = True
-    other = next(r for r in records[1:] if r["candidate"] == 2)
-    other["attempt"] = float(other["attempt"])
-    _resign_write(path, hs, records)
-
-
-CONTRACT = {
-    "contract:M04": {"kind": "transform", "func": contract_m04, "files": [_SPECS]},
-    "contract:M05": {"kind": "transform", "func": contract_m05, "files": [_SPECS]},
-    "contract:M06": {"kind": "transform", "func": contract_m06, "files": [_SPECS]},
-    "contract:M09": _t(("src/robomme_hard/env_record_wrapper/hard_builder.py",
-                        '            "native_episode_spec": entry["row"]["spec"],\n', "")),
-}
-
-RECIPES: dict[str, dict] = {**CHALLENGE, **EVAL, **GEN_SITE, **CONTRACT}
+RECIPES: dict[str, dict] = {**GEN_SITE}

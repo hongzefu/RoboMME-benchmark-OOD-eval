@@ -265,12 +265,12 @@
     {
       "id": "T6-D3",
       "target": "dev-scripts/parity/hard_parity.py::cmd_compare",
-      "method": "去掉「compared > 0」：空清单 0 = 0 判 PASS",
+      "method": "去掉「n > 0 and compared > 0」：空清单 0 = 0 判 PASS（拆仓后判定式改为一行多条件，植入点随之改）",
       "patch": [
         {
           "file": "dev-scripts/parity/hard_parity.py",
-          "old": "judged = n > 0 and manifest_dup == 0",
-          "new": "judged = manifest_dup == 0"
+          "old": "judged = n > 0 and compared > 0 and compared == n and unreadable == 0",
+          "new": "judged = compared == n and unreadable == 0"
         }
       ],
       "expect_fail": [

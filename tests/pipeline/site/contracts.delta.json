@@ -195,5 +195,24 @@
     "resource": "browser",
     "mutants": [],
     "status": "conditional"
+  },
+  {
+    "id": "C17-OFFICIAL-OVERLAY-BROWSER",
+    "domain": "C17",
+    "source": [
+      "dev-scripts/site/official_overlay_site.py",
+      "dev-scripts/site/official_overlay.html",
+      "dev-scripts/site/official_overlay_browser_check.py"
+    ],
+    "symbol": "官方叠字视频站：建站、页面与真浏览器核验脚本",
+    "oracle": "真浏览器（Playwright）按本机第三档完整媒体与重绘结果核验",
+    "positive": "—",
+    "negative": "—",
+    "boundaries": "—",
+    "nodeids": [],
+    "resource": "browser",
+    "mutants": [],
+    "status": "conditional",
+    "note": "依赖本机第三档完整媒体与重绘结果，不在日常 pytest 执行；通过 official_overlay_browser_check.py --base <本站> --shots <产物根> --v9-results <本机V9结果> --xhard0-results <本机xhard0接受结果> 真浏览器核验。旧仓一轮 13 项通过，32 格及 16 栏目全验，报告与截图在 sg-eval-gl-20261004-01/records/official-overlay。（拆仓 MERGE-1 从旧总表按新路径迁入。）"
   }
 ]

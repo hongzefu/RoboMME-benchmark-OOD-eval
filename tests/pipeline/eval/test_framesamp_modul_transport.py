@@ -160,7 +160,7 @@ class _Builder:
 
 def _episode(tmp_path, monkeypatch, plan, *, mode="ok", via_relay=True):
     """一局：假 server（＋生产中继）＋真实 RecordingClient ＋ EnvSession(假 builder)。返回 (结果, 录制器, 中继日志, server)。"""
-    mc, ec = F.framesamp_modul_client(), F.env_client()
+    mc, ec = F.framesamp_modul_client(), F.env_session()
     log = tmp_path / "relay.jsonl"
     rec = F.FakeRecorder(tmp_path / "rec", {})
     b = _Builder(plan)

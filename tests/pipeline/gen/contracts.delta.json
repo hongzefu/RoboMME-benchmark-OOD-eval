@@ -40,7 +40,8 @@
     "id": "C12.06",
     "domain": "C12",
     "source": [
-      "dev-scripts/parity/_rollout.py"
+      "dev-scripts/parity/_rollout.py",
+      "dev-scripts/parity/generate_h5.py"
     ],
     "symbol": "_rollout.run_batch",
     "oracle": "FakeRunner 冒充 train_split_runner 命令行契约（真 h5／mp4／spec_replay.json 落盘）",
@@ -166,19 +167,17 @@
     "source": [
       "dev-scripts/gl/export_eval_identities.py"
     ],
-    "symbol": "export_eval_identities.main/check_rows/balance",
-    "oracle": "新值身份集合直接读包内五份规格的交付行（不经 builder）；贪心均衡用三局两片手算",
-    "positive": "800 局与交付集合逐一相同、每任务 episode 连续、candidate 一致、round／shard 为空；开关开：xhard0 每任务 12、官方清单 10 片",
-    "negative": "少一行交付 → delivery_mismatch=1 FAIL；V9 缺 --delivery、开关开却用默认 --official-out 均退出；check_rows 的 round 已设、缺格、表外格、开关关却有官方行",
-    "boundaries": "同用时按 episode 取片号小者",
+    "symbol": "export_eval_identities.main/check_rows（拆仓后按数据集名 hard-verify／ood 导出）",
+    "oracle": "ood 新值身份集合直接读包内五份规格的交付行（不经 builder）；hard-verify 每任务 12 局、官方原号 3,7,…,47 手写",
+    "positive": "全量导出与交付集合逐一相同；S5 runbook 两行（VideoUnmask × hard-verify 局 0、ood 局 0）",
+    "negative": "少一行交付 → delivery_mismatch=1 FAIL；check_rows 的缺格、表外格等反例；坏数据集名／任务名／空范围／重复数据集退出 2",
+    "boundaries": "xhard0 只按数据集名出现在 hard-verify，不再前置到 ood（旧开关用例随之删除）",
     "nodeids": [
-      "tests/pipeline/gen/test_eval_identities.py::test_export_matches_packaged_delivery",
-      "tests/pipeline/gen/test_eval_identities.py::test_export_detects_delivery_mismatch",
-      "tests/pipeline/gen/test_eval_identities.py::test_v9_requires_delivery",
-      "tests/pipeline/gen/test_eval_identities.py::test_xhard0_switch_on_adds_official_route",
-      "tests/pipeline/gen/test_eval_identities.py::test_balance_greedy_by_hand",
+      "tests/pipeline/gen/test_eval_identities.py::test_split_accept_two_rows",
+      "tests/pipeline/gen/test_eval_identities.py::test_full_export_matches_packaged_delivery",
+      "tests/pipeline/gen/test_eval_identities.py::test_full_export_detects_delivery_mismatch",
       "tests/pipeline/gen/test_eval_identities.py::test_check_rows_negatives",
-      "tests/pipeline/gen/test_eval_identities.py::test_specs_root_env_restored_after_main"
+      "tests/pipeline/gen/test_eval_identities.py::test_bad_args_exit_2"
     ],
     "resource": "cpu",
     "mutants": [
