@@ -5,7 +5,7 @@
 同名测试与 ``BENCH_UPSTREAM`` 判定行守护。评估仓这一侧只需钉死两件事：
 
 1. ``third_party/robomme_benchmark`` 是 ``.gitmodules`` 登记的子模块（URL 为 benchmark 仓），HEAD 树里的 gitlink 等于本文件
-   记下的锁定值 ``BENCH_LOCK``（1.7 提交「benchmark 子模块升到候选版本 v1.0-ood-rc1（d22fe20）」）——升级子模块时必须同步
+   记下的锁定值 ``BENCH_LOCK``（1.16 提交「benchmark 子模块升到锁死版本 v1.0-ood（a5efb99）」）——升级子模块时必须同步
    改这里，不能悄悄漂移；子模块已检出时，检出的 HEAD 也必须等于 gitlink；
 2. 评估仓里没有 ``src/robomme``、``src/robomme_hard`` 的副本（既不被 git 跟踪，也不在磁盘上），``robomme``／``robomme_hard``
    只能从子模块的 ``src/`` 解析（只用 ``find_spec`` 找位置，不执行包代码）。
@@ -25,7 +25,7 @@ from tests._support.loaders import REPO
 SUBMODULE = "third_party/robomme_benchmark"
 BENCH_URL = "https://github.com/hongzefu/RoboMME-benchmark-OOD.git"
 #: benchmark 子模块的锁定提交（1.7 提交写入；升级子模块时与 gitlink 一起改）
-BENCH_LOCK = "d22fe20dc7750e6db10601453206210270912e7d"
+BENCH_LOCK = "a5efb992e769b7011281a1d31739b76d8868602a"
 
 
 def _git(*args: str, cwd: Path = REPO) -> str:
