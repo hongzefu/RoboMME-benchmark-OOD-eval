@@ -1,13 +1,17 @@
-"""C13 两个官方评估入口（benchmark 子模块的 ``scripts/evaluation.py`` 与 ``scripts/evaluation_ood.py``）的 error 分支，
-以测试子进程实际执行。拆仓后两个入口都在子模块里（评估仓 ``scripts/`` 只留 ``evaluate.py``）；子模块未检出（git
-worktree）时按已安装 ``robomme`` 包的位置找同一份文件。
+"""C13: the error branch of the two official evaluation entries (``scripts/evaluation.py`` and
+``scripts/evaluation_ood.py`` in the benchmark submodule), actually executed in a test subprocess. After the repo split
+both entries live in the submodule (the evaluation repo's ``scripts/`` only keeps ``evaluate.py``); when the submodule
+is not checked out (git worktree), the same files are located via the installed ``robomme`` package.
 
-入口脚本一字不改地以 ``__main__`` 运行（``entry_bootstrap.py`` 只在子进程内存里把 builder 换成 CPU 替身环境）。
+The entry scripts run verbatim as ``__main__`` (``entry_bootstrap.py`` only swaps the builder for a CPU stub environment
+in the subprocess's memory).
 
-已登记的语义问题（锁定现状，契约记 conditional）：error 分支不给 ``outcome`` 赋值——
-- 第一局就 error：保存录像时读未定义的 ``outcome``，进程以 NameError 退出（env 已 close，录像未保存）；
-- 前一局有终态、本局 error：录像文件名沿用上一局的 ``outcome``。
-error 局一律记失败、计入成功率分母。
+Registered semantic issue (current behavior locked, contract marked conditional): the error branch never assigns
+``outcome``:
+- error on the first episode: saving the video reads the undefined ``outcome`` and the process exits with NameError
+  (env already closed, video not saved);
+- previous episode reached a terminal status, this one errors: the video file name reuses the previous ``outcome``.
+Error episodes always count as failures and are included in the success-rate denominator.
 """
 from __future__ import annotations
 
@@ -49,7 +53,7 @@ def test_error_on_first_episode_crashes_after_close(tmp_path, entry):
     assert p.returncode != 0
     assert "NameError" in p.stderr and "outcome" in p.stderr
     kinds = [e["kind"] for e in ev]
-    assert kinds == ["builder", "reset", "step", "step", "close"]  # env 在崩溃前已 close
+    assert kinds == ["builder", "reset", "step", "step", "close"]  # env is closed before the crash
     assert "save" not in kinds
 
 
@@ -62,9 +66,9 @@ def test_error_after_terminal_reuses_stale_outcome_and_counts_failure(tmp_path, 
     saves = [e for e in ev if e["kind"] == "save"]
     assert len(saves) == 3
     assert "T_ep_0_success_" in saves[0]["path"]
-    assert "T_ep_1_success_" in saves[1]["path"]  # error 局沿用上一局 outcome（锁定现状）
+    assert "T_ep_1_success_" in saves[1]["path"]  # the error episode reuses the previous outcome (current behavior locked)
     assert "T_ep_2_fail_" in saves[2]["path"]
-    assert [e["frames"] for e in saves] == [3, 2, 2]  # reset 2 帧 + 终态前的非终态步
+    assert [e["frames"] for e in saves] == [3, 2, 2]  # 2 reset frames + non-terminal steps before the terminal one
     assert [e["ep"] for e in ev if e["kind"] == "close"] == [0, 1, 2]
-    assert "Success rate: 0.3333333333333333" in p.stdout  # 1 成功 / 3 局（error 计失败）
+    assert "Success rate: 0.3333333333333333" in p.stdout  # 1 success / 3 episodes (error counts as failure)
     assert all(e["action_shape"] == [8] for e in ev if e["kind"] == "step")

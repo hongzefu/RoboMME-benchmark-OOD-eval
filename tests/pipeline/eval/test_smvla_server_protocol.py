@@ -1,8 +1,9 @@
-"""C13 smvla 协议（慢）：真实 ``smvla_server._serve``／``_handler`` 跑在回环端口上，真实 ``smvla_client`` 经真实
-``WSPolicyConn`` 连过去跑完整局。
+"""C13 smvla protocol (slow): the real ``smvla_server._serve`` / ``_handler`` run on a loopback port, and the real
+``smvla_client`` connects through the real ``WSPolicyConn`` to run full episodes.
 
-``SMVLAPolicyHost`` 用 ``object.__new__`` 构造，模型三件（buffer 工厂、batched、normalize_state）换成 CPU 替身，
-其余方法（``new_episode`` 重设种子、``observe``、``infer``）都是真实实现；不读权重、不初始化 CUDA。
+``SMVLAPolicyHost`` is constructed with ``object.__new__``; the three model pieces (buffer factory, batched,
+normalize_state) are replaced with CPU stubs, while the other methods (``new_episode`` reseeding, ``observe``,
+``infer``) are the real implementations. No weights are read and CUDA is not initialized.
 """
 from __future__ import annotations
 
@@ -46,7 +47,7 @@ class _Batched:
     def generate_batch(self, processed, states):
         self.calls.append(processed[0])
         if self.fail:
-            raise RuntimeError("替身推理失败")
+            raise RuntimeError("stub inference failed")
         seed = processed[0]["n"] * 1000 + len(processed[0]["instruction"])
         a = np.random.default_rng(seed).uniform(-1, 1, size=(F.CHUNK_ROWS, 8)).astype(np.float32)
         return [(a, f"sub{processed[0]['n']}")]
@@ -68,7 +69,7 @@ def _host(fail=False):
 
 @pytest.fixture
 def served():
-    """在独立线程的事件循环里起真实 _serve；返回 (host 工厂设置函数, 端口)。"""
+    """Starts the real _serve in an event loop on a separate thread; returns (host factory setter, port)."""
     srv = F.smvla_server()
     holder = {}
 
@@ -136,11 +137,12 @@ def test_full_episode_over_real_websocket(served):
     assert res["status"] == "success" and res["steps"] == 20 and res["infra"] is False, res["error"]
     assert res["protocol"]["sha_mismatch"] == 0 and res["protocol"]["frames_sent"] == F.N_RESET_FRAMES + 20
     assert res["server_meta"]["fake_host"] is True
-    # 第一次推理时 server 缓冲恰为 reset 帧；第二次为 reset 帧 + 一个执行段的帧
+    # at the first inference the server buffer holds exactly the reset frames; at the second, reset frames + one
+    # execution segment of frames
     assert [c["n"] for c in host.batched.calls] == [F.N_RESET_FRAMES, F.N_RESET_FRAMES + F.smvla_server().EXECUTE_HORIZON]
     assert host.batched.calls[0]["instruction"] == "goal-T-4"
     rng = [e for e in rec.events if e["kind"] == "server_rng"][0]["rng"]
-    assert rng == host.rng_ref  # 每局 reset 后随机状态等于加载后的纯净参照
+    assert rng == host.rng_ref  # after each episode reset the RNG state equals the clean post-load reference
 
 
 def test_two_episodes_each_reset_fresh(served):
@@ -158,7 +160,7 @@ def test_server_inference_error_is_infra_server_error(served):
     port = served(_host(fail=True))
     res, sess, _ = _episode(port, F.Plan(success_at=5))
     assert res["status"] == "error" and res["infra"] is True and res["infra_reason"] == "server_error"
-    assert "替身推理失败" in res["error"] and sess.env.n == 0
+    assert "stub inference failed" in res["error"] and sess.env.n == 0
 
 
 @pytest.mark.parametrize("msg,needle", [({"bogus": {}}, "unknown message keys"),
