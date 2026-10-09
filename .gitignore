@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv
+# Local artifacts root (weights, h5 files, run outputs) is never committed
+/artifacts/
+# Agent worktrees
+/.claude/worktrees/
+# venvs of the model sub-environments
+/envs/*/.venv*
+# Run outputs and media
+/runs/
+*.mp4
+*.mkv
+*.h5
+*.hdf5

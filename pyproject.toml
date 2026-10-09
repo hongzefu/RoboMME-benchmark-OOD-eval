@@ -1,0 +1,53 @@
+# Evaluation harness for RoboMME-benchmark-OOD: the outer load_policy / run_episode loop and the model policies.
+# The benchmark is a submodule at third_party/robomme_benchmark (pinned to a commit); its code is not copied here.
+# The three model client sub-environments have their own pyproject.toml and uv.lock under envs/.
+[project]
+name = "robomme-ood-eval"
+version = "1.0.0"
+description = "RoboMME OOD evaluation"
+readme = "readme.md"
+requires-python = ">=3.11"
+dependencies = [
+    "robomme",
+    "mani-skill",
+    "opencv-python>=4.11.0.86",
+    "pebble>=5.2.2",
+    "setuptools==80.9.0",
+    "torch==2.9.1",
+    "torchvision==0.24.1",
+]
+
+[project.optional-dependencies]
+dev = ["opencv-python", "pytest"]
+
+[dependency-groups]
+eval-client = [
+    "openpi-client",
+    "pillow>=12.1.1",
+    "tree>=0.2.4",
+]
+
+[tool.uv]
+default-groups = ["eval-client"]
+
+[tool.uv.sources]
+robomme = { path = "third_party/robomme_benchmark", editable = true }
+# uv does not inherit [tool.uv.sources] from path dependencies; ManiSkill must be re-declared here or it resolves to the PyPI release.
+mani-skill = { git = "https://github.com/YinpeiDai/ManiSkill.git", rev = "07be6fbc66350ddca200abfb0a11b692f078f7fd" }
+openpi-client = { path = "third_party/mme-vla/packages/openpi-client", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robomme_ood_eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p tests._support.resource_policy"
+xfail_strict = true
+markers = [
+    "slow: slow tests that spawn bash, ffmpeg, websockets or install wheels; excluded from the default gate",
+    "sim: tests that run a real simulator reset",
+]
