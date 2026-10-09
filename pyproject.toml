@@ -1,6 +1,6 @@
-# RoboMME-benchmark-OOD 的评估仓：外层 load_policy / run_episode 与五个模型 Policy、GL 席位、对拍工具。
-# benchmark 仓以 submodule 挂在 third_party/robomme_benchmark（钉 40 位 sha），本仓不复制其代码。
-# 三个模型客户端子环境各有自己的 pyproject.toml 与 uv.lock，见 envs/。
+# Evaluation harness for RoboMME-benchmark-OOD: the outer load_policy / run_episode loop and the model policies.
+# The benchmark is a submodule at third_party/robomme_benchmark (pinned to a commit); its code is not copied here.
+# The three model client sub-environments have their own pyproject.toml and uv.lock under envs/.
 [project]
 name = "robomme-ood-eval"
 version = "1.0.0"
@@ -32,7 +32,7 @@ default-groups = ["eval-client"]
 
 [tool.uv.sources]
 robomme = { path = "third_party/robomme_benchmark", editable = true }
-# uv 不从 path 依赖继承 [tool.uv.sources]，ManiSkill 必须在本仓重新声明，否则会解析成 PyPI 版。
+# uv does not inherit [tool.uv.sources] from path dependencies; ManiSkill must be re-declared here or it resolves to the PyPI release.
 mani-skill = { git = "https://github.com/YinpeiDai/ManiSkill.git", rev = "07be6fbc66350ddca200abfb0a11b692f078f7fd" }
 openpi-client = { path = "third_party/mme-vla/packages/openpi-client", editable = true }
 
@@ -48,6 +48,6 @@ testpaths = ["tests"]
 addopts = "-p tests._support.resource_policy"
 xfail_strict = true
 markers = [
-    "slow: 起 bash／ffmpeg／websocket／wheel 安装等慢用例，不进日常门禁",
-    "sim: 真实仿真 reset",
+    "slow: slow tests that spawn bash, ffmpeg, websockets or install wheels; excluded from the default gate",
+    "sim: tests that run a real simulator reset",
 ]

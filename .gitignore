@@ -3,13 +3,13 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv
-# 产物根整体不进 git（权重、h5 等旧资产在此逐项只读 symlink 引用旧仓）
+# Local artifacts root (weights, h5 files, run outputs) is never committed
 /artifacts/
-# Claude Code 子代理 worktree（计划执行模式）
+# Agent worktrees
 /.claude/worktrees/
-# 三个模型子环境的 venv
+# venvs of the model sub-environments
 /envs/*/.venv*
-# 运行产物与媒体
+# Run outputs and media
 /runs/
 *.mp4
 *.mkv

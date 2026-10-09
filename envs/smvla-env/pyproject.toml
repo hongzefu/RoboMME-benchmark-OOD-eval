@@ -1,14 +1,14 @@
-# SimpleMemVLA 推理 server 的独立 uv 子项目（v7.5eval 方案 §2.3）。
-# - 不是 benchmark 根目录的 workspace 成员：根 pyproject 无 [tool.uv.workspace]，uv 以本目录为项目根。
-# - venv 放在本目录 .venv（.gitignore 的 /envs/*/.venv* 不进 git；解释器钉在 NFS 上的 uv managed python，GL 与本机同一个二进制）：
-#     E=<eval 仓>/envs/smvla-env/.venv
-#     UV_LINK_MODE=copy uv venv --python /nfs/turbo/coe-chaijy-unreplicated/hongzefu/uv-python/cpython-3.10.19-linux-x86_64-gnu/bin/python3.10 "$E"
+# Standalone uv project for the SimpleMemVLA inference server.
+# - Not a workspace member: the root pyproject has no [tool.uv.workspace]; uv treats this directory as the project root.
+# - Setup (the venv lives in this directory and is git-ignored):
+#     E=<repo>/envs/smvla-env/.venv
+#     UV_LINK_MODE=copy uv venv --python 3.10 "$E"
 #     cd envs/smvla-env && UV_PROJECT_ENVIRONMENT="$E" UV_LINK_MODE=copy uv sync --frozen
-#     rm -rf ../../third_party/SimpleMemVLA/simplememvla.egg-info   # 可编辑构建留下的，不许弄脏子模块
-#   server 解释器：SMVLA_PY="$E/bin/python"
-# - 只装策略推理需要的包；不装 sapien / mani_skill（环境一律在 benchmark .venv，口径 3）。
-# - constraint-dependencies 为旧官方 venv（SimpleMemVLA/.venv-robomme，E0 所用）的逐包版本，
-#   只约束版本、不强行安装：凡被依赖到的包一律取旧 venv 同版本。
+#     rm -rf ../../third_party/SimpleMemVLA/simplememvla.egg-info   # left by the editable build; keep the submodule clean
+#   Server interpreter: SMVLA_PY="$E/bin/python"
+# - Only the packages needed for policy inference; no sapien / mani_skill (the environment always runs in the main .venv).
+# - constraint-dependencies pins every package to the version of the reference upstream venv; it only
+#   constrains versions and does not force installation.
 [project]
 name = "smvla-eval-server"
 version = "0.1.0"
