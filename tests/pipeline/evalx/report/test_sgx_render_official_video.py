@@ -94,7 +94,7 @@ def test_restore_float64_action_with_verified_npz(tmp_path):
     rows[2]["action"] = _array(action)
     path = tmp_path / "trace.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    with pytest.raises(ValueError, match="丢失原数组精度"):
+    with pytest.raises(ValueError, match="lose original array precision"):
         mod.load_trace(path)
     np.savez(tmp_path / "arrays.npz", exec_action__00000=action)
     trace = mod.load_trace(path)
@@ -192,7 +192,7 @@ def test_end_to_end_with_real_ffmpeg(tmp_path, repo_root, capsys):
     assert mod.render_episode(ep, official_root=official)["render_status"] == "reused"
     result["source_trace"]["sha256"] = "0" * 64
     (ep / "official/render.json").write_text(json.dumps(result))
-    with pytest.raises(ValueError, match="拒绝覆盖"):
+    with pytest.raises(ValueError, match="refusing to overwrite"):
         mod.render_episode(ep, official_root=official)
     replaced = mod.render_episode(ep, official_root=official, overwrite=True)
     assert replaced["render_status"] == "rendered"
@@ -274,28 +274,28 @@ def test_raw_new_defects_fail_without_fallback(tmp_path, repo_root, raw, defect)
         (ep / "front.mkv").rename(ep / "tmp.mkv")
         (ep / "wrist.mkv").rename(ep / "front.mkv")
         (ep / "tmp.mkv").rename(ep / "wrist.mkv")
-        match = "sha256 不符"
+        match = "do not match index sha256"
     elif defect == "wrong_enc":
         # 末两行 enc 互换：enc 集合仍完整覆盖解码帧，只能靠逐行 sha256 发现
         rows[-1]["enc"], rows[-2]["enc"] = rows[-2]["enc"], rows[-1]["enc"]
         _write_index(ep, rows)
-        match = "sha256 不符"
+        match = "do not match index sha256"
     elif defect == "missing_frame":
         _write_index(ep, rows[:-1])
-        match = "缺帧|索引损坏"
+        match = "missing frames|corrupt index"
     elif defect == "duplicate_idx":
         _write_index(ep, rows + [rows[-1]])
-        match = "重复索引"
+        match = "duplicate index"
     elif defect == "codec_mismatch":
         meta = json.loads((ep / "meta.json").read_text())
         meta.pop("raw_codec")  # 声称旧 FFV1，实际是 AV1 流
         (ep / "meta.json").write_text(json.dumps(meta))
-        match = "有损降级"
+        match = "lossy degradation"
     else:
         meta = json.loads((ep / "meta.json").read_text())
         meta.update(level=1, codec="libx264-crf18")
         (ep / "meta.json").write_text(json.dumps(meta))
-        match = "有损降级"
+        match = "lossy degradation"
     for source in ("raw", "auto"):
         with pytest.raises(ValueError, match=match):
             _render(ep, repo_root, source=source)
@@ -310,11 +310,11 @@ def test_raw_orig_missing_frame_and_raw_mode_needs_raw(tmp_path, repo_root):
     (ep / "frames/front.rgb24").rename(ep / "frames/tmp.rgb24")
     (ep / "frames/wrist.rgb24").rename(ep / "frames/front.rgb24")
     (ep / "frames/tmp.rgb24").rename(ep / "frames/wrist.rgb24")
-    with pytest.raises(ValueError, match="逐帧哈希不符"):
+    with pytest.raises(ValueError, match="per-frame hash mismatch"):
         _render(ep, repo_root, source="raw")
     f = ep / "frames/front.rgb24"
     f.write_bytes(f.read_bytes()[:-fx.H * fx.W * 3])
-    with pytest.raises(ValueError, match="缺帧"):
+    with pytest.raises(ValueError, match="missing frames"):
         _render(ep, repo_root, source="raw")
     only_mp4 = tmp_path / "mp4only"
     only_mp4.mkdir()
@@ -322,7 +322,7 @@ def test_raw_orig_missing_frame_and_raw_mode_needs_raw(tmp_path, repo_root):
     for p in ("frames/front.rgb24", "frames/wrist.rgb24"):
         (ep2 / p).unlink()
     (ep2 / "episode.mp4").write_bytes(b"")
-    with pytest.raises(ValueError, match="raw 模式缺原始帧"):
+    with pytest.raises(ValueError, match="raw mode is missing raw frames"):
         _render(ep2, repo_root, source="raw")
 
 
@@ -335,13 +335,13 @@ def test_reuse_after_raw_deleted_but_not_after_raw_changed(tmp_path, repo_root):
     # 改 raw 后复用必须失败（流指纹不符），不加 --overwrite 拒绝覆盖
     keep = (ep / "front.mkv").read_bytes()
     (ep / "front.mkv").write_bytes(keep + b"\0")
-    with pytest.raises(ValueError, match="拒绝覆盖"):
+    with pytest.raises(ValueError, match="refusing to overwrite"):
         _render(ep, repo_root, source="raw")
     (ep / "front.mkv").write_bytes(keep)
     # 改索引同样不可复用
     idx = (ep / "frames-wrist.jsonl").read_text()
     (ep / "frames-wrist.jsonl").write_text(idx + "\n")
-    with pytest.raises(ValueError, match="拒绝覆盖"):
+    with pytest.raises(ValueError, match="refusing to overwrite"):
         _render(ep, repo_root)
     (ep / "frames-wrist.jsonl").write_text(idx)
     # 转码后删 raw（frames-*.jsonl 保留）：重入走复用；整个目录搬走后仍可核（相对路径）
@@ -353,7 +353,7 @@ def test_reuse_after_raw_deleted_but_not_after_raw_changed(tmp_path, repo_root):
     for source in ("raw", "auto"):
         again = _render(moved, repo_root, source=source)
         assert again["render_status"] == "reused" and again["output_fingerprint"] == first["output_fingerprint"]
-    with pytest.raises(ValueError, match="拒绝覆盖"):
+    with pytest.raises(ValueError, match="refusing to overwrite"):
         _render(moved, repo_root, source="mp4")
 
 
@@ -416,7 +416,7 @@ def test_error_status_allowed_and_count_mismatch_rejected(tmp_path):
 def test_key_option_for_dir_without_key(tmp_path, repo_root):
     _need_ffmpeg()
     ep = fx.write_episode(tmp_path, "normal", dir_name="ep000").dir
-    with pytest.raises(ValueError, match="局目录与 trace.identity.key 不符"):
+    with pytest.raises(ValueError, match="episode directory does not match trace.identity.key"):
         _render(ep, repo_root)
     with pytest.raises(ValueError, match="--key"):
         _render(ep, repo_root, key="Other_xhard0_1")

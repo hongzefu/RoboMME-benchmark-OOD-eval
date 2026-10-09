@@ -133,5 +133,5 @@ def test_close_deadline_does_not_hang_when_encoder_stuck(tmp_path, monkeypatch):
     took = time.monotonic() - t0
     assert took < 40, took
     assert res["RECORDER_VERIFY"] == "FAIL"
-    assert any("收尾超时" in e for e in res["errors"]), res["errors"]
+    assert any("timed out during close" in e for e in res["errors"]), res["errors"]
     assert (tmp_path / "ep" / ".spool").exists()  # 核验未通过，原始块保留
