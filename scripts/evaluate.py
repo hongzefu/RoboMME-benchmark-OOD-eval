@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local entry point for RoboMME OOD evaluation (split plan section 3, "call chain of scripts/evaluate.py").
+"""Local entry point for RoboMME OOD evaluation.
 
     scripts/evaluate.py --model <name> --dataset hard-verify[,ood] --seed N [--tasks A,B] [--episodes a:b] \\
         --out <dir> [--gpus 0[,1]] [--ckpt <path>] [model options...]
@@ -12,7 +12,7 @@
   episode of the task; ``--tasks`` defaults to the 16 official tasks;
 * episodes that already have a ``result.json`` are skipped (runs are resumable);
 * ``--stop-server <metadata>``: only stop the server left behind after its watchdog exited, using the metadata
-  file, then exit (S2);
+  file, then exit;
 * model options: ``--ckpt``, ``--groundsg-variant`` (e.g. ``ground-sg-oracle``), ``--port-base``, ``--work-dir``,
   ``--compile-cache``, plus any ``--<name> <value>`` or ``--cfg key=value``; all are passed through to
   ``load_policy(**cfg)`` (hyphens become underscores).
