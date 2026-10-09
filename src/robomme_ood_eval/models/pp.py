@@ -925,11 +925,12 @@ class PPPolicy(_servers.ServedPolicy):
     ``pp_max_reconnects``（缺省 1）、``hf_hub_offline``、``transformers_offline``；``connection_factory`` 只供单测注入。"""
 
     model = "pp"
+    requires_ckpt = True
 
     def __init__(self, policy_seed: int, **cfg: Any):
         super().__init__(policy_seed, **cfg)
         self.server_wrap = _servers.flag_on(self.cfg.get("pp_server_wrap", True))
-        self.ckpt = self.cfg.get("ckpt") or _servers.DEFAULT_CKPTS[self.model]
+        self.ckpt = self.cfg.get("ckpt")  # no default checkpoint; load() rejects a missing one
         self.sid_uses: dict[str, int] = {}   # 本服务进程里每个 sid 已发过 EPISODE_START 的次数
         self.server_restarts = 0
         self.current_sid: str | None = None

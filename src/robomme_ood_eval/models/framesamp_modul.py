@@ -820,7 +820,7 @@ def load_mme_vla_server(policy, model: str) -> Path:
     （就绪 = 端口在听 + 服务日志含 ``history_config='<yaml>'``）→ 后台 ckpt 指纹。返回所用 ckpt。"""
     S = _servers
     cfg = policy.cfg
-    ckpt = Path(cfg.get("ckpt") or S.DEFAULT_CKPTS[model])
+    ckpt = S.require_ckpt(cfg, model)
     policy._pick_port()
     argv, env, cwd = mme_vla_server_spec(policy, ckpt)
     if policy.preflight:
@@ -846,6 +846,7 @@ class FrameSampModulPolicy(_servers.ServedPolicy):
     ``mme_vla_py``、``compile_cache``、``det``、``xla_mem_fraction``、``warmup``、``warmup_frames``。"""
 
     model = "perceptual-framesamp-modul"
+    requires_ckpt = True
 
     def __init__(self, policy_seed: int, **cfg: Any):
         super().__init__(policy_seed, **cfg)

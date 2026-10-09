@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
-"""RoboMME OOD 评估本机入口（拆分方案 §三「scripts/evaluate.py 的调用链」）。
+"""Local entry point for RoboMME OOD evaluation (split plan section 3, "call chain of scripts/evaluate.py").
 
-    scripts/evaluate.py --model <名> --dataset hard-verify[,ood] --seed N [--tasks A,B] [--episodes a:b] \\
-        --out <目录> [--gpus 0[,1]] [模型参数…]
+    scripts/evaluate.py --model <name> --dataset hard-verify[,ood] --seed N [--tasks A,B] [--episodes a:b] \\
+        --out <dir> [--gpus 0[,1]] [--ckpt <path>] [model options...]
 
-* ``--model`` ∈ {dummy, perceptual-framesamp-modul, groundsg, smvla, pp, astra}；``--seed`` 是模型种子 policy_seed；
-* ``--episodes a:b`` 是 builder 局号半开区间（``0:2`` 即 0、1）；缺省该任务全部局；``--tasks`` 缺省官方 16 任务；
-* 已有 ``result.json`` 的局直接跳过（可续跑）；
-* ``--stop-server <metadata>``：只按元数据停掉看门狗退出后留下的服务端，然后退出（S2）；
-* 模型参数：``--ckpt``、``--groundsg-variant``（如 ``ground-sg-oracle``）、``--port-base``、``--work-dir``、
-  ``--compile-cache``，以及任意 ``--<名> <值>`` 或 ``--cfg 键=值``，一律透传给 ``load_policy(**cfg)``（连字符换下划线）。
+* ``--model`` is one of {dummy, perceptual-framesamp-modul, groundsg, smvla, pp, astra}; ``--seed`` is the model
+  seed policy_seed;
+* ``--ckpt`` has no default: perceptual-framesamp-modul, groundsg, smvla and pp require it on every run
+  (missing it is an argument error, exit code 2); dummy and astra do not use it;
+* ``--episodes a:b`` is a half-open range of builder episode indices (``0:2`` means 0 and 1); default is every
+  episode of the task; ``--tasks`` defaults to the 16 official tasks;
+* episodes that already have a ``result.json`` are skipped (runs are resumable);
+* ``--stop-server <metadata>``: only stop the server left behind after its watchdog exited, using the metadata
+  file, then exit (S2);
+* model options: ``--ckpt``, ``--groundsg-variant`` (e.g. ``ground-sg-oracle``), ``--port-base``, ``--work-dir``,
+  ``--compile-cache``, plus any ``--<name> <value>`` or ``--cfg key=value``; all are passed through to
+  ``load_policy(**cfg)`` (hyphens become underscores).
 
-主循环：``with load_policy(...) as p: for dataset: for task: for ep: run_episode(...)``，每个数据集跑完调
-``report.summarize`` 写 ``log.json``。产物在 ``<out>/rollouts/<模型>/<数据集>/seed<seed>/``。
+Main loop: ``with load_policy(...) as p: for dataset: for task: for ep: run_episode(...)``; after each dataset
+``report.summarize`` writes ``log.json``. Outputs go to ``<out>/rollouts/<model>/<dataset>/seed<seed>/``.
 
-退出码：0 完成；2 参数错；3 运行阻塞（身份不符、服务端不符或已死、Astra 报停）；5 reset 额度耗尽。
+Exit codes: 0 done; 2 argument error; 3 run blocked (identity mismatch, server mismatch or dead, Astra stop);
+5 reset budget exhausted.
 """
 from __future__ import annotations
 
@@ -35,10 +42,10 @@ def parse_episodes(text: str | None) -> tuple[int, int] | None:
         return None
     a, sep, b = text.partition(":")
     if not sep:
-        raise argparse.ArgumentTypeError(f"--episodes 须为 a:b 半开区间：{text!r}")
+        raise argparse.ArgumentTypeError(f"--episodes must be a half-open range a:b: {text!r}")
     lo, hi = int(a or 0), int(b)
     if lo < 0 or hi <= lo:
-        raise argparse.ArgumentTypeError(f"--episodes 区间为空或非法：{text!r}")
+        raise argparse.ArgumentTypeError(f"--episodes range is empty or invalid: {text!r}")
     return lo, hi
 
 
@@ -54,13 +61,13 @@ def _coerce(v: str):
 
 
 def parse_extra(tokens: list[str]) -> dict:
-    """把未声明的 ``--名 值`` ／ ``--开关`` 透传成 cfg（连字符换下划线）。"""
+    """Pass undeclared ``--name value`` / ``--switch`` tokens through as cfg (hyphens become underscores)."""
     cfg: dict = {}
     i = 0
     while i < len(tokens):
         tok = tokens[i]
         if not tok.startswith("--") or tok == "--":
-            raise SystemExit(f"无法解析的参数：{tok!r}")
+            raise SystemExit(f"cannot parse argument: {tok!r}")
         name = tok[2:]
         if "=" in name:
             name, val = name.split("=", 1)
@@ -76,26 +83,32 @@ def parse_extra(tokens: list[str]) -> dict:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    from robomme_ood_eval.models import MODELS
+    from robomme_ood_eval.models import MODELS, MODELS_REQUIRING_CKPT
 
     p = argparse.ArgumentParser(prog="scripts/evaluate.py", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", choices=MODELS, help="模型注册名")
-    p.add_argument("--dataset", help="hard-verify、ood，或逗号分隔两者（同一个 Policy 先后跑）")
-    p.add_argument("--seed", type=int, help="模型种子 policy_seed（加载时定，属于 Policy）")
-    p.add_argument("--tasks", help="逗号分隔任务名；缺省官方 16 任务")
-    p.add_argument("--episodes", type=parse_episodes, help="builder 局号半开区间 a:b；缺省全部")
-    p.add_argument("--out", type=Path, help="产物根目录")
-    p.add_argument("--gpus", help="逗号分隔 GPU 编号（服务端放第一张；Astra 的监视模型放第二张）")
-    p.add_argument("--stop-server", type=Path, metavar="METADATA", help="只按 server-metadata-<port>.json 停服务端后退出")
-    g = p.add_argument_group("模型参数（透传给 load_policy）")
-    g.add_argument("--ckpt")
+    p.add_argument("--model", choices=MODELS, help="registered model name")
+    p.add_argument("--dataset", help="hard-verify, ood, or both comma-separated (run one after another by the same "
+                                     "Policy)")
+    p.add_argument("--seed", type=int, help="model seed policy_seed (fixed at load time, belongs to the Policy)")
+    p.add_argument("--tasks", help="comma-separated task names; default is the 16 official tasks")
+    p.add_argument("--episodes", type=parse_episodes, help="half-open range a:b of builder episode indices; "
+                                                           "default is all")
+    p.add_argument("--out", type=Path, help="output root directory")
+    p.add_argument("--gpus", help="comma-separated GPU indices (the server goes on the first; Astra's monitor model "
+                                  "goes on the second)")
+    p.add_argument("--stop-server", type=Path, metavar="METADATA",
+                   help="only stop the server described by server-metadata-<port>.json, then exit")
+    g = p.add_argument_group("model options (passed through to load_policy)")
+    g.add_argument("--ckpt", help="checkpoint path; no default, required for "
+                                  + ", ".join(sorted(MODELS_REQUIRING_CKPT)))
     g.add_argument("--groundsg-variant")
     g.add_argument("--port-base", type=int)
     g.add_argument("--work-dir")
     g.add_argument("--compile-cache")
-    g.add_argument("--cfg", action="append", default=[], metavar="键=值", help="任意模型参数，可重复")
-    g.add_argument("--no-render", action="store_true", help="不出网站视频（只留原始产物）")
+    g.add_argument("--cfg", action="append", default=[], metavar="KEY=VALUE",
+                   help="any model option, may be repeated")
+    g.add_argument("--no-render", action="store_true", help="do not render website videos (keep raw outputs only)")
     return p
 
 
@@ -109,7 +122,7 @@ def make_cfg(args, extra: dict) -> dict:
         cfg["gpus"] = [int(x) for x in args.gpus.split(",") if x.strip()]
     for kv in args.cfg:
         if "=" not in kv:
-            raise SystemExit(f"--cfg 须为 键=值：{kv!r}")
+            raise SystemExit(f"--cfg must be key=value: {kv!r}")
         k, v = kv.split("=", 1)
         cfg[k.replace("-", "_")] = _coerce(v)
     cfg.update(extra)
@@ -129,6 +142,7 @@ def episode_range(task: str, dataset: str, rng: tuple[int, int] | None) -> range
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args, rest = parser.parse_known_args(argv)
+    from robomme_ood_eval.models import MODELS_REQUIRING_CKPT
     from robomme_ood_eval.policy import ServerProcess
 
     if args.stop_server is not None:
@@ -136,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if how in ("term", "kill", "gone") else EXIT_BLOCKED
     missing = [n for n in ("model", "dataset", "seed", "out") if getattr(args, n) is None]
     if missing:
-        parser.error("必须给 " + " ".join(f"--{m}" for m in missing))
+        parser.error("missing required arguments: " + " ".join(f"--{m}" for m in missing))
     from robomme_ood_eval import episode as E
     from robomme_ood_eval import report
     from robomme_ood_eval.policy import AstraStop, ServerDead, ServerMismatch, load_policy
@@ -145,9 +159,11 @@ def main(argv: list[str] | None = None) -> int:
     datasets = [d.strip() for d in args.dataset.split(",") if d.strip()]
     bad = [d for d in datasets if d not in E.DATASET_MAX_STEPS]
     if bad or not datasets:
-        parser.error(f"--dataset 只能是 {'、'.join(E.DATASET_MAX_STEPS)}（得到 {args.dataset!r}）")
+        parser.error(f"--dataset must be one of {', '.join(E.DATASET_MAX_STEPS)} (got {args.dataset!r})")
     tasks = [t.strip() for t in args.tasks.split(",")] if args.tasks else list(E.TASKS)
     cfg = make_cfg(args, parse_extra(rest))
+    if args.model in MODELS_REQUIRING_CKPT and "ckpt" not in cfg:
+        parser.error(f"--ckpt is required for model {args.model}")
     code = 0
     done = skipped = 0
     try:
@@ -157,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
                     for ep in episode_range(task, dataset, args.episodes):
                         if E.result_path(policy, dataset, task, ep, args.out).is_file():
                             skipped += 1
-                            print(f"EPISODE_SKIP dataset={dataset} task={task} episode={ep}（已有 result.json）",
+                            print(f"EPISODE_SKIP dataset={dataset} task={task} episode={ep} (result.json exists)",
                                   flush=True)
                             continue
                         E.run_episode(policy, dataset, task, ep, args.out, render=not args.no_render)

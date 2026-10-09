@@ -3,8 +3,8 @@
 本包里的 ``policy_server_wrap.py``、``smvla_server.py``、``pp_server_wrap.py`` 由各模型自己 venv 的解释器**按文件路径**
 运行（不经过本 ``__init__``）；本文件只给客户端进程里的 Policy 子类用，内容抽自旧 ``run_seat.sh``：
 
-* 路径与缺省值：评估仓根 ``repo_root``、各服务端解释器 ``interpreter``、缺省 ckpt（``DEFAULT_CKPTS``，照旧
-  ``run_seat.sh`` 顶部）、缺省端口基数（``DEFAULT_PORT_BASE``，照旧 ``run_policy`` 的 ``18000 + 10 × 策略号``）；
+* 路径与缺省值：评估仓根 ``repo_root``、各服务端解释器 ``interpreter``、ckpt check ``require_ckpt`` (no default
+  checkpoint; ``--ckpt`` is mandatory)、缺省端口基数（``DEFAULT_PORT_BASE``，照旧 ``run_policy`` 的 ``18000 + 10 × 策略号``）；
 * ``CleanServerProcess``：在 ``ServerProcess`` 之上先去掉影响确定性／编译缓存的变量（旧 ``CLEAN_ENV``），再加本模型要的；
 * 起服务前的闸门（旧同名 shell 函数的 Python 版，失败抛 ``PreflightError``，文字以 ``RUN_BLOCKED reason=`` 开头）：
   ``tokenizer_gate``、``preflight_mme_vla``、``preflight_pp``、``variant_pairing``；
@@ -45,15 +45,6 @@ TOKENIZER_REL = "big_vision/paligemma_tokenizer.model"
 #: 各模型服务日志里必须出现的 history_config（旧 *_YAML_EXPECT）
 YAML_EXPECT = {"perceptual-framesamp-modul": "perceptual-framesamp-modul.yaml",
                "groundsg": "symbolic-grounded-subgoal.yaml"}
-#: 缺省 ckpt（照旧 run_seat.sh 顶部；PonderPounce 没有缺省，必须显式给）
-DEFAULT_CKPTS = {
-    "perceptual-framesamp-modul": "/data/hongzefu/robomme_policy_learning_MotionJEPA/v1-store/models/"
-                                  "official-mme-vla/perceptual-framesamp-modul/79999",
-    "groundsg": "/data/hongzefu/robomme_policy_learning-vqa-test/runs/ckpts/mme_vla_suite/"
-                "symbolic-grounded-subgoal/79999",
-    "smvla": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/SimpleMemVLA/checkpoints/simplememvla_robomme",
-    "pp": None,
-}
 #: 缺省端口基数（旧 run_policy：18000 + 10 × 策略号，smvla=0、perceptual-framesamp-modul=1、groundsg=2、pp=3）
 DEFAULT_PORT_BASE = {"smvla": 18000, "perceptual-framesamp-modul": 18010, "groundsg": 18020, "pp": 18030}
 #: 旧缺省：服务端就绪等待上限（秒）
@@ -62,6 +53,14 @@ DEFAULT_READY_TIMEOUT_S = 1200.0
 DEFAULT_XLA_MEM_FRACTION = "0.75"
 #: GroundSG 三个变体（与 models/_official_defs.VARIANTS 相同，这里不导入以免拖进官方摘取逻辑）
 GROUNDSG_VARIANTS = ("ground-sg-oracle", "ground-sg-qwenvl", "ground-sg-memer")
+
+
+def require_ckpt(cfg: dict, model: str) -> Path:
+    """Return the checkpoint path from ``cfg["ckpt"]``; there is no default, so a missing value raises ``ValueError``."""
+    ckpt = cfg.get("ckpt")
+    if not ckpt:
+        raise ValueError(f"--ckpt is required for model {model}")
+    return Path(ckpt)
 
 
 class PreflightError(RuntimeError):
@@ -452,7 +451,7 @@ class SessionNoClose:
         return getattr(self._session, name)
 
 
-__all__ = ["SERVERS_DIR", "REPO", "CLEAN_ENV", "MME_VLA_COMMIT", "TOKENIZER_REL", "YAML_EXPECT", "DEFAULT_CKPTS",
+__all__ = ["SERVERS_DIR", "REPO", "CLEAN_ENV", "MME_VLA_COMMIT", "TOKENIZER_REL", "YAML_EXPECT", "require_ckpt",
            "DEFAULT_PORT_BASE", "DEFAULT_READY_TIMEOUT_S", "GROUNDSG_VARIANTS", "PreflightError", "CleanServerProcess",
            "repo_root", "interpreter", "server_dir", "gpu_of", "choose_port", "flag_on", "gpu_slug",
            "check_server_log", "check_wrap_metadata", "tokenizer_gate", "preflight_mme_vla", "preflight_pp",

@@ -91,6 +91,8 @@ class Policy:
 
     model: str = "base"
     episode_wall_s: float | None = None
+    #: True when the model needs ``--ckpt`` (no default checkpoint); mirrored by ``models.MODELS_REQUIRING_CKPT``
+    requires_ckpt: bool = False
 
     def __new__(cls, *a, **k):
         obj = super().__new__(cls)
