@@ -1,4 +1,4 @@
-"""测试子进程继承资源守卫：只在测试会话设置了守卫环境变量时生效。"""
+"""Lets test subprocesses inherit the resource guard; active only when the test session set the guard env var."""
 import os
 
 if os.environ.get("ROBOMME_TEST_RESOURCE_POLICY") == "cpu":

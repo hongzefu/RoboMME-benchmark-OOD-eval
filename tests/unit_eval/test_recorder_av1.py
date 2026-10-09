@@ -1,5 +1,6 @@
-"""录制器 AV1 4:4:4（R8）：真 ffmpeg 编几十帧小视频、ffprobe 核 av1／yuv444p、核帧数时间戳与可解码、
-``meta.json`` 记 ``raw_codec``；``close()`` 截止时间在编码子进程卡死时不挂死。"""
+"""Recorder AV1 4:4:4 (R8): real ffmpeg encodes a few dozen small frames, ffprobe checks av1 / yuv444p, frame counts,
+timestamps and decodability are checked, ``meta.json`` records ``raw_codec``; the ``close()`` deadline does not hang
+when the encoder subprocess is stuck."""
 from __future__ import annotations
 
 import json
@@ -18,7 +19,7 @@ def _ffmpeg_or_skip() -> str:
     try:
         return R.find_ffmpeg()
     except RuntimeError as e:
-        pytest.skip(f"未验证：本机没有支持 libaom-av1 的 ffmpeg（{e}）")
+        pytest.skip(f"Not verified: no ffmpeg with libaom-av1 on this machine ({e})")
 
 
 def _frames(n: int, h: int = 64, w: int = 64, cam: int = 0) -> np.ndarray:
@@ -35,7 +36,7 @@ def _frames(n: int, h: int = 64, w: int = 64, cam: int = 0) -> np.ndarray:
 def _probe(path) -> tuple:
     ffprobe = shutil.which("ffprobe")
     if ffprobe is None:
-        pytest.skip("未验证：本机没有 ffprobe")
+        pytest.skip("Not verified: no ffprobe on this machine")
     out = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
                           "stream=codec_name,pix_fmt,color_range,color_space,width,height", "-of", "json",
                           str(path)], capture_output=True, text=True, check=True).stdout
@@ -65,7 +66,7 @@ def test_encode_av1_yuv444p_and_verify(tmp_path):
         rec.add_frames("front", front[i], tag=f"step{i - 5}")
         rec.add_frames("wrist", wrist[i], tag=f"step{i - 5}")
         rec.add_array("exec_action", np.full(8, i, np.float64), step=i - 5)
-    rec.add_frames("front", front[39], tag="dup")  # 重复帧只编码一份
+    rec.add_frames("front", front[39], tag="dup")  # a duplicate frame is encoded only once
     res = rec.close({"status": "success"})
     assert res["RECORDER_VERIFY"] == "PASS", res
     assert res["errors"] == [] and res["dropped"] == 0 and res["decode_mismatch"] == 0
@@ -79,7 +80,7 @@ def test_encode_av1_yuv444p_and_verify(tmp_path):
     meta = json.loads((ep / "meta.json").read_text())
     assert meta["raw_codec"] == "av1-yuv444p" and meta["encode_args"] == list(R.AV1_ENCODE_ARGS)
     assert R.raw_codec_of(ep) == "av1-yuv444p"
-    assert not (ep / ".spool").exists()  # 核验通过才删原始块
+    assert not (ep / ".spool").exists()  # raw chunks are deleted only after verification passes
     with np.load(ep / "arrays.npz") as z:
         assert z["exec_action__00000"].dtype == np.float64 and z["exec_action__00034"][0] == 39
     recs, imgs = R.load_frames(ep, "front")
@@ -88,7 +89,7 @@ def test_encode_av1_yuv444p_and_verify(tmp_path):
     for a, b in zip(front, imgs[:40]):
         mse = float(((a.astype(np.float64) - b) ** 2).mean())
         psnr.append(99.0 if mse == 0 else 10 * np.log10(255 ** 2 / mse))
-    assert min(psnr) > 30.0, psnr  # 有损但色彩还原正确（bt709 全范围编解码对称）
+    assert min(psnr) > 30.0, psnr  # lossy but colors round-trip correctly (bt709 full-range encode/decode is symmetric)
 
 
 def test_legacy_meta_without_raw_codec_is_ffv1(tmp_path):
@@ -104,13 +105,13 @@ def test_verify_detects_frame_count_mismatch(tmp_path):
     st = rec._streams["front"]
     res = rec.close({})
     assert res["RECORDER_VERIFY"] == "PASS"
-    st.n_enqueued += 2  # 人为声称多编了 2 帧
+    st.n_enqueued += 2  # falsely claim 2 extra frames were encoded
     v = rec._verify_stream(st)
     assert v["mismatch"] == 2 and v["decoded"] == 6
 
 
 def _stuck_ffmpeg(tmp_path):
-    """假 ffmpeg：编码（读管道）时永远不读 stdin；解码调用立即失败。"""
+    """Fake ffmpeg: never reads stdin when encoding (pipe input); decode calls fail immediately."""
     p = tmp_path / "fake-ffmpeg"
     p.write_text("#!/bin/sh\ncase \"$*\" in *pipe:0*) exec sleep 600;; esac\nexit 1\n")
     p.chmod(p.stat().st_mode | stat.S_IXUSR)
@@ -123,15 +124,15 @@ def test_close_deadline_does_not_hang_when_encoder_stuck(tmp_path, monkeypatch):
     rec = R.EpisodeRecorder(tmp_path / "ep", {}, free_gib_fn=lambda _p: 10_000.0, queue_frames=2,
                             close_deadline_s=2.0)
     rec.set_phase("run")
-    big = _frames(3, 256, 256)  # 单帧 192 KiB > 管道缓冲，第一帧写入即卡住
+    big = _frames(3, 256, 256)  # one frame is 192 KiB > pipe buffer, so the first write blocks
     rec.add_frames("front", big[0])
-    time.sleep(0.5)  # 写线程取走第一帧、卡在 ffmpeg stdin
+    time.sleep(0.5)  # the writer thread takes the first frame and blocks on ffmpeg stdin
     rec.add_frames("front", big[1])
-    rec.add_frames("front", big[2])  # 队列（容量 2）此时已满
+    rec.add_frames("front", big[2])  # the queue (capacity 2) is now full
     t0 = time.monotonic()
     res = rec.close({})
     took = time.monotonic() - t0
     assert took < 40, took
     assert res["RECORDER_VERIFY"] == "FAIL"
     assert any("timed out during close" in e for e in res["errors"]), res["errors"]
-    assert (tmp_path / "ep" / ".spool").exists()  # 核验未通过，原始块保留
+    assert (tmp_path / "ep" / ".spool").exists()  # verification failed, raw chunks are kept

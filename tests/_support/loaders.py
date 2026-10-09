@@ -1,4 +1,4 @@
-"""按文件路径加载脚本模块（scripts/ 不是包，生产代码也按路径互相加载）；旧仓路径经 LEGACY_PATHS 映射。"""
+"""Load script modules by file path (scripts/ is not a package; production code also loads modules by path). Legacy-repo paths are mapped through LEGACY_PATHS."""
 from __future__ import annotations
 
 import importlib.util
@@ -9,8 +9,9 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO / "scripts"
 _CACHE: dict[str, object] = {}
 
-# 拆仓映射表（1008 拆分方案第二部分 §二）：键是旧仓 scripts/ 下的相对路径，值是本仓相对仓根的新路径。
-# 本表只收落在评估包 src/ 里的条目；表外的 rel 按本仓 scripts/ 解析。
+# Repo-split mapping (1008 split plan, part two, section 2): keys are paths relative to the legacy repo's scripts/,
+# values are new paths relative to this repo's root. Only entries that landed in the eval package src/ are listed;
+# any other rel resolves against this repo's scripts/.
 LEGACY_PATHS: dict[str, str] = {
     "eval-official/astra_cost_guard.py": "src/robomme_ood_eval/servers/astra_cost_guard.py",
     "eval-official/astra_hard_runner.py": "src/robomme_ood_eval/models/astra.py",
@@ -28,7 +29,7 @@ LEGACY_PATHS: dict[str, str] = {
 
 
 def script_path(rel: str) -> Path:
-    """rel 是旧仓 scripts/ 下的相对路径（如 ``eval-official/recorder.py``），或本仓 scripts/ 下的相对路径。"""
+    """``rel`` is a path relative to the legacy repo's scripts/ (e.g. ``eval-official/recorder.py``) or to this repo's scripts/."""
     if rel in LEGACY_PATHS:
         p = REPO / LEGACY_PATHS[rel]
     else:
@@ -39,16 +40,16 @@ def script_path(rel: str) -> Path:
 
 
 def load_script(rel: str, *, fresh: bool = False):
-    """加载脚本模块；同一路径默认复用同一模块对象，``fresh=True`` 时重新执行一份独立副本。
+    """Load a script module. The same path reuses one module object by default; ``fresh=True`` executes an independent copy.
 
-    模块名由相对路径派生（``_script_parity_noise_gate``），脚本目录临时加到 sys.path 头部，
-    以便脚本里 ``import <同目录模块>`` 的写法照常工作。
+    The module name is derived from the relative path (``_script_parity_noise_gate``), and the script's directory is
+    temporarily prepended to sys.path so that ``import <sibling module>`` inside the script keeps working.
     """
     return load_path(rel, script_path(rel), fresh=fresh)
 
 
 def load_path(rel: str, path: Path, *, fresh: bool = False):
-    """按已解析的 ``path`` 加载（``rel`` 只用来派生模块名）；与 ``load_script`` 共用同一份模块缓存。"""
+    """Load from an already resolved ``path`` (``rel`` only derives the module name); shares the module cache with ``load_script``."""
     key = str(path)
     if not fresh and key in _CACHE:
         return _CACHE[key]

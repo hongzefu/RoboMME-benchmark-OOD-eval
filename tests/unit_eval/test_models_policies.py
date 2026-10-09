@@ -1,19 +1,25 @@
-"""四个普通模型的 Policy 子类（FrameSamp+Modulation、GroundSG、SimpleMemVLA、PonderPounce）：模型侧 4 个方法的契约。
+"""Policy subclasses of the four regular models (FrameSamp+Modulation, GroundSG, SimpleMemVLA, PonderPounce): the
+contract of the 4 model-side methods.
 
-纯 CPU：服务端换成只记参数的 ``FakeSrv``（替换 ``robomme_ood_eval.servers.CleanServerProcess``），websocket／vla-eval
-连接换成进程内替身，环境走 ``tests/unit_eval/fakes.py`` 的假 builder；外层用真实 ``episode.run_episode``。期望值一律手写。
+CPU only: the server is replaced by ``FakeSrv``, which only records its arguments (replacing
+``robomme_ood_eval.servers.CleanServerProcess``); websocket / vla-eval connections are replaced by in-process doubles,
+and the env uses the fake builder from ``tests/unit_eval/fakes.py``; the outer layer is the real
+``episode.run_episode``. All expected values are written by hand.
 
-核对：
+Checks:
 
-* ``load()`` 进程寿命内只起一次服务端，命令照抄旧 ``run_seat.sh::build_server_cmd``（种子、端口、ckpt、cwd、环境变量），
-  就绪判据按模型（MME-VLA 端口 + 日志 ``history_config``、SimpleMemVLA 端口、PonderPounce ``/health``）；
-* ``reset(spec)`` 不向服务端发任何消息、不碰环境；服务端死了抛 ``ServerDead``；
-* ``play`` 里服务端 reset／start_episode 与 ``session.reset()`` 的次序与旧代码相同（FrameSamp、GroundSG 先服务端，
-  SimpleMemVLA、PonderPounce 先环境）；轨迹写在本局 raw 目录；
-* ``close()`` 停服务端进程组恰一次；
-* GroundSG：``label`` 带变体名、两个评估器（1300、1800）共用一个预测器、按 ``spec.max_steps`` 切换；
-* PonderPounce：同一 sid 在本服务进程里第二次出现（``attempt > 1``）才重起服务端，``pp_sid_use_index`` 恒为该 sid 在
-  当前服务进程里的使用序号。
+* ``load()`` starts the server only once per process lifetime, with a command copied from the old
+  ``run_seat.sh::build_server_cmd`` (seed, port, ckpt, cwd, env vars); readiness criteria are per model (MME-VLA port +
+  ``history_config`` in the log, SimpleMemVLA port, PonderPounce ``/health``);
+* ``reset(spec)`` sends nothing to the server and does not touch the env; a dead server raises ``ServerDead``;
+* in ``play`` the order of server reset / start_episode versus ``session.reset()`` matches the old code (FrameSamp and
+  GroundSG reset the server first, SimpleMemVLA and PonderPounce reset the env first); trajectories go into this
+  episode's raw directory;
+* ``close()`` stops the server process group exactly once;
+* GroundSG: ``label`` carries the variant name, the two evaluators (1300, 1800) share one predictor and are selected by
+  ``spec.max_steps``;
+* PonderPounce: the server is restarted only when the same sid appears a second time in the current server process
+  (``attempt > 1``), and ``pp_sid_use_index`` is always that sid's use index within the current server process.
 """
 from __future__ import annotations
 
@@ -36,19 +42,19 @@ from robomme_ood_eval.policy import Policy, ServerDead, ServerMismatch, load_pol
 from . import fakes
 
 TASK = "PickXtimes"
-#: 真实的 CleanServerProcess（夹具会把模块属性换成 FakeSrv）
+#: The real CleanServerProcess (the fixture swaps the module attribute for FakeSrv)
 REAL_CLEAN = S.CleanServerProcess
 
 
-# ── 替身 ─────────────────────────────────────────────────────────────────────
+# ── Test doubles ─────────────────────────────────────────────────────────────────────
 
 
 class FakeSrv:
-    """``CleanServerProcess`` 的替身：只记构造参数；``start()`` 模拟服务端写日志与外壳元数据。"""
+    """Double for ``CleanServerProcess``: only records constructor arguments; ``start()`` simulates the server writing its log and wrapper metadata."""
 
     instances: list["FakeSrv"] = []
     log_text = "history_config='perceptual-framesamp-modul.yaml'\n"
-    wrap_seed: int | None = None  # None：外壳元数据写本次种子；给值即写该值（模拟种子不符）
+    wrap_seed: int | None = None  # None: wrapper metadata records this run's seed; a value is written as-is (simulating a seed mismatch)
 
     def __init__(self, argv, env=None, cwd=None, gpu=None, ready=None, *, port, metadata_dir, policy_seed=None,
                  ckpt=None, log_path=None, name="server", ready_timeout_s=0.0):
@@ -86,7 +92,7 @@ class FakeSrv:
 
     def check(self):
         if not self.alive_flag:
-            raise ServerDead(f"{self.name} 已退出")
+            raise ServerDead(f"{self.name} has exited")
 
     def stop(self, **k):
         self.stops += 1
@@ -99,7 +105,7 @@ class FakeSrv:
 
 
 class FakeMMEVLAWebsocketClient:
-    """MME-VLA websocket 客户端替身（reset／add_buffer／infer）：每条消息记进 ``EVENTS``。"""
+    """MME-VLA websocket client double (reset / add_buffer / infer): every message is recorded in ``EVENTS``."""
 
     log: list = []
 
@@ -125,7 +131,7 @@ def _sha(b: bytes) -> str:
 
 
 class FakeSmvlaConn:
-    """smvla 服务连接替身：按 ``smvla.run_episode`` 的校验口径回包（req_sha、帧指纹、状态／指令指纹）。"""
+    """smvla server connection double: replies following the checks in ``smvla.run_episode`` (req_sha, frame fingerprint, state / instruction fingerprint)."""
 
     def __init__(self, host, port, *a, **k):
         self.metadata = {"fake": True}
@@ -154,7 +160,7 @@ class FakeSmvlaConn:
 
 
 class FakePPConn:
-    """vla-eval 连接替身（外壳打开：回包带 ``subgoal``）。"""
+    """vla-eval connection double (wrapper enabled: replies carry ``subgoal``)."""
 
     def __init__(self, url, timeout):
         self.url = url
@@ -183,7 +189,7 @@ FakePPConn.starts = []
 
 
 class GSEnv(fakes.FakeEnv):
-    """GroundSG 用的假环境：info 带 Oracle 子目标；有 ``unwrapped.difficulty``。"""
+    """Fake env for GroundSG: info carries the Oracle subgoal; has ``unwrapped.difficulty``."""
 
     difficulty = "hard"
 
@@ -247,11 +253,11 @@ def _spec(policy, tmp_path, dataset="hard-verify", episode=0, attempt=1):
     return E.make_spec(policy, dataset, TASK, episode, tmp_path / "out", attempt=attempt)[0]
 
 
-# ── 公共件 ───────────────────────────────────────────────────────────────────
+# ── Shared helpers ───────────────────────────────────────────────────────────────────
 
 
 def test_clean_server_process_drops_determinism_vars(monkeypatch, tmp_path):
-    """起服务端前去掉 XLA_FLAGS 等（旧 CLEAN_ENV）与代理变量；本模型显式给的同名变量保留。"""
+    """Before starting the server, drop XLA_FLAGS etc. (the old CLEAN_ENV) and proxy variables; same-named variables set explicitly by the model are kept."""
     monkeypatch.setenv("XLA_FLAGS", "--bad")
     monkeypatch.setenv("JAX_COMPILATION_CACHE_DIR", "/old")
     monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":16:8")
@@ -274,7 +280,7 @@ def test_choose_port_reuses_left_server_metadata(tmp_path):
     d = tmp_path / "srv"
     d.mkdir()
     (d / "server-metadata-18010.json").write_text("{}")
-    assert S.choose_port({}, "perceptual-framesamp-modul", d) == 18010  # 留下的服务端：沿用端口去 attach／拒接
+    assert S.choose_port({}, "perceptual-framesamp-modul", d) == 18010  # a leftover server: reuse its port to attach / refuse
     assert S.choose_port({"port": 5}, "pp", d) == 5
     assert S.DEFAULT_PORT_BASE == {"smvla": 18000, "perceptual-framesamp-modul": 18010, "groundsg": 18020,
                                    "pp": 18030}
@@ -332,7 +338,7 @@ def test_framesamp_load_once_server_argv_and_close(tmp_path):
     assert p.load_info["server_config"].startswith("SERVER_CONFIG=PASS")
     assert p.server_seed() == 7
     p.close()
-    p.close()  # 幂等
+    p.close()  # idempotent
     assert srv.stops == 1 and p.calls == {"load": 1, "reset": 0, "play": 0, "close": 2}
 
 
@@ -357,7 +363,7 @@ def test_wrap_metadata_seed_mismatch_is_server_mismatch(tmp_path):
     FakeSrv.wrap_seed = 42
     with pytest.raises(ServerMismatch):
         load_policy("perceptual-framesamp-modul", 7, **_cfg(tmp_path))
-    assert FakeSrv.instances[0].stops == 1  # load 失败即 close
+    assert FakeSrv.instances[0].stops == 1  # a failed load closes immediately
 
 
 def test_framesamp_reset_sends_nothing_and_play_order(tmp_path):
@@ -365,11 +371,11 @@ def test_framesamp_reset_sends_nothing_and_play_order(tmp_path):
     spec = _spec(p, tmp_path)
     fakes.EVENTS.clear()
     p.reset(spec)
-    assert fakes.EVENTS == [] and FakeMMEVLAWebsocketClient.log == []  # reset 不发消息、不碰环境
+    assert fakes.EVENTS == [] and FakeMMEVLAWebsocketClient.log == []  # reset sends no message and does not touch the env
     fakes.EVENTS.clear()
     res = _run(p, tmp_path)
     ev = fakes.EVENTS
-    assert ev.index("builder.make_env") < ev.index("server.reset") < ev.index("env.reset")  # 先服务端 reset 再环境
+    assert ev.index("builder.make_env") < ev.index("server.reset") < ev.index("env.reset")  # server reset first, then the env
     assert res.status == "success" and res.task_success == 1 and res.exec_steps == 4 and res.decisions == 1
     assert [k for k, _ in FakeMMEVLAWebsocketClient.log] == ["reset", "add_buffer", "infer"]
     trace = tmp_path / "out" / "rollouts" / "perceptual-framesamp-modul" / "hard-verify" / "seed7" / res.raw_dir
@@ -386,7 +392,7 @@ def test_framesamp_reset_raises_server_dead(tmp_path):
     FakeSrv.instances[0].alive_flag = False
     with pytest.raises(ServerDead):
         _run(p, tmp_path)
-    assert "builder.make_env" not in fakes.EVENTS  # 局前拒绝：环境还没建
+    assert "builder.make_env" not in fakes.EVENTS  # refused before the episode: the env is not built yet
     p.close()
 
 
@@ -425,7 +431,7 @@ def test_smvla_server_argv_and_play_order(tmp_path):
     fakes.EVENTS.clear()
     res = _run(p, tmp_path)
     ev = fakes.EVENTS
-    assert ev.index("env.reset") < ev.index("server.reset")  # SimpleMemVLA：环境 reset 之后才发服务端 reset
+    assert ev.index("env.reset") < ev.index("server.reset")  # SimpleMemVLA: the server reset is sent only after the env reset
     assert res.status == "success" and res.exec_steps == 4
     p.close()
     assert srv.stops == 1
@@ -483,7 +489,7 @@ def test_pp_play_order_and_sid(tmp_path):
     res = _run(p, tmp_path)
     ev = fakes.EVENTS
     assert ev.index("server.connect") < ev.index("env.reset") < ev.index("server.episode_start")
-    sid = f"{TASK}|3|500"  # hard-verify：<task>|<source_episode>|<seed>（fakes.FakeBuilder：source_episode=3+ep、seed=500+ep）
+    sid = f"{TASK}|3|500"  # hard-verify: <task>|<source_episode>|<seed> (fakes.FakeBuilder: source_episode=3+ep, seed=500+ep)
     assert FakePPConn.starts[0]["recording"]["sid"] == sid
     d = res.to_dict()
     assert (d["pp_sid"], d["pp_sid_use_index"], d["pp_server_restarts"]) == (sid, 0, 0)
@@ -494,14 +500,14 @@ def test_pp_play_order_and_sid(tmp_path):
 def test_pp_restarts_server_only_when_sid_reused(tmp_path):
     p = load_policy("pp", 7, **_cfg(tmp_path, connection_factory=FakePPConn))
     r1 = _run(p, tmp_path, episode=0)
-    r2 = _run(p, tmp_path, episode=1)  # 不同身份：不重起
+    r2 = _run(p, tmp_path, episode=1)  # different identity: no restart
     assert len(FakeSrv.instances) == 1 and p.server_restarts == 0
     fakes.EVENTS.clear()
-    r3 = _run(p, tmp_path, episode=0, attempt=2)  # 同一身份重跑：本服务进程已用过该 sid → reset 里重起
+    r3 = _run(p, tmp_path, episode=0, attempt=2)  # rerun of the same identity: this server process already used the sid -> restart in reset
     ev = fakes.EVENTS
     assert ev[:2] == ["server.stop", "server.start"] and ev.index("server.start") < ev.index("builder.make_env")
     assert len(FakeSrv.instances) == 2 and FakeSrv.instances[0].stops == 1 and FakeSrv.instances[1].starts == 1
-    r4 = _run(p, tmp_path, episode=1)  # 重起后的新服务进程里 episode 1 的 sid 没用过：不重起
+    r4 = _run(p, tmp_path, episode=1)  # in the new server process after the restart, episode 1's sid is unused: no restart
     assert len(FakeSrv.instances) == 2
     assert [r.to_dict()["pp_sid_use_index"] for r in (r1, r2, r3, r4)] == [0, 0, 0, 0]
     assert p.server_restarts == 1 and r3.to_dict()["pp_server_restarts"] == 1 and r3.attempt == 2
@@ -520,11 +526,11 @@ def gs_env(monkeypatch):
     rel = Path("mme-vla") / "examples" / "robomme" / "eval.py"
     repo = Path(__file__).resolve().parents[2]
     if not (repo / "third_party" / rel).is_file() and not os.environ.get("SGEVAL_THIRD_PARTY"):
-        # worktree 里子模块目录为空：只读借主检出的同一固定 sha（git common dir 的上一级即主检出）
+        # the submodule directory is empty in a worktree: borrow the same pinned sha read-only from the main checkout (the parent of the git common dir is the main checkout)
         common = subprocess.run(["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
                                 capture_output=True, text=True, timeout=30).stdout.strip()
         main_tp = Path(common).parent / "third_party" if common else None
-        assert main_tp is not None and (main_tp / rel).is_file(), "官方源码不在场（设 SGEVAL_THIRD_PARTY 指向主检出）"
+        assert main_tp is not None and (main_tp / rel).is_file(), "official source is missing (set SGEVAL_THIRD_PARTY to the main checkout)"
         monkeypatch.setenv("SGEVAL_THIRD_PARTY", str(main_tp))
     FakeSrv.log_text = "history_config='symbolic-grounded-subgoal.yaml'\n"
     monkeypatch.setattr(E, "BUILDER_FACTORY", GSBuilder)
@@ -575,11 +581,11 @@ def test_groundsg_label_two_evaluators_shared_predictor(tmp_path, gs_env):
     finally:
         gmod.run_episode = orig
     assert [(s[0], s[1]) for s in seen] == [(1300, 1300), (1800, 1800)]
-    assert seen[0][2] is e13 and seen[1][2] is e18 and seen[0][3] == seen[1][3]  # 同一个预测器
+    assert seen[0][2] is e13 and seen[1][2] is e18 and seen[0][3] == seen[1][3]  # the same predictor
     assert seen[0][4].endswith("/rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/"
                                f"{TASK}_ep3_xhard0/trace.jsonl")
     assert seen[0][5] == "ground-sg-oracle" and seen[0][6] == tmp_path / "work"
-    assert not any((tmp_path / "work").glob("groundsg-*"))  # 本局临时区局末整删
+    assert not any((tmp_path / "work").glob("groundsg-*"))  # the per-episode scratch area is removed entirely at episode end
     assert r1.policy_label == "groundsg-ground-sg-oracle" and r2.status == "fail"
     p.close()
     assert p.ctx is None and p.evaluators == {} and FakeSrv.instances[0].stops == 1

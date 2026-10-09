@@ -1,8 +1,10 @@
-"""外层 ``run_episode`` 与三个数据结构的契约测试（拆分方案 §三「三个数据结构」「两类进程与故障处理」）。
+"""Contract tests for the outer ``run_episode`` and the three data structures (split plan, section 3: "three data
+structures" and "two process kinds and fault handling").
 
-全部用假 builder／假环境／假录制器／假 Policy（``tests/unit_eval/fakes.py``），不跑仿真、不占 GPU。逐字段钉
-``EpisodeSpec``／``EpisodeResult``／``PlayOutput``，钉调用顺序（reset 在 build 之前、play 在 build 之后、收尾
-session.close → recorder.close → result.json）、``load()`` 只调一次与两局常驻、各种故障的落盘终态。
+Everything uses a fake builder / fake env / fake recorder / fake Policy (``tests/unit_eval/fakes.py``); no simulation,
+no GPU. Pins ``EpisodeSpec`` / ``EpisodeResult`` / ``PlayOutput`` field by field, the call order (reset before build,
+play after build, teardown session.close -> recorder.close -> result.json), that ``load()`` is called only once and
+the policy stays resident across two episodes, and the persisted final state for each kind of fault.
 """
 from __future__ import annotations
 
@@ -45,7 +47,7 @@ def read_json(p: Path) -> dict:
     return json.loads(Path(p).read_text(encoding="utf-8"))
 
 
-# ── 数据结构契约 ─────────────────────────────────────────────────────────────
+# ── Data structure contracts ─────────────────────────────────────────────────────────────
 
 
 def test_episode_spec_fields_and_frozen():
@@ -80,7 +82,7 @@ def test_make_spec_from_resolve_identity(tmp_path, dataset):
         assert spec.ep_label == 1
     else:
         assert (spec.candidate, spec.spec_sha256, spec.source_episode) == (None, None, 4)
-        assert spec.ep_label == 4  # hard-verify 的 ep<N> 用官方原 episode 号
+        assert spec.ep_label == 4  # hard-verify ep<N> uses the original official episode number
     assert Path(spec.out_dir) == tmp_path / "rollouts" / "fake" / dataset / "seed7" / "raw" / spec.raw_name
     assert spec.raw_name == f"VideoUnmask_ep{spec.ep_label}_{spec.tier}"
 
@@ -108,7 +110,7 @@ def test_play_output_contract_required_fields():
         E.normalize_play_output(["not", "a", "dict"])
 
 
-# ── 调用顺序与常驻 ───────────────────────────────────────────────────────────
+# ── Call order and residency ───────────────────────────────────────────────────────────
 
 
 def test_call_order_reset_build_play_close(tmp_path):
@@ -118,7 +120,7 @@ def test_call_order_reset_build_play_close(tmp_path):
     ev = fakes.EVENTS
     assert ev.index("policy.reset") < ev.index("recorder.init") < ev.index("builder.make_env") < ev.index("policy.play")
     assert ev.index("policy.play") < ev.index("env.close") < ev.index("recorder.close")
-    assert "policy.load" not in ev and "policy.close" not in ev  # run_episode 绝不调 load／close
+    assert "policy.load" not in ev and "policy.close" not in ev  # run_episode never calls load / close
     assert (Path(tmp_path) / "rollouts/fake/ood/seed7" / res.raw_dir / "result.json").is_file()
 
 
@@ -147,7 +149,7 @@ def test_result_fields_and_explicit_zero_counters(tmp_path):
     assert d["status"] == "fail" and d["task_success"] == 0 and d["decisions"] == 0
     assert all(isinstance(d[k], int) for k in RESULT_COUNTERS)
     assert d["exec_steps"] == 4 and d["steps"] == 4 and d["reset_calls"] == 2 and d["demo_frames"] == 2
-    assert d["pp_sid_use_index"] == 0  # 模型专属字段平铺到顶层
+    assert d["pp_sid_use_index"] == 0  # model-specific fields are flattened to the top level
     assert d["policy_seed"] == 7 and d["server_seed"] is None and d["recorder_verify"] == "PASS"
     assert E.EpisodeResult.from_dict(d).to_dict() == d
 
@@ -159,7 +161,7 @@ def test_success_result(tmp_path):
     assert res.decisions == 2 and res.extra["pp_sid_use_index"] == 1
 
 
-# ── 故障处理 ─────────────────────────────────────────────────────────────────
+# ── Fault handling ─────────────────────────────────────────────────────────────────
 
 
 def test_play_exception_recorded_and_next_episode_runs(tmp_path):
@@ -167,7 +169,7 @@ def test_play_exception_recorded_and_next_episode_runs(tmp_path):
     r1 = run(p, out=tmp_path, ep=0)
     assert (r1.status, r1.error_kind, r1.infra) == ("fail", "error", False)
     assert "ValueError" in r1.error
-    assert fakes.EVENTS.count("env.close") == 1 and fakes.EVENTS.count("recorder.close") == 1  # finally 照样收尾
+    assert fakes.EVENTS.count("env.close") == 1 and fakes.EVENTS.count("recorder.close") == 1  # finally still tears down
     p.behavior = "success"
     r2 = run(p, out=tmp_path, ep=1)
     assert r2.status == "success" and p.calls["load"] == 1
@@ -179,7 +181,7 @@ def test_build_failure_is_infra_and_skips_play(tmp_path, monkeypatch):
     res = run(p, out=tmp_path)
     assert (res.status, res.error_kind, res.infra, res.infra_reason) == ("fail", "error", True, "env_build")
     assert p.calls["play"] == 0 and "policy.play" not in fakes.EVENTS
-    assert "recorder.close" in fakes.EVENTS  # 录制器照样收尾
+    assert "recorder.close" in fakes.EVENTS  # recorder is still torn down
 
 
 def test_step_cap_raised_becomes_timeout(tmp_path, monkeypatch):
@@ -188,7 +190,7 @@ def test_step_cap_raised_becomes_timeout(tmp_path, monkeypatch):
     p = load_policy("fake", 7, behavior="stepcap")
     res = run(p, out=tmp_path)
     assert (res.status, res.cap_hit, res.exec_steps, res.error_kind) == ("timeout", True, 5, None)
-    assert fakes.FakeBuilder.instances[0].envs[0].n == 5  # 第 6 步没进环境
+    assert fakes.FakeBuilder.instances[0].envs[0].n == 5  # step 6 never reached the env
 
 
 def test_step_cap_swallowed_by_model_still_timeout(tmp_path, monkeypatch):
@@ -209,7 +211,7 @@ def test_hard_verify_has_no_strict_cap(tmp_path, monkeypatch):
 def test_error_status_merged_into_fail(tmp_path):
     p = load_policy("fake", 7, behavior="return_error")
     res = run(p, out=tmp_path)
-    assert (res.status, res.error_kind, res.error, res.task_success) == ("fail", "error", "IK 失败", 0)
+    assert (res.status, res.error_kind, res.error, res.task_success) == ("fail", "error", "IK failed", 0)
 
 
 def test_bad_play_output_is_error(tmp_path):
@@ -243,7 +245,7 @@ def test_reset_refusal_propagates_without_result(tmp_path):
     p = load_policy("fake", 7)
 
     def dead(spec):
-        raise ServerDead("服务端已退出")
+        raise ServerDead("server has exited")
     p.reset = dead
     with pytest.raises(ServerDead):
         run(p, out=tmp_path)
@@ -260,12 +262,12 @@ def test_budget_exhausted_records_then_raises(tmp_path):
 
         def claim(self, what):
             if self.n >= self.cap:
-                raise ResetBudgetExhausted(f"{what} 超额")
+                raise ResetBudgetExhausted(f"{what} over budget")
             self.n += 1
 
     p = load_policy("fake", 7)
     with pytest.raises(ResetBudgetExhausted):
-        run(p, out=tmp_path, ledger=Ledger(1))  # build 领到，reset 超额
+        run(p, out=tmp_path, ledger=Ledger(1))  # build gets a slot, reset is over budget
     d = json.loads((tmp_path / "rollouts/fake/ood/seed7/results.jsonl").read_text().splitlines()[0])
     assert d["budget_exhausted"] is True and d["infra"] is False and d["status"] == "fail" and d["reset_calls"] == 1
 
@@ -274,7 +276,7 @@ def test_watchdog_wall_timeout_writes_and_exits(tmp_path, monkeypatch, capsys):
     exits = []
     monkeypatch.setattr(E, "HARD_EXIT", exits.append)
     p = load_policy("fake", 7, behavior="sleep", sleep_s=1.5, with_server=True)
-    p.episodes_run = 1  # 非首局，不加 600 s 放宽
+    p.episodes_run = 1  # not the first episode, so no 600 s extension
     res = run(p, out=tmp_path, wall_s=0.3)
     assert exits == [75]
     out = capsys.readouterr().out
