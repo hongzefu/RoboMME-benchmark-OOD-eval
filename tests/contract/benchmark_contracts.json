@@ -3985,6 +3985,10 @@
   "dev-scripts/release/sync_to_main.sh": {
    "category": "发布工具（只供实跑）",
    "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：dev→main 单向同步脚本，推送远端 main，只在用户说「同步到 main」时实跑。"
+  },
+  "dev-scripts/release/public-manifest.txt": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：公开 main 的逐文件清单（数据，非代码），由 check_manifest.py 与 sync_to_main.sh 每次实跑核对。"
   }
  },
  "file_notes": {
