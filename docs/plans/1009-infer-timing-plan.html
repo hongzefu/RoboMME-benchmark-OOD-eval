@@ -40,415 +40,441 @@
 </style>
 </head>
 <body>
-<div class="meta">RoboMME-benchmark-OOD-eval · 2026-10-09 第一稿 · 代码锚点 <code>dev @ 3941409</code>（1.43）· 只规划不实施：本文件入库 = 计划获批；代码改动另需用户在完整计划呈现后不加修改地说「开工」</div>
+<div class="meta">RoboMME-benchmark-OOD-eval · 2026-10-09 第二稿（按用户要求：两端都测；第一部分压成「图 + 改动总览」两节；时序图由 fable 重画） · 代码锚点 <code>dev @ 3941409</code>（1.43）· 只规划不实施：本文件入库 = 计划获批；代码改动另需用户在完整计划呈现后不加修改地说「开工」</div>
 <div class="box">
 <p><strong>引言块</strong>。本计划只规划不实施；<code>ExitPlanMode</code> 批准 = 批准计划内容并授权把它渲染成 <code>docs/plans/1009-infer-timing-plan.html</code>（含两张 opus 画的内联 SVG：时序图、流程图）并提交；<strong>代码改动另需用户在完整计划呈现后不加修改地说「开工」</strong>（AGENTS.md 第 2 条）。代码锚点 <code>dev @ 3941409</code>，工作副本 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>，commit 体例 <code>1.44 …</code> 起递增，<code>sub/&lt;编号&gt;:</code> 为子代理前缀。第三方依赖锚点：五个子模块 gitlink 不动（第 24 条），<strong>本计划零第三方改动</strong>。用户原话（2026-10-09）：「出一份测速改造计划 进 plan mode html 能否只在 simulation 的这一侧去计时一次就是每次收到一个 ActionChunk 的时间 以此为准？」「然后服务器这里和客户端是否都可以测速。评估一下改动的到底有多大」「画出时序图来。然后画出流程图来这个让我可视化用 HTML」。</p>
 </div>
 <h1>第一部分（给人看）</h1>
-<h2>一、一句话方案与已定口径</h2>
-<p><strong>一句话</strong>：以 <strong>仿真侧（评估进程）每收到一个新 ActionChunk 的往返时间 <code>chunk_rtt_ms</code></strong> 为五个模型统一的权威测速指标，在五个 Policy 客户端各加一处 <code>perf_counter</code> 包住「发观测 → 收到新 chunk」；服务端前向时间 <code>server_infer_ms</code> 作为<strong>辅助</strong>指标，只在本仓已有的两个服务端包装器与 SimpleMemVLA 自家服务端里取，不碰第三方源码。两者都写进 <code>result.json</code> 的 <code>timing.policy.chunks</code>，<code>eval_report.py</code> 出一张按模型、按 GPU 型号分的速度表。</p>
-<p><strong>已定口径</strong>（依据小节在括号里）：</p>
-<ol>
-<li>权威指标是客户端 <code>chunk_rtt_ms</code>，不是服务端数（§二）。回答用户问题：<strong>可以只在仿真侧计时、以此为准</strong>。它含 msgpack 编解码 + 本机回环网络 + 服务端全部处理，五个模型测量点完全一致；本机回环开销实测可由 FrameSamp 现有 <code>network_mean_s = rtt − server</code> 看到量级，计划把它作为验收项之一。</li>
-<li>服务端也能测，五个模型里四个 GPU 模型都能在本仓代码内测到（§三）；Astra 的规划器是远程付费 API，只记已有的 <code>seconds</code>，不算前向。</li>
-<li>「一次」= 一个 decision（一次新 chunk），不是一个 env step。PonderPounce 客户端每步收一个动作，chunk 边界靠服务端包装器打标 <code>chunk_fresh</code>（§三 PP 行）。</li>
-<li>统计分「首次（含编译／预热残余）／第 2、3 次／稳态（第 4 次起）」三段，报 mean、p50、p95；按 GPU 型号分组，<strong>A40 与 RTX 6000 Ada 不混比</strong>（第 16 条）。</li>
-<li><code>trace.jsonl</code> 行 schema 冻结不改；新字段只进 <code>result.json</code> 与 <code>events.jsonl</code>（§四）。</li>
-<li>协议字节不变：PonderPounce 新字段放进已存在、客户端已 pop 的 <code>_sgeval_audit</code> 块；mme-vla 服务端的新字段同样放审计块（§三）。<code>SGEVAL_AUDIT=0</code> 时回复与第三方逐字节相同的既有保证保持。</li>
-<li>本计划零第三方改动、零受保护目录改动、零 <code>pyproject.toml</code> 改动。</li>
-</ol>
-<h2>二、现状：五个模型分别怎么测、缺什么</h2>
+<h2>一、怎么测、改在哪（一张图）</h2>
+<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 2430" width="1200" height="2430" font-family="Noto Sans CJK SC, PingFang SC, Microsoft YaHei, sans-serif">
+<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,4 L0,8 z" fill="#555"/></marker></defs>
+<rect width="1200" height="2430" fill="#fff"/>
+<text x="28.0" y="30.0" font-size="16" fill="#222" text-anchor="start" font-weight="bold">推理测速：怎么测、改在哪（五个模型）</text>
+<rect x="28" y="44" width="14" height="14" fill="#c0392b"/>
+<text x="48.0" y="56.0" font-size="13" fill="#222" text-anchor="start">client_rtt_ms（权威）</text>
+<rect x="224.64000000000001" y="44" width="14" height="14" fill="#2b6cb0"/>
+<text x="244.6" y="56.0" font-size="13" fill="#222" text-anchor="start">server_infer_ms / s1_infer_ms</text>
+<rect x="485.76" y="44" width="14" height="14" fill="#2f855a"/>
+<text x="505.8" y="56.0" font-size="13" fill="#222" text-anchor="start">lang / subgoal / s2 / planner</text>
+<rect x="746.88" y="44" width="14" height="14" fill="#555"/>
+<text x="766.9" y="56.0" font-size="13" fill="#222" text-anchor="start">实线：请求　虚线：回复</text>
+<rect x="10" y="70" width="1180" height="380" rx="8" fill="#fafafa" stroke="#ddd"/>
+<text x="28.0" y="96.0" font-size="16" fill="#222" text-anchor="start" font-weight="bold">① SimpleMemVLA</text>
+<rect x="27.5" y="114" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="122.5" y="134.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">EnvSession</text>
+<line x1="122.5" y1="144" x2="122.5" y2="434" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="232.5" y="114" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="327.5" y="134.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">Policy 客户端（评估进程）</text>
+<line x1="327.5" y1="144" x2="327.5" y2="434" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="437.5" y="114" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="532.5" y="134.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">模型服务端</text>
+<line x1="532.5" y1="144" x2="532.5" y2="434" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.5" y="114" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="737.5" y="134.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">语言 / 子目标系统</text>
+<line x1="737.5" y1="144" x2="737.5" y2="434" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="850" y1="110" x2="850" y2="434" stroke="#ddd"/>
+<text x="860.0" y="134.0" font-size="13" fill="#222" text-anchor="start" font-weight="bold">计时区间与改在哪</text>
+<rect x="860" y="151" width="12" height="12" fill="#c0392b"/>
+<text x="880.0" y="162.0" font-size="13" fill="#c0392b" text-anchor="start" font-weight="bold">client_rtt_ms（权威）</text>
+<text x="880.0" y="182.0" font-size="12" fill="#333" text-anchor="start">models/smvla.py::run_episode</text>
+<text x="880.0" y="200.0" font-size="12" fill="#333" text-anchor="start">已有 rtt_ms，改字段名</text>
+<rect x="860" y="221" width="12" height="12" fill="#2b6cb0"/>
+<text x="880.0" y="232.0" font-size="13" fill="#2b6cb0" text-anchor="start" font-weight="bold">server_infer_ms</text>
+<text x="880.0" y="252.0" font-size="12" fill="#333" text-anchor="start">servers/smvla_server.py</text>
+<text x="880.0" y="270.0" font-size="12" fill="#333" text-anchor="start">  ::SMVLAPolicyHost.infer</text>
+<text x="880.0" y="288.0" font-size="12" fill="#333" text-anchor="start">已有，含 cuda.synchronize</text>
+<rect x="860" y="309" width="12" height="12" fill="#2f855a"/>
+<text x="880.0" y="320.0" font-size="13" fill="#2f855a" text-anchor="start" font-weight="bold">lang_ms / action_ms</text>
+<text x="880.0" y="340.0" font-size="12" fill="#333" text-anchor="start">servers/smvla_server.py</text>
+<text x="880.0" y="358.0" font-size="12" fill="#333" text-anchor="start">用代理替换 model.action_head.sample 打点</text>
+<text x="880.0" y="376.0" font-size="12" fill="#333" text-anchor="start">新增</text>
+<line x1="327.5" y1="180" x2="532.5" y2="180" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="368.2" y="159.6" width="123.5" height="16.3" fill="#fff"/>
+<text x="430.0" y="171.0" font-size="13" fill="#222" text-anchor="middle">obs（RGB + 状态）</text>
+<rect x="526.5" y="180" width="12" height="150" fill="#2b6cb0" fill-opacity="0.18" stroke="#2b6cb0" stroke-width="1"/>
+<path d="M542.5,180 h8 V330 h-8" fill="none" stroke="#2b6cb0" stroke-width="2.5"/>
+<rect x="549.5" y="164.4" width="101.8" height="15.2" fill="#fff"/>
+<text x="552.5" y="175.0" font-size="12" fill="#2b6cb0" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">server_infer_ms</text>
+<path d="M538.5,198 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="197.1" width="187.5" height="16.3" fill="#fff"/>
+<text x="586.5" y="208.5" font-size="13" fill="#222" text-anchor="start">① 自回归生成 subtask token</text>
+<rect x="583.5" y="214.1" width="71.0" height="16.3" fill="#fff"/>
+<text x="586.5" y="225.5" font-size="13" fill="#222" text-anchor="start">（语言段）</text>
+<path d="M522.5,192 h-8 V250 h8" fill="none" stroke="#2f855a" stroke-width="2.5"/>
+<rect x="460.8" y="215.4" width="50.7" height="15.2" fill="#fff"/>
+<text x="508.5" y="226.0" font-size="12" fill="#2f855a" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">lang_ms</text>
+<path d="M538.5,260 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="259.1" width="197.9" height="16.3" fill="#fff"/>
+<text x="586.5" y="270.5" font-size="13" fill="#222" text-anchor="start">② action_head.sample 出动作</text>
+<rect x="583.5" y="276.1" width="71.0" height="16.3" fill="#fff"/>
+<text x="586.5" y="287.5" font-size="13" fill="#222" text-anchor="start">（动作段）</text>
+<path d="M522.5,256 h-8 V314 h8" fill="none" stroke="#2f855a" stroke-width="2.5"/>
+<rect x="448.0" y="279.4" width="63.5" height="15.2" fill="#fff"/>
+<text x="508.5" y="290.0" font-size="12" fill="#2f855a" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">action_ms</text>
+<line x1="532.5" y1="350" x2="327.5" y2="350" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="374.7" y="329.6" width="110.5" height="16.3" fill="#fff"/>
+<text x="430.0" y="341.0" font-size="13" fill="#222" text-anchor="middle">16 步动作 chunk</text>
+<path d="M317.5,180 h-8 V350 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="259.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="270.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<line x1="327.5" y1="380" x2="122.5" y2="380" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="85.8" y="359.6" width="278.5" height="16.3" fill="#fff"/>
+<text x="225.0" y="371.0" font-size="13" fill="#222" text-anchor="middle">env.step ×16（逐步执行后再发下一次 obs）</text>
+<line x1="327.5" y1="410" x2="122.5" y2="410" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="192.9" y="389.6" width="64.2" height="16.3" fill="#fff"/>
+<text x="225.0" y="401.0" font-size="13" fill="#222" text-anchor="middle">env.step</text>
+<line x1="327.5" y1="440" x2="122.5" y2="440" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="192.9" y="419.6" width="64.2" height="16.3" fill="#fff"/>
+<text x="225.0" y="431.0" font-size="13" fill="#222" text-anchor="middle">env.step</text>
+<rect x="643.5" y="398.6" width="188.0" height="16.3" fill="#fff"/>
+<text x="737.5" y="410.0" font-size="13" fill="#999" text-anchor="middle">（语言段在服务端前向内完成）</text>
+<rect x="10" y="480" width="1180" height="350" rx="8" fill="#fafafa" stroke="#ddd"/>
+<text x="28.0" y="506.0" font-size="16" fill="#222" text-anchor="start" font-weight="bold">② FrameSamp</text>
+<rect x="27.5" y="524" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="122.5" y="544.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">EnvSession</text>
+<line x1="122.5" y1="554" x2="122.5" y2="814" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="232.5" y="524" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="327.5" y="544.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">Policy 客户端（评估进程）</text>
+<line x1="327.5" y1="554" x2="327.5" y2="814" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="437.5" y="524" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="532.5" y="544.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">模型服务端</text>
+<line x1="532.5" y1="554" x2="532.5" y2="814" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.5" y="524" width="190" height="30" rx="4" fill="#fff" stroke="#999" stroke-width="1.5"/>
+<text x="737.5" y="544.0" font-size="13" fill="#999" text-anchor="middle" font-weight="bold">语言 / 子目标系统（无）</text>
+<line x1="737.5" y1="554" x2="737.5" y2="814" stroke="#999" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="850" y1="520" x2="850" y2="814" stroke="#ddd"/>
+<text x="860.0" y="544.0" font-size="13" fill="#222" text-anchor="start" font-weight="bold">计时区间与改在哪</text>
+<rect x="860" y="561" width="12" height="12" fill="#c0392b"/>
+<text x="880.0" y="572.0" font-size="13" fill="#c0392b" text-anchor="start" font-weight="bold">client_rtt_ms（权威）</text>
+<text x="880.0" y="592.0" font-size="12" fill="#333" text-anchor="start">models/framesamp_modul.py::_roundtrip</text>
+<text x="880.0" y="610.0" font-size="12" fill="#333" text-anchor="start">已有 rtt_s，改字段名</text>
+<rect x="860" y="631" width="12" height="12" fill="#2b6cb0"/>
+<text x="880.0" y="642.0" font-size="13" fill="#2b6cb0" text-anchor="start" font-weight="bold">server_infer_ms</text>
+<text x="880.0" y="662.0" font-size="12" fill="#333" text-anchor="start">servers/policy_server_wrap.py</text>
+<text x="880.0" y="680.0" font-size="12" fill="#333" text-anchor="start">  ::AuditedPolicy.infer</text>
+<text x="880.0" y="698.0" font-size="12" fill="#333" text-anchor="start">新增，写进审计块</text>
+<rect x="860" y="719" width="12" height="12" fill="#999"/>
+<text x="880.0" y="730.0" font-size="13" fill="#999" text-anchor="start" font-weight="bold">lang_ms</text>
+<text x="880.0" y="750.0" font-size="12" fill="#333" text-anchor="start">无语言系统</text>
+<rect x="183.3" y="568.6" width="288.4" height="16.3" fill="#fff"/>
+<text x="327.5" y="580.0" font-size="13" fill="#333" text-anchor="middle">_roundtrip：pack → send → recv → unpack</text>
+<line x1="327.5" y1="610" x2="532.5" y2="610" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="383.6" y="589.6" width="92.8" height="16.3" fill="#fff"/>
+<text x="430.0" y="601.0" font-size="13" fill="#222" text-anchor="middle">obs（帧采样）</text>
+<rect x="526.5" y="610" width="12" height="80" fill="#2b6cb0" fill-opacity="0.18" stroke="#2b6cb0" stroke-width="1"/>
+<path d="M542.5,610 h8 V690 h-8" fill="none" stroke="#2b6cb0" stroke-width="2.5"/>
+<rect x="549.5" y="594.4" width="101.8" height="15.2" fill="#fff"/>
+<text x="552.5" y="605.0" font-size="12" fill="#2b6cb0" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">server_infer_ms</text>
+<path d="M538.5,630 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="637.6" width="250.4" height="16.3" fill="#fff"/>
+<text x="586.5" y="649.0" font-size="13" fill="#222" text-anchor="start">AuditedPolicy.infer → mme-vla 前向</text>
+<line x1="532.5" y1="710" x2="327.5" y2="710" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="374.7" y="689.6" width="110.5" height="16.3" fill="#fff"/>
+<text x="430.0" y="701.0" font-size="13" fill="#222" text-anchor="middle">20 步动作 chunk</text>
+<path d="M317.5,610 h-8 V710 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="654.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="665.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<path d="M333.5,730 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="378.5" y="737.6" width="113.1" height="16.3" fill="#fff"/>
+<text x="381.5" y="749.0" font-size="13" fill="#222" text-anchor="start">客户端取前 16 步</text>
+<line x1="327.5" y1="790" x2="122.5" y2="790" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="178.3" y="769.6" width="93.4" height="16.3" fill="#fff"/>
+<text x="225.0" y="781.0" font-size="13" fill="#222" text-anchor="middle">env.step ×16</text>
+<line x1="327.5" y1="820" x2="122.5" y2="820" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="192.9" y="799.6" width="64.2" height="16.3" fill="#fff"/>
+<text x="225.0" y="811.0" font-size="13" fill="#222" text-anchor="middle">env.step</text>
+<rect x="10" y="860" width="1180" height="370" rx="8" fill="#fafafa" stroke="#ddd"/>
+<text x="28.0" y="886.0" font-size="16" fill="#222" text-anchor="start" font-weight="bold">③ GroundSG</text>
+<rect x="27.5" y="904" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="122.5" y="924.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">EnvSession</text>
+<line x1="122.5" y1="934" x2="122.5" y2="1214" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="232.5" y="904" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="327.5" y="924.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">Policy 客户端（评估进程）</text>
+<line x1="327.5" y1="934" x2="327.5" y2="1214" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="437.5" y="904" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="532.5" y="924.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">模型服务端</text>
+<line x1="532.5" y1="934" x2="532.5" y2="1214" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.5" y="904" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="737.5" y="924.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">语言 / 子目标系统</text>
+<line x1="737.5" y1="934" x2="737.5" y2="1214" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="850" y1="900" x2="850" y2="1214" stroke="#ddd"/>
+<text x="860.0" y="924.0" font-size="13" fill="#222" text-anchor="start" font-weight="bold">计时区间与改在哪</text>
+<rect x="860" y="941" width="12" height="12" fill="#c0392b"/>
+<text x="880.0" y="952.0" font-size="13" fill="#c0392b" text-anchor="start" font-weight="bold">client_rtt_ms（权威）</text>
+<text x="880.0" y="972.0" font-size="12" fill="#333" text-anchor="start">models/framesamp_modul.py::_roundtrip</text>
+<text x="880.0" y="990.0" font-size="12" fill="#333" text-anchor="start">同 ②（复用）</text>
+<rect x="860" y="1011" width="12" height="12" fill="#2b6cb0"/>
+<text x="880.0" y="1022.0" font-size="13" fill="#2b6cb0" text-anchor="start" font-weight="bold">server_infer_ms</text>
+<text x="880.0" y="1042.0" font-size="12" fill="#333" text-anchor="start">servers/policy_server_wrap.py</text>
+<text x="880.0" y="1060.0" font-size="12" fill="#333" text-anchor="start">  ::AuditedPolicy.infer</text>
+<text x="880.0" y="1078.0" font-size="12" fill="#333" text-anchor="start">同 ②</text>
+<rect x="860" y="1099" width="12" height="12" fill="#2f855a"/>
+<text x="880.0" y="1110.0" font-size="13" fill="#2f855a" text-anchor="start" font-weight="bold">subgoal_ms</text>
+<text x="880.0" y="1130.0" font-size="12" fill="#333" text-anchor="start">models/groundsg.py::make_policy_context</text>
+<text x="880.0" y="1148.0" font-size="12" fill="#333" text-anchor="start">包一层预测器代理，新增</text>
+<line x1="327.5" y1="970" x2="737.5" y2="970" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="375.3" y="949.6" width="314.4" height="16.3" fill="#fff"/>
+<text x="532.5" y="961.0" font-size="13" fill="#222" text-anchor="middle">obs → get_subgoal（按 subgoal_keep_period）</text>
+<rect x="731.5" y="970" width="12" height="50" fill="#2f855a" fill-opacity="0.18" stroke="#2f855a" stroke-width="1"/>
+<path d="M747.5,970 h8 V1020 h-8" fill="none" stroke="#2f855a" stroke-width="2.5"/>
+<rect x="754.5" y="954.4" width="69.8" height="15.2" fill="#fff"/>
+<text x="757.5" y="965.0" font-size="12" fill="#2f855a" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">subgoal_ms</text>
+<path d="M731.5,984 h-40 v28 h32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="535.4" y="991.6" width="151.1" height="16.3" fill="#fff"/>
+<text x="683.5" y="1003.0" font-size="13" fill="#222" text-anchor="end">Qwen/MemER 预测子目标</text>
+<line x1="737.5" y1="1040" x2="327.5" y2="1040" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="487.4" y="1019.6" width="90.2" height="16.3" fill="#fff"/>
+<text x="532.5" y="1031.0" font-size="13" fill="#222" text-anchor="middle">subgoal 文本</text>
+<line x1="327.5" y1="1080" x2="532.5" y2="1080" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="313.6" y="1059.6" width="232.7" height="16.3" fill="#fff"/>
+<text x="430.0" y="1071.0" font-size="13" fill="#222" text-anchor="middle">obs + subgoal（复用 _roundtrip）</text>
+<rect x="526.5" y="1080" width="12" height="70" fill="#2b6cb0" fill-opacity="0.18" stroke="#2b6cb0" stroke-width="1"/>
+<path d="M542.5,1080 h8 V1150 h-8" fill="none" stroke="#2b6cb0" stroke-width="2.5"/>
+<rect x="549.5" y="1064.4" width="101.8" height="15.2" fill="#fff"/>
+<text x="552.5" y="1075.0" font-size="12" fill="#2b6cb0" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">server_infer_ms</text>
+<path d="M538.5,1096 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="1103.6" width="250.4" height="16.3" fill="#fff"/>
+<text x="586.5" y="1115.0" font-size="13" fill="#222" text-anchor="start">AuditedPolicy.infer → mme-vla 前向</text>
+<line x1="532.5" y1="1170" x2="327.5" y2="1170" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="344.3" y="1149.6" width="171.4" height="16.3" fill="#fff"/>
+<text x="430.0" y="1161.0" font-size="13" fill="#222" text-anchor="middle">20 步 chunk，客户端取 16</text>
+<path d="M317.5,1080 h-8 V1170 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="1119.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="1130.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<line x1="327.5" y1="1210" x2="122.5" y2="1210" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="178.3" y="1189.6" width="93.4" height="16.3" fill="#fff"/>
+<text x="225.0" y="1201.0" font-size="13" fill="#222" text-anchor="middle">env.step ×16</text>
+<rect x="10" y="1260" width="1180" height="660" rx="8" fill="#fafafa" stroke="#ddd"/>
+<text x="28.0" y="1286.0" font-size="16" fill="#222" text-anchor="start" font-weight="bold">④ PonderPounce</text>
+<rect x="27.5" y="1304" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="122.5" y="1324.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">EnvSession</text>
+<line x1="122.5" y1="1334" x2="122.5" y2="1904" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="232.5" y="1304" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="327.5" y="1324.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">Policy 客户端（评估进程）</text>
+<line x1="327.5" y1="1334" x2="327.5" y2="1904" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="437.5" y="1304" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="532.5" y="1324.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">模型服务端</text>
+<line x1="532.5" y1="1334" x2="532.5" y2="1904" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.5" y="1304" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="737.5" y="1324.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">语言 / 子目标系统</text>
+<line x1="737.5" y1="1334" x2="737.5" y2="1904" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="850" y1="1300" x2="850" y2="1904" stroke="#ddd"/>
+<text x="860.0" y="1324.0" font-size="13" fill="#222" text-anchor="start" font-weight="bold">计时区间与改在哪</text>
+<rect x="860" y="1341" width="12" height="12" fill="#c0392b"/>
+<text x="880.0" y="1352.0" font-size="13" fill="#c0392b" text-anchor="start" font-weight="bold">client_rtt_ms（权威）</text>
+<text x="880.0" y="1372.0" font-size="12" fill="#333" text-anchor="start">models/pp.py::TracedConnection.act</text>
+<text x="880.0" y="1390.0" font-size="12" fill="#333" text-anchor="start">新增；按 chunk_fresh 归到 chunk</text>
+<rect x="860" y="1411" width="12" height="12" fill="#2b6cb0"/>
+<text x="880.0" y="1422.0" font-size="13" fill="#2b6cb0" text-anchor="start" font-weight="bold">s1_infer_ms</text>
+<text x="880.0" y="1442.0" font-size="12" fill="#333" text-anchor="start">servers/pp_server_wrap.py::_fire_s1</text>
+<text x="880.0" y="1460.0" font-size="12" fill="#333" text-anchor="start">新增；_dispense 审计块加 chunk_fresh</text>
+<rect x="860" y="1481" width="12" height="12" fill="#2f855a"/>
+<text x="880.0" y="1492.0" font-size="13" fill="#2f855a" text-anchor="start" font-weight="bold">s2_infer_ms</text>
+<text x="880.0" y="1512.0" font-size="12" fill="#333" text-anchor="start">servers/pp_server_wrap.py::_S2Watch.fire</text>
+<text x="880.0" y="1530.0" font-size="12" fill="#333" text-anchor="start">已包住，加计时</text>
+<rect x="731.5" y="1360" width="12" height="70" fill="#2f855a" fill-opacity="0.18" stroke="#2f855a" stroke-width="1"/>
+<path d="M747.5,1360 h8 V1430 h-8" fill="none" stroke="#2f855a" stroke-width="2.5"/>
+<rect x="754.5" y="1344.4" width="76.2" height="15.2" fill="#fff"/>
+<text x="757.5" y="1355.0" font-size="12" fill="#2f855a" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">s2_infer_ms</text>
+<path d="M731.5,1374 h-40 v28 h32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="571.3" y="1373.1" width="115.2" height="16.3" fill="#fff"/>
+<text x="683.5" y="1384.5" font-size="13" fill="#222" text-anchor="end">Ponder _fire_s2</text>
+<rect x="527.6" y="1390.1" width="158.9" height="16.3" fill="#fff"/>
+<text x="683.5" y="1401.5" font-size="13" fill="#222" text-anchor="end">→ subgoal / cognition</text>
+<line x1="737.5" y1="1450" x2="532.5" y2="1450" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="525.1" y="1429.6" width="219.7" height="16.3" fill="#fff"/>
+<text x="635.0" y="1441.0" font-size="13" fill="#222" text-anchor="middle">subgoal / cognition 供 S1 使用</text>
+<line x1="327.5" y1="1490" x2="532.5" y2="1490" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="379.2" y="1469.6" width="101.7" height="16.3" fill="#fff"/>
+<text x="430.0" y="1481.0" font-size="13" fill="#222" text-anchor="middle">obs（第 1 步）</text>
+<rect x="526.5" y="1490" width="12" height="70" fill="#2b6cb0" fill-opacity="0.18" stroke="#2b6cb0" stroke-width="1"/>
+<path d="M542.5,1490 h8 V1560 h-8" fill="none" stroke="#2b6cb0" stroke-width="2.5"/>
+<rect x="549.5" y="1474.4" width="76.2" height="15.2" fill="#fff"/>
+<text x="552.5" y="1485.0" font-size="12" fill="#2b6cb0" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">s1_infer_ms</text>
+<path d="M538.5,1506 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="1505.1" width="200.5" height="16.3" fill="#fff"/>
+<text x="586.5" y="1516.5" font-size="13" fill="#222" text-anchor="start">_fire_s1：1000 ms 仿真钟触发</text>
+<rect x="583.5" y="1522.1" width="114.7" height="16.3" fill="#fff"/>
+<text x="586.5" y="1533.5" font-size="13" fill="#222" text-anchor="start">前向出整块 chunk</text>
+<line x1="532.5" y1="1580" x2="327.5" y2="1580" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="329.0" y="1559.6" width="202.0" height="16.3" fill="#fff"/>
+<text x="430.0" y="1571.0" font-size="13" fill="#222" text-anchor="middle">1 个动作（chunk_fresh=True）</text>
+<path d="M317.5,1490 h-8 V1580 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="1529.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="1540.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<line x1="327.5" y1="1610" x2="122.5" y2="1610" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="182.0" y="1589.6" width="86.1" height="16.3" fill="#fff"/>
+<text x="225.0" y="1601.0" font-size="13" fill="#222" text-anchor="middle">env.step ×1</text>
+<line x1="327.5" y1="1650" x2="532.5" y2="1650" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="379.2" y="1629.6" width="101.7" height="16.3" fill="#fff"/>
+<text x="430.0" y="1641.0" font-size="13" fill="#222" text-anchor="middle">obs（第 2 步）</text>
+<path d="M538.5,1660 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="1667.6" width="213.5" height="16.3" fill="#fff"/>
+<text x="586.5" y="1679.0" font-size="13" fill="#222" text-anchor="start">_dispense：从缓存 chunk 取一行</text>
+<line x1="532.5" y1="1710" x2="327.5" y2="1710" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="325.3" y="1689.6" width="209.3" height="16.3" fill="#fff"/>
+<text x="430.0" y="1701.0" font-size="13" fill="#222" text-anchor="middle">1 个动作（chunk_fresh=False）</text>
+<path d="M317.5,1650 h-8 V1710 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="1674.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="1685.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<line x1="327.5" y1="1740" x2="122.5" y2="1740" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="182.0" y="1719.6" width="86.1" height="16.3" fill="#fff"/>
+<text x="225.0" y="1731.0" font-size="13" fill="#222" text-anchor="middle">env.step ×1</text>
+<line x1="327.5" y1="1780" x2="532.5" y2="1780" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="379.2" y="1759.6" width="101.7" height="16.3" fill="#fff"/>
+<text x="430.0" y="1771.0" font-size="13" fill="#222" text-anchor="middle">obs（第 3 步）</text>
+<path d="M538.5,1790 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="1797.6" width="213.5" height="16.3" fill="#fff"/>
+<text x="586.5" y="1809.0" font-size="13" fill="#222" text-anchor="start">_dispense：从缓存 chunk 取一行</text>
+<line x1="532.5" y1="1840" x2="327.5" y2="1840" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="325.3" y="1819.6" width="209.3" height="16.3" fill="#fff"/>
+<text x="430.0" y="1831.0" font-size="13" fill="#222" text-anchor="middle">1 个动作（chunk_fresh=False）</text>
+<path d="M317.5,1780 h-8 V1840 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="1804.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="1815.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<line x1="327.5" y1="1870" x2="122.5" y2="1870" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="182.0" y="1849.6" width="86.1" height="16.3" fill="#fff"/>
+<text x="225.0" y="1861.0" font-size="13" fill="#222" text-anchor="middle">env.step ×1</text>
+<rect x="64.8" y="1888.6" width="525.5" height="16.3" fill="#fff"/>
+<text x="327.5" y="1900.0" font-size="13" fill="#333" text-anchor="middle">每个 env step 发一次 obs、收 1 个动作；按 chunk_fresh 把 rtt 归到所属 chunk</text>
+<rect x="10" y="1950" width="1180" height="450" rx="8" fill="#fafafa" stroke="#ddd"/>
+<text x="28.0" y="1976.0" font-size="16" fill="#222" text-anchor="start" font-weight="bold">⑤ Astra</text>
+<rect x="27.5" y="1994" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="122.5" y="2014.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">EnvSession</text>
+<line x1="122.5" y1="2024" x2="122.5" y2="2384" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="232.5" y="1994" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="327.5" y="2014.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">Policy 客户端（评估进程）</text>
+<line x1="327.5" y1="2024" x2="327.5" y2="2384" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="437.5" y="1994" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="532.5" y="2014.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">模型服务端</text>
+<line x1="532.5" y1="2024" x2="532.5" y2="2384" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<rect x="642.5" y="1994" width="190" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="737.5" y="2014.0" font-size="13" fill="#555" text-anchor="middle" font-weight="bold">语言 / 子目标系统</text>
+<line x1="737.5" y1="2024" x2="737.5" y2="2384" stroke="#555" stroke-width="1" stroke-dasharray="3 3"/>
+<line x1="850" y1="1990" x2="850" y2="2384" stroke="#ddd"/>
+<text x="860.0" y="2014.0" font-size="13" fill="#222" text-anchor="start" font-weight="bold">计时区间与改在哪</text>
+<rect x="860" y="2031" width="12" height="12" fill="#c0392b"/>
+<text x="880.0" y="2042.0" font-size="13" fill="#c0392b" text-anchor="start" font-weight="bold">client_rtt_ms（权威）</text>
+<text x="880.0" y="2062.0" font-size="12" fill="#333" text-anchor="start">models/astra.py::TracedClient.infer</text>
+<text x="880.0" y="2080.0" font-size="12" fill="#333" text-anchor="start">新增</text>
+<rect x="860" y="2101" width="12" height="12" fill="#2b6cb0"/>
+<text x="880.0" y="2112.0" font-size="13" fill="#2b6cb0" text-anchor="start" font-weight="bold">server_infer_ms</text>
+<text x="880.0" y="2132.0" font-size="12" fill="#333" text-anchor="start">servers/policy_server_wrap.py</text>
+<text x="880.0" y="2150.0" font-size="12" fill="#333" text-anchor="start">  ::AuditedPolicy.infer</text>
+<text x="880.0" y="2168.0" font-size="12" fill="#333" text-anchor="start">同 ②（同一包装器）</text>
+<rect x="860" y="2189" width="12" height="12" fill="#2f855a"/>
+<text x="880.0" y="2200.0" font-size="13" fill="#2f855a" text-anchor="start" font-weight="bold">planner / monitor seconds</text>
+<text x="880.0" y="2220.0" font-size="12" fill="#333" text-anchor="start">第三方 runner.py 已有 decisions.jsonl</text>
+<text x="880.0" y="2238.0" font-size="12" fill="#333" text-anchor="start">本仓 models/astra.py::_finish_one 只汇总</text>
+<text x="880.0" y="2256.0" font-size="12" fill="#333" text-anchor="start">不改第三方</text>
+<line x1="327.5" y1="2060" x2="737.5" y2="2060" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="439.0" y="2039.6" width="187.0" height="16.3" fill="#fff"/>
+<text x="532.5" y="2051.0" font-size="13" fill="#222" text-anchor="middle">规划请求（发送间隔 ≥ 20 s）</text>
+<rect x="731.5" y="2060" width="12" height="50" fill="#2f855a" fill-opacity="0.18" stroke="#2f855a" stroke-width="1"/>
+<path d="M743.5,2060 h8 V2110 h-8" fill="none" stroke="#2f855a" stroke-width="2.5"/>
+<rect x="750.5" y="2044.4" width="101.8" height="15.2" fill="#fff"/>
+<text x="753.5" y="2055.0" font-size="12" fill="#2f855a" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">planner seconds</text>
+<path d="M731.5,2074 h-40 v28 h32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="501.6" y="2081.6" width="184.9" height="16.3" fill="#fff"/>
+<text x="683.5" y="2093.0" font-size="13" fill="#222" text-anchor="end">远程 OpenAI Responses API</text>
+<line x1="737.5" y1="2130" x2="327.5" y2="2130" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="514.9" y="2109.6" width="35.1" height="16.3" fill="#fff"/>
+<text x="532.5" y="2121.0" font-size="13" fill="#222" text-anchor="middle">plan</text>
+<line x1="327.5" y1="2170" x2="532.5" y2="2170" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="337.6" y="2149.6" width="184.9" height="16.3" fill="#fff"/>
+<text x="430.0" y="2161.0" font-size="13" fill="#222" text-anchor="middle">obs（TracedClient.infer）</text>
+<rect x="526.5" y="2170" width="12" height="70" fill="#2b6cb0" fill-opacity="0.18" stroke="#2b6cb0" stroke-width="1"/>
+<path d="M542.5,2170 h8 V2240 h-8" fill="none" stroke="#2b6cb0" stroke-width="2.5"/>
+<rect x="549.5" y="2154.4" width="101.8" height="15.2" fill="#fff"/>
+<text x="552.5" y="2165.0" font-size="12" fill="#2b6cb0" text-anchor="start" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">server_infer_ms</text>
+<path d="M538.5,2186 h40 v28 h-32" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="583.5" y="2185.1" width="144.3" height="16.3" fill="#fff"/>
+<text x="586.5" y="2196.5" font-size="13" fill="#222" text-anchor="start">AuditedPolicy.infer</text>
+<rect x="583.5" y="2202.1" width="138.1" height="16.3" fill="#fff"/>
+<text x="586.5" y="2213.5" font-size="13" fill="#222" text-anchor="start">→ 本地 mme-vla 前向</text>
+<line x1="532.5" y1="2260" x2="327.5" y2="2260" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="374.7" y="2239.6" width="110.5" height="16.3" fill="#fff"/>
+<text x="430.0" y="2251.0" font-size="13" fill="#222" text-anchor="middle">16 步动作 chunk</text>
+<path d="M317.5,2170 h-8 V2260 h8" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<rect x="217.5" y="2209.4" width="89.0" height="15.2" fill="#fff"/>
+<text x="303.5" y="2220.0" font-size="12" fill="#c0392b" text-anchor="end" font-weight="bold" font-family="ui-monospace,Menlo,Consolas,monospace">client_rtt_ms</text>
+<line x1="327.5" y1="2300" x2="122.5" y2="2300" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="178.3" y="2279.6" width="93.4" height="16.3" fill="#fff"/>
+<text x="225.0" y="2291.0" font-size="13" fill="#222" text-anchor="middle">env.step ×16</text>
+<line x1="327.5" y1="2340" x2="737.5" y2="2340" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="403.4" y="2319.6" width="258.2" height="16.3" fill="#fff"/>
+<text x="532.5" y="2331.0" font-size="13" fill="#222" text-anchor="middle">本地监视器另行调用（monitor seconds）</text>
+<line x1="737.5" y1="2380" x2="327.5" y2="2380" stroke="#555" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+<rect x="487.4" y="2359.6" width="90.2" height="16.3" fill="#fff"/>
+<text x="532.5" y="2371.0" font-size="13" fill="#222" text-anchor="middle">monitor 结果</text>
+</svg><figcaption>图 1 五个模型「观测 → ActionChunk」时序：红 client_rtt_ms（评估端，权威）、蓝 server_infer_ms（服务端）、绿 lang_ms（语言 / 子目标）；右栏为改在哪</figcaption></figure>
+<p>图 1 读法：每个面板左栏是「评估进程发观测 → 收到一个 ActionChunk」的时序，右栏三行是本计划要加或要改的三类计时：<strong>红 <code>client_rtt_ms</code></strong>（评估端 <code>ws.send → ws.recv</code>，权威指标）、<strong>蓝 <code>server_infer_ms</code></strong>（服务端前向，辅助）、<strong>绿 <code>lang_ms</code></strong>（双系统子目标 / 单模型内语言段）。五个模型都能同时测评估端与服务端，且全部在本仓代码内改，零第三方源码改动。</p>
+<p>已定口径：① 权威指标是评估端 <code>client_rtt_ms</code>；② 服务端数与语言段数都测、作辅助列；③「一次」= 一个 decision（新 chunk），PonderPounce 靠服务端包装器审计块里的 <code>chunk_fresh</code> 标出；④ 统计分「首次 / 第 2、3 次 / 稳态」报 mean、p50、p95，按 GPU 型号分组，A40 与 RTX 6000 Ada 不混比；⑤ <code>trace.jsonl</code> 行 schema 冻结，新字段只进 <code>result.json</code> 与 <code>events.jsonl</code>；⑥ <code>SGEVAL_AUDIT=0</code> 时服务端回复与第三方逐字节相同的既有保证保持（新字段只进审计块）；⑦ 零第三方、零受保护目录、零 <code>pyproject</code> 改动。用户原话（2026-10-09）：「两个都要测」「我只关注这张图 客户端与服务端都能测：怎么测、改在哪」「HTML第一部分只分两节这个图加上和要改动的内容总览」。</p>
+<h2>二、要改什么（总览）</h2>
 <table>
 <thead>
 <tr>
 <th>模型</th>
-<th>一次前向出几步</th>
-<th>客户端现有</th>
-<th>服务端现有</th>
-<th>缺口</th>
+<th>评估端 <code>client_rtt_ms</code></th>
+<th>服务端 <code>server_infer_ms</code></th>
+<th>语言 / 子目标 <code>lang_ms</code></th>
+<th>现状 → 改法</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>SimpleMemVLA</td>
-<td>16（<code>EXECUTE_HORIZON</code>，<code>models/smvla.py</code>）</td>
-<td><code>run_episode::call</code> 每次 infer 记 <code>rtt_ms</code> 列表</td>
-<td><code>servers/smvla_server.py::SMVLAPolicyHost.infer</code> 用 <code>monotonic</code> + <code>torch.cuda.synchronize()</code> 记 <code>infer_ms</code>（含 <code>_prepare_inputs</code>）</td>
-<td>只缺统一字段名与三段统计</td>
+<td><code>models/smvla.py::run_episode::call</code> 已有 <code>rtt_ms</code>，改字段名</td>
+<td><code>servers/smvla_server.py::SMVLAPolicyHost.infer</code> 已有 <code>infer_ms</code>（含 <code>cuda.synchronize</code>）</td>
+<td>同文件用代理替换 <code>model.action_head.sample</code>，切出 <code>lang_ms / action_ms</code>（新增）</td>
+<td>只补映射与拆分</td>
 </tr>
 <tr>
 <td>FrameSamp</td>
-<td>服务端出 20，客户端取 16（<code>OBS_HORIZON</code>）</td>
-<td><code>framesamp_modul.py::make_recording_client._roundtrip</code> 记 <code>pack_s / rtt_s / unpack_s</code>，<code>summarize_timing</code> 已有首次／2／3／稳态</td>
-<td>第三方 <code>mme_vla_suite/policies/policy.py::infer</code> 的 <code>infer_time_ms</code> 只包住 JAX 派发，<code>np.asarray</code> 在停表之后，<strong>偏小</strong></td>
-<td>服务端数不可信；要在本仓 <code>policy_server_wrap.py::AuditedPolicy.infer</code> 外包一层（该层返回时已是 numpy，阻塞完成）</td>
+<td><code>models/framesamp_modul.py::_roundtrip</code> 已有 <code>rtt_s</code>，改字段名</td>
+<td><code>servers/policy_server_wrap.py::AuditedPolicy.infer</code> 外包 <code>perf_counter</code> 写进审计块（新增；第三方 <code>infer_time_ms</code> 只包住 JAX 派发、偏小，弃用）</td>
+<td>无</td>
+<td>服务端数换源</td>
 </tr>
 <tr>
 <td>GroundSG</td>
+<td>复用 FrameSamp 的 <code>_roundtrip</code></td>
 <td>同 FrameSamp</td>
-<td>复用同一 <code>_roundtrip</code></td>
-<td>同 FrameSamp</td>
-<td>同上；子目标模型（Qwen／MemER）在评估进程内，另记 <code>subgoal_ms</code>（可选，默认关）</td>
+<td><code>models/groundsg.py::make_policy_context</code> 包一层预测器代理计 <code>get_subgoal</code>（新增）</td>
+<td>加子目标计时</td>
 </tr>
 <tr>
 <td>PonderPounce</td>
-<td>服务端缓存 chunk，<code>_fire_s1</code> 按 1000 ms 仿真钟触发；客户端每步一个动作</td>
-<td>只有 <code>connect_s / episode_s</code></td>
-<td>零计时</td>
-<td>客户端 <code>TracedConnection.act</code> 加每步 RTT；<code>pp_server_wrap.py::SubgoalReportingServer._fire_s1</code> 加 <code>s1_infer_ms</code>，<code>_dispense</code> 在审计块里加 <code>chunk_fresh</code> 与该值</td>
+<td><code>models/pp.py::TracedConnection.act</code> 每步 RTT（新增），按 <code>chunk_fresh</code> 归到 chunk</td>
+<td><code>servers/pp_server_wrap.py::_fire_s1</code> 外包计时得 <code>s1_infer_ms</code>；<code>_dispense</code> 审计块加 <code>chunk_fresh</code>（新增）</td>
+<td><code>servers/pp_server_wrap.py::_S2Watch.fire</code> 加计时得 <code>s2_infer_ms</code>（已包住，加打点）</td>
+<td>两端从零加</td>
 </tr>
 <tr>
 <td>Astra</td>
-<td>本地 VLA（mme-vla 服务端）16 步 + 远程规划器</td>
-<td>第三方 <code>runner.py</code> 已记 <code>vla</code> 事件 <code>seconds</code>（含本仓 trace 写盘）</td>
-<td>VLA 服务端同 FrameSamp</td>
-<td>客户端 <code>models/astra.py::TracedClient.infer</code> 外包计时得到纯往返；服务端由同一 <code>AuditedPolicy</code> 改动覆盖</td>
+<td><code>models/astra.py::TracedClient.infer</code> 外包（新增）</td>
+<td>同 FrameSamp（同一包装器）</td>
+<td>第三方 <code>runner.py</code> 已有 <code>planner / monitor seconds</code>，<code>models/astra.py::_finish_one</code> 只汇总</td>
+<td>评估端新增、其余汇总</td>
+</tr>
+<tr>
+<td>共享</td>
+<td>新 <code>src/robomme_ood_eval/timing.py</code>：<code>ChunkTimer</code>、<code>summarize_chunks</code>、<code>attach_policy_timing</code>；<code>result.json</code> 加 <code>timing.policy.chunks[] / chunk_summary / lang_calls[] / lang_summary / gpu_name</code>；<code>events.jsonl</code> 加 <code>chunk_timing</code> 事件</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>报表</td>
+<td><code>dev-scripts/gl/eval_report.py</code> 新表「推理速度」（模型 × GPU 型号；decision 数旁注 <code>任务 × 档 × 局</code> 乘式）；<code>report.py</code> 的 <code>log.json</code> 加 <code>speed</code> 节</td>
+<td></td>
+<td></td>
+<td></td>
 </tr>
 </tbody>
 </table>
-<p>外层 <code>episode.py::run_episode</code> 只有整局 <code>episode_wall_s</code>；<code>session.py::EnvSession.step</code> 只计 <code>env.step</code>。<code>eval_report.py</code> 只读 <code>episode_wall_s</code>。</p>
-<h2>三、客户端与服务端都能测：怎么测、改在哪</h2>
-<p><strong>客户端（权威）</strong>：五处各一个 <code>time.perf_counter()</code> 对，包住「ws.send 观测 → ws.recv 回复」。SimpleMemVLA、FrameSamp、GroundSG 已有该对，只是字段名不一；PonderPounce、Astra 新加。统一写进 <code>timing.policy.chunks[]</code>，每项 <code>{decision, env_step, client_rtt_ms, server_infer_ms, pack_ms, unpack_ms}</code>。</p>
-<p><strong>服务端（辅助）</strong>：</p>
-<ul>
-<li>mme-vla（FrameSamp／GroundSG／Astra-VLA 共用）：<code>AuditedPolicy.infer</code> 在 <code>self._inner.infer(obs)</code> 前后 <code>perf_counter</code>，结果写 <code>out[AUDIT_KEY]["server_timing"] = {"infer_ms": …, "gpu": torch/jax 设备名}</code>。第三方 <code>infer</code> 末尾已 <code>np.asarray</code> 落地，所以这个区间是真实的「预处理 + 前向 + 回传主机」。</li>
-<li>PonderPounce：<code>SubgoalReportingServer._fire_s1</code> 包住 <code>super()._fire_s1</code>（<code>predict_action</code> 返回 CPU tensor，已同步），把 <code>s1_infer_ms</code> 挂到 <code>ep.chunk</code>；<code>_dispense</code> 判断 <code>ep.chunk.cursor == 1</code> 即「这一步是新 chunk 的第一行」→ 审计块 <code>pp_timing = {"chunk_fresh": True, "s1_infer_ms": …, "n_s1_fires": …}</code>。客户端收到后把该步 RTT 记为该 chunk 的 <code>client_rtt_ms</code>。</li>
-<li>SimpleMemVLA：已有 <code>infer_ms</code>，只改字段名映射。</li>
-</ul>
-<p><strong>客户端 RTT 与服务端前向的差 = 编解码 + 回环网络</strong>，FrameSamp 现有 <code>network_mean_s</code> 就是这个量；验收时要求五个模型的 <code>client_rtt_ms − server_infer_ms</code> 中位数为正且在同一量级（见 §五）。</p>
-<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 966" width="1200" height="966" font-family="sans-serif"><defs><marker id="ac0392b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c0392b"/></marker><marker id="a2b6cb0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2b6cb0"/></marker><marker id="a2f855a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2f855a"/></marker><marker id="a555" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#555"/></marker></defs><rect width="1200" height="966" fill="#fff"/><g font-size="13"><rect x="20" y="16" width="14" height="14" fill="#c0392b"/><text x="40" y="28">client_rtt_ms：客户端 ws.send→ws.recv（权威指标）</text><rect x="420" y="16" width="14" height="14" fill="#2b6cb0"/><text x="440" y="28">server_infer_ms：服务端前向</text><rect x="680" y="16" width="14" height="14" fill="#2f855a"/><text x="700" y="28">lang_ms / 语言·子目标·规划段</text><line x1="940" y1="23" x2="980" y2="23" stroke="#555" stroke-dasharray="3 3"/><text x="986" y="28">泳道；虚线箭头=返回</text></g><rect x="4" y="60" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="62" fill="#111" font-size="14" text-anchor="start" font-weight="bold">① SimpleMemVLA</text><text x="150" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="84" x2="150" y2="228" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="84" x2="430" y2="228" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">模型服务端</text><line x1="730" y1="84" x2="730" y2="228" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="78" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">（语言段在服务端同一前向内）</text><line x1="1020" y1="84" x2="1020" y2="228" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="110" x2="730" y2="110" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="106" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">smvla.py::run_episode::call ws.send(obs)</text><rect x="724" y="116" width="12" height="34" fill="#2f855a" opacity="0.35"/><rect x="724" y="152" width="12" height="28" fill="#2b6cb0" opacity="0.35"/><text x="746" y="136" fill="#2f855a" font-size="12" text-anchor="start" font-weight="normal">自回归生成 subtask token</text><text x="746" y="170" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="normal">action_head.sample + cuda.synchronize</text><path d="M1010 116 h6 V150 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1020" y="137.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">lang_ms</text><path d="M1010 116 h6 V180 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="1020" y="152.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold"></text><text x="1190" y="200" fill="#2b6cb0" font-size="12" text-anchor="end" font-weight="bold">server_infer_ms（SMVLAPolicyHost.infer）</text><line x1="730" y1="190" x2="430" y2="190" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="186" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">16 步 ActionChunk（ws.recv）</text><path d="M390 110 h-6 V190 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="154.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="210" x2="150" y2="210" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="206" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步 env.step 后再发下一次</text><rect x="4" y="240" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="242" fill="#111" font-size="14" text-anchor="start" font-weight="bold">② FrameSamp</text><text x="150" y="258" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="264" x2="150" y2="408" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="258" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="264" x2="430" y2="408" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="258" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">模型服务端</text><line x1="730" y1="264" x2="730" y2="408" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="282" fill="#555" font-size="11" text-anchor="middle" font-weight="normal">framesamp_modul.py::_roundtrip：pack →</text><line x1="430" y1="300" x2="730" y2="300" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="296" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">ws.send</text><rect x="724" y="306" width="12" height="44" fill="#2b6cb0" opacity="0.35"/><text x="746" y="332" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="normal">mme-vla AuditedPolicy.infer（本仓包装器）</text><path d="M1030 306 h6 V350 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="1040" y="332.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">server_infer_ms</text><line x1="730" y1="365" x2="430" y2="365" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="361" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">20 步 chunk（ws.recv）→ unpack，取前 16</text><path d="M390 300 h-6 V365 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="336.5" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="390" x2="150" y2="390" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="386" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步</text><text x="1020" y="330" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">无语言系统</text><rect x="4" y="420" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="422" fill="#111" font-size="14" text-anchor="start" font-weight="bold">③ GroundSG</text><text x="150" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="444" x2="150" y2="588" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="444" x2="430" y2="588" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">模型服务端</text><line x1="730" y1="444" x2="730" y2="588" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="438" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">子目标预测器 Qwen/MemER（评估进程内）</text><line x1="1020" y1="444" x2="1020" y2="588" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="466" x2="1020" y2="466" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)"/><text x="725.0" y="462" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">get_subgoal（每 subgoal_keep_period）</text><rect x="1014" y="470" width="12" height="22" fill="#2f855a" opacity="0.35"/><path d="M1034 470 h6 V492 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="485.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">lang_ms</text><line x1="1020" y1="500" x2="430" y2="500" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)" stroke-dasharray="5 3"/><text x="725.0" y="496" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">subgoal</text><line x1="430" y1="518" x2="730" y2="518" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="514" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">ws.send(obs+subgoal)</text><rect x="724" y="522" width="12" height="26" fill="#2b6cb0" opacity="0.35"/><path d="M744 522 h6 V548 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="754" y="539.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">server_infer_ms（同 FrameSamp 服务端）</text><line x1="730" y1="558" x2="430" y2="558" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="554" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">20 步 chunk → 取 16</text><path d="M390 518 h-6 V558 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="542.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="580" x2="150" y2="580" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="576" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步</text><rect x="4" y="600" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="602" fill="#111" font-size="14" text-anchor="start" font-weight="bold">④ PonderPounce</text><text x="150" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(每步 1 次)</text><line x1="150" y1="624" x2="150" y2="768" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">pp.py::TracedConnection.act</text><line x1="430" y1="624" x2="430" y2="768" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Pounce（S1）</text><line x1="730" y1="624" x2="730" y2="768" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="618" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Ponder（S2）</text><line x1="1020" y1="624" x2="1020" y2="768" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="650" x2="730" y2="650" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="646" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">obs</text><line x1="730" y1="662" x2="430" y2="662" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="658" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">1 个动作</text><path d="M410 650 h-6 V662 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="400" y="660.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="695" x2="730" y2="695" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="691" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">obs</text><line x1="730" y1="707" x2="430" y2="707" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="703" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">1 个动作</text><path d="M410 695 h-6 V707 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="400" y="705.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><line x1="430" y1="735" x2="730" y2="735" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="731" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">obs</text><line x1="730" y1="747" x2="430" y2="747" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="743" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">1 个动作</text><path d="M410 735 h-6 V747 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="400" y="745.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><rect x="1014" y="630" width="12" height="50" fill="#2f855a" opacity="0.35"/><path d="M1034 630 h6 V680 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="659.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">_fire_s2：s2_infer_ms</text><line x1="1020" y1="670" x2="730" y2="670" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)" stroke-dasharray="5 3"/><text x="875.0" y="666" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">subgoal/cognition</text><rect x="724" y="652" width="12" height="8" fill="#2b6cb0" opacity="0.35"/><path d="M744 652 h6 V660 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="754" y="660.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">_fire_s1（1000 ms 仿真钟）s1_infer_ms</text><text x="750" y="680" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">chunk_fresh=True</text><text x="750" y="720" fill="#555" font-size="12" text-anchor="start" font-weight="normal">_dispense：从缓存发一行（chunk_fresh=False）</text><line x1="430" y1="765" x2="150" y2="765" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="761" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">每收到 1 个动作执行 1 次 env.step</text><rect x="4" y="780" width="1192" height="174" fill="none" stroke="#ccc"/><text x="12" y="782" fill="#111" font-size="14" text-anchor="start" font-weight="bold">⑤ Astra</text><text x="150" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">EnvSession(env.step×16)</text><line x1="150" y1="804" x2="150" y2="948" stroke="#555" stroke-dasharray="3 3"/><text x="430" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">Policy 客户端（评估进程）</text><line x1="430" y1="804" x2="430" y2="948" stroke="#555" stroke-dasharray="3 3"/><text x="730" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">本地 mme-vla VLA 服务端</text><line x1="730" y1="804" x2="730" y2="948" stroke="#555" stroke-dasharray="3 3"/><text x="1020" y="798" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">规划器（远程 Responses API）/ 监视器（本地）</text><line x1="1020" y1="804" x2="1020" y2="948" stroke="#555" stroke-dasharray="3 3"/><line x1="430" y1="824" x2="1020" y2="824" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)"/><text x="725.0" y="820" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">planner 请求（≥20 s 发送间隔）</text><rect x="1014" y="828" width="12" height="24" fill="#2f855a" opacity="0.35"/><path d="M1034 828 h6 V852 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="844.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">planner seconds</text><line x1="1020" y1="860" x2="430" y2="860" stroke="#2f855a" stroke-width="1.5" marker-end="url(#a2f855a)" stroke-dasharray="5 3"/><text x="725.0" y="856" fill="#2f855a" font-size="12" text-anchor="middle" font-weight="normal">plan</text><line x1="430" y1="878" x2="730" y2="878" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)"/><text x="580.0" y="874" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">astra.py::TracedClient.infer ws.send</text><rect x="724" y="882" width="12" height="22" fill="#2b6cb0" opacity="0.35"/><path d="M744 882 h6 V904 h-6" fill="none" stroke="#2b6cb0" stroke-width="2.5"/><text x="754" y="897.0" fill="#2b6cb0" font-size="12" text-anchor="start" font-weight="bold">server_infer_ms</text><line x1="730" y1="914" x2="430" y2="914" stroke="#c0392b" stroke-width="1.5" marker-end="url(#ac0392b)" stroke-dasharray="5 3"/><text x="580.0" y="910" fill="#c0392b" font-size="12" text-anchor="middle" font-weight="normal">16 步 chunk</text><path d="M390 878 h-6 V914 h6" fill="none" stroke="#c0392b" stroke-width="2.5"/><text x="380" y="900.0" fill="#c0392b" font-size="12" text-anchor="end" font-weight="bold">client_rtt_ms</text><rect x="1014" y="920" width="12" height="16" fill="#2f855a" opacity="0.35"/><path d="M1034 920 h6 V936 h-6" fill="none" stroke="#2f855a" stroke-width="2.5"/><text x="1044" y="932.0" fill="#2f855a" font-size="12" text-anchor="start" font-weight="bold">monitor seconds（本地监视器）</text><line x1="430" y1="940" x2="150" y2="940" stroke="#555" stroke-width="1.5" marker-end="url(#a555)"/><text x="290.0" y="936" fill="#555" font-size="12" text-anchor="middle" font-weight="normal">执行 16 步</text></svg><figcaption>图 1 五个模型「观测 → ActionChunk」时序与三类计时区间（红 client_rtt_ms 权威、蓝 server_infer_ms、绿 lang_ms）</figcaption></figure><h2>三′、双系统的子目标生成也要测清；单模型内「语言推理 vs 动作」能否拆开</h2>
-<p>用户追问（2026-10-09）：「这个是双系统的 subgoal 生成的也要清楚 然后如果不是双系统或者说内部 Language Reasoning 和 Action 是不是都可以测分开测出来」。结论：<strong>五个模型都能把「语言／子目标」与「动作」拆成两列，且全部在本仓代码内做到，零第三方源码改动</strong>。拆法分三类：</p>
-<table>
-<thead>
-<tr>
-<th>模型</th>
-<th>结构</th>
-<th>语言／子目标怎么测</th>
-<th>动作怎么测</th>
-<th>两者关系</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>PonderPounce</td>
-<td>双系统：Ponder（S2，<code>_fire_s2</code>）出 cognition+subgoal，Pounce（S1，<code>_fire_s1</code>）出 chunk</td>
-<td>本仓 <code>pp_server_wrap.py::_S2Watch.fire</code> 已包住第三方 <code>ctx.fire</code>（同步调用），在里面加 <code>perf_counter</code> 得 <code>s2_infer_ms</code>，随现有 <code>pp_generation</code> 块回传</td>
-<td><code>_fire_s1</code> 外包计时得 <code>s1_infer_ms</code>（§三）</td>
-<td>独立两次前向，各自触发（仿真钟 1000 ms），可分别统计</td>
-</tr>
-<tr>
-<td>GroundSG</td>
-<td>双系统：子目标预测器（Qwen／MemER）在评估进程内，动作在 mme-vla 服务端</td>
-<td>本仓 <code>groundsg.py::make_policy_context</code> 在 <code>build_predictor</code> 返回后包一层代理，<code>get_subgoal</code> 前后 <code>perf_counter</code>（含 <code>torch.cuda.synchronize</code>，模型在本进程）得 <code>subgoal_ms</code> 列表</td>
-<td><code>chunk_rtt_ms</code> / <code>server_infer_ms</code>（§三）</td>
-<td>独立，默认都开（原 §二「可选默认关」作废）</td>
-</tr>
-<tr>
-<td>Astra</td>
-<td>双系统：规划器（远程 API）+ 监视器（本地）+ VLA</td>
-<td>第三方 <code>runner.py</code> 已逐次记 <code>planner / monitor / second_button_review</code> 的 <code>seconds</code> 进 <code>decisions.jsonl</code>；本仓只汇总，不改</td>
-<td><code>TracedClient.infer</code> 外包（§三）</td>
-<td>独立；规划器 <code>seconds</code> 含 20 s 发送间隔与退避，报表单列并注明</td>
-</tr>
-<tr>
-<td>SimpleMemVLA</td>
-<td>单模型：同一次 <code>generate_batch</code> 先自回归生成 subtask token，再 <code>self.model.action_head.sample(...)</code> 出动作</td>
-<td>本仓 <code>smvla_server.py</code> 在 <code>SMVLAPolicyHost.__init__</code> 把 <code>self.batched.model.action_head.sample</code> 换成计时代理：进入时 <code>torch.cuda.synchronize()</code> 打点 <code>t_lang_end</code>，调原 <code>sample</code> 后再 <code>synchronize</code> 打点 <code>t_act_end</code>；<code>lang_ms = t_lang_end − t0</code>（t0 为现有 <code>infer</code> 起点，含预处理），<code>action_ms = t_act_end − t_lang_end</code></td>
-<td>同左 <code>action_ms</code></td>
-<td>串行同一前向，两段相加 ≈ 现有 <code>infer_ms</code>（验收：差 &lt; 1%）</td>
-</tr>
-<tr>
-<td>FrameSamp</td>
-<td>单模型，无语言输出</td>
-<td>无（报表填 <code>—</code>）</td>
-<td><code>chunk_rtt_ms</code> / <code>server_infer_ms</code></td>
-<td>—</td>
-</tr>
-</tbody>
-</table>
-<p>SimpleMemVLA 这一处是对第三方模型对象方法的<strong>运行时替换</strong>（第 21 条意义上的「覆盖」，但 <code>third_party/SimpleMemVLA</code> 不在 <code>&lt;PROTECTED_DIRS&gt;</code>），不改第三方源文件、不改随机数、不改输出；<code>SGEVAL_AUDIT=0</code> 时不安装代理。替代方案是在 fork 分支改 <code>batched_policy.py</code> 加时间戳，改动更重、要升 gitlink，不推荐。</p>
-<p>统一字段：<code>timing.policy.lang_calls[]</code>（每次语言／子目标调用 <code>{index, env_step, ms, kind: s2|subgoal|planner|monitor|lang_in_forward}</code>）、<code>lang_summary</code>（同 <code>chunk_summary</code> 三段统计）。报表速度表加两列「语言稳态 mean」「动作稳态 mean」。</p>
-<h2>四、输出到哪、怎么汇总</h2>
-<ul>
-<li><code>result.json</code>：<code>timing.policy.chunks[]</code>（逐 decision）+ <code>timing.policy.chunk_summary</code>（<code>n / first_ms / second_ms / third_ms / steady_mean_ms / steady_p50_ms / steady_p95_ms</code>，client 与 server 各一套）+ <code>timing.policy.gpu_name</code>。</li>
-<li><code>events.jsonl</code>：每个 decision 一条 <code>{"kind": "chunk_timing", …}</code>（recorder 已有 <code>add_event</code>）。</li>
-<li><code>trace.jsonl</code>：不动。</li>
-<li><code>dev-scripts/gl/eval_report.py</code>：新表「推理速度」：行 = 模型 × GPU 型号，列 = decision 数（按 P5 写成 <code>任务 × 档 × 局</code> 的乘式旁注）、首次、稳态 mean／p50／p95（client）、稳态 mean（server）、差值。</li>
-<li><code>src/robomme_ood_eval/report.py</code>：<code>log.json</code> 汇总加同一组字段。</li>
-</ul>
-<h2>五、验收判定行</h2>
-<table>
-<thead>
-<tr>
-<th>查什么</th>
-<th>怎么查</th>
-<th>判定行</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>统计助手正确</td>
-<td>单测喂固定列表</td>
-<td><code>TIMING_HELPER=PASS cases=6</code></td>
-</tr>
-<tr>
-<td>五个客户端都产出 chunks</td>
-<td>dummy 冒烟 + 各模型单测用假服务端（<code>tests/pipeline/evalx/pp/pp_fakes.py</code> 等已有夹具）</td>
-<td><code>CHUNK_TIMING=PASS model=&lt;m&gt; decisions=&lt;n&gt; missing=0</code></td>
-</tr>
-<tr>
-<td>PP chunk 边界与服务端一致</td>
-<td>假服务端固定 chunk=5，验证 <code>chunk_fresh</code> 每 5 步一次</td>
-<td><code>PP_CHUNK_FRESH=PASS period=5 fires=&lt;n&gt;</code></td>
-</tr>
-<tr>
-<td>协议字节不变</td>
-<td><code>SGEVAL_AUDIT=0</code> 时回复与第三方逐字节相同（既有 <code>OBS_EQ</code> 测试扩到新字段）</td>
-<td><code>OBS_EQ=PASS</code></td>
-</tr>
-<tr>
-<td>语言与动作拆分</td>
-<td>PP 假服务端：<code>s2_infer_ms</code> 每次 S2 一条；GroundSG 假预测器：<code>subgoal_ms</code> 条数 = 调用次数；SimpleMemVLA 假 <code>action_head.sample</code>：<code>lang_ms + action_ms</code> 与 <code>infer_ms</code> 差 &lt; 1%</td>
-<td><code>LANG_SPLIT=PASS model=&lt;m&gt; calls=&lt;n&gt; delta_pct=&lt;x&gt;</code></td>
-</tr>
-<tr>
-<td>trace 冻结</td>
-<td>既有 contract 测试</td>
-<td><code>TRACE_SCHEMA=PASS</code></td>
-</tr>
-<tr>
-<td>核心短测</td>
-<td><code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code></td>
-<td><code>TEST_RESOURCE=</code> 末行 + 全绿</td>
-</tr>
-<tr>
-<td>真机一次</td>
-<td>本机 RTX 6000 Ada，每模型 1 任务 × 1 档 × 1 局 smoke（Astra 需先批局数与费用，P2″）</td>
-<td><code>SPEED_SMOKE=PASS model=&lt;m&gt; steady_p50_ms=&lt;x&gt; server_mean_ms=&lt;y&gt; gap_ms=&lt;x−y&gt;</code> 且 <code>gap_ms&gt;0</code></td>
-</tr>
-</tbody>
-</table>
-<h2>六、步骤</h2>
-<table>
-<thead>
-<tr>
-<th>阶段</th>
-<th>内容</th>
-<th>判据</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>0</td>
-<td>渲染 HTML 计划（两张 SVG）、commit <code>1.44</code></td>
-<td><code>grep -c '&lt;h1[^&gt;]*&gt;第一部分\|&lt;h1[^&gt;]*&gt;第二部分'</code> = 2</td>
-</tr>
-<tr>
-<td>1</td>
-<td>S1 共享助手 <code>timing.py</code> + SimpleMemVLA 映射</td>
-<td><code>TIMING_HELPER</code>、<code>CHUNK_TIMING model=smvla</code></td>
-</tr>
-<tr>
-<td>2</td>
-<td>S2 mme-vla 客户端 + <code>policy_server_wrap</code> 服务端计时（FrameSamp／GroundSG）</td>
-<td><code>CHUNK_TIMING model=framesamp,groundsg</code>、<code>OBS_EQ</code></td>
-</tr>
-<tr>
-<td>3</td>
-<td>S3 PonderPounce 客户端 + <code>pp_server_wrap</code></td>
-<td><code>CHUNK_TIMING model=pp</code>、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code></td>
-</tr>
-<tr>
-<td>4</td>
-<td>S4 Astra 客户端</td>
-<td><code>CHUNK_TIMING model=astra</code></td>
-</tr>
-<tr>
-<td>5</td>
-<td>S5 <code>eval_report.py</code> / <code>report.py</code> 速度表</td>
-<td>用 S1～S4 的 result.json 夹具生成表</td>
-</tr>
-<tr>
-<td>6</td>
-<td>主会话：合并、核心短测、本机 smoke、留档 <code>docs/validation/infer-timing-20261009/</code></td>
-<td><code>SPEED_SMOKE</code> × 5</td>
-</tr>
-</tbody>
-</table>
-<h2>七、改动有多大（评估）</h2>
-<table>
-<thead>
-<tr>
-<th>文件</th>
-<th>性质</th>
-<th>估算</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>新 <code>src/robomme_ood_eval/timing.py</code></td>
-<td>新增：<code>ChunkTimer</code>、<code>summarize_chunks</code></td>
-<td>~80 行</td>
-</tr>
-<tr>
-<td><code>models/smvla.py</code></td>
-<td>字段映射到 <code>chunks[]</code></td>
-<td>~15 行</td>
-</tr>
-<tr>
-<td><code>models/framesamp_modul.py</code></td>
-<td><code>_roundtrip</code> 的 <code>per_msg</code> 转 <code>chunks[]</code>；读审计块 <code>server_timing</code></td>
-<td>~25 行</td>
-</tr>
-<tr>
-<td><code>models/groundsg.py</code></td>
-<td>复用上条，只接 summary</td>
-<td>~5 行</td>
-</tr>
-<tr>
-<td><code>servers/policy_server_wrap.py</code></td>
-<td><code>AuditedPolicy.infer</code> 计时进审计块</td>
-<td>~10 行</td>
-</tr>
-<tr>
-<td><code>models/pp.py</code></td>
-<td><code>TracedConnection.act</code> 计时；按 <code>chunk_fresh</code> 归 chunk</td>
-<td>~30 行</td>
-</tr>
-<tr>
-<td><code>servers/pp_server_wrap.py</code></td>
-<td><code>_fire_s1</code> 计时、<code>_dispense</code> 加 <code>pp_timing</code></td>
-<td>~15 行</td>
-</tr>
-<tr>
-<td><code>models/astra.py</code></td>
-<td><code>TracedClient.infer</code> 计时</td>
-<td>~15 行</td>
-</tr>
-<tr>
-<td><code>dev-scripts/gl/eval_report.py</code>、<code>report.py</code></td>
-<td>速度表</td>
-<td>~60 行</td>
-</tr>
-<tr>
-<td>测试</td>
-<td>6 个新测试文件／用例</td>
-<td>~200 行</td>
-</tr>
-</tbody>
-</table>
-<p>风险集中在 PP 的 <code>chunk_fresh</code> 判定（依赖 <code>ep.chunk.cursor</code> 这一第三方私有属性，gitlink 锁死、不会漂）。</p>
-<h2>八、子代理分工与合并（简述）</h2>
-<p>拆成 S1～S5 五个写入型子代理（opus，worktree 隔离），可写集合互不重叠：S1 共享助手与 smvla；S2 mme-vla 两端；S3 PP 两端；S4 Astra；S5 报表。S2～S4 依赖 S1 的 <code>timing.py</code> 接口（先定好签名写进分配表，S2～S4 按签名写、不等 S1 合入）。合并顺序 S1→S2→S3→S4→S5，每次合并前一个 sonnet 审查者审 diff 范围、前缀、协议字节；合并后主会话跑核心短测。HTML 计划与两张 SVG 由主会话在阶段 0 派两个 opus 画图子代理（只读代码、只写 scratchpad SVG）后拼装。</p>
-<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" font-family="sans-serif">
-<defs>
-<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#555"/></marker>
-<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2f855a"/></marker>
-</defs>
-<rect width="1200" height="900" fill="#fff"/>
-<text x="600" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">推理测速改造：实施流程与子代理合并顺序</text>
-<text x="20" y="62" font-size="15" font-weight="bold" fill="#2b6cb0">一、阶段流</text>
-<g font-size="12" text-anchor="middle">
-<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
-<rect x="20" y="75" width="150" height="70" rx="8"/><rect x="188" y="75" width="150" height="70" rx="8"/><rect x="356" y="75" width="150" height="70" rx="8"/><rect x="524" y="75" width="150" height="70" rx="8"/><rect x="692" y="75" width="150" height="70" rx="8"/><rect x="860" y="75" width="150" height="70" rx="8"/><rect x="1028" y="75" width="152" height="70" rx="8"/>
-</g>
-<g fill="#1a365d">
-<text x="95" y="100" font-weight="bold">0 渲染 HTML 计划</text><text x="95" y="118">（本图）</text>
-<text x="263" y="98" font-weight="bold">1 S1 共享助手</text><text x="263" y="115">timing.py +</text><text x="263" y="131">SimpleMemVLA 两端</text>
-<text x="431" y="100" font-weight="bold">2 S2 mme-vla 两端</text><text x="431" y="118">FrameSamp/GroundSG</text>
-<text x="599" y="100" font-weight="bold">3 S3 PonderPounce</text><text x="599" y="118">两端</text>
-<text x="767" y="100" font-weight="bold">4 S4 Astra</text><text x="767" y="118">客户端</text>
-<text x="935" y="100" font-weight="bold">5 S5 报表</text><text x="935" y="118">eval_report/report</text>
-<text x="1104" y="95" font-weight="bold">6 主会话合并后</text><text x="1104" y="111">核心短测 + 本机 smoke</text><text x="1104" y="125" font-size="10">每模型1任务×1档×1局</text><text x="1104" y="139">+ 留档</text>
-</g>
-<g stroke="#555" stroke-width="1.5" marker-end="url(#ar)">
-<line x1="170" y1="110" x2="186" y2="110"/><line x1="338" y1="110" x2="354" y2="110"/><line x1="506" y1="110" x2="522" y2="110"/><line x1="674" y1="110" x2="690" y2="110"/><line x1="842" y1="110" x2="858" y2="110"/><line x1="1010" y1="110" x2="1026" y2="110"/>
-</g>
-<g font-size="10" fill="#444" font-family="monospace">
-<text x="95" y="162">判定：无</text>
-<text x="263" y="162">TIMING_HELPER</text><text x="263" y="176">CHUNK_TIMING(smvla)</text><text x="263" y="190">LANG_SPLIT(smvla)</text>
-<text x="431" y="162">CHUNK_TIMING(</text><text x="431" y="176">framesamp,groundsg)</text><text x="431" y="190">LANG_SPLIT(groundsg)</text><text x="431" y="204">OBS_EQ</text>
-<text x="599" y="162">CHUNK_TIMING(pp)</text><text x="599" y="176">PP_CHUNK_FRESH</text><text x="599" y="190">LANG_SPLIT(pp)</text><text x="599" y="204">OBS_EQ</text>
-<text x="767" y="162">CHUNK_TIMING(astra)</text>
-<text x="935" y="162">速度表单测</text>
-<text x="1104" y="162">TEST_RESOURCE</text><text x="1104" y="176">SPEED_SMOKE×5</text>
-</g>
-</g>
-<line x1="20" y1="225" x2="1180" y2="225" stroke="#ccc" stroke-dasharray="4 4"/>
-<text x="20" y="252" font-size="15" font-weight="bold" fill="#2b6cb0">二、S1～S5 五个 opus worktree 子代理：并行开发 → 顺序合并</text>
-<rect x="20" y="420" width="130" height="50" rx="8" fill="#f0fff4" stroke="#2f855a" stroke-width="2"/>
-<text x="85" y="442" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f855a">dev @BASE</text>
-<text x="85" y="459" text-anchor="middle" font-size="10" fill="#2f855a">同时分出 5 个分支</text>
-<g font-size="11">
-<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
-<rect x="220" y="270" width="300" height="62" rx="6"/><rect x="220" y="345" width="300" height="62" rx="6"/><rect x="220" y="420" width="300" height="62" rx="6"/><rect x="220" y="495" width="300" height="62" rx="6"/><rect x="220" y="570" width="300" height="62" rx="6"/>
-</g>
-<g fill="#1a365d">
-<text x="230" y="290" font-weight="bold">S1（opus · worktree）共享助手 + SimpleMemVLA</text><text x="230" y="310" font-family="monospace" font-size="10">timing.py, models/smvla.py,</text><text x="230" y="323" font-family="monospace" font-size="10">servers/smvla_server.py</text>
-<text x="230" y="365" font-weight="bold">S2（opus · worktree）mme-vla 两端</text><text x="230" y="385" font-family="monospace" font-size="10">models/framesamp_modul.py, models/groundsg.py,</text><text x="230" y="398" font-family="monospace" font-size="10">servers/policy_server_wrap.py</text>
-<text x="230" y="440" font-weight="bold">S3（opus · worktree）PonderPounce 两端</text><text x="230" y="460" font-family="monospace" font-size="10">models/pp.py, servers/pp_server_wrap.py</text>
-<text x="230" y="515" font-weight="bold">S4（opus · worktree）Astra 客户端</text><text x="230" y="535" font-family="monospace" font-size="10">models/astra.py</text>
-<text x="230" y="590" font-weight="bold">S5（opus · worktree）报表</text><text x="230" y="610" font-family="monospace" font-size="10">dev-scripts/gl/eval_report.py, report.py</text>
-</g>
-</g>
-<g stroke="#555" stroke-width="1.3" fill="none" marker-end="url(#ar)">
-<path d="M150,445 C185,445 185,301 218,301"/><path d="M150,445 C185,445 185,376 218,376"/><path d="M150,445 L218,451"/><path d="M150,445 C185,445 185,526 218,526"/><path d="M150,445 C185,445 185,601 218,601"/>
-</g>
-<g stroke="#2b6cb0" stroke-width="1.3" stroke-dasharray="5 4" fill="none" marker-end="url(#ar)">
-<path d="M520,301 C560,301 560,376 522,376"/><path d="M520,301 C585,301 585,451 522,451"/><path d="M520,301 C610,301 610,526 522,526"/>
-</g>
-<text x="615" y="420" font-size="11" fill="#2b6cb0" transform="rotate(90 615 420)" text-anchor="middle">S2～S4 依赖 timing.py 签名：按签名写，不等合入</text>
-<text x="860" y="268" text-anchor="middle" font-size="12" font-weight="bold" fill="#2f855a">逐个 --no-ff 合回 dev（S1→S2→S3→S4→S5）</text>
-<g font-size="10" text-anchor="middle">
-<g id="rows">
-</g>
-</g>
-<g font-size="10" text-anchor="middle">
-<!-- 每行：审查菱形 -> 合并框 -> POST 菱形 -->
-<g fill="#fffaf0" stroke="#555" stroke-width="1.3">
-<path d="M720,281 L770,301 L720,321 L670,301z"/><path d="M720,356 L770,376 L720,396 L670,376z"/><path d="M720,431 L770,451 L720,471 L670,451z"/><path d="M720,506 L770,526 L720,546 L670,526z"/><path d="M720,581 L770,601 L720,621 L670,601z"/>
-</g>
-<g fill="#333"><text x="720" y="299">sonnet 审查</text><text x="720" y="310" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="374">sonnet 审查</text><text x="720" y="385" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="449">sonnet 审查</text><text x="720" y="460" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="524">sonnet 审查</text><text x="720" y="535" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="599">sonnet 审查</text><text x="720" y="610" font-size="8">PRE_MERGE_REVIEW</text></g>
-<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.5">
-<rect x="800" y="286" width="110" height="30" rx="5"/><rect x="800" y="361" width="110" height="30" rx="5"/><rect x="800" y="436" width="110" height="30" rx="5"/><rect x="800" y="511" width="110" height="30" rx="5"/><rect x="800" y="586" width="110" height="30" rx="5"/>
-</g>
-<g fill="#2f855a" font-size="11"><text x="855" y="305">① 合并 S1 --no-ff</text><text x="855" y="380">② 合并 S2 --no-ff</text><text x="855" y="455">③ 合并 S3 --no-ff</text><text x="855" y="530">④ 合并 S4 --no-ff</text><text x="855" y="605">⑤ 合并 S5 --no-ff</text></g>
-<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.3">
-<path d="M1000,279 L1062,301 L1000,323 L938,301z"/><path d="M1000,354 L1062,376 L1000,398 L938,376z"/><path d="M1000,429 L1062,451 L1000,473 L938,451z"/><path d="M1000,504 L1062,526 L1000,548 L938,526z"/><path d="M1000,579 L1062,601 L1000,623 L938,601z"/>
-</g>
-<g fill="#2f855a" font-size="8"><text x="1000" y="299">POST_MERGE_REVIEW</text><text x="1000" y="310">+ push</text>
-<text x="1000" y="374">POST_MERGE_REVIEW</text><text x="1000" y="385">+ push</text>
-<text x="1000" y="449">POST_MERGE_REVIEW</text><text x="1000" y="460">+ push</text>
-<text x="1000" y="524">POST_MERGE_REVIEW</text><text x="1000" y="535">+ push</text>
-<text x="1000" y="599">POST_MERGE_REVIEW</text><text x="1000" y="610">+ push</text></g>
-</g>
-<g stroke="#555" stroke-width="1.3" marker-end="url(#ar)">
-<line x1="625" y1="301" x2="668" y2="301"/><line x1="625" y1="376" x2="668" y2="376"/><line x1="625" y1="451" x2="668" y2="451"/><line x1="625" y1="526" x2="668" y2="526"/><line x1="625" y1="601" x2="668" y2="601"/>
-<line x1="770" y1="301" x2="798" y2="301"/><line x1="770" y1="376" x2="798" y2="376"/><line x1="770" y1="451" x2="798" y2="451"/><line x1="770" y1="526" x2="798" y2="526"/><line x1="770" y1="601" x2="798" y2="601"/>
-<line x1="910" y1="301" x2="936" y2="301"/><line x1="910" y1="376" x2="936" y2="376"/><line x1="910" y1="451" x2="936" y2="451"/><line x1="910" y1="526" x2="936" y2="526"/><line x1="910" y1="601" x2="936" y2="601"/>
-</g>
-<g stroke="#555" stroke-width="1" fill="none" stroke-dasharray="2 3">
-<line x1="520" y1="301" x2="625" y2="301"/><line x1="520" y1="376" x2="625" y2="376"/><line x1="520" y1="451" x2="625" y2="451"/><line x1="520" y1="526" x2="625" y2="526"/><line x1="520" y1="601" x2="625" y2="601"/>
-</g>
-<g stroke="#2f855a" stroke-width="1.5" fill="none" marker-end="url(#ag)">
-<path d="M1062,301 C1110,301 1110,340 720,340 L720,354"/><path d="M1062,376 C1110,376 1110,415 720,415 L720,429"/><path d="M1062,451 C1110,451 1110,490 720,490 L720,504"/><path d="M1062,526 C1110,526 1110,565 720,565 L720,579"/>
-<path d="M1000,623 L1000,665"/>
-</g>
-<text x="1115" y="345" font-size="9" fill="#2f855a">下一个</text>
-<rect x="880" y="667" width="240" height="48" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
-<text x="1000" y="687" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a365d">阶段 6：主会话核心短测 + smoke</text>
-<text x="1000" y="704" text-anchor="middle" font-size="10" font-family="monospace" fill="#444">TEST_RESOURCE / SPEED_SMOKE×5</text>
-<text x="20" y="680" font-size="11" fill="#555">图例：实线箭头 = 流程；蓝虚线 = 接口签名依赖（不等合入）；绿 = 合并与合并后审查；</text>
-<text x="20" y="697" font-size="11" fill="#555">合并对象是审查钉死的 TIP sha；FAIL 不合并，findings 用 SendMessage 交回原子代理续改。</text>
-<rect x="20" y="760" width="560" height="110" rx="8" fill="#fff5f5" stroke="#c0392b" stroke-width="2.5"/>
-<text x="40" y="788" font-size="15" font-weight="bold" fill="#c0392b">红线</text>
-<g font-size="13" fill="#c0392b"><text x="40" y="812">· 零 third_party 改动</text><text x="40" y="834">· trace.jsonl schema 不变</text><text x="40" y="856">· SGEVAL_AUDIT=0 时协议逐字节不变</text></g>
-</svg>
-<figcaption>图 2 实施阶段 0～6 与 S1～S5 worktree 子代理的并行、审查与合并顺序</figcaption></figure><h1>第二部分（技术细节，供 agent 追踪）</h1>
+<p>规模：约 520 行，10 个本仓文件加 6 个测试；S1～S5 五个 opus worktree 子代理按 S1→S5 顺序 <code>--no-ff</code> 合并，每次合并前 sonnet 审查；验收判定行 <code>TIMING_HELPER</code>、<code>CHUNK_TIMING×5</code>、<code>LANG_SPLIT×4</code>、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code>、<code>TRACE_SCHEMA</code>、核心短测、本机 <code>SPEED_SMOKE×5</code>（每模型 1 任务 × 1 档 × 1 局；Astra 先批局数与费用）。逐文件改法、分配表、闸门、runbook 见第二部分。</p>
+<h1>第二部分（技术细节，供 agent 追踪）</h1>
 <h2>〇 红线</h2>
 <p>R1 不改 <code>third_party/**</code>；R2 不改 <code>third_party/robomme_benchmark/src/robomme/**</code>；R3 <code>trace.jsonl</code> 各行键集合不变（contract 测试守）；R4 <code>SGEVAL_AUDIT=0</code> 时服务端回复逐字节同第三方；R5 不改 <code>pyproject.toml</code>／<code>uv.lock</code>；R6 不动 <code>scripts/evaluate.py</code> 以外的 <code>scripts/</code>；R7 Astra 任何真机局先批局数与美元（P2″）；R8 计时只用 <code>time.perf_counter</code>，不用 <code>time.time</code>。</p>
 <h2>一 逐文件改动</h2>
@@ -574,5 +600,398 @@ audit = build_audit(sink); audit[&quot;server_timing&quot;] = {&quot;infer_ms&qu
 </ul>
 <h2>七 留档与 commit</h2>
 <p>阶段 0 一个 commit（<code>1.44 计划：推理测速改造（HTML+两图）</code>）；S1～S5 各 <code>sub/</code> 提交经 <code>--no-ff</code> 合并提交 <code>1.45</code>～<code>1.49</code>；阶段 6 留档 <code>1.50</code>。每次 commit 后 push。</p>
+<h2>附（由第一部分移入的细节）</h2>
+<h2>附·二、现状：五个模型分别怎么测、缺什么</h2>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>一次前向出几步</th>
+<th>客户端现有</th>
+<th>服务端现有</th>
+<th>缺口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SimpleMemVLA</td>
+<td>16（<code>EXECUTE_HORIZON</code>，<code>models/smvla.py</code>）</td>
+<td><code>run_episode::call</code> 每次 infer 记 <code>rtt_ms</code> 列表</td>
+<td><code>servers/smvla_server.py::SMVLAPolicyHost.infer</code> 用 <code>monotonic</code> + <code>torch.cuda.synchronize()</code> 记 <code>infer_ms</code>（含 <code>_prepare_inputs</code>）</td>
+<td>只缺统一字段名与三段统计</td>
+</tr>
+<tr>
+<td>FrameSamp</td>
+<td>服务端出 20，客户端取 16（<code>OBS_HORIZON</code>）</td>
+<td><code>framesamp_modul.py::make_recording_client._roundtrip</code> 记 <code>pack_s / rtt_s / unpack_s</code>，<code>summarize_timing</code> 已有首次／2／3／稳态</td>
+<td>第三方 <code>mme_vla_suite/policies/policy.py::infer</code> 的 <code>infer_time_ms</code> 只包住 JAX 派发，<code>np.asarray</code> 在停表之后，<strong>偏小</strong></td>
+<td>服务端数不可信；要在本仓 <code>policy_server_wrap.py::AuditedPolicy.infer</code> 外包一层（该层返回时已是 numpy，阻塞完成）</td>
+</tr>
+<tr>
+<td>GroundSG</td>
+<td>同 FrameSamp</td>
+<td>复用同一 <code>_roundtrip</code></td>
+<td>同 FrameSamp</td>
+<td>同上；子目标模型（Qwen／MemER）在评估进程内，另记 <code>subgoal_ms</code>（可选，默认关）</td>
+</tr>
+<tr>
+<td>PonderPounce</td>
+<td>服务端缓存 chunk，<code>_fire_s1</code> 按 1000 ms 仿真钟触发；客户端每步一个动作</td>
+<td>只有 <code>connect_s / episode_s</code></td>
+<td>零计时</td>
+<td>客户端 <code>TracedConnection.act</code> 加每步 RTT；<code>pp_server_wrap.py::SubgoalReportingServer._fire_s1</code> 加 <code>s1_infer_ms</code>，<code>_dispense</code> 在审计块里加 <code>chunk_fresh</code> 与该值</td>
+</tr>
+<tr>
+<td>Astra</td>
+<td>本地 VLA（mme-vla 服务端）16 步 + 远程规划器</td>
+<td>第三方 <code>runner.py</code> 已记 <code>vla</code> 事件 <code>seconds</code>（含本仓 trace 写盘）</td>
+<td>VLA 服务端同 FrameSamp</td>
+<td>客户端 <code>models/astra.py::TracedClient.infer</code> 外包计时得到纯往返；服务端由同一 <code>AuditedPolicy</code> 改动覆盖</td>
+</tr>
+</tbody>
+</table>
+<p>外层 <code>episode.py::run_episode</code> 只有整局 <code>episode_wall_s</code>；<code>session.py::EnvSession.step</code> 只计 <code>env.step</code>。<code>eval_report.py</code> 只读 <code>episode_wall_s</code>。</p>
+<h2>附·三、客户端与服务端都能测：怎么测、改在哪</h2>
+<p><strong>客户端（权威）</strong>：五处各一个 <code>time.perf_counter()</code> 对，包住「ws.send 观测 → ws.recv 回复」。SimpleMemVLA、FrameSamp、GroundSG 已有该对，只是字段名不一；PonderPounce、Astra 新加。统一写进 <code>timing.policy.chunks[]</code>，每项 <code>{decision, env_step, client_rtt_ms, server_infer_ms, pack_ms, unpack_ms}</code>。</p>
+<p><strong>服务端（辅助）</strong>：</p>
+<ul>
+<li>mme-vla（FrameSamp／GroundSG／Astra-VLA 共用）：<code>AuditedPolicy.infer</code> 在 <code>self._inner.infer(obs)</code> 前后 <code>perf_counter</code>，结果写 <code>out[AUDIT_KEY]["server_timing"] = {"infer_ms": …, "gpu": torch/jax 设备名}</code>。第三方 <code>infer</code> 末尾已 <code>np.asarray</code> 落地，所以这个区间是真实的「预处理 + 前向 + 回传主机」。</li>
+<li>PonderPounce：<code>SubgoalReportingServer._fire_s1</code> 包住 <code>super()._fire_s1</code>（<code>predict_action</code> 返回 CPU tensor，已同步），把 <code>s1_infer_ms</code> 挂到 <code>ep.chunk</code>；<code>_dispense</code> 判断 <code>ep.chunk.cursor == 1</code> 即「这一步是新 chunk 的第一行」→ 审计块 <code>pp_timing = {"chunk_fresh": True, "s1_infer_ms": …, "n_s1_fires": …}</code>。客户端收到后把该步 RTT 记为该 chunk 的 <code>client_rtt_ms</code>。</li>
+<li>SimpleMemVLA：已有 <code>infer_ms</code>，只改字段名映射。</li>
+</ul>
+<p><strong>客户端 RTT 与服务端前向的差 = 编解码 + 回环网络</strong>，FrameSamp 现有 <code>network_mean_s</code> 就是这个量；验收时要求五个模型的 <code>client_rtt_ms − server_infer_ms</code> 中位数为正且在同一量级（见 §五）。</p>
+<h2>附·三′、双系统的子目标生成也要测清；单模型内「语言推理 vs 动作」能否拆开</h2>
+<p>用户追问（2026-10-09）：「这个是双系统的 subgoal 生成的也要清楚 然后如果不是双系统或者说内部 Language Reasoning 和 Action 是不是都可以测分开测出来」。结论：<strong>五个模型都能把「语言／子目标」与「动作」拆成两列，且全部在本仓代码内做到，零第三方源码改动</strong>。拆法分三类：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>结构</th>
+<th>语言／子目标怎么测</th>
+<th>动作怎么测</th>
+<th>两者关系</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PonderPounce</td>
+<td>双系统：Ponder（S2，<code>_fire_s2</code>）出 cognition+subgoal，Pounce（S1，<code>_fire_s1</code>）出 chunk</td>
+<td>本仓 <code>pp_server_wrap.py::_S2Watch.fire</code> 已包住第三方 <code>ctx.fire</code>（同步调用），在里面加 <code>perf_counter</code> 得 <code>s2_infer_ms</code>，随现有 <code>pp_generation</code> 块回传</td>
+<td><code>_fire_s1</code> 外包计时得 <code>s1_infer_ms</code>（§三）</td>
+<td>独立两次前向，各自触发（仿真钟 1000 ms），可分别统计</td>
+</tr>
+<tr>
+<td>GroundSG</td>
+<td>双系统：子目标预测器（Qwen／MemER）在评估进程内，动作在 mme-vla 服务端</td>
+<td>本仓 <code>groundsg.py::make_policy_context</code> 在 <code>build_predictor</code> 返回后包一层代理，<code>get_subgoal</code> 前后 <code>perf_counter</code>（含 <code>torch.cuda.synchronize</code>，模型在本进程）得 <code>subgoal_ms</code> 列表</td>
+<td><code>chunk_rtt_ms</code> / <code>server_infer_ms</code>（§三）</td>
+<td>独立，默认都开（原 §二「可选默认关」作废）</td>
+</tr>
+<tr>
+<td>Astra</td>
+<td>双系统：规划器（远程 API）+ 监视器（本地）+ VLA</td>
+<td>第三方 <code>runner.py</code> 已逐次记 <code>planner / monitor / second_button_review</code> 的 <code>seconds</code> 进 <code>decisions.jsonl</code>；本仓只汇总，不改</td>
+<td><code>TracedClient.infer</code> 外包（§三）</td>
+<td>独立；规划器 <code>seconds</code> 含 20 s 发送间隔与退避，报表单列并注明</td>
+</tr>
+<tr>
+<td>SimpleMemVLA</td>
+<td>单模型：同一次 <code>generate_batch</code> 先自回归生成 subtask token，再 <code>self.model.action_head.sample(...)</code> 出动作</td>
+<td>本仓 <code>smvla_server.py</code> 在 <code>SMVLAPolicyHost.__init__</code> 把 <code>self.batched.model.action_head.sample</code> 换成计时代理：进入时 <code>torch.cuda.synchronize()</code> 打点 <code>t_lang_end</code>，调原 <code>sample</code> 后再 <code>synchronize</code> 打点 <code>t_act_end</code>；<code>lang_ms = t_lang_end − t0</code>（t0 为现有 <code>infer</code> 起点，含预处理），<code>action_ms = t_act_end − t_lang_end</code></td>
+<td>同左 <code>action_ms</code></td>
+<td>串行同一前向，两段相加 ≈ 现有 <code>infer_ms</code>（验收：差 &lt; 1%）</td>
+</tr>
+<tr>
+<td>FrameSamp</td>
+<td>单模型，无语言输出</td>
+<td>无（报表填 <code>—</code>）</td>
+<td><code>chunk_rtt_ms</code> / <code>server_infer_ms</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>SimpleMemVLA 这一处是对第三方模型对象方法的<strong>运行时替换</strong>（第 21 条意义上的「覆盖」，但 <code>third_party/SimpleMemVLA</code> 不在 <code>&lt;PROTECTED_DIRS&gt;</code>），不改第三方源文件、不改随机数、不改输出；<code>SGEVAL_AUDIT=0</code> 时不安装代理。替代方案是在 fork 分支改 <code>batched_policy.py</code> 加时间戳，改动更重、要升 gitlink，不推荐。</p>
+<p>统一字段：<code>timing.policy.lang_calls[]</code>（每次语言／子目标调用 <code>{index, env_step, ms, kind: s2|subgoal|planner|monitor|lang_in_forward}</code>）、<code>lang_summary</code>（同 <code>chunk_summary</code> 三段统计）。报表速度表加两列「语言稳态 mean」「动作稳态 mean」。</p>
+<h2>附·四、输出到哪、怎么汇总</h2>
+<ul>
+<li><code>result.json</code>：<code>timing.policy.chunks[]</code>（逐 decision）+ <code>timing.policy.chunk_summary</code>（<code>n / first_ms / second_ms / third_ms / steady_mean_ms / steady_p50_ms / steady_p95_ms</code>，client 与 server 各一套）+ <code>timing.policy.gpu_name</code>。</li>
+<li><code>events.jsonl</code>：每个 decision 一条 <code>{"kind": "chunk_timing", …}</code>（recorder 已有 <code>add_event</code>）。</li>
+<li><code>trace.jsonl</code>：不动。</li>
+<li><code>dev-scripts/gl/eval_report.py</code>：新表「推理速度」：行 = 模型 × GPU 型号，列 = decision 数（按 P5 写成 <code>任务 × 档 × 局</code> 的乘式旁注）、首次、稳态 mean／p50／p95（client）、稳态 mean（server）、差值。</li>
+<li><code>src/robomme_ood_eval/report.py</code>：<code>log.json</code> 汇总加同一组字段。</li>
+</ul>
+<h2>附·五、验收判定行</h2>
+<table>
+<thead>
+<tr>
+<th>查什么</th>
+<th>怎么查</th>
+<th>判定行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>统计助手正确</td>
+<td>单测喂固定列表</td>
+<td><code>TIMING_HELPER=PASS cases=6</code></td>
+</tr>
+<tr>
+<td>五个客户端都产出 chunks</td>
+<td>dummy 冒烟 + 各模型单测用假服务端（<code>tests/pipeline/evalx/pp/pp_fakes.py</code> 等已有夹具）</td>
+<td><code>CHUNK_TIMING=PASS model=&lt;m&gt; decisions=&lt;n&gt; missing=0</code></td>
+</tr>
+<tr>
+<td>PP chunk 边界与服务端一致</td>
+<td>假服务端固定 chunk=5，验证 <code>chunk_fresh</code> 每 5 步一次</td>
+<td><code>PP_CHUNK_FRESH=PASS period=5 fires=&lt;n&gt;</code></td>
+</tr>
+<tr>
+<td>协议字节不变</td>
+<td><code>SGEVAL_AUDIT=0</code> 时回复与第三方逐字节相同（既有 <code>OBS_EQ</code> 测试扩到新字段）</td>
+<td><code>OBS_EQ=PASS</code></td>
+</tr>
+<tr>
+<td>语言与动作拆分</td>
+<td>PP 假服务端：<code>s2_infer_ms</code> 每次 S2 一条；GroundSG 假预测器：<code>subgoal_ms</code> 条数 = 调用次数；SimpleMemVLA 假 <code>action_head.sample</code>：<code>lang_ms + action_ms</code> 与 <code>infer_ms</code> 差 &lt; 1%</td>
+<td><code>LANG_SPLIT=PASS model=&lt;m&gt; calls=&lt;n&gt; delta_pct=&lt;x&gt;</code></td>
+</tr>
+<tr>
+<td>trace 冻结</td>
+<td>既有 contract 测试</td>
+<td><code>TRACE_SCHEMA=PASS</code></td>
+</tr>
+<tr>
+<td>核心短测</td>
+<td><code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code></td>
+<td><code>TEST_RESOURCE=</code> 末行 + 全绿</td>
+</tr>
+<tr>
+<td>真机一次</td>
+<td>本机 RTX 6000 Ada，每模型 1 任务 × 1 档 × 1 局 smoke（Astra 需先批局数与费用，P2″）</td>
+<td><code>SPEED_SMOKE=PASS model=&lt;m&gt; steady_p50_ms=&lt;x&gt; server_mean_ms=&lt;y&gt; gap_ms=&lt;x−y&gt;</code> 且 <code>gap_ms&gt;0</code></td>
+</tr>
+</tbody>
+</table>
+<h2>附·六、步骤</h2>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>内容</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>渲染 HTML 计划（两张 SVG）、commit <code>1.44</code></td>
+<td><code>grep -c '&lt;h1[^&gt;]*&gt;第一部分\|&lt;h1[^&gt;]*&gt;第二部分'</code> = 2</td>
+</tr>
+<tr>
+<td>1</td>
+<td>S1 共享助手 <code>timing.py</code> + SimpleMemVLA 映射</td>
+<td><code>TIMING_HELPER</code>、<code>CHUNK_TIMING model=smvla</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>S2 mme-vla 客户端 + <code>policy_server_wrap</code> 服务端计时（FrameSamp／GroundSG）</td>
+<td><code>CHUNK_TIMING model=framesamp,groundsg</code>、<code>OBS_EQ</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>S3 PonderPounce 客户端 + <code>pp_server_wrap</code></td>
+<td><code>CHUNK_TIMING model=pp</code>、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>S4 Astra 客户端</td>
+<td><code>CHUNK_TIMING model=astra</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td>S5 <code>eval_report.py</code> / <code>report.py</code> 速度表</td>
+<td>用 S1～S4 的 result.json 夹具生成表</td>
+</tr>
+<tr>
+<td>6</td>
+<td>主会话：合并、核心短测、本机 smoke、留档 <code>docs/validation/infer-timing-20261009/</code></td>
+<td><code>SPEED_SMOKE</code> × 5</td>
+</tr>
+</tbody>
+</table>
+<h2>附·七、改动有多大（评估）</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>性质</th>
+<th>估算</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新 <code>src/robomme_ood_eval/timing.py</code></td>
+<td>新增：<code>ChunkTimer</code>、<code>summarize_chunks</code></td>
+<td>~80 行</td>
+</tr>
+<tr>
+<td><code>models/smvla.py</code></td>
+<td>字段映射到 <code>chunks[]</code></td>
+<td>~15 行</td>
+</tr>
+<tr>
+<td><code>models/framesamp_modul.py</code></td>
+<td><code>_roundtrip</code> 的 <code>per_msg</code> 转 <code>chunks[]</code>；读审计块 <code>server_timing</code></td>
+<td>~25 行</td>
+</tr>
+<tr>
+<td><code>models/groundsg.py</code></td>
+<td>复用上条，只接 summary</td>
+<td>~5 行</td>
+</tr>
+<tr>
+<td><code>servers/policy_server_wrap.py</code></td>
+<td><code>AuditedPolicy.infer</code> 计时进审计块</td>
+<td>~10 行</td>
+</tr>
+<tr>
+<td><code>models/pp.py</code></td>
+<td><code>TracedConnection.act</code> 计时；按 <code>chunk_fresh</code> 归 chunk</td>
+<td>~30 行</td>
+</tr>
+<tr>
+<td><code>servers/pp_server_wrap.py</code></td>
+<td><code>_fire_s1</code> 计时、<code>_dispense</code> 加 <code>pp_timing</code></td>
+<td>~15 行</td>
+</tr>
+<tr>
+<td><code>models/astra.py</code></td>
+<td><code>TracedClient.infer</code> 计时</td>
+<td>~15 行</td>
+</tr>
+<tr>
+<td><code>dev-scripts/gl/eval_report.py</code>、<code>report.py</code></td>
+<td>速度表</td>
+<td>~60 行</td>
+</tr>
+<tr>
+<td>测试</td>
+<td>6 个新测试文件／用例</td>
+<td>~200 行</td>
+</tr>
+</tbody>
+</table>
+<p>风险集中在 PP 的 <code>chunk_fresh</code> 判定（依赖 <code>ep.chunk.cursor</code> 这一第三方私有属性，gitlink 锁死、不会漂）。</p>
+<h2>附·八、子代理分工与合并（简述）</h2>
+<p>拆成 S1～S5 五个写入型子代理（opus，worktree 隔离），可写集合互不重叠：S1 共享助手与 smvla；S2 mme-vla 两端；S3 PP 两端；S4 Astra；S5 报表。S2～S4 依赖 S1 的 <code>timing.py</code> 接口（先定好签名写进分配表，S2～S4 按签名写、不等 S1 合入）。合并顺序 S1→S2→S3→S4→S5，每次合并前一个 sonnet 审查者审 diff 范围、前缀、协议字节；合并后主会话跑核心短测。HTML 计划与两张 SVG 由主会话在阶段 0 派两个 opus 画图子代理（只读代码、只写 scratchpad SVG）后拼装。</p>
+<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" font-family="sans-serif">
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#555"/></marker>
+<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2f855a"/></marker>
+</defs>
+<rect width="1200" height="900" fill="#fff"/>
+<text x="600" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">推理测速改造：实施流程与子代理合并顺序</text>
+<text x="20" y="62" font-size="15" font-weight="bold" fill="#2b6cb0">一、阶段流</text>
+<g font-size="12" text-anchor="middle">
+<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
+<rect x="20" y="75" width="150" height="70" rx="8"/><rect x="188" y="75" width="150" height="70" rx="8"/><rect x="356" y="75" width="150" height="70" rx="8"/><rect x="524" y="75" width="150" height="70" rx="8"/><rect x="692" y="75" width="150" height="70" rx="8"/><rect x="860" y="75" width="150" height="70" rx="8"/><rect x="1028" y="75" width="152" height="70" rx="8"/>
+</g>
+<g fill="#1a365d">
+<text x="95" y="100" font-weight="bold">0 渲染 HTML 计划</text><text x="95" y="118">（本图）</text>
+<text x="263" y="98" font-weight="bold">1 S1 共享助手</text><text x="263" y="115">timing.py +</text><text x="263" y="131">SimpleMemVLA 两端</text>
+<text x="431" y="100" font-weight="bold">2 S2 mme-vla 两端</text><text x="431" y="118">FrameSamp/GroundSG</text>
+<text x="599" y="100" font-weight="bold">3 S3 PonderPounce</text><text x="599" y="118">两端</text>
+<text x="767" y="100" font-weight="bold">4 S4 Astra</text><text x="767" y="118">客户端</text>
+<text x="935" y="100" font-weight="bold">5 S5 报表</text><text x="935" y="118">eval_report/report</text>
+<text x="1104" y="95" font-weight="bold">6 主会话合并后</text><text x="1104" y="111">核心短测 + 本机 smoke</text><text x="1104" y="125" font-size="10">每模型1任务×1档×1局</text><text x="1104" y="139">+ 留档</text>
+</g>
+<g stroke="#555" stroke-width="1.5" marker-end="url(#ar)">
+<line x1="170" y1="110" x2="186" y2="110"/><line x1="338" y1="110" x2="354" y2="110"/><line x1="506" y1="110" x2="522" y2="110"/><line x1="674" y1="110" x2="690" y2="110"/><line x1="842" y1="110" x2="858" y2="110"/><line x1="1010" y1="110" x2="1026" y2="110"/>
+</g>
+<g font-size="10" fill="#444" font-family="monospace">
+<text x="95" y="162">判定：无</text>
+<text x="263" y="162">TIMING_HELPER</text><text x="263" y="176">CHUNK_TIMING(smvla)</text><text x="263" y="190">LANG_SPLIT(smvla)</text>
+<text x="431" y="162">CHUNK_TIMING(</text><text x="431" y="176">framesamp,groundsg)</text><text x="431" y="190">LANG_SPLIT(groundsg)</text><text x="431" y="204">OBS_EQ</text>
+<text x="599" y="162">CHUNK_TIMING(pp)</text><text x="599" y="176">PP_CHUNK_FRESH</text><text x="599" y="190">LANG_SPLIT(pp)</text><text x="599" y="204">OBS_EQ</text>
+<text x="767" y="162">CHUNK_TIMING(astra)</text>
+<text x="935" y="162">速度表单测</text>
+<text x="1104" y="162">TEST_RESOURCE</text><text x="1104" y="176">SPEED_SMOKE×5</text>
+</g>
+</g>
+<line x1="20" y1="225" x2="1180" y2="225" stroke="#ccc" stroke-dasharray="4 4"/>
+<text x="20" y="252" font-size="15" font-weight="bold" fill="#2b6cb0">二、S1～S5 五个 opus worktree 子代理：并行开发 → 顺序合并</text>
+<rect x="20" y="420" width="130" height="50" rx="8" fill="#f0fff4" stroke="#2f855a" stroke-width="2"/>
+<text x="85" y="442" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f855a">dev @BASE</text>
+<text x="85" y="459" text-anchor="middle" font-size="10" fill="#2f855a">同时分出 5 个分支</text>
+<g font-size="11">
+<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
+<rect x="220" y="270" width="300" height="62" rx="6"/><rect x="220" y="345" width="300" height="62" rx="6"/><rect x="220" y="420" width="300" height="62" rx="6"/><rect x="220" y="495" width="300" height="62" rx="6"/><rect x="220" y="570" width="300" height="62" rx="6"/>
+</g>
+<g fill="#1a365d">
+<text x="230" y="290" font-weight="bold">S1（opus · worktree）共享助手 + SimpleMemVLA</text><text x="230" y="310" font-family="monospace" font-size="10">timing.py, models/smvla.py,</text><text x="230" y="323" font-family="monospace" font-size="10">servers/smvla_server.py</text>
+<text x="230" y="365" font-weight="bold">S2（opus · worktree）mme-vla 两端</text><text x="230" y="385" font-family="monospace" font-size="10">models/framesamp_modul.py, models/groundsg.py,</text><text x="230" y="398" font-family="monospace" font-size="10">servers/policy_server_wrap.py</text>
+<text x="230" y="440" font-weight="bold">S3（opus · worktree）PonderPounce 两端</text><text x="230" y="460" font-family="monospace" font-size="10">models/pp.py, servers/pp_server_wrap.py</text>
+<text x="230" y="515" font-weight="bold">S4（opus · worktree）Astra 客户端</text><text x="230" y="535" font-family="monospace" font-size="10">models/astra.py</text>
+<text x="230" y="590" font-weight="bold">S5（opus · worktree）报表</text><text x="230" y="610" font-family="monospace" font-size="10">dev-scripts/gl/eval_report.py, report.py</text>
+</g>
+</g>
+<g stroke="#555" stroke-width="1.3" fill="none" marker-end="url(#ar)">
+<path d="M150,445 C185,445 185,301 218,301"/><path d="M150,445 C185,445 185,376 218,376"/><path d="M150,445 L218,451"/><path d="M150,445 C185,445 185,526 218,526"/><path d="M150,445 C185,445 185,601 218,601"/>
+</g>
+<g stroke="#2b6cb0" stroke-width="1.3" stroke-dasharray="5 4" fill="none" marker-end="url(#ar)">
+<path d="M520,301 C560,301 560,376 522,376"/><path d="M520,301 C585,301 585,451 522,451"/><path d="M520,301 C610,301 610,526 522,526"/>
+</g>
+<text x="615" y="420" font-size="11" fill="#2b6cb0" transform="rotate(90 615 420)" text-anchor="middle">S2～S4 依赖 timing.py 签名：按签名写，不等合入</text>
+<text x="860" y="268" text-anchor="middle" font-size="12" font-weight="bold" fill="#2f855a">逐个 --no-ff 合回 dev（S1→S2→S3→S4→S5）</text>
+<g font-size="10" text-anchor="middle">
+<g id="rows">
+</g>
+</g>
+<g font-size="10" text-anchor="middle">
+<!-- 每行：审查菱形 -> 合并框 -> POST 菱形 -->
+<g fill="#fffaf0" stroke="#555" stroke-width="1.3">
+<path d="M720,281 L770,301 L720,321 L670,301z"/><path d="M720,356 L770,376 L720,396 L670,376z"/><path d="M720,431 L770,451 L720,471 L670,451z"/><path d="M720,506 L770,526 L720,546 L670,526z"/><path d="M720,581 L770,601 L720,621 L670,601z"/>
+</g>
+<g fill="#333"><text x="720" y="299">sonnet 审查</text><text x="720" y="310" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="374">sonnet 审查</text><text x="720" y="385" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="449">sonnet 审查</text><text x="720" y="460" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="524">sonnet 审查</text><text x="720" y="535" font-size="8">PRE_MERGE_REVIEW</text>
+<text x="720" y="599">sonnet 审查</text><text x="720" y="610" font-size="8">PRE_MERGE_REVIEW</text></g>
+<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.5">
+<rect x="800" y="286" width="110" height="30" rx="5"/><rect x="800" y="361" width="110" height="30" rx="5"/><rect x="800" y="436" width="110" height="30" rx="5"/><rect x="800" y="511" width="110" height="30" rx="5"/><rect x="800" y="586" width="110" height="30" rx="5"/>
+</g>
+<g fill="#2f855a" font-size="11"><text x="855" y="305">① 合并 S1 --no-ff</text><text x="855" y="380">② 合并 S2 --no-ff</text><text x="855" y="455">③ 合并 S3 --no-ff</text><text x="855" y="530">④ 合并 S4 --no-ff</text><text x="855" y="605">⑤ 合并 S5 --no-ff</text></g>
+<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.3">
+<path d="M1000,279 L1062,301 L1000,323 L938,301z"/><path d="M1000,354 L1062,376 L1000,398 L938,376z"/><path d="M1000,429 L1062,451 L1000,473 L938,451z"/><path d="M1000,504 L1062,526 L1000,548 L938,526z"/><path d="M1000,579 L1062,601 L1000,623 L938,601z"/>
+</g>
+<g fill="#2f855a" font-size="8"><text x="1000" y="299">POST_MERGE_REVIEW</text><text x="1000" y="310">+ push</text>
+<text x="1000" y="374">POST_MERGE_REVIEW</text><text x="1000" y="385">+ push</text>
+<text x="1000" y="449">POST_MERGE_REVIEW</text><text x="1000" y="460">+ push</text>
+<text x="1000" y="524">POST_MERGE_REVIEW</text><text x="1000" y="535">+ push</text>
+<text x="1000" y="599">POST_MERGE_REVIEW</text><text x="1000" y="610">+ push</text></g>
+</g>
+<g stroke="#555" stroke-width="1.3" marker-end="url(#ar)">
+<line x1="625" y1="301" x2="668" y2="301"/><line x1="625" y1="376" x2="668" y2="376"/><line x1="625" y1="451" x2="668" y2="451"/><line x1="625" y1="526" x2="668" y2="526"/><line x1="625" y1="601" x2="668" y2="601"/>
+<line x1="770" y1="301" x2="798" y2="301"/><line x1="770" y1="376" x2="798" y2="376"/><line x1="770" y1="451" x2="798" y2="451"/><line x1="770" y1="526" x2="798" y2="526"/><line x1="770" y1="601" x2="798" y2="601"/>
+<line x1="910" y1="301" x2="936" y2="301"/><line x1="910" y1="376" x2="936" y2="376"/><line x1="910" y1="451" x2="936" y2="451"/><line x1="910" y1="526" x2="936" y2="526"/><line x1="910" y1="601" x2="936" y2="601"/>
+</g>
+<g stroke="#555" stroke-width="1" fill="none" stroke-dasharray="2 3">
+<line x1="520" y1="301" x2="625" y2="301"/><line x1="520" y1="376" x2="625" y2="376"/><line x1="520" y1="451" x2="625" y2="451"/><line x1="520" y1="526" x2="625" y2="526"/><line x1="520" y1="601" x2="625" y2="601"/>
+</g>
+<g stroke="#2f855a" stroke-width="1.5" fill="none" marker-end="url(#ag)">
+<path d="M1062,301 C1110,301 1110,340 720,340 L720,354"/><path d="M1062,376 C1110,376 1110,415 720,415 L720,429"/><path d="M1062,451 C1110,451 1110,490 720,490 L720,504"/><path d="M1062,526 C1110,526 1110,565 720,565 L720,579"/>
+<path d="M1000,623 L1000,665"/>
+</g>
+<text x="1115" y="345" font-size="9" fill="#2f855a">下一个</text>
+<rect x="880" y="667" width="240" height="48" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="1000" y="687" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a365d">阶段 6：主会话核心短测 + smoke</text>
+<text x="1000" y="704" text-anchor="middle" font-size="10" font-family="monospace" fill="#444">TEST_RESOURCE / SPEED_SMOKE×5</text>
+<text x="20" y="680" font-size="11" fill="#555">图例：实线箭头 = 流程；蓝虚线 = 接口签名依赖（不等合入）；绿 = 合并与合并后审查；</text>
+<text x="20" y="697" font-size="11" fill="#555">合并对象是审查钉死的 TIP sha；FAIL 不合并，findings 用 SendMessage 交回原子代理续改。</text>
+<rect x="20" y="760" width="560" height="110" rx="8" fill="#fff5f5" stroke="#c0392b" stroke-width="2.5"/>
+<text x="40" y="788" font-size="15" font-weight="bold" fill="#c0392b">红线</text>
+<g font-size="13" fill="#c0392b"><text x="40" y="812">· 零 third_party 改动</text><text x="40" y="834">· trace.jsonl schema 不变</text><text x="40" y="856">· SGEVAL_AUDIT=0 时协议逐字节不变</text></g>
+</svg>
+<figcaption>图 2 实施阶段 0～6 与 S1～S5 worktree 子代理的并行、审查与合并顺序</figcaption></figure>
 </body>
 </html>
