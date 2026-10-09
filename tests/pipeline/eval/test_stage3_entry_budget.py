@@ -34,10 +34,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 from robomme_ood_eval import episode as E
 from robomme_ood_eval import servers as S
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 #: 旧仓 run_seat.sh 不迁（拆分方案第二部分 §二）：起服务端的命令与种子核对改由 ``robomme_ood_eval.servers`` 与各模型
 #: Policy 子类承担，本文件对应断言改接到那里；席位脚本的预算参数核对与无进展检测归 GL 席位（dev-scripts/gl）。

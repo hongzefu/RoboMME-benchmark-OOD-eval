@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import groundsg_fakes as F
+import groundsg_fakes_dev as F
 from tests.pipeline.evalx.report import trace_contract as TC
 
 NEW_ONLY_END = F.NEW_ONLY_END

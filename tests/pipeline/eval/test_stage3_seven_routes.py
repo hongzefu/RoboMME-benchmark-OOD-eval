@@ -45,8 +45,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import eval_fakes as F
-from tests._support.loaders import load_script
+import eval_fakes_dev as F
+from tests._support.dev_loaders import load_script
 from tests.pipeline.evalx.astra import astra_fakes as A
 from tests.pipeline.evalx.groundsg import groundsg_fakes as G
 from tests.pipeline.evalx.pp import pp_fakes as P

@@ -60,13 +60,8 @@ def print_official_sha() -> None:
 # ---------------------------------------------------------------- 生产模块
 
 
-def env_client():
-    return load_script("eval-official/env_client.py")
-
-
 def env_session():
-    """拆仓后 ``EnvSession``／``NullRecorder``／``StepCapReached`` 在评估包 ``robomme_ood_eval.session``（``env_client()``
-    现指向只剩席位层的 ``dev-scripts/gl/seat.py``）。"""
+    """拆仓后 ``EnvSession``／``NullRecorder``／``StepCapReached`` 在评估包 ``robomme_ood_eval.session``。"""
     from robomme_ood_eval import session
 
     return session
@@ -78,10 +73,6 @@ def groundsg_client():
 
 def official_defs():
     return load_script("eval-official/official_defs.py")
-
-
-def official_hard_runner():
-    return load_script("eval-official/official_hard_runner.py")
 
 
 # ---------------------------------------------------------------- 假环境
@@ -402,27 +393,6 @@ class NewSide:
         return res
 
 
-class OrigSide:
-    """原侧：``official_hard_runner``（官方 ``EnvRunner`` 摘取原文 + 假 builder、假服务、swift 替身）。"""
-
-    def __init__(self, variant: str, max_steps: int, tmp: Path, world: World, *, port: int = 18120,
-                 real_client: bool = False, policy_seed: int = POLICY_SEED, swift: FakeSwift | None = None,
-                 server: FakeServer | None = None):
-        self.variant, self.max_steps, self.tmp, self.world = variant, max_steps, tmp, world
-        self.server = server or FakeServer()
-        self.swift = swift or FakeSwift()
-        self.ohr = official_hard_runner()
-        factory = None if real_client else (lambda h, p, ep: FakeClient(self.server))
-        self.ctx = self.ohr.make_context(variant, host="127.0.0.1", port=port, max_steps=max_steps,
-                                         policy_seed=policy_seed, adapter=ADAPTER if variant == QWENVL else None,
-                                         memer_adapter=MEMER_ADAPTER if variant == MEMER else None,
-                                         builder_cls=world.official_builder_cls(), scratch_root=tmp,
-                                         client_factory=factory, qwen_extra=self.swift.names)
-
-    def run(self, ident: dict, *, attempt: int = 1) -> dict:
-        return self.ohr.run_identity(self.ctx, ident, out=self.tmp, attempt=attempt)
-
-
 def read_trace(path: str | Path) -> list[dict]:
     return [json.loads(x) for x in Path(path).read_text(encoding="utf-8").splitlines() if x.strip()]
 
@@ -471,32 +441,6 @@ def legacy_trace_parts(rows: list[dict]) -> dict:
             r.update(terminated=False, truncated=False, status="error")
         conv.append(r)
     return _BASE_TRACE_PARTS(conv)
-
-
-# ---------------------------------------------------------------- 两侧逐项比较
-
-
-def seq_diff(a: list, b: list) -> int:
-    return sum(x != y for x, y in zip(a, b)) + abs(len(a) - len(b))
-
-
-def diffs(new_side, orig_side) -> dict:
-    (new, wn, rn), (orig, wo, ro) = new_side, orig_side
-    tn = trace_parts(read_trace(rn["trace_path"]))
-    to = trace_parts(read_trace(ro["trace_path"]))
-    payload = (seq_diff([(r["name"], r["sha256"], r["step"]) for r in tn["request"]],
-                        [(r["name"], r["sha256"], r["step"]) for r in to["request"]])
-               + seq_diff([x[:2] for x in new.server.log], [x[:2] for x in orig.server.log])
-               + seq_diff(tn["response"], to["response"]) + seq_diff(tn["demo"], to["demo"])
-               + seq_diff(tn["history"], to["history"]) + seq_diff(new.swift.requests, orig.swift.requests))
-    acts_n = [a.tobytes() for e in wn.envs for a in e.actions]
-    acts_o = [a.tobytes() for e in wo.envs for a in e.actions]
-    exec_ = seq_diff(acts_n, acts_o) + seq_diff(tn["step"], to["step"])
-    term = int((rn["status"], rn["steps"], rn["error"], rn["success_flag"])
-               != (ro["status"], ro["exec_steps"], ro["error"], ro["success_flag"])) + seq_diff(tn["end"], to["end"])
-    if new.variant == MEMER:  # MemER 的子目标模型请求另比附图逐张字节（关键帧 + 最近帧）
-        payload += seq_diff([r["image_shas"] for r in new.swift.requests], [r["image_shas"] for r in orig.swift.requests])
-    return {"payload": payload, "exec": exec_, "terminal": term, "n_req": len(tn["request"]), "n_exec": len(acts_n)}
 
 
 # ---------------------------------------------------------------- 回环 websocket 假服务（slow 用例）

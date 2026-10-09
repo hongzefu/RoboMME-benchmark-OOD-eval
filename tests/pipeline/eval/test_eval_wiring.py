@@ -27,7 +27,7 @@ import subprocess
 
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 
 EO = F.REPO / "dev-scripts" / "orig"
 GL = F.REPO / "dev-scripts" / "gl"

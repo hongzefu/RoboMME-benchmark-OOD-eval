@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import parity_fixtures as F
-from tests._support.loaders import script_path
+from tests._support.dev_loaders import script_path
 
 #: 现行映射在源码里的写法（隔离副本据此替换；形态变了先报「需同步」）
 DECLARED = '{"button_left": "button_right", "button_right": "button_left"}'

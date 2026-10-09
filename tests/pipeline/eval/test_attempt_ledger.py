@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 
 
 def _ledger(tmp_path, **kw):

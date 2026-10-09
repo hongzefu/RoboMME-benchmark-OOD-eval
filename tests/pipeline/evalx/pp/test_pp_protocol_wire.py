@@ -32,7 +32,7 @@ import numpy as np
 import pytest
 
 from pp_fakes import REPO, FakeConn, FakeEnv, FakeSession, action_for, compare_frames
-from tests._support.loaders import LEGACY_PATHS, load_script, script_path
+from tests._support.dev_loaders import LEGACY_PATHS, load_script, script_path
 from tests.pipeline.evalx.report import trace_contract as tc
 
 CLIENT_ENV_SITE = "envs/client-env/.venv/lib/python3.11/site-packages"  # 拆仓后客户端扩展环境位置

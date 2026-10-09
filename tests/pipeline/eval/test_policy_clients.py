@@ -14,8 +14,8 @@ import threading
 import numpy as np
 import pytest
 
-import eval_fakes as F
-from tests._support.loaders import load_script
+import eval_fakes_dev as F
+from tests._support.dev_loaders import load_script
 from tests.pipeline.evalx.report import trace_contract as tc
 
 

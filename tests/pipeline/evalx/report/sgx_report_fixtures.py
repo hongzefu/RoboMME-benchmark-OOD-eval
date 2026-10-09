@@ -16,10 +16,6 @@ def tw():
     return load_script("eval-official/trace_writer.py")
 
 
-def g2():
-    return load_script("eval-official/gate2_compare.py")
-
-
 def frame(step: int, cam: int = 0) -> np.ndarray:
     """确定性小画面（4×4×3 uint8），每步、每相机不同。"""
     return np.full((4, 4, 3), (step * 7 + cam * 3) % 251, dtype=np.uint8)

@@ -11,7 +11,7 @@ import subprocess
 import numpy as np
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 
 def _module():

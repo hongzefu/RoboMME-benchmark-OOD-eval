@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tests._support.loaders import REPO, load_script
+from tests._support.dev_loaders import REPO, load_script
 from tests.pipeline.evalx.report import trace_contract as tc
 
 OBS = REPO / "dev-scripts" / "orig" / "orig_observer"

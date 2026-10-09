@@ -17,7 +17,7 @@ import pytest
 
 from pp_fakes import (PP_BENCHMARK_LITERAL, REPO, TASK_GOAL, FakeConn, FakeEnv, FakeSession, action_for,
                       compare_frames, sha256_file)
-from tests._support.loaders import load_script, script_path
+from tests._support.dev_loaders import load_script, script_path
 
 pp = load_script("eval-official/pp_client.py")
 orig = load_script("eval-official/pp_official_runner.py")

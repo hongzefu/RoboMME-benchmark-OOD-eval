@@ -6,7 +6,7 @@ import threading
 import time
 from pathlib import Path
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 
 def R():

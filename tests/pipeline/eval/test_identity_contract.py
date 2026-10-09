@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 
 #: (数据集, 手写步数上限, 是否严格截断)
 CASES = [("ood", 1800, True), ("hard-verify", 1300, False)]

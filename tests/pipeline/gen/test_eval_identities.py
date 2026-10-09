@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 E = load_script("injection-dev/export_eval_identities.py")
 H = E.hard_specs()

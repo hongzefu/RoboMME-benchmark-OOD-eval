@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import sgx_report_fixtures as F
+import sgx_report_fixtures_dev as F
 
 IDS = [("VideoUnmask", 3, 101), ("PickXtimes", 7, 202)]
 

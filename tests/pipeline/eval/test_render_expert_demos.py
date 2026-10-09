@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 GOAL = "pick up the red cube"
 N_FRAMES = 12  # 含 timestep_10、timestep_11：字符串排序会把它们排到 timestep_1 之后

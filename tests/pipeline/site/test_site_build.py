@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 SB = load_script("injection-dev/site_build.py")
 H = SB.load_catalog_module().load_hard_specs()

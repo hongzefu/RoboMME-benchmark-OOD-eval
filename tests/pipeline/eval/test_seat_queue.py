@@ -19,14 +19,14 @@ import time
 
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 
 LABEL = "perceptual-framesamp-modul"
 T0 = 1_000_000.0
 
 
 def _bl():
-    from tests._support.loaders import load_script
+    from tests._support.dev_loaders import load_script
 
     return load_script("eval-official/budget_ledger.py")
 

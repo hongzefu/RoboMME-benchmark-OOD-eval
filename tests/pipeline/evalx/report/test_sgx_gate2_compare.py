@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-import sgx_report_fixtures as F
+import sgx_report_fixtures_dev as F
 
 IDS = [("VideoUnmask", 3, 101), ("VideoUnmask", 7, 102), ("PickXtimes", 3, 201), ("PickXtimes", 7, 202)]
 

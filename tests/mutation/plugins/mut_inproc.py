@@ -178,7 +178,7 @@ def _recording(key: str) -> None:
 
             cls._video_prepare_step_frames = prep
     elif key == "T5-K4":
-        from tests._support.loaders import load_script
+        from tests._support.dev_loaders import load_script
 
         old = os.environ.get("CUDA_VISIBLE_DEVICES")
         mod = load_script("dataset_replay.py")

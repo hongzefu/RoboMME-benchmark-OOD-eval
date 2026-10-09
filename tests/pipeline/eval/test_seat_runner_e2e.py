@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import eval_fakes as F
+import eval_fakes_dev as F
 
 LABEL = "perceptual-framesamp-modul"  # 队列与席位目录标签（任意已登记模型名）
 

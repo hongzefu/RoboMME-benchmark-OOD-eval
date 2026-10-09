@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from site_world import CAT, DEMO, H, SUBGOALS, catalog_inputs, write_h5
-from tests._support.loaders import load_script
+from tests._support.dev_loaders import load_script
 
 SG = load_script("injection-dev/site/subgoal_lengths.py")
 SEM = load_script("injection-dev/site/semantic_diff.py")
