@@ -39,7 +39,19 @@
 | 会话名 | 用途 | 状态 |
 |---|---|---|
 | split-sync | 三个子环境 venv 构建 | 已结束（`EXIT_CODE=0`，会话随命令退出） |
+| split-dummy2 | EVAL_EPISODE 续跑：dummy VideoUnmask ood 局 0（卡 0；hard-verify 局已完成、跳过） | 已结束：`EVAL_DONE episodes_run=1 skipped=1 exit=0`，`EXIT_CODE=0` |
+| split-sim | benchmark 仓 `tests/robomme_hard/sim --allow-sim-reset`（卡 1，59 + 1 = 60 次 reset） | 已结束：60 passed，217.7 s，`EXIT_CODE=0` |
+| split-glsync | 经 ssh 在 GL 登录节点为 NFS 副本建主 `.venv` 与 `envs/client-env/.venv`（`uv sync --frozen`，解释器 NFS 上的 cpython 3.11.14） | 已结束：`EXIT_CODE=0`，两环境 `robomme_hard.__file__` 均指 NFS 副本子模块 |
 
 ## 五、预算账本
 
-按方案 §五：身份执行 26 次硬上限、计量额度 60 硬上限、显式 reset 下限 30；Astra 2 局、5 美元硬上限；基础设施重试 0 次。实际消耗随阶段记在 result.md。
+按方案 §五：身份执行 26 次硬上限（2026-10-08 用户「都同意，补跑那局，sim 冒烟也跑」：EVAL_EPISODE 的 ood 局被主会话外层 `timeout 900` 在网站视频渲染阶段杀掉，补跑 1 局，身份执行上限变为 27；另批 benchmark 仓 sim 冒烟 60 次 reset，记在表外）、计量额度 60 硬上限、显式 reset 下限 30；Astra 2 局、5 美元硬上限；基础设施重试 0 次。实际消耗随阶段记在 result.md。
+
+## 六、GL 执行副本与环境
+
+| 项 | 值 |
+|---|---|
+| NFS 副本 | `/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval`（本机 `rsync -a --exclude /artifacts/ --exclude /.venv/ --exclude '/envs/*/.venv/' --exclude /.claude/`；首次同步 HEAD `2413b6f`，S5 前按冻结 sha 再同步） |
+| 主 `.venv`、`envs/client-env/.venv` | GL 登录节点新建（见 split-glsync） |
+| 三方服务 venv（沿用上一轮 GL 评估，同锁定 gitlink） | `mme_vla_py`、`pp_py`：`…/robomme_benchmark-sgeval/third_party/{mme-vla,PonderPounce}/.venv/bin/python`；`smvla_py`：`…/robomme_benchmark-sgeval2-b34/artifacts/v8-two/venvs/smvla-env/bin/python` |
+| 本机输入 symlink | `artifacts/inputs/v9-delivery` → 旧仓 `artifacts/newtask-v9/delivery`（5 档 800 个 h5，只读） |
