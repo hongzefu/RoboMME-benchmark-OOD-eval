@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>公开 main 与 dev 分支拆分方案</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1b1b; --muted:#666; --line:#ddd; --head:#f3f4f6; --accent:#1d4ed8; --code:#f6f8fa; --warn:#b45309; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#111; --fg:#e6e6e6; --muted:#aaa; --line:#333; --head:#1c1c1c; --accent:#7aa2ff; --code:#1a1a1a; --warn:#f59e0b; } }
+  :root[data-theme="dark"] { --bg:#111; --fg:#e6e6e6; --muted:#aaa; --line:#333; --head:#1c1c1c; --accent:#7aa2ff; --code:#1a1a1a; --warn:#f59e0b; }
+  body { background:var(--bg); color:var(--fg); font:15px/1.6 -apple-system,"Noto Sans CJK SC","PingFang SC",sans-serif; max-width:960px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:24px; margin:36px 0 8px; border-bottom:2px solid var(--accent); padding-bottom:4px; }
+  h2 { font-size:18px; margin:26px 0 8px; border-bottom:1px solid var(--line); padding-bottom:3px; }
+  h3 { font-size:16px; margin:18px 0 6px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  table { border-collapse:collapse; width:100%; margin:8px 0 12px; font-size:14px; display:block; overflow-x:auto; }
+  th, td { border:1px solid var(--line); padding:5px 8px; vertical-align:top; text-align:left; }
+  th { background:var(--head); }
+  code { background:var(--code); padding:1px 4px; border-radius:3px; font-size:13px; word-break:break-word; }
+  pre { background:var(--code); padding:10px; border-radius:6px; overflow-x:auto; font-size:13px; line-height:1.45; }
+  pre code { background:none; padding:0; }
+  .box { border-left:4px solid var(--accent); background:var(--head); padding:8px 12px; margin:10px 0; }
+  .warn { border-left:4px solid var(--warn); background:var(--head); padding:8px 12px; margin:10px 0; }
+  ul, ol { padding-left:20px; } li { margin:2px 0; }
+  .trees { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:10px 0 14px; }
+  @media (max-width:720px) { .trees { grid-template-columns:1fr; } }
+  .tree { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--bg); }
+  .tree h4 { margin:0 0 6px; font-size:15px; }
+  .tree ul { list-style:none; padding-left:16px; margin:0; border-left:1px dashed var(--line); }
+  .tree > ul { border-left:none; padding-left:0; }
+  .tree li { margin:2px 0; font-size:13.5px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .tree li.dir::before { content:"\1F4C1  "; } .tree li.file::before { content:"\1F4C4  "; }
+  .only-dev { background:rgba(245,158,11,.18); border-radius:3px; padding:0 4px; }
+  .shared { background:rgba(37,99,235,.14); border-radius:3px; padding:0 4px; }
+  .new { color:var(--accent); font-weight:600; }
+  .legend span { display:inline-block; margin-right:14px; font-size:13px; }
+  .flow svg { width:100%; height:auto; display:block; }
+  details summary { cursor:pointer; color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="meta">RoboMME-benchmark-OOD-eval · 2026-10-09 第六稿（按两份子代理审查与用户逐项答复修订）· 仓库现 PRIVATE、默认分支 <code>main</code>，HEAD <code>6166689</code>（1.20），423 个跟踪文件 · <b>只规划不实施</b>：开工令 = 本稿完整呈现后你不改直接同意（正本第 2 条）· 只动本仓库，不动 benchmark 子模块与四个模型子模块 · commit 体例 <code>1.&lt;小版本&gt; 中文描述</code>，接续 1.20 · 第五稿备份在会话 scratchpad，未入库</div>
+
+<h1>第一部分（给人看）</h1>
+
+<h2>一、总览</h2>
+<div class="box"><p><b>一句话。</b>把仓库分成两条分支：<code>dev</code> 是现在的全部内容，以后只在它上面改；<code>main</code> 是公开面，只放「本机跑评估」所需的最小集、全英文、ckpt 必须手动传入。<code>main</code> 由一个只在 <code>dev</code> 的本机脚本按白名单单向同步，<b>你说「同步到 main」才跑</b>；GitHub Action 只做检查、不推送。</p></div>
+
+<h3>已定口径（逐条带依据）</h3>
+<p>①～⑥、⑩ 的「前一会话」指写出第一至五稿的那次会话：本稿据实标注，<b>那次的原话没有留存在计划里</b>，审查子代理也找不到逐字依据。本会话里你对审查清单的答复逐字记在右列；如需补前一会话的原话，请你给出，我照抄进来。</p>
+<table>
+<tr><th>#</th><th>口径</th><th>依据</th></tr>
+<tr><td>①</td><td>LICENSE 沿用 benchmark 仓的（复制 <code>third_party/robomme_benchmark/LICENSE</code>，已核实存在）</td><td>前一会话裁决（原话未留存）</td></tr>
+<tr><td>②</td><td>S3 用孤儿 <code>main</code> 覆盖远端，<b>唯一一次</b>强推；形式为带预期旧 sha 的 <code>--force-with-lease</code>，比裸 <code>--force</code> 更严</td><td>前一会话裁决；本会话审查清单第 1 项答复「123可以」</td></tr>
+<tr><td>③</td><td>单仓，<code>dev</code> 随仓库一起公开，含 <code>AGENTS.md</code>、<code>CLAUDE.md</code>、<code>greatlakes.md</code>、<code>docs/validation/</code>（152 文件）、<code>dev-scripts/</code>（80 文件）全部内容；凭据扫描覆盖全部历史，<b>命中即停</b></td><td>前一会话裁决；审查清单第 2 项答复「123可以」</td></tr>
+<tr><td>④</td><td>ckpt 没有默认值，需要权重的模型每次必须传 <code>--ckpt</code></td><td>前一会话裁决（原话未留存）</td></tr>
+<tr><td>⑤</td><td>测 main 代码的测试进 main。按审查后的逐文件核实，<b>进 main 27 个测试文件</b>（16 个原样、11 个拆辅助模块或拆用例），留 dev 71 个，逐文件见第二部分「四」</td><td>前一会话裁决；本会话选项答复「A 加 B，共 48 个 (推荐)」。<b>48 是我按导入关系推断的上限</b>，四个 Haiku 子代理逐文件核实后，32 个 B 类里只有 11 个真测 <code>src</code>，其余 21 个测的是 <code>dev-scripts</code> 工具（parity 10、gen 3、site 1、eval 4、report/groundsg 3）。按你「A 加 B」的意图落为 27 个</td></tr>
+<tr><td>⑥</td><td>main 不留一个中文字（CJK、中文标点、全角字符）</td><td>前一会话裁决（原话未留存）</td></tr>
+<tr><td>⑦</td><td>README 写全，但<b>暂不写各模型权重的下载来源</b>，只写 <code>--ckpt</code> 指到哪一级目录</td><td>审查清单第 8 项答复「8暂时不写」</td></tr>
+<tr><td>⑧</td><td>同步只手动触发、本机推送；Action 只检查、无写权限</td><td>「action只保留检查 手动腿」</td></tr>
+<tr><td>⑨</td><td>默认分支始终是 <code>main</code>，S1 不改默认分支（第五稿要临时切 <code>dev</code>，取消）</td><td>审查清单第 4 项答复「4不管」，按审查建议执行</td></tr>
+<tr><td>⑩</td><td>包名 <code>robomme_ood_eval</code>，发行名一并改 <code>robomme-ood-eval</code>；<b>不留旧名兼容层</b></td><td>前一会话裁决（包名）；「7不留」（兼容层）</td></tr>
+<tr><td>⑪</td><td>五个子模块保持现状：已核实五个仓库都是 PUBLIC，钉住的 sha 都能从远端取到；子模块内容不在本次公开审查范围</td><td>审查清单第 3 项答复「123可以」</td></tr>
+<tr><td>⑫</td><td>本机工作副本从 S1 起在 <code>dev</code> 上工作；S3 后本地 <code>main</code> 改跟新的远端 <code>main</code></td><td>「5本地切到dev」</td></tr>
+<tr><td>⑬</td><td>同步脚本逐个路径 <code>git add</code> / <code>git rm</code>，不用 <code>git add -A</code></td><td>选项答复「不同意，逐个路径 add」</td></tr>
+<tr><td>⑭</td><td>旧 main 的留档 tag 推送、S6 之后每次推 <code>dev</code> 即公开，都不另设授权点</td><td>「10无所谓」</td></tr>
+<tr><td>⑮</td><td>计划文件用 HTML</td><td>正本 <code>a65eda2</code> 第 2 条（本会话已同步进本仓 1.20）</td></tr>
+</table>
+
+<h2>二、两个分支的差距</h2>
+<table>
+<tr><th>内容</th><th>dev</th><th>main</th><th>差距</th></tr>
+<tr><td>评估入口 <code>scripts/evaluate.py</code></td><td>有</td><td>有，相同</td><td>翻译成英文；加「ckpt 必填」校验</td></tr>
+<tr><td>评估包 <code>src/</code>（22 文件）</td><td>有，名 <code>robomme_ood_eval</code></td><td>有，相同</td><td>改名；翻译；删 <code>DEFAULT_CKPTS</code></td></tr>
+<tr><td>测试 <code>tests/</code>（98 个测试文件 + 28 个辅助 + 21 个数据文件 = 147）</td><td>全部</td><td>27 个测试 + 它们需要的辅助与数据文件（约 45 个）</td><td>拆 8 个辅助模块与 3 个混合测试；进 main 的翻译</td></tr>
+<tr><td>依赖声明 <code>pyproject.toml</code>、<code>uv.lock</code>、<code>.python-version</code>、<code>envs/</code>（6 文件）、<code>.gitmodules</code> 与 5 个子模块指针</td><td>有</td><td>有，相同</td><td>改发行名、重 lock；注释翻译</td></tr>
+<tr><td>README、LICENSE</td><td>一行标题；无 LICENSE</td><td>相同（英文完整 README、LICENSE）</td><td>新写</td></tr>
+<tr><td>规则文件 <code>AGENTS.md</code>、<code>CLAUDE.md</code>、<code>greatlakes.md</code>、<code>.claude/</code></td><td>有</td><td>无</td><td>只在 dev</td></tr>
+<tr><td><code>dev-scripts/</code>（80 + 新增约 7）、<code>docs/validation/</code>（152）</td><td>有</td><td>无</td><td>只在 dev</td></tr>
+<tr><td>Action：<code>public-gate.yml</code>（main 检查）／<code>dev-gate.yml</code>（dev 检查）</td><td>两份都有</td><td>只有 <code>public-gate.yml</code></td><td>新增</td></tr>
+</table>
+<p>关键性质：<b>凡是两边都有的文件，内容逐字节相同。</b>翻译在 dev 上做一次，main 不另维护一份；dev 独有的文件继续中文。因此 main 里每个文件在 dev 上就必须已经没有中文、没有 <code>dev-scripts</code> 字样——这条决定了测试辅助模块必须拆成「公开部分」与「dev 部分」两个文件，而不能在同一个文件里留 dev 分支逻辑。</p>
+
+<h2>三、要翻译什么</h2>
+<p>翻译范围 = 进 main 的全部文本文件，约 75 个：<code>src/</code> 22 个、<code>evaluate.py</code>、进 main 的测试与辅助约 45 个、pyproject 与 .gitignore 注释、README、public-gate.yml。翻什么：注释、docstring、命令行帮助、日志、报错与异常文案、测试断言里引用的原文、测试数据文件里的中文值。不翻什么：代码逻辑、标识符、判定行（<code>NAME=PASS k=v</code> 形式本来就是 ASCII，<b>键名与取值一律不动</b>）、数据集名 <code>hard-verify</code>／<code>ood</code>（来自 benchmark 包）。判定标准不是「看起来英文了」，而是扫描整份白名单，一个 CJK 字符都没有。行为不变的证据：同一组测试在 dev 上翻译前后通过数一致。</p>
+<div class="warn"><b>翻译与测试断言是绑在一起的。</b><code>src</code> 的报错文案一改，测试里断言这些原文的地方必须同一次改，否则两边各自验收都过不了（并行性审查第 2 条）。所以 <code>src</code> 翻译交给<b>一个</b>子代理，它同时改 <code>src</code> 和测试里引用这些原文的断言；那一轮里别的子代理都不碰 <code>tests/</code>。</div>
+
+<h2>四、ckpt 不再有默认：改什么、机制是什么</h2>
+<p><b>现状。</b><code>src/robomme_hard_eval/servers/__init__.py</code> 里有一张 <code>DEFAULT_CKPTS</code> 表，三个模型（FrameSamp+Modulation、GroundSG、SimpleMemVLA）写死了本机与 NFS 的绝对路径；<code>models/framesamp_modul.py</code>、<code>models/smvla.py</code>、<code>models/pp.py</code> 三处写法是「命令行没给 <code>--ckpt</code> 就用表里的」。全仓只有这 4 个文件引用 <code>DEFAULT_CKPTS</code>，测试与 <code>dev-scripts</code> 里都没有（已用 <code>git grep -l DEFAULT_CKPTS</code> 核实）。</p>
+<p><b>改后机制。</b><code>evaluate.py</code> 不知道、不猜、不下载任何权重；权重在哪完全由使用者每次用 <code>--ckpt &lt;目录&gt;</code> 指定。改动两处：</p>
+<ol>
+<li><b>入口拦截</b>：解析完参数后，若模型需要权重而没给 <code>--ckpt</code>，立刻 <code>parser.error</code>（退出码 2）。哪些模型需要权重，由每个模型类的 <code>requires_ckpt</code> 属性声明（dummy 与 astra 为 False），入口不手写名单。</li>
+<li><b>模型层删默认</b>：三处「没给就用表」改成调用 <code>require_ckpt(cfg, model)</code>，没给就抛同一句错；表整段删除。这是给绕过入口、直接 import 包的人准备的第二道保险。</li>
+</ol>
+<p>后面的链路不变：路径传给模型类 → 预检目录里有没有 <code>params/</code>、<code>assets/</code>、<code>history_config.txt</code> → 起服务端并把路径写进服务元数据 → 评估结束把路径与逐文件 sha256 写进 <code>log.json</code>。</p>
+<pre><code># 权重自行准备（README 不写下载来源，只写目录要求，口径⑦）
+uv run scripts/evaluate.py --model smvla --dataset ood --seed 0 --ckpt ~/ckpts/smvla --out runs/smvla
+uv run scripts/evaluate.py --model perceptual-framesamp-modul --dataset ood --seed 0 --ckpt ~/ckpts/framesamp/79999 --out runs/fs
+uv run scripts/evaluate.py --model groundsg --dataset ood --seed 0 --ckpt ~/ckpts/groundsg/79999 --groundsg-variant ground-sg-oracle --out runs/gsg
+uv run scripts/evaluate.py --model pp --dataset ood --seed 0 --ckpt ~/ckpts/pp --out runs/pp
+uv run scripts/evaluate.py --model dummy --dataset hard-verify --seed 0 --out runs/dummy     # 不需要权重
+
+# 忘了 --ckpt（退出码 2，不会去找默认路径）
+$ uv run scripts/evaluate.py --model smvla --dataset ood --seed 0 --out runs/smvla
+scripts/evaluate.py: error: --ckpt is required for model smvla
+</code></pre>
+<p><b>对 dev 的影响。</b>dev 与 main 是同一份代码，dev 上也没有默认了。<code>dev-scripts/gl/</code> 与 <code>dev-scripts/orig/</code> 里原先靠回落的调用，改为从只在 dev 的 <code>dev-scripts/gl/ckpt_paths.sh</code> 取三条原路径后显式传 <code>--ckpt</code>。这一块不依赖 <code>src</code> 改没改，可以和别的块同时做。</p>
+
+<h2>五、改名牵连面（<code>robomme_hard_eval</code> → <code>robomme_ood_eval</code>）</h2>
+<p>实测 89 个跟踪文件、485 行（<code>git grep -c robomme_hard_eval</code>），不留兼容层（口径⑩）。主会话一次做完（切不开），之后所有子代理都从改名后的提交出发。</p>
+<table>
+<tr><th>牵连处</th><th>现状</th><th>怎么改</th></tr>
+<tr><td>源码目录</td><td><code>src/robomme_hard_eval/</code>，15 个文件有内部引用</td><td><code>git mv</code> 成 <code>src/robomme_ood_eval/</code>，内部 import 替换</td></tr>
+<tr><td>发行名与打包</td><td><code>pyproject.toml</code> 的 <code>name = "robomme-hard-eval"</code>、<code>packages = ["src/robomme_hard_eval"]</code></td><td>改成 <code>robomme-ood-eval</code> / <code>src/robomme_ood_eval</code></td></tr>
+<tr><td><code>uv.lock</code></td><td>一条 <code>name = "robomme-hard-eval"</code></td><td><code>uv lock</code> 重新生成，不手改</td></tr>
+<tr><td>本机 <code>.venv</code></td><td>装着 <code>_editable_impl_robomme_hard_eval.pth</code> 与 <code>robomme_hard_eval-1.0.0.dist-info</code></td><td><code>uv sync</code>；之后核对 <code>robomme_ood_eval.__file__</code> 在 <code>src/robomme_ood_eval/</code> 下，且旧 <code>.pth</code> 已消失</td></tr>
+<tr><td>GL 集群副本 venv</td><td>NFS 上同样装着旧名</td><td>下次 rsync 后在 sled-vail 上对 NFS 副本跑 <code>UV_LINK_MODE=copy uv sync</code>（NFS 本机可写，不登 GL）；在下次 GL 评估之前做</td></tr>
+<tr><td>测试</td><td>49 个文件；<code>tests/_support/loaders.py</code> 的 <code>LEGACY_PATHS</code> 里约 10 条 <code>src/robomme_hard_eval/…</code></td><td>替换</td></tr>
+<tr><td><code>dev-scripts</code></td><td>20 个文件；<code>gl/run_eval_gl.sh</code> 起跑前硬核 <code>robomme_hard_eval.__file__</code> 是否在 <code>&lt;repo&gt;/src/robomme_hard_eval/</code></td><td>替换（含这条起跑检查与 <code>RUN_INPUTS</code> 行里的字段名）</td></tr>
+<tr><td><code>scripts/evaluate.py</code>、<code>AGENTS.md</code>、<code>CLAUDE.md</code></td><td>各 1 处；<code>CLAUDE.md</code> 的 worktree 验收取法要打印旧名</td><td>替换</td></tr>
+<tr><td><code>docs/validation/</code></td><td>1 个历史留档</td><td><b>不改</b>；<code>docs/validation/legacy-names.md</code> 加一行改名记录</td></tr>
+<tr><td><code>envs/</code>、子模块</td><td>0 处</td><td>不受影响</td></tr>
+</table>
+
+<h2>六、同步是怎么同步的</h2>
+<p><b>同步哪些。</b>main 的内容由 dev 上一份逐文件清单 <code>dev-scripts/release/public-manifest.txt</code> 决定，清单里的文件就是下图右侧 main 的全部；清单外的文件 main 永远没有。</p>
+<div class="legend"><span class="shared">蓝底：两边都有，逐字节相同（= 清单内容）</span><span class="only-dev">橙底：只在 dev</span><span class="new">蓝字加粗：本方案新增</span></div>
+<div class="trees">
+<div class="tree"><h4>dev（唯一开发分支，中文为主）</h4>
+<ul>
+<li class="file"><span class="only-dev">AGENTS.md · CLAUDE.md · greatlakes.md</span></li>
+<li class="dir"><span class="only-dev">.claude/</span><ul><li class="file">settings.json</li></ul></li>
+<li class="file"><span class="shared">readme.md</span> <span class="new">英文重写</span> · <span class="shared">LICENSE</span> <span class="new">新增</span></li>
+<li class="file"><span class="shared">pyproject.toml · uv.lock · .python-version · .gitignore · .gitmodules</span></li>
+<li class="dir">.github/workflows/<ul>
+  <li class="file"><span class="shared">public-gate.yml</span> <span class="new">新增</span></li>
+  <li class="file"><span class="only-dev">dev-gate.yml</span> <span class="new">新增</span></li></ul></li>
+<li class="dir">scripts/<ul><li class="file"><span class="shared">evaluate.py</span></li></ul></li>
+<li class="dir"><span class="shared">src/robomme_ood_eval/</span>（22）</li>
+<li class="dir"><span class="shared">envs/</span>（6） · <span class="shared">third_party/</span>（5 个子模块指针）</li>
+<li class="dir">tests/（147 + 拆出的约 11）<ul>
+  <li class="dir"><span class="shared">27 个测试 + 公开辅助（如 <code>_support/loaders.py</code>、<code>eval_fakes.py</code>）</span></li>
+  <li class="dir"><span class="only-dev">71 个测试 + dev 辅助（如 <code>_support/dev_loaders.py</code>、<code>eval_fakes_dev.py</code>）</span></li></ul></li>
+<li class="dir"><span class="only-dev">dev-scripts/</span>（80）<ul>
+  <li class="file">gl/ckpt_paths.sh <span class="new">新增</span></li>
+  <li class="dir">release/ <span class="new">新增</span><ul>
+    <li class="file">public-manifest.txt · sync_to_main.sh</li>
+    <li class="file">check_public_lang.py · check_public_paths.py · check_manifest.py · check_secrets.py</li></ul></li></ul></li>
+<li class="dir"><span class="only-dev">docs/validation/</span>（152）</li>
+</ul></div>
+<div class="tree"><h4>main（公开面，英文，约 120 个文件）</h4>
+<ul>
+<li class="file"><span class="shared">readme.md · LICENSE</span></li>
+<li class="file"><span class="shared">pyproject.toml · uv.lock · .python-version · .gitignore · .gitmodules</span></li>
+<li class="dir">.github/workflows/<ul><li class="file"><span class="shared">public-gate.yml</span></li></ul></li>
+<li class="dir">scripts/<ul><li class="file"><span class="shared">evaluate.py</span></li></ul></li>
+<li class="dir"><span class="shared">src/robomme_ood_eval/</span>（22）</li>
+<li class="dir"><span class="shared">envs/</span>（6） · <span class="shared">third_party/</span>（5 个指针，sha 同 dev）</li>
+<li class="dir">tests/<ul><li class="dir"><span class="shared">27 个测试 + 公开辅助与数据</span></li></ul></li>
+<li class="file" style="color:var(--muted)">没有：规则文件、.claude/、dev-scripts/、docs/、dev-gate.yml、71 个 dev 测试与 dev 辅助</li>
+</ul></div>
+</div>
+<p><b>怎么同步。</b>只在 dev 上改。要发布时你说「同步到 main」，由主会话在 sled-vail 上跑同步脚本；脚本把清单内文件复制到 main 的临时检出、逐个路径暂存、提交并快进推送。流程：</p>
+<div class="flow"><svg viewBox="0 0 920 1110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="同步流程图"><defs><marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="var(--fg)"/></marker></defs><rect x="150.0" y="10" width="360" height="44" rx="7" fill="var(--head)" stroke="var(--line)" stroke-width="1.3"/><text x="330.0" y="37" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fg)">在 dev 上改代码 → commit → push</text><line x1="330" y1="54" x2="330" y2="80" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><rect x="150.0" y="80" width="360" height="62" rx="7" fill="var(--head)" stroke="var(--line)" stroke-width="1.3"/><text x="330.0" y="100" text-anchor="middle" font-size="13" fill="var(--fg)">触发同步（只手动）</text><text x="330.0" y="116" text-anchor="middle" font-size="13" fill="var(--fg)">你说「同步到 main」→ 主会话在本机运行</text><text x="330.0" y="132" text-anchor="middle" font-size="13" fill="var(--fg)">dev-scripts/release/sync_to_main.sh</text><line x1="330" y1="142" x2="330" y2="168" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><polygon points="330.0,168 530.0,210.0 330.0,252 130.0,210.0" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.4"/><text x="330.0" y="208" text-anchor="middle" font-size="12.5" fill="var(--fg)">dev 工作区干净？</text><text x="330.0" y="222" text-anchor="middle" font-size="12.5" fill="var(--fg)">HEAD 已 push？</text><text x="120.0" y="215" text-anchor="end" font-size="13" font-weight="600" fill="var(--accent)">① 前置</text><line x1="530.0" y1="210" x2="580.0" y2="210" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)" stroke-dasharray="5,4"/><rect x="582.0" y="193" width="170" height="34" rx="17" fill="rgba(220,38,38,.12)" stroke="#dc2626" stroke-width="1.2"/><text x="667.0" y="215" text-anchor="middle" font-size="12.5" fill="var(--fg)">否 → 停</text><text x="338" y="270" text-anchor="start" font-size="12" fill="var(--muted)">是</text><line x1="330" y1="252" x2="330" y2="278" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><polygon points="330.0,278 530.0,320.0 330.0,362 130.0,320.0" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.4"/><text x="330.0" y="318" text-anchor="middle" font-size="12.5" fill="var(--fg)">清单内文件：零中文？</text><text x="330.0" y="332" text-anchor="middle" font-size="12.5" fill="var(--fg)">零私有路径？清单一致？</text><text x="120.0" y="325" text-anchor="end" font-size="13" font-weight="600" fill="var(--accent)">② 闸门</text><line x1="530.0" y1="320" x2="580.0" y2="320" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)" stroke-dasharray="5,4"/><rect x="582.0" y="303" width="170" height="34" rx="17" fill="rgba(220,38,38,.12)" stroke="#dc2626" stroke-width="1.2"/><text x="667.0" y="325" text-anchor="middle" font-size="12.5" fill="var(--fg)">任一否 → 停，打印命中行</text><text x="338" y="380" text-anchor="start" font-size="12" fill="var(--muted)">是</text><line x1="330" y1="362" x2="330" y2="388" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><polygon points="330.0,388 530.0,430.0 330.0,472 130.0,430.0" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.4"/><text x="330.0" y="435" text-anchor="middle" font-size="12.5" fill="var(--fg)">清单内测试全过？</text><text x="120.0" y="435" text-anchor="end" font-size="13" font-weight="600" fill="var(--accent)">③ 短测</text><line x1="530.0" y1="430" x2="580.0" y2="430" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)" stroke-dasharray="5,4"/><rect x="582.0" y="413" width="170" height="34" rx="17" fill="rgba(220,38,38,.12)" stroke="#dc2626" stroke-width="1.2"/><text x="667.0" y="435" text-anchor="middle" font-size="12.5" fill="var(--fg)">否 → 停</text><text x="338" y="490" text-anchor="start" font-size="12" fill="var(--muted)">是</text><line x1="330" y1="472" x2="330" y2="498" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><polygon points="330.0,498 530.0,540.0 330.0,582 130.0,540.0" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.4"/><text x="330.0" y="538" text-anchor="middle" font-size="12.5" fill="var(--fg)">取 origin/main 到临时目录</text><text x="330.0" y="552" text-anchor="middle" font-size="12.5" fill="var(--fg)">最新 commit 带 Dev-Source？</text><text x="120.0" y="545" text-anchor="end" font-size="13" font-weight="600" fill="var(--accent)">④ 取 main</text><line x1="530.0" y1="540" x2="580.0" y2="540" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)" stroke-dasharray="5,4"/><rect x="582.0" y="523" width="170" height="34" rx="17" fill="rgba(220,38,38,.12)" stroke="#dc2626" stroke-width="1.2"/><text x="667.0" y="545" text-anchor="middle" font-size="12.5" fill="var(--fg)">否 → 有人直改 main，停</text><text x="338" y="600" text-anchor="start" font-size="12" fill="var(--muted)">是</text><line x1="330" y1="582" x2="330" y2="608" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><rect x="150.0" y="608" width="360" height="62" rx="7" fill="var(--head)" stroke="var(--line)" stroke-width="1.3"/><text x="330.0" y="628" text-anchor="middle" font-size="13" fill="var(--fg)">⑤ 复制：按清单把文件从 dev 复制到临时目录</text><text x="330.0" y="644" text-anchor="middle" font-size="13" fill="var(--fg)">逐个路径 git add；清单外文件逐个 git rm</text><text x="330.0" y="660" text-anchor="middle" font-size="13" fill="var(--fg)">5 个子模块指针对齐 dev</text><line x1="330" y1="670" x2="330" y2="696" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><polygon points="330.0,696 530.0,731.0 330.0,766 130.0,731.0" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.4"/><text x="330.0" y="736" text-anchor="middle" font-size="12.5" fill="var(--fg)">⑥ 有差异？</text><line x1="530.0" y1="731" x2="580.0" y2="731" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)" stroke-dasharray="5,4"/><rect x="582.0" y="714" width="170" height="34" rx="17" fill="rgba(220,38,38,.12)" stroke="#dc2626" stroke-width="1.2"/><text x="667.0" y="736" text-anchor="middle" font-size="12.5" fill="var(--fg)">否 → SYNC_MAIN=NOOP</text><text x="338" y="784" text-anchor="start" font-size="12" fill="var(--muted)">是</text><line x1="330" y1="766" x2="330" y2="792" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><rect x="150.0" y="792" width="360" height="62" rx="7" fill="rgba(37,99,235,.12)" stroke="var(--accent)" stroke-width="1.3"/><text x="330.0" y="812" text-anchor="middle" font-size="13" fill="var(--fg)">commit「Sync from dev @&lt;sha&gt;: 一句话」</text><text x="330.0" y="828" text-anchor="middle" font-size="13" fill="var(--fg)">尾行 Dev-Source: &lt;dev 完整 sha&gt;</text><text x="330.0" y="844" text-anchor="middle" font-size="13" fill="var(--fg)">（溯源：这个 main commit 来自 dev 哪个提交）</text><line x1="330" y1="854" x2="330" y2="880" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><rect x="150.0" y="880" width="360" height="44" rx="7" fill="var(--head)" stroke="var(--line)" stroke-width="1.3"/><text x="330.0" y="907" text-anchor="middle" font-size="13" fill="var(--fg)">⑦ 本机快进 push 到 origin/main（永不 force）</text><line x1="510.0" y1="902" x2="580.0" y2="902" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)" stroke-dasharray="5,4"/><rect x="582.0" y="885" width="170" height="34" rx="17" fill="rgba(220,38,38,.12)" stroke="#dc2626" stroke-width="1.2"/><text x="667.0" y="907" text-anchor="middle" font-size="12.5" fill="var(--fg)">被拒 → 停</text><line x1="330" y1="924" x2="330" y2="950" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><rect x="150.0" y="950" width="360" height="52" rx="7" fill="var(--head)" stroke="var(--line)" stroke-width="1.3"/><text x="330.0" y="973" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fg)">⑧ 删临时目录，打印判定行</text><text x="330.0" y="989" text-anchor="middle" font-size="13" font-weight="600" fill="var(--fg)">SYNC_MAIN=PASS dev=… main=… changed=…</text><line x1="330" y1="1002" x2="330" y2="1028" stroke="var(--fg)" stroke-width="1.3" marker-end="url(#ah)"/><rect x="150.0" y="1028" width="360" height="52" rx="7" fill="var(--bg)" stroke="var(--line)" stroke-width="1.3"/><text x="330.0" y="1051" text-anchor="middle" font-size="13" fill="var(--fg)">main 上的 public-gate Action 只检查：扫中文与私有路径、跑测试</text><text x="330.0" y="1067" text-anchor="middle" font-size="13" fill="var(--fg)">（只读权限、不推送；第二道保险）</text></svg></div>
+<p><b>为什么同步时不用翻译。</b>清单内文件在 dev 上就已经是英文（翻译在 S2 做一次，之后由闸门守住），所以同步只是复制；两边同名文件永远逐字节相同。</p>
+<p><b>两份 Action 都只检查。</b><code>public-gate.yml</code>（两边都有，只在 push main 时跑）：在 main 全树扫中文与私有路径、<code>uv sync</code>、跑 pytest。<code>dev-gate.yml</code>（只在 dev）：push dev 时对清单内文件跑三道闸门脚本，挂了就红，提醒这次 dev 改动让公开面不合规。两份都设 <code>permissions: contents: read</code>，不持有写权限。</p>
+<p><b>单向保证。</b>GitHub 对 main 开分支保护：禁止强推、禁止删除，<b>不要求 PR</b>（要求 PR 会挡住本机同步推送）；dev 同样禁止强推与删除。脚本第④步发现 main 最新提交没有 <code>Dev-Source:</code> 尾行就停；<code>AGENTS.md</code> 写明 main 只由同步脚本写。</p>
+
+<h2>七、验收判定行</h2>
+<table>
+<tr><th>查什么</th><th>怎么查</th><th>过了说明什么</th><th>判定行</th></tr>
+<tr><td>改名干净</td><td><code>git grep -n robomme_hard_eval -- . ':!docs/validation'</code> 零命中；<code>uv sync</code> 后 <code>robomme_ood_eval.__file__</code> 在仓内 <code>src/</code></td><td>除历史留档外没有旧名，且装的是本仓代码</td><td><code>RENAME_CLEAN=PASS hits=0 pkg_in_repo=1</code></td></tr>
+<tr><td>main 无中文</td><td>扫清单全部文件的 CJK、中文标点、全角字符</td><td>公开面零中文（口径⑥）</td><td><code>PUBLIC_LANG=PASS files=&lt;n&gt; cjk_hits=0</code></td></tr>
+<tr><td>main 无私有路径</td><td>扫 <code>/data/hongzefu</code>、<code>/nfs/turbo</code>、<code>chaijy</code>、<code>greatlakes</code>、<code>sled-</code>、<code>dev-scripts</code>、<code>dev_scripts</code>、<code>hongzefu@</code></td><td>公开面不暴露内部路径，也不回指 dev 代码</td><td><code>PUBLIC_PATHS=PASS hits=0</code></td></tr>
+<tr><td>main 恰等于清单</td><td>清单每行存在；目标树无清单外文件；只含清单内容的临时目录里 <code>pytest --collect-only</code> 成功；5 个 gitlink 与 dev 相同</td><td>公开测试不依赖任何 dev 文件</td><td><code>PUBLIC_MANIFEST=PASS listed=&lt;n&gt; missing=0 extra=0 collected=27 gitlinks=5</code></td></tr>
+<tr><td>全历史无凭据</td><td>扫 <code>git log --all -p</code>：<code>hf_</code>、<code>ghp_</code>、<code>github_pat_</code>、独立的 <code>sk-</code>、<code>AKIA</code>、私钥头、Slack token；白名单只放两条已知假值。预扫（38 个提交）：4 种命中串，全是假值 <code>sk-test-placeholder-not-a-real-key</code>、<code>sk-test-sentinel-not-a-real-key</code> 与计划文件名误报（改用前向断言后消失）</td><td>dev 带全部历史公开时不泄露密钥；<b>命中即停、交你裁决</b>（口径③）</td><td><code>PUBLIC_SECRETS=PASS commits=&lt;n&gt; hits=0 allowlisted=&lt;m&gt;</code></td></tr>
+<tr><td>子模块可取</td><td>对 5 个 gitlink 逐个 <code>gh api repos/&lt;o&gt;/&lt;r&gt;/commits/&lt;sha&gt;</code> 与 <code>gh repo view --json visibility</code>。今天预跑：5 个都是 PUBLIC，5 个 sha 都能取到</td><td>别人 <code>--recurse-submodules</code> clone 能拉齐</td><td><code>SUBMODULE_PUBLIC=PASS repos=5 public=5 reachable=5</code></td></tr>
+<tr><td>ckpt 无默认</td><td>全仓无 <code>DEFAULT_CKPTS</code>；不带 <code>--ckpt</code> 跑 smvla 退出码 2</td><td>口径④</td><td><code>CKPT_NO_DEFAULT=PASS exit=2</code></td></tr>
+<tr><td>翻译不改行为</td><td>dev 上 <code>pytest -m 'not slow'</code> 通过、失败、跳过数与 S2-0 后的 <code>BASE1</code> 逐项相等</td><td>只改了字符串，没改逻辑</td><td><code>TRANSLATE_EQ=PASS passed=&lt;n&gt; base=&lt;n&gt;</code></td></tr>
+<tr><td>main 能跑</td><td>scratchpad 下干净 clone、<code>uv sync</code>、dummy 1 任务 × 1 档 × 1 局、pytest</td><td>别人照 README 能跑起来</td><td><code>PUBLIC_SMOKE=PASS model=dummy episodes=1 exit=0 tests_passed=&lt;n&gt;</code></td></tr>
+<tr><td>同步可用</td><td>dev 改一行英文注释后同步，main 多一个带 <code>Dev-Source:</code> 的提交；再同步一次得 NOOP</td><td>同步脚本两条路径都走通</td><td><code>SYNC_MAIN=PASS changed=1</code> 与 <code>SYNC_MAIN=NOOP</code></td></tr>
+</table>
+
+<h2>八、步骤</h2>
+<table>
+<tr><th>阶段</th><th>内容</th><th>判据</th></tr>
+<tr><td>S1</td><td>建 <code>dev</code>（= 当前 main），push；本机切到 <code>dev</code>；记 <code>OLD_MAIN=$(git rev-parse origin/main)</code>。<b>默认分支不动</b></td><td><code>dev</code> 与 <code>OLD_MAIN</code> 同 sha</td></tr>
+<tr><td>S2-0</td><td>主会话：包改名、发行名、<code>uv lock</code>、<code>uv sync</code>、全量短测；commit 1.22、push dev；记 <code>BASE1</code></td><td><code>RENAME_CLEAN=PASS</code>；通过数与改名前相等</td></tr>
+<tr><td>S2 第一波</td><td>并行：A1 ckpt 接口 + <code>evaluate.py</code> 翻译；T0 测试拆分（不翻译）；D dev 侧显式传 ckpt。主会话同时写同步工具、凭据与子模块检查、两份 Action、LICENSE、<code>AGENTS.md</code> 覆盖项</td><td>各自 worktree 验收 + 合并前后两次审查</td></tr>
+<tr><td>S2 第二波</td><td>A2：<code>src</code> 全部翻译 + 测试里引用这些原文的断言（独占 <code>src/</code> 与 <code>tests/</code>）</td><td>全量短测通过数 == <code>BASE1</code></td></tr>
+<tr><td>S2 第三波</td><td>并行：T1～T4 按目录翻译进 main 的测试。主会话写 README、生成清单、<code>pyproject.toml</code> 的 <code>testpaths</code>、首跑闸门</td><td><code>PUBLIC_LANG</code>／<code>PATHS</code>／<code>MANIFEST</code>／<code>CKPT_NO_DEFAULT</code>／<code>TRANSLATE_EQ</code> 全 PASS</td></tr>
+<tr><td>S3 前置</td><td>逐项核对，<b>不与任何操作并批</b>：S2 全部合并且 <code>POST_MERGE_REVIEW=PASS</code>、已 push；上一行五条判定行 PASS；<code>PUBLIC_SECRETS=PASS</code>；<code>SUBMODULE_PUBLIC=PASS</code>；<code>git ls-remote origin refs/heads/main</code> 等于 <code>OLD_MAIN</code></td><td>全部满足才进 S3</td></tr>
+<tr><td>S3</td><td>旧 main 打 tag <code>private-main-20261009</code> 并 push；建孤儿 main，按清单填入；<code>--force-with-lease=main:&lt;OLD_MAIN&gt;</code> 推上去（口径②，唯一一次）；本地 <code>main</code> 改跟新的 <code>origin/main</code>，工作副本留在 dev</td><td><code>PUBLIC_MANIFEST=PASS extra=0</code>；tag 指向 <code>OLD_MAIN</code></td></tr>
+<tr><td>S4</td><td>干净 clone 验收 main（只读，期间不动 main）</td><td><code>PUBLIC_SMOKE=PASS</code>，判定行记下 main 的 sha</td></tr>
+<tr><td>S5</td><td>同步演练：本机脚本跑两次（一次有改动、一次 NOOP）；看 main 上 <code>public-gate</code> 变绿</td><td><code>SYNC_MAIN=PASS changed=1</code>、<code>SYNC_MAIN=NOOP</code></td></tr>
+<tr><td>S6</td><td>分支保护（main、dev）→ 仓库改 PUBLIC，按序串行（都是对同一仓库设置的写入）；改 PUBLIC 前当场再问你一次</td><td>PUBLIC；<code>public-gate</code> 绿</td></tr>
+</table>
+
+<h2>九、子代理分工与合并（简述）</h2>
+<p>S2 分三波，每波内部并行、波与波之间串行，因为后一波依赖前一波合并后的代码：</p>
+<ul>
+<li><b>改名（主会话）</b>：牵连 89 个文件，切不开，主会话先做完并推送，作为所有子代理的起点。</li>
+<li><b>第一波，三块并行</b>：A1 只改 ckpt 相关的 6 个 <code>src</code> 文件和 <code>evaluate.py</code>，并新增一个 ckpt 测试；T0 只动 <code>tests/</code>，把 8 个辅助模块拆成公开与 dev 两半、把 3 个混合测试拆开，不翻译；D 只动 <code>dev-scripts/gl</code> 与 <code>dev-scripts/orig</code>。三块文件不重叠，主会话同时写 <code>dev-scripts/release/</code>、Action、LICENSE。</li>
+<li><b>第二波，一块</b>：A2 翻译全部 <code>src</code>，并顺手改测试里断言这些原文的地方。翻译和断言必须一起改，所以只派一个子代理，这一波没人碰 <code>tests/</code>。</li>
+<li><b>第三波，四块并行</b>：T1～T4 按测试目录分片，翻译进 main 的 27 个测试及其辅助。主会话写 README 与清单。</li>
+</ul>
+<p>合并顺序：第一波 A1 → T0 → D，第二波 A2，第三波 T1 → T4。每个分支合并前，主会话核对改动文件不越界，在 worktree 里复跑验收，再派<b>一个</b> Sonnet 审查子代理逐个提交审「只改了自己的文件、没改逻辑、前缀与说明合规」；合并后主会话跑全量短测与闸门，过了才推送、才合下一个。逐文件清单与分配表见第二部分。</p>
+
+<h1>第二部分（技术细节，供 agent 追踪）</h1>
+
+<h2>〇、红线</h2>
+<ol>
+<li>R0-1 不动 <code>third_party/*</code> 的 gitlink、<code>.gitmodules</code> 的 url 与 branch；不动 benchmark 仓；受保护目录 <code>third_party/robomme_benchmark/src/robomme/</code> 不进任何可写集合。工作区里 <code>third_party/SimpleMemVLA</code> 子模块内部的未提交改动不属本方案，不碰；clean 判定一律用 <code>git status --short --ignore-submodules=dirty -- . ':!docs/subagent-stats'</code>。</li>
+<li>R0-2 不改数据集名 <code>hard-verify</code>／<code>ood</code>、任务名、<code>log.json</code> 字段、任何判定行的键名与取值。</li>
+<li>R0-3 翻译不改逻辑：<code>TRANSLATE_EQ</code> 不等即 FAIL 交回。</li>
+<li>R0-4 强推只有 S3 那一次、只对 main、只用 <code>--force-with-lease=main:&lt;OLD_MAIN&gt;</code>，前置清单全过才执行；其余推送一律快进，被拒即停、原始报错交你。</li>
+<li>R0-5 子代理只写分配表内的文件；主检出唯一写者是主会话；<code>pyproject.toml</code>、<code>uv.lock</code>、gitlink 一律归主会话。</li>
+<li>R0-6 不在 main 上直接提交；main 只由 <code>sync_to_main.sh</code> 写（S3 的初始提交除外）。</li>
+<li>R0-7 同步脚本逐个路径暂存（<code>git add --pathspec-from-file</code> 喂清单、<code>git rm --pathspec-from-file</code> 喂待删列表），禁止 <code>git add -A</code>、<code>git add .</code>（口径⑬）。</li>
+<li>R0-8 Action 不持有写权限（<code>contents: read</code>），不推送任何分支。</li>
+<li>R0-9 凭据扫描命中（白名单外）即停，不自行改写历史、不自行判定为误报。</li>
+</ol>
+
+<h2>一、逐文件改动清单</h2>
+<table>
+<tr><th>文件</th><th>阶段 / 归属</th><th>改什么</th></tr>
+<tr><td><code>src/robomme_hard_eval/</code> → <code>src/robomme_ood_eval/</code> 及全仓 88 个文件的引用（排除 <code>docs/validation/</code>）</td><td>S2-0 主会话</td><td><code>git mv</code>；逐文件替换；<code>dev-scripts/gl/run_eval_gl.sh</code> 的起跑检查改新路径与新字段名；<code>CLAUDE.md</code>「项目专属补充」的打印对象改新名</td></tr>
+<tr><td><code>pyproject.toml</code>、<code>uv.lock</code></td><td>S2-0 主会话</td><td><code>name = "robomme-ood-eval"</code>、<code>packages = ["src/robomme_ood_eval"]</code>；<code>uv lock</code>；<code>uv sync</code></td></tr>
+<tr><td><code>src/robomme_ood_eval/servers/__init__.py</code></td><td>A1</td><td>删 <code>DEFAULT_CKPTS</code> 及其说明；新增 <code>require_ckpt(cfg, model) -&gt; Path</code>：<code>cfg.get("ckpt")</code> 为空抛 <code>ValueError("--ckpt is required for model &lt;name&gt;")</code></td></tr>
+<tr><td><code>models/framesamp_modul.py::load_mme_vla_server</code>、<code>models/smvla.py::load</code>、<code>models/pp.py::__init__</code></td><td>A1</td><td><code>cfg.get("ckpt") or DEFAULT_CKPTS[model]</code> → <code>_servers.require_ckpt(cfg, model)</code></td></tr>
+<tr><td><code>src/robomme_ood_eval/policy.py::Policy</code>、<code>models/groundsg.py</code></td><td>A1</td><td>类属性 <code>requires_ckpt: bool</code>，基类 False；FrameSamp+Modulation、GroundSG、SimpleMemVLA、PonderPounce 置 True</td></tr>
+<tr><td><code>src/robomme_ood_eval/models/__init__.py</code></td><td>A1</td><td>导出 <code>MODELS_REQUIRING_CKPT = {name for name, cls in MODELS.items() if cls.requires_ckpt}</code></td></tr>
+<tr><td><code>scripts/evaluate.py</code></td><td>A1</td><td><code>make_cfg</code> 后：<code>args.model in MODELS_REQUIRING_CKPT and "ckpt" not in cfg</code> → <code>parser.error(...)</code>；<code>--ckpt</code> 的 help 列出需要它的模型；全文翻译成英文（这个文件只有 A1 写）</td></tr>
+<tr><td><code>tests/unit_eval/test_ckpt_required.py</code>（新）</td><td>A1</td><td>不带 <code>--ckpt</code> 调 <code>evaluate.main</code> 得 <code>SystemExit(2)</code>；dummy 不报错；直接调三个模型的加载函数得 <code>ValueError</code>。英文</td></tr>
+<tr><td><code>tests/_support/loaders.py</code> → 拆出 <code>tests/_support/dev_loaders.py</code></td><td>T0</td><td>公开版只保留解析到 <code>src/</code> 与 <code>scripts/</code> 的映射，文件里不出现 <code>dev-scripts</code> 字样；dev 版 import 公开版并补上全部 <code>dev-scripts</code> 映射与表外回退，所有 dev 测试改从 <code>dev_loaders</code> 导入 <code>load_script</code></td></tr>
+<tr><td><code>tests/pipeline/eval/eval_fakes.py</code> → 拆出 <code>eval_fakes_dev.py</code></td><td>T0</td><td>公开版留 <code>env_session</code>、<code>framesamp_modul_client</code>、<code>smvla_client</code>、<code>smvla_server</code>、<code>episode_mod</code>、各 <code>Fake*</code>、<code>Plan</code>、<code>World</code>、<code>frame</code>、<code>sha_bytes</code>、<code>hard_specs</code>、<code>real_builder</code>、<code>packaged_identity</code>、<code>hard0_identity</code> 等；dev 版放 <code>env_client</code>、<code>eval_report</code>、<code>eval_manifest</code>、<code>seat_args</code>、<code>make_runner</code>、<code>write_manifest</code>、<code>run_report</code>、<code>Stage</code>、<code>seat_dir</code>、<code>queue_dir</code>、<code>seat_ledger</code>、<code>seat_results</code>、<code>run_rows</code>（名字清单来自 Haiku 核查，T0 以实际 import 为准）</td></tr>
+<tr><td><code>tests/pipeline/evalx/groundsg/groundsg_fakes.py</code> → 拆出 <code>groundsg_fakes_dev.py</code></td><td>T0</td><td>dev 版放 <code>official_hard_runner</code>、<code>OrigSide</code>、<code>env_client</code>，以及依赖 <code>OrigSide</code> 的 <code>diffs</code> 用法</td></tr>
+<tr><td><code>tests/pipeline/evalx/report/sgx_report_fixtures.py</code> → 拆出 <code>sgx_report_fixtures_dev.py</code></td><td>T0</td><td>dev 版只放 <code>g2()</code></td></tr>
+<tr><td><code>tests/pipeline/evalx/report/trace_contract.py</code></td><td>T0</td><td><code>_render()</code> 改为直接导入 <code>robomme_ood_eval.record.official_render</code>（<code>load_trace</code> 的实现本就在 <code>src</code>），不再经 <code>dev-scripts/media/render_official_video.py</code>；之后整文件进 main</td></tr>
+<tr><td><code>parity_fixtures.py</code>、<code>gen_world.py</code>、<code>site_world.py</code>、<code>mutation/**</code>、<code>seat_fake_engine.py</code>、<code>pp_fakes.py</code>、<code>entry_bootstrap.py</code> 等</td><td>T0</td><td>不拆，整文件留 dev（其使用者全部留 dev）；只把 <code>load_script</code> 的导入改到 <code>dev_loaders</code></td></tr>
+<tr><td>三个混合测试：<code>test_eval_recorder.py</code>、<code>test_groundsg_context.py</code>、<code>test_groundsg_memer.py</code></td><td>T0</td><td>dev 用例分别移到新文件 <code>test_eval_recorder_seat.py</code>、<code>test_groundsg_context_seat.py</code>、<code>test_groundsg_memer_orig.py</code>（留 dev）；原文件只剩只测 <code>src</code> 的用例（进 main）。用例总数不变</td></tr>
+<tr><td>进 main 的 27 个测试中引用上述辅助的</td><td>T0</td><td>改从公开版辅助导入</td></tr>
+<tr><td><code>tests/README.md</code>、<code>contracts.delta.json</code>、<code>mutants.json</code> 等数据文件</td><td>T0 定去向，T1～T4 翻译</td><td>跟随其读取者：被进 main 的测试读取就进 main 并翻译中文值，否则留 dev</td></tr>
+<tr><td><code>src/robomme_ood_eval/**</code> 全部 22 个文件</td><td>A2</td><td>翻译注释、docstring、日志、报错；测试里断言这些原文的地方同步改；判定行不动</td></tr>
+<tr><td>进 main 的测试与公开辅助、数据文件（约 45 个）</td><td>T1～T4</td><td>翻译剩余中文（注释、docstring、本地字符串、数据值）；断言里的 <code>src</code> 原文已由 A2 改好，不再动</td></tr>
+<tr><td><code>dev-scripts/gl/ckpt_paths.sh</code>（新，只在 dev）</td><td>D</td><td>三个 <code>export CKPT_&lt;MODEL&gt;=&lt;原路径&gt;</code>，路径原样搬自现 <code>DEFAULT_CKPTS</code></td></tr>
+<tr><td><code>dev-scripts/gl/run_eval_gl.sh</code>、<code>seat_media_lib.sh</code>、<code>dev-scripts/orig/*.sh</code></td><td>D</td><td>source <code>ckpt_paths.sh</code>，调 <code>seat.py</code>／<code>evaluate.py</code> 时显式传 <code>--ckpt</code></td></tr>
+<tr><td><code>dev-scripts/release/check_public_lang.py</code>、<code>check_public_paths.py</code>、<code>check_manifest.py</code>、<code>check_secrets.py</code>（新）</td><td>主会话（第一波）</td><td>正则与判定行见第一部分「七」；<code>check_secrets.py</code> 的 <code>sk-</code> 规则用 <code>(?&lt;![A-Za-z0-9])sk-</code>，白名单恰两条；子模块检查并入 <code>check_manifest.py</code> 的 <code>--submodules</code> 子命令，输出 <code>SUBMODULE_PUBLIC=</code></td></tr>
+<tr><td><code>dev-scripts/release/sync_to_main.sh</code>（新）</td><td>主会话（第一波）</td><td>八步，见下文「同步脚本步骤」</td></tr>
+<tr><td><code>dev-scripts/release/public-manifest.txt</code>（新）</td><td>主会话（第三波）</td><td>逐文件路径、不写通配；由 <code>git ls-files</code> 的 <code>src/</code>、<code>scripts/evaluate.py</code>、<code>envs/</code>、根目录声明文件、<code>LICENSE</code>、<code>readme.md</code>、<code>.github/workflows/public-gate.yml</code>，加 T0 交回的公开测试、辅助与数据清单生成</td></tr>
+<tr><td><code>.github/workflows/public-gate.yml</code>（新，两边都有）</td><td>主会话（第一波）</td><td><code>on: push: branches: [main]</code>；<code>permissions: contents: read</code>；checkout（带子模块）→ 内联 grep 扫 CJK 与私有路径（文件里不出现 <code>dev-scripts</code> 字样，用拼接或字符类写正则）→ <code>uv sync</code> → pytest</td></tr>
+<tr><td><code>.github/workflows/dev-gate.yml</code>（新，只在 dev）</td><td>主会话（第一波）</td><td><code>on: push: branches: [dev]</code>；<code>contents: read</code>；跑三道闸门脚本，任一 FAIL 即红</td></tr>
+<tr><td><code>pyproject.toml</code> 注释与 <code>[tool.pytest.ini_options] testpaths</code>、<code>.gitignore</code> 注释</td><td>主会话（第三波）</td><td>注释英文；<code>testpaths</code> 保持 <code>tests</code>（dev 的测试在 main 上不存在，pytest 只收存在的文件）</td></tr>
+<tr><td><code>readme.md</code></td><td>主会话（第三波，A1、A2 合并后）</td><td>英文：定位；安装（<code>git clone --recurse-submodules</code>、<code>uv sync</code>、三个 <code>envs/</code> 用 <code>UV_PROJECT_ENVIRONMENT</code>）；<code>evaluate.py</code> 用法；每个模型 <code>--ckpt</code> 指到哪一级、目录里要有什么（不写下载来源）；产物树；退出码 0/2/3/5；dev 分支一句话说明</td></tr>
+<tr><td><code>LICENSE</code></td><td>主会话（第一波）</td><td>复制 <code>third_party/robomme_benchmark/LICENSE</code></td></tr>
+<tr><td><code>AGENTS.md</code>「对正本的覆盖项」</td><td>主会话（第一波）</td><td>加：覆盖第 1 条——<code>public-manifest.txt</code> 内文件为公开面，一律英文；加：main 只由 <code>sync_to_main.sh</code> 写；加：同步脚本的逐路径暂存是第 11 条下的既定做法</td></tr>
+<tr><td><code>docs/validation/legacy-names.md</code></td><td>S2-0 主会话</td><td>加一行改名记录；留档内历史命令原文不改</td></tr>
+</table>
+
+<h3>同步脚本步骤（<code>sync_to_main.sh</code>）</h3>
+<ol>
+<li><b>前置</b>：当前分支 <code>dev</code>；clean 判定为空；<code>HEAD == origin/dev</code>。</li>
+<li><b>闸门</b>：<code>check_public_lang.py</code>、<code>check_public_paths.py</code>、<code>check_manifest.py</code> 全 PASS。</li>
+<li><b>短测</b>：<code>uv run --no-sync python -m pytest $(清单内测试文件) -q</code>。</li>
+<li><b>取 main</b>：<code>git worktree add --detach &lt;scratch&gt;/main-sync origin/main</code>；<code>git -C &lt;wt&gt; log -1 --format=%B</code> 必须含 <code>Dev-Source:</code>，否则停。</li>
+<li><b>复制与暂存</b>：<code>git archive HEAD -- $(cat manifest) | tar -x -C &lt;wt&gt;</code>（取的是已提交字节）；待删 = <code>git -C &lt;wt&gt; ls-files</code> 减去清单，喂给 <code>git -C &lt;wt&gt; rm -q --pathspec-from-file=-</code>；新增与修改喂给 <code>git -C &lt;wt&gt; add --pathspec-from-file=manifest</code>；5 个 gitlink 用 <code>update-index --cacheinfo 160000,&lt;sha&gt;,&lt;path&gt;</code> 对齐 dev。</li>
+<li><b>无差异</b>：<code>git -C &lt;wt&gt; diff --cached --quiet</code> 为真 → 打印 <code>SYNC_MAIN=NOOP</code>，跳到第 8 步。</li>
+<li><b>提交与推送</b>：commit「Sync from dev @&lt;短 sha&gt;: &lt;dev 最新 subject 的英文摘要，由你给或我拟&gt;」+ 尾行 <code>Dev-Source: &lt;完整 sha&gt;</code>；<code>git -C &lt;wt&gt; push origin HEAD:main</code>（快进，被拒即停）。</li>
+<li><b>收尾</b>：<code>git worktree remove &lt;wt&gt;</code>；打印 <code>SYNC_MAIN=PASS dev=&lt;sha&gt; main=&lt;sha&gt; files=&lt;n&gt; changed=&lt;m&gt;</code>。<code>--dry-run</code> 执行到第 6 步止。</li>
+</ol>
+
+<h2>二、子代理分配表</h2>
+<table>
+<tr><th>编号</th><th>模型</th><th>目标</th><th>可写集合</th><th>禁触</th><th>接口契约与依赖</th><th>合并顺序</th><th>验收命令与判定行</th><th>资源</th></tr>
+<tr><td>S2-0</td><td>主会话</td><td>包改名、发行名、重 lock</td><td>除 <code>docs/validation/</code>（只许改 <code>legacy-names.md</code>）与 <code>third_party/</code> 外，含旧名的 88 个文件；<code>pyproject.toml</code>、<code>uv.lock</code></td><td><code>third_party/</code>、<code>docs/validation/</code> 历史留档</td><td>切不开（牵连全仓）；完成后记 <code>BASE1</code></td><td>最先</td><td><code>RENAME_CLEAN=PASS</code>；<code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code> 通过数与改名前相等</td><td>CPU</td></tr>
+<tr><td>S2-A1</td><td>opus</td><td>ckpt 接口 + <code>evaluate.py</code> 翻译</td><td><code>src/robomme_ood_eval/servers/__init__.py</code>、<code>policy.py</code>、<code>models/__init__.py</code>、<code>models/framesamp_modul.py</code>、<code>models/smvla.py</code>、<code>models/pp.py</code>、<code>models/groundsg.py</code>、<code>scripts/evaluate.py</code>、新文件 <code>tests/unit_eval/test_ckpt_required.py</code></td><td>上列以外一切，尤其 <code>tests/</code> 其余文件、<code>dev-scripts/</code></td><td>提供 <code>require_ckpt</code>、<code>requires_ckpt</code>、<code>MODELS_REQUIRING_CKPT</code>（名字在本表定死）；<code>src</code> 里只改 ckpt 相关行，其余翻译留给 A2</td><td>第一波 1</td><td>worktree 内全量 <code>pytest -m 'not slow'</code> 通过数 == <code>BASE1</code> + 新增用例数；<code>git grep -n DEFAULT_CKPTS</code> 零命中；<code>python scripts/evaluate.py --help</code> 输出零 CJK；不带 <code>--ckpt</code> 跑 smvla 退出码 2</td><td>CPU</td></tr>
+<tr><td>S2-T0</td><td>opus</td><td>测试拆分，不翻译</td><td><code>tests/**</code>（除 <code>tests/unit_eval/test_ckpt_required.py</code>）</td><td><code>src/</code>、<code>scripts/</code>、<code>dev-scripts/</code></td><td>按第二部分「一」拆 8 个辅助、3 个混合测试；交回表「文件 / 去向 main|dev / 理由」，与第二部分「四」对账，不一致处说明</td><td>第一波 2</td><td>全量 <code>pytest -m 'not slow'</code> 通过数与用例总数 == <code>BASE1</code>；对每个进 main 的测试文件做 import 闭包检查，闭包内零 <code>*_dev</code>、零 <code>dev_loaders</code>；公开辅助文件 <code>grep -c dev-scripts</code> 为 0</td><td>CPU</td></tr>
+<tr><td>S2-D</td><td>opus</td><td>dev 侧显式传 ckpt</td><td><code>dev-scripts/gl/**</code>、<code>dev-scripts/orig/**</code></td><td><code>src/</code>、<code>scripts/</code>、<code>tests/</code>、<code>dev-scripts/release/</code></td><td>新建 <code>ckpt_paths.sh</code>；不依赖 A1 是否合并（显式传参在有无默认时都成立）</td><td>第一波 3</td><td>全部 <code>.sh</code> 过 <code>bash -n</code>；<code>tests/pipeline/eval/test_seat_scripts.py</code> 等席位脚本测试通过；对照清单逐个调用点都有 <code>--ckpt</code></td><td>CPU</td></tr>
+<tr><td>主会话（第一波）</td><td>主会话</td><td>同步与检查工具、Action、LICENSE、覆盖项</td><td><code>dev-scripts/release/**</code>、<code>.github/**</code>、<code>LICENSE</code>、<code>AGENTS.md</code></td><td>子代理的可写集合</td><td>与三块子代理并行；不依赖它们</td><td>第一波末，三块合完后提交</td><td>各脚本对当前 dev 跑一遍能出判定行（此时 <code>PUBLIC_LANG</code> 预期 FAIL，只验脚本本身）；<code>PUBLIC_SECRETS=PASS</code>；<code>SUBMODULE_PUBLIC=PASS</code></td><td>CPU</td></tr>
+<tr><td>S2-A2</td><td>opus</td><td><code>src</code> 全部翻译</td><td><code>src/robomme_ood_eval/**</code>；<code>tests/**</code> 中仅限断言 <code>src</code> 原文的行</td><td><code>scripts/</code>、<code>dev-scripts/</code></td><td>基于第一波合并后的 dev；本波独占 <code>tests/</code>；判定行不动</td><td>第二波</td><td>全量短测通过数 == 第一波后的基线；<code>check_public_lang.py --paths src</code> 零命中；对 <code>dev-scripts</code> 做一次 grep，确认没有脚本按中文日志原文做匹配（今天预扫 62 个文件与 <code>src</code> 有共同中文片段，均为注释与说明里的常用词，由 A2 逐条确认）</td><td>CPU</td></tr>
+<tr><td>S2-T1</td><td>opus</td><td>翻译 <code>tests/unit_eval</code>、<code>tests/static</code>、根目录、<code>tests/_support</code> 的公开文件</td><td>这些目录下进 main 的文件</td><td>其余一切</td><td>不改断言里的 <code>src</code> 原文</td><td>第三波 1</td><td><code>check_public_lang.py --paths &lt;本片文件&gt;</code> 零命中；本片测试全过</td><td>CPU</td></tr>
+<tr><td>S2-T2</td><td>opus</td><td>翻译 <code>tests/pipeline/eval</code> 的公开文件</td><td>同上</td><td>其余一切</td><td>同上</td><td>第三波 2</td><td>同上</td><td>CPU</td></tr>
+<tr><td>S2-T3</td><td>opus</td><td>翻译 <code>tests/pipeline/evalx/astra</code>、<code>evalx/pp</code> 的公开文件</td><td>同上</td><td>其余一切</td><td>同上</td><td>第三波 3</td><td>同上</td><td>CPU</td></tr>
+<tr><td>S2-T4</td><td>opus</td><td>翻译 <code>tests/pipeline/evalx/groundsg</code>、<code>evalx/report</code> 的公开文件</td><td>同上</td><td>其余一切</td><td>同上</td><td>第三波 4</td><td>同上</td><td>CPU</td></tr>
+<tr><td>主会话（第三波）</td><td>主会话</td><td>README、清单、<code>pyproject.toml</code> 注释、首跑闸门</td><td><code>readme.md</code>、<code>dev-scripts/release/public-manifest.txt</code>、<code>pyproject.toml</code>、<code>.gitignore</code></td><td>T1～T4 的可写集合</td><td>README 依赖 A1、A2 合并后的行为；清单依赖 T0 交回表</td><td>T1～T4 合完后</td><td>五条判定行全 PASS（见步骤表 S2 第三波）</td><td>CPU</td></tr>
+<tr><td>合并前审查</td><td>sonnet</td><td>每个分支一个，只读</td><td>无</td><td>一切</td><td>钉 <code>REVIEW_BASE</code>／<code>REVIEW_TIP</code> 两个完整 sha</td><td>每次合并前</td><td><code>PRE_MERGE_REVIEW=PASS|FAIL base= tip= files= commits= findings=</code></td><td>—</td></tr>
+</table>
+<p><b>worktree 环境取法</b>（照抄 <code>CLAUDE.md</code>「项目专属补充」，改名后）：<code>UV_PROJECT_ENVIRONMENT=/data/hongzefu/RoboMME-benchmark-OOD-eval/.venv PYTHONPATH=&lt;worktree&gt;/src:/data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src uv run --no-sync python -m pytest &lt;定向测试&gt; -q</code>；第一条命令打印 <code>robomme_ood_eval.__file__</code>，必须以 <code>&lt;worktree&gt;/src/</code> 开头。所有验收只跑 CPU 测试，≤5 分钟。</p>
+<p><b>共享文件归属</b>：<code>scripts/evaluate.py</code> 只归 A1；<code>tests/unit_eval/test_ckpt_required.py</code> 只归 A1；<code>tests/**</code> 第一波归 T0、第二波归 A2（限断言行）、第三波按目录归 T1～T4；<code>pyproject.toml</code>、<code>uv.lock</code>、gitlink 只归主会话。同一波内无重叠。</p>
+<p><b>派发前核对</b>（任一不满足不派）：全局与项目级 <code>worktree.baseRef</code> 为 <code>"head"</code>（今天已核实全局为 <code>head</code>）；clean 判定为空；<code>git check-ignore -q .claude/worktrees/probe</code> 成功；<code>git worktree list</code> 存档。</p>
+
+<h2>三、闸门总表</h2>
+<table>
+<tr><th>判定行</th><th>在哪跑</th><th>何时</th></tr>
+<tr><td><code>RENAME_CLEAN=PASS hits=0 pkg_in_repo=1</code></td><td>dev 主检出</td><td>S2-0</td></tr>
+<tr><td><code>PUBLIC_LANG=PASS files=&lt;n&gt; cjk_hits=0</code></td><td>dev 主检出；同步脚本；两份 Action</td><td>S2 收尾、每次同步、每次 push</td></tr>
+<tr><td><code>PUBLIC_PATHS=PASS hits=0</code></td><td>同上</td><td>同上</td></tr>
+<tr><td><code>PUBLIC_MANIFEST=PASS listed=&lt;n&gt; missing=0 extra=0 collected=27 gitlinks=5</code></td><td>dev 主检出；同步脚本；dev-gate</td><td>S2 收尾、每次同步</td></tr>
+<tr><td><code>PUBLIC_SECRETS=PASS commits=&lt;n&gt; hits=0 allowlisted=&lt;m&gt;</code></td><td>dev 主检出（扫全部 ref 的全部历史）</td><td>S2 第一波、S3 前置、S6 前</td></tr>
+<tr><td><code>SUBMODULE_PUBLIC=PASS repos=5 public=5 reachable=5</code></td><td>dev 主检出</td><td>S3 前置、S6 前</td></tr>
+<tr><td><code>CKPT_NO_DEFAULT=PASS exit=2</code></td><td>dev 主检出</td><td>A1 合并后</td></tr>
+<tr><td><code>TRANSLATE_EQ=PASS passed=&lt;n&gt; base=&lt;n&gt;</code></td><td>dev 主检出</td><td>每次合并后、S2 收尾</td></tr>
+<tr><td><code>PUBLIC_SMOKE=PASS model=dummy episodes=1 exit=0 tests_passed=&lt;n&gt;</code></td><td>scratchpad 干净 clone</td><td>S4</td></tr>
+<tr><td><code>SYNC_MAIN=PASS|NOOP dev=&lt;sha&gt; main=&lt;sha&gt; files=&lt;n&gt; changed=&lt;m&gt;</code></td><td>同步脚本末行</td><td>S5、此后每次同步</td></tr>
+<tr><td><code>POST_MERGE_REVIEW=PASS merge=&lt;sha&gt; tests=&lt;结果&gt; files=&lt;n&gt;</code></td><td>dev 主检出</td><td>每次合并后</td></tr>
+</table>
+
+<h2>四、测试分流表（逐文件，98 个测试文件）</h2>
+<p>判定方法：先按「是否直接写 <code>dev-scripts</code>／是否经 <code>load_script</code> 解析到 <code>dev-scripts</code>／是否含私有路径」机械分出 A（16 个，原样进 main）、C（50 个，只能留 dev）、B（32 个，只因引用了公共辅助模块才沾到 dev）；再由四个 Haiku 子代理逐个读 B 类文件的被测对象，主会话抽查了其中判为 main 的 7 个。结果：B 类 11 个进 main（含 3 个拆用例），21 个留 dev。T0 实施时以实际 import 为准对账。</p>
+<table>
+<tr><th>#</th><th>测试文件（tests/ 下）</th><th>去向</th><th>依据与处理</th></tr>
+<tr><td>1</td><td><code>pipeline/eval/test_env_session.py</code></td><td>main</td><td>改从 eval_fakes 公开部分导入</td></tr>
+<tr><td>2</td><td><code>pipeline/eval/test_eval_entries.py</code></td><td>main</td><td>被测对象是 benchmark 子模块的官方入口；改从 eval_fakes 公开部分导入</td></tr>
+<tr><td>3</td><td><code>pipeline/eval/test_framesamp_modul_transport.py</code></td><td>main</td><td>改从 eval_fakes 公开部分导入</td></tr>
+<tr><td>4</td><td><code>pipeline/eval/test_smvla_server_protocol.py</code></td><td>main</td><td>改从 eval_fakes 公开部分导入</td></tr>
+<tr><td>5</td><td><code>pipeline/eval/test_smvla_server_units.py</code></td><td>main</td><td>改从 eval_fakes 公开部分导入</td></tr>
+<tr><td>6</td><td><code>pipeline/evalx/astra/test_astra_cost_guard.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>7</td><td><code>pipeline/evalx/astra/test_astra_policy.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>8</td><td><code>pipeline/evalx/astra/test_astra_stage3.py</code></td><td>main</td><td>只用 trace_contract.contract_problems，走公开部分</td></tr>
+<tr><td>9</td><td><code>pipeline/evalx/astra/test_astra_stop_rules.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>10</td><td><code>pipeline/evalx/astra/test_run_astra_script.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>11</td><td><code>pipeline/evalx/groundsg/test_groundsg_episode_id.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>12</td><td><code>pipeline/evalx/pp/test_pp_server_wrap.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>13</td><td><code>pipeline/evalx/report/test_sgx_trace_writer.py</code></td><td>main</td><td>改从 sgx_report_fixtures 公开部分导入</td></tr>
+<tr><td>14</td><td><code>pipeline/evalx/report/test_trace_contract.py</code></td><td>main</td><td>trace_contract._render 改为直接导入 src 的 record/official_render（不经 dev-scripts/media）</td></tr>
+<tr><td>15</td><td><code>static/test_package.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>16</td><td><code>static/test_resource_policy.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>17</td><td><code>static/test_submodule_lock.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>18</td><td><code>test_episode.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>19</td><td><code>unit_eval/test_evaluate_cli.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>20</td><td><code>unit_eval/test_find_ffprobe.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>21</td><td><code>unit_eval/test_models_policies.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>22</td><td><code>unit_eval/test_policy.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>23</td><td><code>unit_eval/test_recorder_av1.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>24</td><td><code>unit_eval/test_session_report.py</code></td><td>main</td><td>原样进（只需翻译）</td></tr>
+<tr><td>25</td><td><code>pipeline/eval/test_eval_recorder.py</code></td><td>main（拆用例）</td><td>test_seat_runner_with_real_recorder_feeds_report 用 dev 的 SeatRunner，移到 dev 侧新文件</td></tr>
+<tr><td>26</td><td><code>pipeline/evalx/groundsg/test_groundsg_context.py</code></td><td>main（拆用例）</td><td>test_policy_context_built_once_per_seat 用 dev 的 SeatRunner，移到 dev 侧新文件</td></tr>
+<tr><td>27</td><td><code>pipeline/evalx/groundsg/test_groundsg_memer.py</code></td><td>main（拆用例）</td><td>POLICY_SEEDS 用例调原侧 official_hard_runner，移到 dev 侧新文件</td></tr>
+<tr><td>28</td><td><code>pipeline/eval/test_attempt_ledger.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>29</td><td><code>pipeline/eval/test_budget_ledger.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>30</td><td><code>pipeline/eval/test_client_replay_eq.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>31</td><td><code>pipeline/eval/test_dataset_routing.py</code></td><td>dev</td><td>测 dev 的 eval_manifest 与 seat</td></tr>
+<tr><td>32</td><td><code>pipeline/eval/test_eval_manifest.py</code></td><td>dev</td><td>经加载器测 dev-scripts：gl/export_eval_identities.py</td></tr>
+<tr><td>33</td><td><code>pipeline/eval/test_eval_report.py</code></td><td>dev</td><td>测 dev 的 eval_report</td></tr>
+<tr><td>34</td><td><code>pipeline/eval/test_eval_video_mover.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>35</td><td><code>pipeline/eval/test_eval_wiring.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>36</td><td><code>pipeline/eval/test_gate2_inputs.py</code></td><td>dev</td><td>含私有路径</td></tr>
+<tr><td>37</td><td><code>pipeline/eval/test_gate2_v75.py</code></td><td>dev</td><td>含私有路径</td></tr>
+<tr><td>38</td><td><code>pipeline/eval/test_identity_contract.py</code></td><td>dev</td><td>测 seat/eval_manifest/eval_report 的 key 函数</td></tr>
+<tr><td>39</td><td><code>pipeline/eval/test_legacy_names.py</code></td><td>dev</td><td>经加载器测 dev-scripts：gl/budget_ledger.py,gl/eval_report.py,gl/seat.py,media/official_media_check.py,o</td></tr>
+<tr><td>40</td><td><code>pipeline/eval/test_official_media_check.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>41</td><td><code>pipeline/eval/test_policy_clients.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>42</td><td><code>pipeline/eval/test_render_expert_demos.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>43</td><td><code>pipeline/eval/test_seat_queue.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>44</td><td><code>pipeline/eval/test_seat_runner_e2e.py</code></td><td>dev</td><td>测 dev 的 SeatRunner</td></tr>
+<tr><td>45</td><td><code>pipeline/eval/test_seat_scripts.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>46</td><td><code>pipeline/eval/test_stage3_counterexamples.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/lang_io_check.py,checks/trace_arrays_check.py,gl/budget_ledger.py</td></tr>
+<tr><td>47</td><td><code>pipeline/eval/test_stage3_entry_budget.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>48</td><td><code>pipeline/eval/test_stage3_seven_routes.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>49</td><td><code>pipeline/evalx/astra/test_astra_wiring.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>50</td><td><code>pipeline/evalx/groundsg/test_groundsg_official_adapter.py</code></td><td>dev</td><td>新旧两侧对比，原侧是 dev 的 official_hard_runner</td></tr>
+<tr><td>51</td><td><code>pipeline/evalx/groundsg/test_groundsg_orig_runner.py</code></td><td>dev</td><td>经加载器测 dev-scripts：orig/official_hard_runner.py</td></tr>
+<tr><td>52</td><td><code>pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>53</td><td><code>pipeline/evalx/groundsg/test_groundsg_websocket.py</code></td><td>dev</td><td>新旧两侧对比，原侧是 dev 的 official_hard_runner</td></tr>
+<tr><td>54</td><td><code>pipeline/evalx/orig_observer/test_orig_observer.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>55</td><td><code>pipeline/evalx/orig_observer/test_step_arrays_merge.py</code></td><td>dev</td><td>经加载器测 dev-scripts：orig/orig_observer/step_arrays.py</td></tr>
+<tr><td>56</td><td><code>pipeline/evalx/pp/test_pp_protocol.py</code></td><td>dev</td><td>经加载器测 dev-scripts：orig/pp_official_runner.py</td></tr>
+<tr><td>57</td><td><code>pipeline/evalx/pp/test_pp_protocol_wire.py</code></td><td>dev</td><td>经加载器测 dev-scripts：orig/pp_official_runner.py</td></tr>
+<tr><td>58</td><td><code>pipeline/evalx/report/test_sgx_cap_probe.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/cap_probe.py</td></tr>
+<tr><td>59</td><td><code>pipeline/evalx/report/test_sgx_gate2_compare.py</code></td><td>dev</td><td>测 dev 的 checks/gate2_compare</td></tr>
+<tr><td>60</td><td><code>pipeline/evalx/report/test_sgx_gate2_lang_host.py</code></td><td>dev</td><td>含私有路径</td></tr>
+<tr><td>61</td><td><code>pipeline/evalx/report/test_sgx_lang_io_check.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/lang_io_check.py</td></tr>
+<tr><td>62</td><td><code>pipeline/evalx/report/test_sgx_model_eval_report.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/model_eval_report.py</td></tr>
+<tr><td>63</td><td><code>pipeline/evalx/report/test_sgx_publish_videos.py</code></td><td>dev</td><td>经加载器测 dev-scripts：gl/publish_videos.py</td></tr>
+<tr><td>64</td><td><code>pipeline/evalx/report/test_sgx_render_official_video.py</code></td><td>dev</td><td>经加载器测 dev-scripts：media/render_official_video.py</td></tr>
+<tr><td>65</td><td><code>pipeline/evalx/report/test_sgx_resource_probe.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/resource_probe.py</td></tr>
+<tr><td>66</td><td><code>pipeline/evalx/report/test_sgx_video_check.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/video_check.py</td></tr>
+<tr><td>67</td><td><code>pipeline/evalx/trace/test_client_language_audit.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/lang_io_check.py</td></tr>
+<tr><td>68</td><td><code>pipeline/evalx/trace/test_merge1_cross_block.py</code></td><td>dev</td><td>经加载器测 dev-scripts：gl/budget_ledger.py,orig/orig_observer/step_arrays.py</td></tr>
+<tr><td>69</td><td><code>pipeline/evalx/trace/test_trace_arrays_language.py</code></td><td>dev</td><td>经加载器测 dev-scripts：checks/trace_arrays_check.py</td></tr>
+<tr><td>70</td><td><code>pipeline/gen/test_eval_identities.py</code></td><td>dev</td><td>经加载器测 dev-scripts：gl/export_eval_identities.py</td></tr>
+<tr><td>71</td><td><code>pipeline/gen/test_freeze.py</code></td><td>dev</td><td>测 dev 的 parity/generate_h5、_rollout、_freeze_min</td></tr>
+<tr><td>72</td><td><code>pipeline/gen/test_rollout_h5_race.py</code></td><td>dev</td><td>经加载器测 dev-scripts：parity/_rollout.py</td></tr>
+<tr><td>73</td><td><code>pipeline/gen/test_rollout_state_machine.py</code></td><td>dev</td><td>测 dev 的 parity/generate_h5、_rollout、_freeze_min</td></tr>
+<tr><td>74</td><td><code>pipeline/gen/test_run_batch.py</code></td><td>dev</td><td>测 dev 的 parity/generate_h5、_rollout、_freeze_min</td></tr>
+<tr><td>75</td><td><code>pipeline/parity/test_declared_renames_bijective.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>76</td><td><code>pipeline/parity/test_env_digest.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>77</td><td><code>pipeline/parity/test_gen_compare.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>78</td><td><code>pipeline/parity/test_gen_regress.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>79</td><td><code>pipeline/parity/test_h5_comparators.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>80</td><td><code>pipeline/parity/test_hard_parity_cli.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>81</td><td><code>pipeline/parity/test_hard_parity_compare.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>82</td><td><code>pipeline/parity/test_hard_parity_smoke.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>83</td><td><code>pipeline/parity/test_hard_regression_pure.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>84</td><td><code>pipeline/parity/test_mover_ship_pull.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>85</td><td><code>pipeline/parity/test_noise_gate_selftest_cli.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>86</td><td><code>pipeline/parity/test_noise_run.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>87</td><td><code>pipeline/parity/test_noise_run_shell.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>88</td><td><code>pipeline/parity/test_parity_configs.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>89</td><td><code>pipeline/parity/test_parity_pins.py</code></td><td>dev</td><td>经加载器测 dev-scripts：parity/gate_set.py</td></tr>
+<tr><td>90</td><td><code>pipeline/parity/test_xhard0_reset_verdict.py</code></td><td>dev</td><td>测 dev 的 parity 工具</td></tr>
+<tr><td>91</td><td><code>pipeline/site/test_site_assets.py</code></td><td>dev</td><td>经加载器测 dev-scripts：site/eval_transcode.py,site/semantic_diff.py,site/subgoal_lengths.py</td></tr>
+<tr><td>92</td><td><code>pipeline/site/test_site_build.py</code></td><td>dev</td><td>经加载器测 dev-scripts：site/site_build.py</td></tr>
+<tr><td>93</td><td><code>pipeline/site/test_site_catalog.py</code></td><td>dev</td><td>经加载器测 dev-scripts：site/semantic_diff.py,site/subgoal_lengths.py</td></tr>
+<tr><td>94</td><td><code>pipeline/site/test_site_semantic_schema.py</code></td><td>dev</td><td>经加载器测 dev-scripts：site/semantic_diff.py,site/site_browser_check.py</td></tr>
+<tr><td>95</td><td><code>pipeline/site/test_site_server.py</code></td><td>dev</td><td>测 dev 的 site/site_server</td></tr>
+<tr><td>96</td><td><code>static/test_entry_scripts.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>97</td><td><code>static/test_inventory.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+<tr><td>98</td><td><code>static/test_official_names.py</code></td><td>dev</td><td>直接测 dev-scripts</td></tr>
+</table>
+
+<h2>五、runbook（阶段顺序，命令形状）</h2>
+<ol>
+<li>S1：<code>git branch dev main</code>；<code>git push -u origin dev</code>；<code>git checkout dev</code>；记 <code>OLD_MAIN=$(git rev-parse origin/main)</code> 进留档。</li>
+<li>S2-0：<code>git mv src/robomme_hard_eval src/robomme_ood_eval</code>；逐文件替换；改 <code>pyproject.toml</code>；<code>uv lock</code>；<code>uv sync</code>；<code>RENAME_CLEAN</code>；全量短测；commit「1.22 包改名 robomme_ood_eval」；push dev；记 <code>BASE1</code>。</li>
+<li>S2 第一波：同一条消息派 A1、T0、D（opus、<code>isolation: "worktree"</code>、<code>sub/S2-A1:</code> 等前缀）；主会话同时写 <code>dev-scripts/release/</code> 与 Action 等。按 A1 → T0 → D 合并：每个先第一次审查（核越界、worktree 复跑验收、sonnet 审查）→ <code>git merge --no-ff &lt;TIP sha&gt;</code> → 第二次审查（全量短测、文件清单核对）→ push。三块合完后主会话提交自己的工具，push。</li>
+<li>S2 第二波：派 A2；同样两次审查后合并、push。</li>
+<li>S2 第三波：同一条消息派 T1～T4；按 T1 → T4 合并；主会话写 README、生成清单、首跑五条判定行；commit、push。</li>
+<li>S3：逐项过前置清单 → <code>git tag private-main-20261009 &lt;OLD_MAIN&gt;</code>；<code>git push origin private-main-20261009</code> → <code>git worktree add --detach &lt;scratch&gt;/orphan</code>，其中 <code>git checkout --orphan main-new</code>、<code>git rm -rq .</code>、按清单 <code>git archive dev -- $(cat manifest) | tar -x</code>、逐路径 add、对齐 5 个 gitlink、commit「Initial public release」+ <code>Dev-Source:</code> → <code>git push --force-with-lease=main:&lt;OLD_MAIN&gt; origin main-new:main</code> → <code>git fetch</code>；<code>git branch -f main origin/main</code>；<code>git branch -u origin/main main</code>；删临时 worktree；本机工作副本仍在 dev。</li>
+<li>S4：scratchpad 下 <code>git clone --branch main --recurse-submodules</code>；<code>UV_LINK_MODE=copy uv sync</code>；dummy 1 任务 × 1 档 × 1 局（2 次 reset，在 P3 阈值内）；pytest；CJK grep。</li>
+<li>S5：dev 改一行英文注释、commit、push；<code>sync_to_main.sh</code> 得 <code>changed=1</code>；再跑一次得 <code>NOOP</code>；看 main 上 <code>public-gate</code>。</li>
+<li>S6：<code>gh api -X PUT repos/hongzefu/RoboMME-benchmark-OOD-eval/branches/main/protection</code>（禁强推、禁删除、不要求 PR），dev 同样；重跑 <code>PUBLIC_SECRETS</code>、<code>SUBMODULE_PUBLIC</code>；问你一次后 <code>gh repo edit --visibility public --accept-visibility-change-consequences</code>。</li>
+</ol>
+
+<h2>六、风险登记</h2>
+<table>
+<tr><th>#</th><th>风险</th><th>处置</th></tr>
+<tr><td>R1</td><td>翻译改了文案，测试断言跟着改，可能掩盖行为变化</td><td><code>TRANSLATE_EQ</code>；审查子代理专查「只改字符串不改逻辑」；文案与断言由 A2 一次改完，审查对得上</td></tr>
+<tr><td>R2</td><td><code>dev-scripts</code> 或 Monitor 过滤词按 <code>src</code> 的中文日志原文匹配，翻译后 GL 盯盘失灵</td><td>判定行本来是 ASCII 且不动；A2 验收含对 <code>dev-scripts</code> 的匹配核查；<code>CLAUDE.md</code> 过滤词表里 <code>全部完成</code> 在 <code>src</code>／<code>scripts</code> 里零命中（已核实），不受影响</td></tr>
+<tr><td>R3</td><td>改名后本机或 GL 的 <code>.venv</code> 残留旧 editable 指向，import 失败</td><td>S2-0 <code>uv sync</code> 并核 <code>__file__</code>；GL 副本在下次评估前 <code>uv sync</code>；<code>run_eval_gl.sh</code> 的起跑检查会在指向不对时拦下</td></tr>
+<tr><td>R4</td><td>dev 侧席位脚本漏传 ckpt，GL 上报「必须给 --ckpt」</td><td>D 的逐调用点核对；下次 GL 评估前先跑 1 局 smoke</td></tr>
+<tr><td>R5</td><td>进 main 的测试经 conftest 或公开辅助间接依赖 dev 文件</td><td>T0 的 import 闭包检查；<code>check_manifest.py</code> 的 collect 检查；S4 干净 clone 兜底</td></tr>
+<tr><td>R6</td><td><code>uv.lock</code> 以 editable 路径依赖子模块，clone 不带子模块则 <code>uv sync</code> 失败</td><td>README 安装第一步写明 <code>--recurse-submodules</code>；S4 按该命令 clone</td></tr>
+<tr><td>R7</td><td>S3 强推时远端 main 已被别处更新</td><td><code>--force-with-lease=main:&lt;OLD_MAIN&gt;</code>，远端不等于预期即拒，拒了停下交你</td></tr>
+<tr><td>R8</td><td>第二波 A2 是单个子代理，是 S2 的最长路径</td><td>为保证文案与断言一致而有意不拆；A2 只翻译不重构，按文件顺序提交多个 <code>sub/S2-A2:</code> 提交便于审查</td></tr>
+</table>
+
+<h2>七、盲区诚实清单</h2>
+<ul>
+<li>测试分流由 Haiku 子代理逐文件读被测对象、主会话抽查 7 个；T0 实施时按实际 import 对账，最终以 S4 干净 clone 的 pytest 为准。</li>
+<li>翻译质量只能靠审查子代理与人工抽读，闸门只保证「没有中文」。</li>
+<li><code>dev</code> 公开后，规则文件、留档里的实验数字、个人邮箱、主机名、集群账户名都会可见，这是口径③的既定结果；凭据扫描只拦密钥类字符串。</li>
+<li>子模块仓库自身的内容（含 fork 分支）不在本次扫描范围（口径⑪）。</li>
+<li>口径①②④⑥⑩的前一会话原话未留存，依据只能写到「前一会话裁决」。</li>
+</ul>
+
+<h2>八、留档与 commit 纪律</h2>
+<ul>
+<li>dev 上 commit 按本仓体例 <code>1.&lt;小版本&gt; 中文描述</code> 接续 1.20；子代理 <code>sub/S2-&lt;编号&gt;:</code> 前缀，<code>--no-ff</code> 合入，合并提交 body 摘录子代理报告与 <code>PRE_MERGE_REVIEW</code> 行；每次合并后 push。</li>
+<li>main 上的提交一律英文，除 S3 的「Initial public release」外只由同步脚本产生，subject「Sync from dev @&lt;sha&gt;: …」，尾行 <code>Dev-Source:</code>。</li>
+<li>实施完成后在 <code>docs/validation/public-split-20261009/</code> 写 <code>result.md</code>：各判定行原文、最终分流表、改名记录、<code>OLD_MAIN</code> 与 tag、用户裁决原话（本稿「已定口径」表逐条搬入）。</li>
+<li>本方案文件开工前先作为 1.21 独立提交入库（移入 <code>docs/plans/</code>），实施记录以子节追加在步骤表之后，不改写原计划。</li>
+</ul>
+
+</body>
+</html>
