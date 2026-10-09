@@ -1,9 +1,12 @@
-"""C13 评估录制器 ``recorder.EpisodeRecorder``（慢，真 ffmpeg）：AV1 4:4:4 有损编码（拆分方案红线 R8）读回帧数、
-逐帧编码前 sha256 与去重映射精确、画面近似（PSNR > 30 dB）、同流重复帧只编一次、reset 阶段只入队、降级档、拒绝覆盖。
-真实录制器接在真实 ``SeatRunner`` 上的用例在 ``test_eval_recorder_seat.py``。
+"""C13 evaluation recorder ``recorder.EpisodeRecorder`` (slow, real ffmpeg): with lossy AV1 4:4:4 encoding (split plan
+red line R8), the read-back frame count, per-frame pre-encoding sha256 and dedup mapping are exact, the image is
+approximate (PSNR > 30 dB), duplicate frames in a stream are encoded only once, the reset phase only queues, degrade
+levels work, and overwriting is refused. Cases with the real recorder attached to a real ``SeatRunner`` are in
+``test_eval_recorder_seat.py``.
 
-文件名带 ``eval_`` 前缀：pytest 默认按文件名导入测试模块，避免与其他目录的同名文件冲突。
-缺支持 libaom-av1 的 ffmpeg 时整文件记「未验证」。
+The file name carries the ``eval_`` prefix: pytest imports test modules by file name by default, so this avoids
+clashing with same-named files in other directories.
+Without an ffmpeg that supports libaom-av1 the whole file is marked "Not verified".
 """
 from __future__ import annotations
 
@@ -23,7 +26,7 @@ def rec_mod():
     try:
         mod.find_ffmpeg()
     except RuntimeError as e:
-        pytest.skip(f"未验证：{e}")
+        pytest.skip(f"Not verified: {e}")
     return mod
 
 
@@ -32,7 +35,7 @@ def _frames(vals, hw=16):
     for v in vals:
         f = np.zeros((hw, hw, 3), dtype=np.uint8)
         f[..., 0] = v
-        f[: hw // 2, :, 1] = 255 - v  # 上下半区不同，避免整帧常数
+        f[: hw // 2, :, 1] = 255 - v  # top and bottom halves differ, so the frame is not constant
         f[:, : hw // 3, 2] = (v * 7) % 256
         out.append(f)
     return np.stack(out)
@@ -44,10 +47,11 @@ def _psnr(a, b) -> float:
 
 
 def test_av1_roundtrip_and_dedup(tmp_path, rec_mod):
-    """AV1 有损（R8）：帧数、逐帧编码前 sha256、去重映射与原始数组精确；画面只近似（PSNR > 30 dB），不再要求逐字节。"""
+    """Lossy AV1 (R8): frame count, per-frame pre-encoding sha256, dedup mapping and raw arrays are exact; the image is
+    only approximate (PSNR > 30 dB) and is no longer required to be byte-identical."""
     r = rec_mod.EpisodeRecorder(tmp_path / "ep", {"never_degrade": True}, free_gib_fn=lambda p: 1e6)
     r.set_phase("reset")
-    front = _frames([1, 2, 3, 2], hw=64)  # 第 4 帧与第 2 帧逐字节相同
+    front = _frames([1, 2, 3, 2], hw=64)  # frame 4 is byte-identical to frame 2
     idx = r.add_frames("front", front, tag="reset")
     r.set_phase("run")
     r.add_frames("front", _frames([9], hw=64), tag="step0")
@@ -59,7 +63,7 @@ def test_av1_roundtrip_and_dedup(tmp_path, rec_mod):
     assert idx == [0, 1, 2, 3]
     assert res["RECORDER_VERIFY"] == "PASS" and res["level"] == 0
     assert res["lossless"] is False and res["raw_codec"] == rec_mod.RAW_CODEC == "av1-yuv444p"
-    assert res["frames"] == 7 and res["encoded_frames"] == 4 + 1  # front 去重后 4、wrist 1
+    assert res["frames"] == 7 and res["encoded_frames"] == 4 + 1  # front: 4 after dedup, wrist: 1
     assert res["decode_mismatch"] == 0 and res["dropped"] == 0 and res["errors"] == []
     assert res["streams"]["front"]["timestamps_ok"] is True and res["streams"]["front"]["decoded"] == 4
     out = tmp_path / "ep"
@@ -69,7 +73,7 @@ def test_av1_roundtrip_and_dedup(tmp_path, rec_mod):
     recs, imgs = rec_mod.load_frames(out, "front")
     assert [x["enc"] for x in recs] == [0, 1, 2, 1, 3]
     allf = np.concatenate([front, _frames([9], hw=64)])
-    assert [x["sha256"] for x in recs] == [rec_mod.frame_sha256(f) for f in allf]  # 编码前字节的哈希仍逐帧精确
+    assert [x["sha256"] for x in recs] == [rec_mod.frame_sha256(f) for f in allf]  # pre-encoding hashes exact
     psnr = [_psnr(want, got) for want, got in zip(allf, imgs)]
     assert len(psnr) == 5 and min(psnr) > 30.0, psnr
     wrecs, wimgs = rec_mod.load_frames(out, "wrist")
@@ -103,7 +107,7 @@ def test_degrade_level_respects_never_degrade(tmp_path, rec_mod, free, meta, lev
 
 def test_level2_keeps_head_and_tail_only(tmp_path, rec_mod):
     if not rec_mod._FFMPEG_CACHE.get("libx264"):
-        pytest.skip("未验证：ffmpeg 不支持 libx264，2 档降级无法编码")
+        pytest.skip("Not verified: ffmpeg lacks libx264, cannot encode degrade level 2")
     keep = rec_mod.LEVEL2_KEEP
     n = 2 * keep + 5
     r = rec_mod.EpisodeRecorder(tmp_path / "ep", {}, free_gib_fn=lambda p: 1.0)

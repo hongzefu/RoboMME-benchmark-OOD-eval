@@ -1,10 +1,12 @@
-"""测试子进程的引导脚本：以 ``__main__`` 原样执行官方 ``scripts/evaluation.py`` 或 ``scripts/evaluation_ood.py``（benchmark 子模块）。
+"""Bootstrap script for the test subprocess: runs the official ``scripts/evaluation.py`` or
+``scripts/evaluation_ood.py`` (benchmark submodule) unchanged as ``__main__``.
 
-只在本子进程内存里把入口用到的 ``BenchmarkEnvBuilder`` 四个方法换成 CPU 替身环境、把 ``imageio.mimsave`` 换成记事件，
-不改任何源文件、不落盘（P2 对测试进程内临时替身的豁免）；入口脚本本身一字不改地执行。
+Only in this subprocess's memory, the four ``BenchmarkEnvBuilder`` methods used by the entry are replaced with a CPU
+stub environment and ``imageio.mimsave`` is replaced with an event logger. No source file is modified and nothing is
+persisted (P2 exemption for temporary in-process test stubs); the entry script itself runs verbatim.
 
-用法：python entry_bootstrap.py <入口路径> <场景 json> <事件日志 jsonl>
-场景 json：{"tasks": [...], "episodes": n, "plans": {"<task>/<ep>": ["ongoing", "success" | "fail" | "error", ...]}}
+Usage: python entry_bootstrap.py <entry path> <scenario json> <event log jsonl>
+Scenario json: {"tasks": [...], "episodes": n, "plans": {"<task>/<ep>": ["ongoing", "success" | "fail" | "error", ...]}}
 """
 from __future__ import annotations
 
@@ -44,7 +46,7 @@ class FakeEnv:
         status = self.plan.pop(0)
         emit(kind="step", task=self.task, ep=self.ep, status=status, action_shape=list(np.shape(action)))
         if status == "error":
-            return None, 0.0, True, False, {"status": "error", "error_message": "IK 无解（替身）"}
+            return None, 0.0, True, False, {"status": "error", "error_message": "IK has no solution (stub)"}
         done = status in ("success", "fail")
         return _obs(1), 0.0, done, False, {"status": status}
 

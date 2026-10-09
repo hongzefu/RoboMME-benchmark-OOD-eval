@@ -1,13 +1,15 @@
-"""C13-17 ``smvla_server`` 的进程内单元契约（不起端口、不读权重、不初始化 CUDA）：
+"""C13-17 in-process unit contracts for ``smvla_server`` (no port opened, no weights read, CUDA not initialized):
 
-- 指纹函数（``sha256_file``／``array_sha``／``frame_sha``）；
-- ``make_closures`` 的相机键映射与状态归一化；
-- ``reseed``／``rng_digest``／``warmup``：每局重设后随机状态回到纯净参照；
-- ``_handler`` 的逐消息分派：用内存里的假 websocket 喂真实 msgpack 字节，核对回包、``req_sha``、决策序号与出错即关；
-- ``enable_det``／``main``／``cmd_serve`` 的参数与环境闸门。
+- fingerprint functions (``sha256_file`` / ``array_sha`` / ``frame_sha``);
+- camera-key mapping and state normalization in ``make_closures``;
+- ``reseed`` / ``rng_digest`` / ``warmup``: after each per-episode reseed the RNG state returns to the clean reference;
+- per-message dispatch in ``_handler``: an in-memory fake websocket feeds real msgpack bytes, and the replies,
+  ``req_sha``, decision counter and close-on-error are checked;
+- argument and environment gates of ``enable_det`` / ``main`` / ``cmd_serve``.
 
-``SMVLAPolicyHost`` 用 ``object.__new__`` 构造，模型三件换成 CPU 替身，``new_episode``／``observe``／``infer``／``warmup``
-都是真实实现（同 ``test_smvla_server_protocol.py`` 的做法，但不走网络、不标 slow）。
+``SMVLAPolicyHost`` is constructed with ``object.__new__`` with the three model pieces replaced by CPU stubs;
+``new_episode`` / ``observe`` / ``infer`` / ``warmup`` are the real implementations (same approach as
+``test_smvla_server_protocol.py``, but without networking and not marked slow).
 """
 from __future__ import annotations
 
@@ -22,13 +24,14 @@ import pytest
 
 import eval_fakes as F
 
-torch = pytest.importorskip("torch", reason="未验证：torch 未安装")
-msgpack_numpy = pytest.importorskip("openpi_client.msgpack_numpy", reason="未验证：openpi_client 未安装")
+torch = pytest.importorskip("torch", reason="Not verified: torch not installed")
+msgpack_numpy = pytest.importorskip("openpi_client.msgpack_numpy", reason="Not verified: openpi_client not installed")
 
 
 @pytest.fixture(autouse=True)
 def _keep_global_rng():
-    """被测函数会重设 numpy／torch 全局种子；用完还原，免得影响同进程其他用例。"""
+    """The functions under test reseed the numpy / torch global RNGs; restore them afterwards so other cases in the
+    same process are unaffected."""
     np_state = np.random.get_state()
     t_state = torch.get_rng_state()
     yield
@@ -65,9 +68,9 @@ class _Batched:
     def generate_batch(self, processed, states):
         self.calls.append((processed[0], states[0]))
         if self.fail:
-            raise RuntimeError("替身推理失败")
+            raise RuntimeError("stub inference failed")
         if self.consume_rng:
-            torch.randn(3)  # 模拟 DiT 采样消耗 torch 全局随机数
+            torch.randn(3)  # simulates DiT sampling consuming the torch global RNG
         a = np.arange(F.CHUNK_ROWS * 8, dtype=np.float32).reshape(F.CHUNK_ROWS, 8) + processed[0]["n"]
         return [(a, f"sub{processed[0]['n']}")]
 
@@ -86,29 +89,32 @@ def _host(**kw):
     return h
 
 
-# ---------------------------------------------------------------- 指纹
+# ---------------------------------------------------------------- fingerprints
 
 
 def test_fingerprints_hand_computed(tmp_path):
     srv = F.smvla_server()
-    data = bytes(range(256)) * 5000  # 1.28 MB，跨过 1 MiB 分块
+    data = bytes(range(256)) * 5000  # 1.28 MB, crosses the 1 MiB chunk boundary
     p = tmp_path / "config.json"
     p.write_bytes(data)
     assert srv.sha256_file(p) == hashlib.sha256(data).hexdigest()
     assert srv.sha256_bytes(b"x") == hashlib.sha256(b"x").hexdigest()
     fr = np.arange(48, dtype=np.uint8).reshape(4, 4, 3)
     assert srv.frame_sha(fr[:, ::-1]) == hashlib.sha256(fr[:, ::-1].copy().tobytes()).hexdigest()
-    # array_sha 把 dtype 与 shape 一起算进去：同字节、不同 dtype 或形状必须给不同指纹（负例）
+    # array_sha includes dtype and shape: same bytes with a different dtype or shape must give a different
+    # fingerprint (negative case)
     a = np.zeros(8, dtype=np.float32)
     assert srv.array_sha(a) != srv.array_sha(a.view(np.int32))
     assert srv.array_sha(a) != srv.array_sha(a.reshape(2, 4))
     assert srv.array_sha(a) == srv.array_sha(np.zeros(8, dtype=np.float32))
-    # frame_sha 只看字节：同字节不同形状指纹相同（与 recorder.frame_sha256 同一定义）
+    # frame_sha only looks at bytes: same bytes with a different shape give the same fingerprint (same definition
+    # as recorder.frame_sha256)
     assert srv.frame_sha(fr) == srv.frame_sha(fr.reshape(-1))
 
 
 def test_git_head_and_setup_paths(tmp_path, monkeypatch):
-    """子模块提交号：git 仓库给 40 位 sha，非仓库目录给 None（metadata 里如实记缺失）；路径只补一次。"""
+    """Submodule commit: a git repo gives a 40-char sha, a non-repo directory gives None (metadata records it as
+    missing); paths are added only once."""
     import re
     import sys
 
@@ -125,7 +131,7 @@ def test_git_head_and_setup_paths(tmp_path, monkeypatch):
     assert sys.path.count(str(srv.SUBMODULE_ROOT)) == 1
 
 
-# ---------------------------------------------------------------- 闭包与随机状态
+# ---------------------------------------------------------------- closures and RNG state
 
 
 def test_make_closures_maps_camera_keys_and_normalizes_state():
@@ -142,7 +148,7 @@ def test_make_closures_maps_camera_keys_and_normalizes_state():
     norm = _Norm()
     to_full, state_norm = srv.make_closures(_Buf, norm, _Batched())
     out = to_full({"front": [[1, 2]], "wrist": np.zeros((1, 2)), "depth": np.ones((1, 1))})
-    assert sorted(out) == ["depth", "observation.images.front", "observation.images.wrist"]  # 未知键原样
+    assert sorted(out) == ["depth", "observation.images.front", "observation.images.wrist"]  # unknown keys kept as-is
     assert all(v.dtype == np.uint8 for v in out.values())
     s = state_norm(np.arange(8, dtype=np.float64))
     assert norm.got.dtype == torch.float32 and tuple(s.shape) == (1, 8)
@@ -155,7 +161,7 @@ def test_reseed_restores_reference_digest():
     srv = F.smvla_server()
     srv.reseed()
     ref = srv.rng_digest()
-    assert set(ref) == {"torch_cpu", "numpy"}  # 资源守卫下 CUDA 不可用，不出 torch_cuda
+    assert set(ref) == {"torch_cpu", "numpy"}  # CUDA is unavailable under the resource guard, so no torch_cuda
     np.random.random()
     assert srv.rng_digest()["numpy"] != ref["numpy"]
     torch.randn(2)
@@ -168,11 +174,11 @@ def test_reseed_restores_reference_digest():
 def test_warmup_reports_consumption_and_restoration(consume):
     h = _host(consume_rng=consume)
     w = h.warmup()
-    assert w["rng_consumed_by_warmup"] is consume  # 消耗了才有区分力；不消耗时如实报 False
+    assert w["rng_consumed_by_warmup"] is consume  # only discriminative if the RNG is consumed; reports False truthfully otherwise
     assert w["rng_restored"] is True and w["rng"] == h.rng_ref
     assert h.metadata["warmup"] is w
     (processed, state), = h.batched.calls
-    assert processed == {"n": 1, "instruction": "warmup"} and state is None  # 一帧全零图 + 零状态（无归一化器）
+    assert processed == {"n": 1, "instruction": "warmup"} and state is None  # one all-zero frame + zero state (no normalizer)
 
 
 def test_observe_and_infer_on_real_host_methods():
@@ -186,20 +192,21 @@ def test_observe_and_infer_on_real_host_methods():
                     {"front": F.sha_bytes(F.frame(3)), "wrist": F.sha_bytes(F.frame(4))}]
     assert list(buf.frames[0]) == ["observation.images.wrist", "observation.images.front"]
     st = np.full(8, 0.5, dtype=np.float32)
-    out = h.infer(buf, "抓起方块", st)
+    out = h.infer(buf, "pick up the cube", st)
     full = np.arange(F.CHUNK_ROWS * 8, dtype=np.float32).reshape(F.CHUNK_ROWS, 8) + 2
     assert np.array_equal(out["actions_full"], full)
     assert np.array_equal(out["actions"], full[:srv.EXECUTE_HORIZON]) and srv.EXECUTE_HORIZON < F.CHUNK_ROWS
     assert out["subtask"] == "sub2" and out["infer_ms"] >= 0
-    assert out["recv_instruction_sha"] == hashlib.sha256("抓起方块".encode("utf-8")).hexdigest()
+    assert out["recv_instruction_sha"] == hashlib.sha256("pick up the cube".encode("utf-8")).hexdigest()
     assert out["recv_state_sha"] == srv.array_sha(st) != srv.array_sha(st.astype(np.float64))
 
 
-# ---------------------------------------------------------------- _handler 分派（内存假 websocket）
+# ---------------------------------------------------------------- _handler dispatch (in-memory fake websocket)
 
 
 class _FakeWS:
-    """按顺序吐出预置的原始消息，吐完抛 ConnectionClosed；记录 send 与 close。``fail_send_at`` 让第 n 次 send 断开。"""
+    """Yields the preset raw messages in order and raises ConnectionClosed when exhausted; records send and close.
+    ``fail_send_at`` makes the n-th send disconnect."""
 
     def __init__(self, raws, *, fail_send_at=None):
         self.raws = list(raws)
@@ -240,17 +247,17 @@ def test_handler_dispatch_and_req_sha():
             {"reset": {"episode_key": "T/4/8"}},
             {"infer": {"instruction": "g", "state": st}}]
     ws, raws, reps = _drive(h, msgs)
-    assert reps[0] == h.metadata  # 连接建立先发 metadata
+    assert reps[0] == h.metadata  # metadata is sent first when the connection opens
     reps = reps[1:]
     assert [r["req_sha"] for r in reps] == [hashlib.sha256(r).hexdigest() for r in raws]
     assert reps[0]["reset_finished"] is True and reps[0]["episode_key"] == "T/3/7" and reps[0]["rng_matches_ref"] is True
     assert reps[1]["observe_finished"] is True and reps[1]["n"] == 1
     assert reps[1]["frame_sha"] == [{"front": F.sha_bytes(F.frame(1)), "wrist": F.sha_bytes(F.frame(2))}]
     assert [reps[2]["decision"], reps[3]["decision"]] == [0, 1]
-    # 第二局 reset 后缓冲清空、决策序号归零
+    # after the second episode's reset the buffer is cleared and the decision counter returns to zero
     assert reps[4]["episode_key"] == "T/4/8" and reps[5]["decision"] == 0
     assert [c[0]["n"] for c in h.batched.calls] == [1, 1, 0]
-    assert ws.closed is False  # 正常结束只因对端关闭
+    assert ws.closed is False  # a normal end only happens because the peer closed
 
 
 @pytest.mark.parametrize("msgs,needle", [
@@ -258,23 +265,23 @@ def test_handler_dispatch_and_req_sha():
     ([{"observe": {"frames": []}}], "observe before reset"),
     ([{"infer": {"instruction": "x", "state": np.zeros(8, np.float32)}}], "infer before reset"),
     ([{"reset": {"episode_key": "k"}}, {"infer": {"instruction": "x", "state": np.zeros(8, np.float32)}}],
-     "RuntimeError: 替身推理失败"),
+     "RuntimeError: stub inference failed"),
 ])
 def test_handler_error_reply_then_close(msgs, needle):
     h = _host(fail=True)
-    ws, _, reps = _drive(h, msgs + [{"reset": {"episode_key": "不应处理"}}])
+    ws, _, reps = _drive(h, msgs + [{"reset": {"episode_key": "must-not-be-processed"}}])
     assert needle in reps[-1]["error"] and ws.closed is True
-    assert len(reps) == 1 + len(msgs)  # 出错后不再处理后续消息
-    assert all("不应处理" != r.get("episode_key") for r in reps)
+    assert len(reps) == 1 + len(msgs)  # no further messages are processed after an error
+    assert all("must-not-be-processed" != r.get("episode_key") for r in reps)
 
 
 def test_handler_returns_quietly_when_peer_closes_during_send():
     h = _host()
     ws, _, reps = _drive(h, [{"reset": {"episode_key": "k"}}], fail_send_at=1)
-    assert len(reps) == 1 and ws.closed is False  # 只发出 metadata；回 reset 时对端已断开，不回 error
+    assert len(reps) == 1 and ws.closed is False  # only the metadata went out; the peer was gone when replying to reset, so no error is sent
 
 
-# ---------------------------------------------------------------- 闸门：确定性模式、固定环境变量、serve 参数
+# ---------------------------------------------------------------- gates: deterministic mode, fixed env vars, serve args
 
 
 def test_enable_det_requires_cublas_env(monkeypatch):
@@ -314,14 +321,14 @@ def test_main_parses_serve_args(monkeypatch):
     with pytest.raises(SystemExit) as ei:  # --ckpt is required (no default checkpoint)
         srv.main(["serve", "--port", "4321", "--policy-seed", "42"])
     assert ei.value.code == 2
-    with pytest.raises(SystemExit):  # --port 必填
+    with pytest.raises(SystemExit):  # --port is required
         srv.main(["serve", "--policy-seed", "7", "--ckpt", "/ckpt/x"])
-    with pytest.raises(SystemExit):  # 第三阶段：--policy-seed 必填，不回落旧常量 0
+    with pytest.raises(SystemExit):  # stage 3: --policy-seed is required, no fallback to the old constant 0
         srv.main(["serve", "--port", "4321", "--ckpt", "/ckpt/x"])
 
 
 class _HostStub:
-    """cmd_serve 用的 host 替身：metadata 字段与真实 host 同名。"""
+    """Host stub for cmd_serve: metadata fields have the same names as on the real host."""
 
     instances: list = []
 
@@ -350,12 +357,13 @@ def test_cmd_serve_config_sha_gate_and_metadata(monkeypatch, tmp_path, capsys):
     served = []
     monkeypatch.setattr(srv, "SMVLAPolicyHost", _HostStub)
     monkeypatch.setattr(srv, "asyncio", types.SimpleNamespace(run=lambda coro: (served.append(coro), coro.close())))
-    # 负例：config.json 指纹不符 → 退出 2，不起 server
+    # negative case: config.json fingerprint mismatch -> exit 2, server not started
     rc = srv.cmd_serve(_serve_args(tmp_path, expect_config_sha="cd" * 32))
     out = capsys.readouterr().out
     assert rc == 2 and served == []
     assert "SMVLA_DET det=off" in out and f"SMVLA_CONFIG_SHA=FAIL got={'ab' * 32} want={'cd' * 32}" in out
-    # 正例：指纹相符 + 预热 + 落 metadata → 起 server（被替换的 asyncio.run 收到 _serve 协程）
+    # positive case: fingerprint matches + warmup + metadata written -> server started (the replaced asyncio.run
+    # receives the _serve coroutine)
     meta = tmp_path / "out" / "meta.json"
     rc = srv.cmd_serve(_serve_args(tmp_path, expect_config_sha="ab" * 32, warmup=True, metadata_out=str(meta)))
     out = capsys.readouterr().out
@@ -364,7 +372,8 @@ def test_cmd_serve_config_sha_gate_and_metadata(monkeypatch, tmp_path, capsys):
     assert "SMVLA_WARMUP warmup_s=0.1 infer_ms=2.0 rng_consumed=True rng_restored=True" in out
     written = json.loads(meta.read_text())
     assert written["det"] is False and written["ckpt_config_sha256"] == "ab" * 32
-    assert "startup_s" in host.metadata and "startup_s" not in written  # 启动耗时在落盘之后才补
-    # 第三阶段：服务元数据带 policy_seed／argv／pid／port（客户端据此反查结果行 server_seed）
+    assert "startup_s" in host.metadata and "startup_s" not in written  # startup time is added only after the file is written
+    # stage 3: server metadata carries policy_seed / argv / pid / port (the client uses them to look up server_seed
+    # for result rows)
     assert written["policy_seed"] == 7 and host.policy_seed == 7 and isinstance(written["argv"], list)
     assert written["port"] == 1 and isinstance(written["pid"], int)
