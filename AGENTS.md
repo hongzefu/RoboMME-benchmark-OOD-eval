@@ -21,7 +21,7 @@ command -v micromamba >/dev/null && echo "micromamba: 有" || echo "micromamba: 
 | 判据 | 环境 A：sled-vail 本机（2026-10-08 口径） |
 |---|---|
 | 主机名（`hostname` 前缀） | `sled-vail` |
-| 仓库根 | `/data/hongzefu/RoboMME-benchmark-OOD-eval`（`main` 分支） |
+| 仓库根 | `/data/hongzefu/RoboMME-benchmark-OOD-eval`（工作分支 `dev`；`main` 是公开面，只由同步脚本写） |
 | 共享存储路径（NFS） | `/nfs/turbo/coe-chaijy-unreplicated/hongzefu/` 存在、可直读 |
 | 本机盘路径 | `/data/hongzefu/`（NVMe 14 TB） |
 | 单机工作盘路径 | 无（不适用） |
@@ -374,7 +374,7 @@ command -v micromamba >/dev/null && echo "micromamba: 有" || echo "micromamba: 
 
 ## 项目专属规则
 
-- **P1. `scripts/` 只许 `evaluate.py` 一个文件；其余脚本一律在 `dev-scripts/` 的子目录里。** 用户原话（2026-10-08）：「…一个是 scripts 然后里面只保留一个最简单的脚本然后脚本名字就叫 evaluate.py 另外一个改成 dev-scripts…」。现有子目录：`gl/`（GL 席位与占位 job 胶水、账本、搬运、发布）、`parity/`（生成对拍、hard-verify 对拍、noise 门）、`orig/`（原侧对照）、`checks/`（诊断与回归检查）、`media/`（渲染 CLI）、`site/`（站点）。`dev-scripts` 带连字符不是 Python 包：脚本之间以「把自己所在目录放进 `sys.path` 后按同目录模块名 import」的方式引用。新子目录先与用户沟通。核查：`ls scripts/` 只有 `evaluate.py`。
+- **P1. `scripts/` 只许 `evaluate.py` 一个文件；其余脚本一律在 `dev-scripts/` 的子目录里。** 用户原话（2026-10-08）：「…一个是 scripts 然后里面只保留一个最简单的脚本然后脚本名字就叫 evaluate.py 另外一个改成 dev-scripts…」。现有子目录：`gl/`（GL 席位与占位 job 胶水、账本、搬运、发布）、`parity/`（生成对拍、hard-verify 对拍、noise 门）、`orig/`（原侧对照）、`checks/`（诊断与回归检查）、`media/`（渲染 CLI）、`site/`（站点）、`release/`（公开 main 的清单、三道闸门、凭据与子模块检查、`sync_to_main.sh`；2026-10-09 随公开拆分方案新增）。`dev-scripts` 带连字符不是 Python 包：脚本之间以「把自己所在目录放进 `sys.path` 后按同目录模块名 import」的方式引用。新子目录先与用户沟通。核查：`ls scripts/` 只有 `evaluate.py`。
 - **P2. benchmark 子模块与受保护目录。** `third_party/robomme_benchmark` 只在 benchmark 仓改（该仓 `v1.0-ood` 后锁死），本仓只升级 gitlink；其中 `src/robomme/` 的任何改动和覆盖须用户逐个批准（正本第 21 条，`<PROTECTED_DIRS>` = `third_party/robomme_benchmark/src/robomme/`），录像器 `RecordWrapper.py` 冻结；`import robomme_hard` 以 `override=True` 接管官方 16 个环境 id 是已登记的既有覆盖，原侧对照一律独立进程、原侧进程里不先 import `robomme_hard`。官方 `RolloutRecorder` 只经 `importlib` 调用，不复制不改写。
 - **P2′. 外层接口契约。** 外层 3 个函数（`load_policy`、`run_episode`、入口主循环）+ 模型侧 4 个方法（`load`／`reset`／`play`／`close`）；`run_episode` 第一句是 `policy.reset(spec)`，绝不调 `load()`；`reset` 不向服务端发消息、不碰环境；编译与预热全在 `load()`；每局产物只有三样（官方版式视频、AV1 4:4:4 原始帧、原始动作与逐步记录），产物树见 `scripts/evaluate.py` 文件头。
 - **P2″. Astra 的局数与费用先审批。** 任何 Astra 局（含本机测试）先报局数与美元上限、获批后才跑；独立费用账本，超额硬拒，不新建账本绕额度；密钥只在本机 `~/.config/astra/`，不出本机。
@@ -404,11 +404,11 @@ command -v micromamba >/dev/null && echo "micromamba: 有" || echo "micromamba: 
 
 ## 对正本的覆盖项（按正本条号；未列出的条目按正本执行）
 
-- **覆盖第 1 条**：无豁免清单。`third_party/` 下第三方原文不在本条约束内。
+- **覆盖第 1 条**：无豁免清单。`third_party/` 下第三方原文不在本条约束内。**公开面例外（2026-10-09 起）**：`dev-scripts/release/public-manifest.txt` 列出的文件是公开 main 的全部内容，一律英文（注释、docstring、日志、报错、README），零 CJK 字符、零中文标点与全角字符，由 `check_public_lang.py` 守住；清单外（`dev-scripts/`、`docs/`、规则文件、dev 侧测试）继续中文。改清单内文件时直接写英文。
 - **覆盖第 2 条（计划标杆）**：`<PLAN_EXEMPLAR>` = 旧仓 `docs/plans/1005-eval-video-phase2-all-models-rerun-plan.md` 第一部分；新计划写在本仓 `docs/plans/`，命名 `MMDD-<主题>-plan.html`（正本第 2 条：进仓库 git 的计划一律 HTML）。
 - **覆盖第 4 条（核心短测）**：日常门禁 `timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q`（testpaths `tests`，纯 CPU，资源守卫插件，末行 `TEST_RESOURCE=`）；慢测试 `uv run --no-sync python -m pytest -m slow -q`；端到端冒烟 `uv run --no-sync python scripts/evaluate.py --model dummy --dataset hard-verify,ood --tasks VideoUnmask --episodes 0:1 --seed 0 --out artifacts/<run>`（2 次 reset）。
 - **覆盖第 5 条**：本仓所有可视化脚本同受最近邻放大约束。
-- **覆盖第 11 条（commit 体例与 push）**：`<COMMIT_SUBJECT_STYLE>` = `<大版本>.<小版本>[.<修订>] <中文描述>`，从 `1.0` 起；作者 `hongzefu <hongzefu@umich.edu>`（只设本仓本地 git 配置）；`main` commit 后立即 push。
+- **覆盖第 11 条（commit 体例与 push）**：`<COMMIT_SUBJECT_STYLE>` = `<大版本>.<小版本>[.<修订>] <中文描述>`，从 `1.0` 起；作者 `hongzefu <hongzefu@umich.edu>`（只设本仓本地 git 配置）；`dev` commit 后立即 push。**分支分工（2026-10-09 起）**：`dev` 是唯一开发分支，一切改动只在 `dev` 上做；`main` 是公开面，**只由 `dev-scripts/release/sync_to_main.sh` 写**（S3 的初始提交除外），不在 `main` 上直接提交，用户说「同步到 main」才跑；`main` 上的提交一律英文，subject `Sync from dev @<短 sha>: <英文摘要>`，尾行 `Dev-Source: <dev 完整 sha>`。同步脚本用 `git add --pathspec-from-file` / `git rm --pathspec-from-file` 喂清单逐路径暂存，是本条「逐个明确路径暂存」下的既定做法，不是 `git add -A`。
 - **覆盖第 14 条（存储）**：`<WORK_ROOT>` = `/data/hongzefu/RoboMME-benchmark-OOD-eval`；`<STORE_ROOT>` = `artifacts/`（不进 git）；旧资产只以只读 symlink 逐项引用旧仓 `artifacts/`；GL 副本在 NFS，产物搬回 `/data`、NFS 不留大文件。
 - **覆盖第 24 条（第三方源码）**：五个子模块一律 gitlink 锁 40 位 sha；PonderPounce、Astra 接 `hongzefu` 名下 fork；改模型代码只在各自 fork 分支，本仓只升 gitlink。初始化子模块不加 `--recursive`（`mme-vla` 内嵌的 benchmark 必须为空）。
 - **第 22 条（过程记录）**：不维护执行日志；过程写 commit body，实测留档写 `docs/validation/`。
