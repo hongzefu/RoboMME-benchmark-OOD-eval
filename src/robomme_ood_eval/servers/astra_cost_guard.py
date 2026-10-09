@@ -1,46 +1,56 @@
-"""3-tier Astra 费用守卫：常驻汇总两侧全部规划请求的 ``usage`` × 单价，到线即在 ``group_*/`` 下写 ``STOP.json``。
+"""3-tier Astra cost guard: continuously sums ``usage`` x unit price over all planning requests on both sides, and
+writes ``STOP.json`` under ``group_*/`` when the limit is reached.
 
-计划：``1003-oracle-subgoal-groundsg-eval-plan.md`` 第二部分 1.5「费用上限」与红线 R4。
+- What is scanned: under each ``--root`` (recursively), every ``response.json`` in the same directory as a
+  ``request.json`` -- exactly the Astra ``Planner`` spool layout ``<spool>/<uuid>/{request.json,response.json}``;
+  the monitor's ``monitor_inputs/tNNNN/response.json`` has no ``request.json`` next to it and is not counted. In the
+  ``response.json`` written by ``ResponsesClient``, ``usage`` is the OpenAI Responses API usage object verbatim.
+- Pricing: ``(input_tokens - cached_tokens) x input + cached_tokens x cached_input + output_tokens x output``, with
+  unit prices in "USD per million tokens" supplied by the ``--prices`` config file (never hard-coded).
+  ``reasoning_tokens`` are already included in ``output_tokens`` and are only counted, not priced separately (with
+  ``"reasoning_billed_separately": true`` in the config they are additionally charged at the output price). Missing
+  fields count as 0 and increment the ``missing_fields`` warning counter; responses with ``status=error`` and no
+  ``usage`` count toward ``no_usage``.
+- Cumulative ledger: the JSON at ``--ledger`` is read first (a ledger from a local pre-check can be copied to the
+  cluster and continued), deduplicated by request uuid, and atomically written back after every scan.
+- Limit check: ``total + max(1, in_flight) x worst-case cost of one request > --cap`` (in flight = has
+  ``api_started.json`` but no ``response.json``; worst-case cost = largest input tokens seen x input price +
+  ``--max-output-tokens`` (2048) x output price). When the limit is reached, ``STOP.json`` is written in every
+  ``group_*`` directory (directories named ``group_<number>`` among the ancestors or descendants of ``--root``) and
+  ``ASTRA_COST=STOP usd=... cap=...`` is printed. Both of Astra's built-in stop points read it:
+  ``ResponsesClient._send`` before each send, and ``AstraPolicy.reset`` before each episode (in this evaluation repo
+  the guard is started and stopped by ``AstraPolicy.load`` via ``ServerProcess``, no longer started manually first).
+- Output: when the total changes (and on the first round) prints ``ASTRA_COST usd=<total> calls=<n> ...``.
 
-- 扫描对象：每个 ``--root`` 下（递归）凡是与 ``request.json`` 同目录的 ``response.json``——这正是 Astra
-  ``Planner`` 的 spool 布局 ``<spool>/<uuid>/{request.json,response.json}``；监视器的
-  ``monitor_inputs/tNNNN/response.json`` 旁边没有 ``request.json``，不计。``ResponsesClient`` 写的
-  ``response.json`` 里 ``usage`` 是 OpenAI Responses API 原样的 usage 对象。
-- 计价：``(input_tokens - cached_tokens) × input + cached_tokens × cached_input + output_tokens × output``，
-  单价单位「美元 / 百万 token」，由 ``--prices`` 配置文件给（不写死）。``reasoning_tokens`` 已含在
-  ``output_tokens`` 里，只统计不另计价（配置 ``"reasoning_billed_separately": true`` 时另按 output 单价加计）。
-  缺字段按 0 计，并计入 ``missing_fields`` 告警计数；``status=error`` 且无 ``usage`` 的响应计入 ``no_usage``。
-- 累计账本：``--ledger`` 指向的 JSON 先读入（本机预检的账本拷到 GL 后接着累计），按请求 uuid 去重，
-  每轮扫描后原子写回。
-- 到线判定：``累计 + max(1, 在途数) × 一次请求最坏花费 > --cap``（在途＝有 ``api_started.json`` 而无
-  ``response.json``；最坏花费＝已见最大输入 token × input 单价 + ``--max-output-tokens``(2048) × output 单价）。
-  到线时在每个 ``group_*`` 目录（``--root`` 的祖先或子孙中名为 ``group_<数字>`` 的目录）写 ``STOP.json``，
-  打印 ``ASTRA_COST=STOP usd=… cap=…``。Astra 自带两个停机口都读它：``ResponsesClient._send`` 每次发送前、
-  ``AstraPolicy.reset`` 每局开跑前（评估仓里守卫由 ``AstraPolicy.load`` 经 ``ServerProcess`` 起停，不再人工先起）。
-- 输出：累计变化时（及首轮）打印 ``ASTRA_COST usd=<累计> calls=<n> …``。
-
-单价配置示例（``--prices``）::
+Example price config (``--prices``)::
 
     {"model": "gpt-6-astra", "unit": "usd_per_1m_tokens",
      "input": 1.25, "cached_input": 0.125, "output": 10.0,
-     "source": "<OpenAI 价目页 URL>", "checked_at": "2026-10-05"}
+     "source": "<OpenAI pricing page URL>", "checked_at": "2026-10-05"}
 
-（数值仅为格式示意，开工后查官方价目填写并记入 launch.md。）
+(The values only illustrate the format; look up the official prices before running and record them.)
 
-第二阶段硬上限（1005-eval-video-phase2-all-models-rerun-plan.md 第二部分一节 S3、审计第 19 条、红线 R6）：
+Hard limits:
 
-- ``--cap`` 默认且最大为 ``HARD_CAP_USD``（本轮固定 5 美元），给更大的值直接拒绝启动（退出码 2）；
-  ``--interval`` 默认 2 秒（须不超过心跳超时 10 秒的一半）。
-- 缺 usage 视为超限：非 error 的规划响应缺 ``usage`` 或缺 ``input_tokens``／``output_tokens`` 即写 STOP
-  （``reason=astra_usage_missing``）。``status=error`` 且无 usage 的响应（HTTP 错误、超时等，可能计费也可能
-  未计费）按「一次请求最坏花费」计入投影（``unknown_charge_usd``）而不直接停——HTTP 错误本身不计费，按最坏价
-  计入已是保守口径；同目录有 ``guard_refused.json`` 的（runner 发送前就拒发、从未外联）计 0。
-- 心跳与同步预留：每轮把状态原子写进 ``--state``（默认 ``<账本名>.state.json``）：``heartbeat``（墙钟秒）、
-  ``committed_usd``（已计 + error 无 usage 的最坏计入）、``counted``（已计入账本的请求 uuid）、``prices``、
-  ``max_output_tokens``、``cap``、``stop``。``models/astra.py`` 的 ``GuardedResponsesClient`` 每次真正发送前
-  同步读它，并在 ``<state>.reservations.json``（``fcntl`` 锁 ``<state>.lock``）里原子预留单次最坏费用；守卫把
-  尚未计入账本的预留也算进投影。守卫正常退出时写 ``exited=true``；崩溃则心跳停更，runner 10 秒后即拒发。
-- 局数硬上限 ``ASTRA_MAX_EPISODES=2``：runner 每局开跑前在同一预留文件的 ``episodes`` 列表里登记，跨 RUN 累计。
+- ``--cap`` defaults to and is at most ``HARD_CAP_USD`` (fixed at 5 USD); a larger value refuses to start (exit
+  code 2); ``--interval`` defaults to 2 seconds (must be at most half the 10-second heartbeat timeout).
+- Missing usage counts as over the limit: a non-error planning response without ``usage`` or without
+  ``input_tokens`` / ``output_tokens`` writes STOP (``reason=astra_usage_missing``). Responses with
+  ``status=error`` and no usage (HTTP errors, timeouts, ...; possibly billed, possibly not) are added to the
+  projection at the "worst-case cost of one request" (``unknown_charge_usd``) rather than stopping directly -- HTTP
+  errors themselves are not billed, so counting them at the worst-case price is already conservative; those with a
+  ``guard_refused.json`` in the same directory (refused by the runner before sending, never left the machine) count
+  as 0.
+- Heartbeat and synchronous reservation: every round the state is atomically written to ``--state`` (default
+  ``<ledger name>.state.json``): ``heartbeat`` (wall-clock seconds), ``committed_usd`` (counted + worst-case charge
+  for error responses without usage), ``counted`` (request uuids already in the ledger), ``prices``,
+  ``max_output_tokens``, ``cap``, ``stop``. ``GuardedResponsesClient`` in ``models/astra.py`` reads it synchronously
+  before every real send and atomically reserves the single-request worst-case cost in
+  ``<state>.reservations.json`` (``fcntl`` lock ``<state>.lock``); the guard also includes reservations not yet in
+  the ledger in its projection. On a normal exit the guard writes ``exited=true``; if it crashes the heartbeat stops
+  updating and the runner refuses to send after 10 seconds.
+- Hard episode limit ``ASTRA_MAX_EPISODES=2``: before each episode the runner registers it in the ``episodes`` list
+  of the same reservation file, cumulative across runs.
 """
 from __future__ import annotations
 
@@ -57,29 +67,30 @@ from pathlib import Path
 
 LEDGER_SCHEMA = "astra-cost-ledger/1"
 GROUP_RE = re.compile(r"^group_\d+$")
-#: 有效单价单位
+#: valid unit-price unit
 PRICE_UNIT = "usd_per_1m_tokens"
-#: 本轮固定的费用硬上限（美元；R6：Astra 本机 smoke ≤2 局、5 美元硬上限）；--cap 不得超过它
+#: fixed hard cost limit (USD; Astra local smoke runs are limited to <= 2 episodes and 5 USD); --cap must not exceed it
 HARD_CAP_USD = 5.0
-#: 守卫扫描间隔默认值（秒）
+#: default guard scan interval (seconds)
 DEFAULT_INTERVAL_S = 2.0
-#: runner 判定守卫失联的心跳超时（秒）；--interval 不得超过它的一半
+#: heartbeat timeout (seconds) after which the runner treats the guard as lost; --interval must not exceed half of it
 HEARTBEAT_TIMEOUT_S = 10.0
-#: Astra 局数硬上限（R6）；runner 经预留文件的 episodes 列表跨 RUN 计数
+#: hard Astra episode limit; the runner counts across runs via the episodes list of the reservation file
 ASTRA_MAX_EPISODES = 2
 STATE_SCHEMA = "astra-guard-state/1"
 RESERVATIONS_SCHEMA = "astra-reservations/1"
-#: runner 发送前拒发时写在请求目录里的标记；守卫见到它就把该请求计 0（从未外联）
+#: marker written in the request directory when the runner refuses before sending; the guard counts such requests as
+#: 0 (they never left the machine)
 REFUSED_MARKER = "guard_refused.json"
 
 
 def load_prices(path: Path) -> dict:
     prices = json.loads(Path(path).read_text())
     if prices.get("unit", PRICE_UNIT) != PRICE_UNIT:
-        raise ValueError(f"单价单位须为 {PRICE_UNIT}，实为 {prices.get('unit')!r}")
+        raise ValueError(f"unit price unit must be {PRICE_UNIT}, got {prices.get('unit')!r}")
     for key in ("input", "output"):
         if not isinstance(prices.get(key), (int, float)) or prices[key] < 0:
-            raise ValueError(f"单价配置缺少非负数值 {key!r}")
+            raise ValueError(f"price config lacks a non-negative number for {key!r}")
     prices.setdefault("cached_input", prices["input"])
     prices.setdefault("reasoning_billed_separately", False)
     return prices
@@ -100,7 +111,7 @@ def _get(usage: dict, *keys, warn: list) -> int:
 
 
 def price_usage(usage: dict, prices: dict) -> tuple[float, dict, list]:
-    """一次请求的花费；返回 ``(usd, tokens, 缺失字段列表)``。"""
+    """Cost of one request; returns ``(usd, tokens, list of missing fields)``."""
     warn: list = []
     tokens = {
         "input_tokens": _get(usage, "input_tokens", warn=warn),
@@ -125,7 +136,7 @@ def load_ledger(path: Path | None) -> dict:
         return new_ledger()
     ledger = json.loads(Path(path).read_text())
     if ledger.get("schema") != LEDGER_SCHEMA:
-        raise ValueError(f"账本 schema 应为 {LEDGER_SCHEMA}：{path}")
+        raise ValueError(f"ledger schema must be {LEDGER_SCHEMA}: {path}")
     return ledger
 
 
@@ -138,7 +149,8 @@ def save_ledger(path: Path, ledger: dict) -> None:
 
 
 def scan(roots: list[Path], ledger: dict, prices: dict) -> dict:
-    """扫描全部根，把新出现的规划响应计入账本；返回本轮统计（在途数、本轮新增等）。"""
+    """Scan all roots and add newly seen planning responses to the ledger; returns this round's stats (in flight,
+    newly added, ...)."""
     pending = 0
     added = 0
     for root in roots:
@@ -158,10 +170,10 @@ def scan(roots: list[Path], ledger: dict, prices: dict) -> dict:
             try:
                 body = json.loads(response.read_text())
             except (OSError, ValueError):
-                continue  # 正在写（Astra 用原子替换，理论上不会出现）；下一轮再读
+                continue  # being written (Astra uses atomic replace, so in theory this never happens); read next round
             usage = body.get("usage")
             if (call_dir / REFUSED_MARKER).is_file() and body.get("status") == "error" and not isinstance(usage, dict):
-                usd, tokens, warn = 0.0, {}, ["refused"]  # runner 发送前拒发：从未外联，不计费
+                usd, tokens, warn = 0.0, {}, ["refused"]  # refused by the runner before sending: never left the machine, not billed
             elif isinstance(usage, dict):
                 usd, tokens, warn = price_usage(usage, prices)
             else:
@@ -173,7 +185,8 @@ def scan(roots: list[Path], ledger: dict, prices: dict) -> dict:
 
 
 def unknown_usage(call: dict) -> bool:
-    """非 error 的响应却拿不到计费依据（usage 整体缺失，或缺 input_tokens／output_tokens）：视为超限。"""
+    """A non-error response without a billing basis (usage missing entirely, or missing input_tokens /
+    output_tokens): treated as over the limit."""
     missing = call.get("missing") or []
     if call.get("status") == "error" or missing == ["refused"]:
         return False
@@ -199,7 +212,8 @@ def worst_request_usd(max_input: int, prices: dict, max_output_tokens: int) -> f
 
 
 def group_dirs(roots: list[Path]) -> list[Path]:
-    """当前全部 ``group_*`` 目录：各根自身及其祖先中名为 group_<n> 的，加上根下（≤3 层）的。"""
+    """All current ``group_*`` directories: each root itself and its ancestors named group_<n>, plus those under the
+    root (<= 3 levels)."""
     found: set[Path] = set()
     for root in roots:
         root = Path(root).resolve()
@@ -229,7 +243,8 @@ def write_stops(roots: list[Path], summary: dict) -> list[Path]:
 
 
 def outstanding_reservations(reservations: dict | None, counted) -> float:
-    """尚未计入账本的预留（runner 已预留、守卫还没扫到响应）之和；已释放（拒发）的不计。"""
+    """Sum of reservations not yet in the ledger (reserved by the runner, response not yet scanned by the guard);
+    released (refused) ones are not counted."""
     if not reservations:
         return 0.0
     counted = set(counted)
@@ -239,10 +254,12 @@ def outstanding_reservations(reservations: dict | None, counted) -> float:
 
 def cycle(roots: list[Path], ledger: dict, prices: dict, cap: float, max_output_tokens: int,
           reservations: dict | None = None) -> dict:
-    """一轮：扫描、算累计与投影、到线写 STOP。返回本轮摘要。
+    """One round: scan, compute the total and projection, write STOP when the limit is reached. Returns this round's
+    summary.
 
-    投影 = 已计 + error 无 usage 按最坏价计入 + max(未结预留之和, max(1, 在途数) × 一次最坏花费)；
-    非 error 响应缺 usage 一律 STOP（``reason=astra_usage_missing``）。"""
+    projection = counted + error responses without usage at the worst-case price + max(sum of outstanding
+    reservations, max(1, in_flight) x worst-case cost of one request); a non-error response without usage always
+    STOPs (``reason=astra_usage_missing``)."""
     stats = scan(roots, ledger, prices)
     tot = totals(ledger)
     worst = worst_request_usd(tot["max_input"], prices, max_output_tokens)
@@ -261,7 +278,7 @@ def cycle(roots: list[Path], ledger: dict, prices: dict, cap: float, max_output_
     return summary
 
 
-# ── 心跳状态与同步预留（runner 与守卫共用的协议） ───────────────────────────
+# -- heartbeat state and synchronous reservation (protocol shared by runner and guard) --
 
 def default_state_path(ledger_path: Path) -> Path:
     ledger_path = Path(ledger_path)
@@ -280,7 +297,8 @@ def lock_path(state_path: Path) -> Path:
 
 @contextlib.contextmanager
 def locked(state_path: Path):
-    """预留文件的排他锁（``fcntl.flock``）；runner 预留与守卫一轮扫描都在锁内，保证「读—判—写」原子。"""
+    """Exclusive lock on the reservation file (``fcntl.flock``); runner reservations and each guard scan run inside
+    the lock, so "read - decide - write" is atomic."""
     path = lock_path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a+") as fh:
@@ -305,7 +323,7 @@ def load_reservations(state_path: Path) -> dict:
         return {"schema": RESERVATIONS_SCHEMA, "reservations": {}, "episodes": []}
     doc = json.loads(path.read_text())
     if doc.get("schema") != RESERVATIONS_SCHEMA:
-        raise ValueError(f"预留文件 schema 应为 {RESERVATIONS_SCHEMA}：{path}")
+        raise ValueError(f"reservation file schema must be {RESERVATIONS_SCHEMA}: {path}")
     doc.setdefault("reservations", {})
     doc.setdefault("episodes", [])
     return doc
@@ -329,7 +347,8 @@ def write_state(state_path: Path, summary: dict, ledger: dict, prices: dict, max
 
 def guard_round(roots: list[Path], ledger: dict, prices: dict, cap: float, max_output_tokens: int,
                 state_path: Path, *, clock=time.time) -> dict:
-    """守卫一轮：锁内读预留 → 扫描与投影（到线写 STOP）→ 写心跳状态。``main`` 与测试共用。"""
+    """One guard round: read reservations inside the lock -> scan and project (write STOP when the limit is reached)
+    -> write the heartbeat state. Shared by ``main`` and tests."""
     with locked(state_path):
         reservations = load_reservations(state_path)
         summary = cycle(roots, ledger, prices, cap, max_output_tokens, reservations)
@@ -340,23 +359,26 @@ def guard_round(roots: list[Path], ledger: dict, prices: dict, cap: float, max_o
 def check_cap(cap: float) -> float:
     cap = float(cap)
     if not 0 < cap <= HARD_CAP_USD:
-        raise ValueError(f"ASTRA_COST_BLOCKED --cap={cap:g} 超出本轮硬上限 {HARD_CAP_USD:g} 美元（R6）")
+        raise ValueError(f"ASTRA_COST_BLOCKED --cap={cap:g} exceeds the hard limit of {HARD_CAP_USD:g} USD")
     return cap
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="3-tier Astra 费用守卫（每 --interval 秒汇总一次）")
+    parser = argparse.ArgumentParser(description="3-tier Astra cost guard (aggregates once every --interval seconds)")
     parser.add_argument("--root", action="append", required=True,
-                        help="spool 根（可多个，本机预检与 GL 各一个）；也可直接给 group_*/ 或其上层目录")
-    parser.add_argument("--prices", required=True, help="单价配置 JSON（美元/百万 token）")
-    parser.add_argument("--ledger", required=True, help="累计账本 JSON：存在则先读入，每轮写回")
+                        help="spool root (repeatable, e.g. one for a local pre-check and one for the cluster); may "
+                             "also be a group_*/ directory or its parent")
+    parser.add_argument("--prices", required=True, help="unit price config JSON (USD per million tokens)")
+    parser.add_argument("--ledger", required=True, help="cumulative ledger JSON: read first if it exists, written "
+                                                        "back every round")
     parser.add_argument("--cap", type=float, default=HARD_CAP_USD,
-                        help=f"美元；默认且最大 {HARD_CAP_USD:g}（本轮硬上限，R6）")
+                        help=f"USD; default and maximum {HARD_CAP_USD:g} (hard limit)")
     parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_S,
-                        help=f"秒；不得超过心跳超时 {HEARTBEAT_TIMEOUT_S:g} 秒的一半")
-    parser.add_argument("--state", default=None, help="心跳状态文件（runner 发送前同步读）；默认 <账本名>.state.json")
-    parser.add_argument("--max-output-tokens", type=int, default=2048, help="Astra 每次请求的 max_output_tokens")
-    parser.add_argument("--once", action="store_true", help="只跑一轮（测试与手动核账用）")
+                        help=f"seconds; must not exceed half the heartbeat timeout of {HEARTBEAT_TIMEOUT_S:g} seconds")
+    parser.add_argument("--state", default=None, help="heartbeat state file (read synchronously by the runner before "
+                                                      "sending); default <ledger name>.state.json")
+    parser.add_argument("--max-output-tokens", type=int, default=2048, help="max_output_tokens of each Astra request")
+    parser.add_argument("--once", action="store_true", help="run a single round (for tests and manual reconciliation)")
     return parser
 
 
@@ -368,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr, flush=True)
         return 2
     if not 0 < args.interval <= HEARTBEAT_TIMEOUT_S / 2:
-        print(f"ASTRA_COST_BLOCKED --interval={args.interval:g} 须在 (0, {HEARTBEAT_TIMEOUT_S / 2:g}] 秒内",
+        print(f"ASTRA_COST_BLOCKED --interval={args.interval:g} must be within (0, {HEARTBEAT_TIMEOUT_S / 2:g}] seconds",
               file=sys.stderr, flush=True)
         return 2
     prices = load_prices(Path(args.prices))
@@ -408,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
         while running["go"] and time.monotonic() < deadline:
             time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
     if summary is not None and not args.once:
-        # 正常退出：写 exited=true，runner 立即拒发（不等心跳超时）
+        # normal exit: write exited=true so the runner refuses immediately (without waiting for the heartbeat timeout)
         with locked(state_path):
             write_state(state_path, summary, ledger, prices, args.max_output_tokens, exited=True)
         print(f"ASTRA_COST_GUARD_EXIT state={state_path}", flush=True)
