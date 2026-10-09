@@ -60,7 +60,8 @@ def test_help_prints():
 
 
 def test_scripts_dir_has_only_evaluate():
-    assert sorted(p.name for p in (REPO / "scripts").iterdir()) == ["evaluate.py"]
+    # __pycache__ appears once any test imports evaluate.py; it is never tracked.
+    assert sorted(p.name for p in (REPO / "scripts").iterdir() if p.name != "__pycache__") == ["evaluate.py"]
 
 
 def test_parse_args_and_cfg_passthrough():
