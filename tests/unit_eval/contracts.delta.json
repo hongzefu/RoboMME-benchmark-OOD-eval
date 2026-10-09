@@ -212,5 +212,27 @@
   "resource": "cpu",
   "mutants": [],
   "status": "verified"
+ },
+ {
+  "id": "C19-FIND-FFPROBE",
+  "domain": "C19",
+  "source": [
+   "src/robomme_hard_eval/record/official_render.py"
+  ],
+  "symbol": "find_ffprobe／ENV_FFPROBE",
+  "oracle": "临时目录里的假可执行文件，shutil.which 与录制器 find_ffmpeg 打桩",
+  "positive": "ROBOMME_FFPROBE 优先；给定 ffmpeg 时取同目录 ffprobe；未给 ffmpeg 时按录制器 find_ffmpeg（认 V75_FFMPEG）取同目录 ffprobe",
+  "negative": "都找不到时 RuntimeError 且提示 ROBOMME_FFPROBE；ROBOMME_FFPROBE 指向不存在的文件时忽略",
+  "boundaries": "2026-10-08 S5：GL 计算节点 PATH 无 ffprobe，旧实现只查 PATH，8 局网站视频记 video_error",
+  "nodeids": [
+   "tests/unit_eval/test_find_ffprobe.py::test_env_ffprobe_wins",
+   "tests/unit_eval/test_find_ffprobe.py::test_sibling_of_given_ffmpeg",
+   "tests/unit_eval/test_find_ffprobe.py::test_without_ffmpeg_uses_recorder_find_ffmpeg",
+   "tests/unit_eval/test_find_ffprobe.py::test_not_found_raises_with_hint",
+   "tests/unit_eval/test_find_ffprobe.py::test_env_pointing_to_missing_file_is_ignored"
+  ],
+  "mutants": [],
+  "resource": "cpu",
+  "status": "verified"
  }
 ]

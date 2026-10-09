@@ -84,15 +84,28 @@ def load_official(repo_root: Path | None = None):
     return mod.RolloutRecorder, mod.TASK_WITH_VIDEO_DEMO
 
 
+ENV_FFPROBE = "ROBOMME_FFPROBE"
+
+
 def find_ffprobe(ffmpeg: str | None = None) -> str:
-    """ffprobe：与 ffmpeg 同目录者优先，否则 PATH。"""
+    """ffprobe：环境变量 ROBOMME_FFPROBE 优先；其次与 ffmpeg 同目录者（未给 ffmpeg 时按录制器 find_ffmpeg 的规则定位，
+    认 V75_FFMPEG）；最后 PATH。GL 计算节点 PATH 上没有 ffprobe、imageio 自带的只有 ffmpeg，须经前两条找到。"""
+    env = os.environ.get(ENV_FFPROBE)
+    if env and Path(env).is_file() and os.access(env, os.X_OK):
+        return env
+    if not ffmpeg:
+        try:
+            from .recorder import find_ffmpeg
+            ffmpeg = find_ffmpeg()
+        except Exception:  # noqa: BLE001 — 找不到 ffmpeg 时退回 PATH
+            ffmpeg = None
     if ffmpeg:
         cand = Path(ffmpeg).with_name("ffprobe")
         if cand.is_file() and os.access(cand, os.X_OK):
             return str(cand)
     w = shutil.which("ffprobe")
     if not w:
-        raise RuntimeError("找不到 ffprobe")
+        raise RuntimeError(f"找不到 ffprobe（可设 {ENV_FFPROBE}，或让 V75_FFMPEG 指向同目录带 ffprobe 的 ffmpeg）")
     return w
 
 
