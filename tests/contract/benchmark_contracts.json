@@ -3961,6 +3961,30 @@
   "dev-scripts/gl/ckpt_paths.sh": {
    "category": "冻结配置（只供实跑）",
    "reason": "只在 dev：三个模型的本机／NFS ckpt 原路径（搬自已删除的 src DEFAULT_CKPTS），run_eval_gl.sh 以子进程取值后显式传 --ckpt；补参与透传逻辑由 run_eval_gl.sh 所属契约覆盖，本文件只是路径常量。"
+  },
+  "dev-scripts/release/_manifest.py": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：公开清单读取与文件枚举的共享模块，随三道闸门脚本实跑。"
+  },
+  "dev-scripts/release/check_public_lang.py": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：PUBLIC_LANG 闸门，扫公开清单的 CJK；同步脚本与 dev-gate Action 每次实跑，判定行即证据。"
+  },
+  "dev-scripts/release/check_public_paths.py": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：PUBLIC_PATHS 闸门，扫公开清单的内部路径；同步脚本与 dev-gate Action 每次实跑。"
+  },
+  "dev-scripts/release/check_manifest.py": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：PUBLIC_MANIFEST 与 SUBMODULE_PUBLIC 闸门（含临时目录 pytest 收集、gh api 查子模块），需 git 历史与网络，不在 CPU 门禁内。"
+  },
+  "dev-scripts/release/check_secrets.py": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：PUBLIC_SECRETS 全历史凭据扫描，读 git log --all -p，S3／S6 前实跑。"
+  },
+  "dev-scripts/release/sync_to_main.sh": {
+   "category": "发布工具（只供实跑）",
+   "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：dev→main 单向同步脚本，推送远端 main，只在用户说「同步到 main」时实跑。"
   }
  },
  "file_notes": {

@@ -24,7 +24,7 @@ from tests._support.loaders import REPO
 SCRIPTS = REPO / "scripts"
 DEV_SCRIPTS = REPO / "dev-scripts"
 ENTRY_SET = {"evaluate.py"}
-DEV_SUBDIRS = {"gl", "orig", "checks", "media", "parity", "site"}
+DEV_SUBDIRS = {"gl", "orig", "checks", "media", "parity", "site", "release"}
 PRODUCTION_DIRS = (REPO / "src", REPO / "scripts", REPO / "dev-scripts")
 
 
