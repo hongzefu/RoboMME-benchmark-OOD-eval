@@ -326,3 +326,46 @@ def test_guard_batch_misuse_preserves_allocation_hold(tmp_path):
         assert p.poll() is None and not (control/'STOP').exists() and not cancelled.exists()
     finally: p.terminate(); out=p.communicate(timeout=5)[0]
     assert 'GUARD_BATCH_MISUSE' in out
+
+
+def mail_config(tmp_path):
+    c=dict(root=str(tmp_path),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64,
+           notification=dict(enabled=True,to=S.MAIL_TO,command='/usr/sbin/sendmail',timeout=30))
+    (tmp_path/'control').mkdir()
+    return c
+
+
+def test_notification_submit_is_bound_idempotent_and_not_delivery(tmp_path,monkeypatch):
+    import types
+    c=mail_config(tmp_path); calls=[]
+    def run(cmd,**kw):
+        calls.append((cmd,kw)); return types.SimpleNamespace(returncode=0,stdout=b'queued fixture',stderr=b'')
+    monkeypatch.setattr(S.subprocess,'run',run)
+    report=S.notify(c,'probe',{'test':'只用CPU邮件替身'})
+    assert report['state']=='submitted' and report['rc']==0 and not report['delivery_verified'] and not report['notification_established']
+    assert calls[0][0]==['/usr/sbin/sendmail','-i','-t'] and b'hongzefu@umich.edu' in calls[0][1]['input']
+    S.require_probe(c); assert S.notify(c,'probe',{})==report and len(calls)==1
+    bad=dict(c,config_sha256='c'*64)
+    with pytest.raises(ValueError): S.require_probe(bad)
+
+
+def test_notification_failure_does_not_stop_other_pids(tmp_path,monkeypatch):
+    import types
+    c=mail_config(tmp_path); child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],start_new_session=True)
+    monkeypatch.setattr(S.subprocess,'run',lambda *a,**kw:types.SimpleNamespace(returncode=75,stdout=b'',stderr=b'fixture MTA refused'))
+    try:
+        assert S.fail(c,RuntimeError('fixture failure'),process=child)==1 and child.poll() is None
+        r=S.read(tmp_path/'control/notification-failure.json')
+        assert r['state']=='failed' and r['rc']==75 and r['stderr']=='fixture MTA refused'
+        assert not (tmp_path/'control/STOP').exists()
+    finally: child.terminate(); child.wait(timeout=5)
+
+
+def test_notification_timeout_and_recipient_guard(tmp_path,monkeypatch):
+    c=mail_config(tmp_path)
+    def hung(*a,**kw): raise subprocess.TimeoutExpired(a[0],30)
+    monkeypatch.setattr(S.subprocess,'run',hung)
+    r=S.notify(c,'completed',{})
+    assert r['state']=='failed' and r['error_kind']=='TimeoutExpired' and r['rc'] is None
+    c['notification']['to']='other@example.com'
+    with pytest.raises(ValueError): S.notification_config(c)

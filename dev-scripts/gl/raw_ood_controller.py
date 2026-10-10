@@ -18,6 +18,54 @@ SECONDS = dict(qwenvl=311.428, smvla=152.526, pp=138.695, oracle=130.485, frames
 ROUTES = dict(qwenvl=('groundsg','groundsg-ground-sg-qwenvl','ground-sg-qwenvl'),
               oracle=('groundsg','groundsg-ground-sg-oracle','ground-sg-oracle'),smvla=('smvla','smvla',None),
               pp=('pp','pp',None),framesamp=('perceptual-framesamp-modul','perceptual-framesamp-modul',None))
+PRIOR_SHA256='fc294d2d4dfe5d3ad00b1cd93afe7d1e3e47989ba457b0241c0695b1b1131d74'
+
+
+def ledger_snapshot(path: Path):
+    """严格只读，不调用会初始化文件或配置的BudgetLedger接口。"""
+    from budget_ledger import BudgetState
+    raw=path.read_bytes()
+    if raw and not raw.endswith(b'\n'): raise ValueError('预算账本缺少完整末行')
+    rows=[json.loads(line) for line in raw.decode().splitlines() if line.strip()]
+    if len([r for r in rows if r.get('kind')=='config'])!=1: raise ValueError('预算配置行必须唯一')
+    state=BudgetState(rows)
+    if state.bad_rows: raise ValueError('预算账本坏行')
+    caps=state.config
+    if any(caps[k]!=v for k,v in {'trajectory_cap':4000,'reset_cap':8000,'planned_first_tries':4000,'shared_infra_cap':0,'expired_cap':0,'schema':'sgeval-budget/3'}.items()):
+        raise ValueError('预算账本4000/8000硬上限不符')
+    return state,hashlib.sha256(raw).hexdigest()
+
+
+def work_budget(c: dict, *, current=None) -> dict:
+    prior=c.get('prior_work'); prior_count=0; prior_resets=0; fingerprint=None
+    if prior is None:
+        if c['run'].endswith('-02'): raise ValueError('恢复轮必须声明prior_work')
+        tcap,rcap=4000,8000
+    else:
+        fields={'sha256':PRIOR_SHA256,'expected_trajectories':1,'expected_reset_claims':2,'combined_trajectory_cap':4001,'combined_reset_cap':8002}
+        if any(prior[k]!=v for k,v in fields.items()): raise ValueError('跨轮预算固定锚点或1/2/4001/8002不符')
+        path=Path(prior['ledger'])
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to((Path(c['root'])/'control').resolve()): raise ValueError('prior账本必须是本轮control内实体副本')
+        old,fingerprint=ledger_snapshot(path)
+        if fingerprint!=PRIOR_SHA256: raise ValueError('prior账本SHA不符')
+        prior_count=old.trajectories; prior_resets=sum(old.claimed.values())+old.orphan_claims
+        if prior_count!=1 or prior_resets!=2 or old.resets!=2 or old.retries or old.recovery_used or old.astra: raise ValueError('prior实际计量不是1/2零重试')
+        tcap,rcap=4001,8002
+        if tcap!=4000+prior_count or rcap!=8000+prior_resets: raise ValueError('跨轮硬上限未闭合')
+    if current is None:
+        if Path(c['budget_ledger']).exists(): current,_=ledger_snapshot(Path(c['budget_ledger']))
+        elif prior is not None: raise ValueError('恢复轮缺少当前预算账本')
+    trajectories=current.trajectories if current is not None else 0
+    claims=sum(current.claimed.values())+current.orphan_claims if current is not None else 0
+    resets=current.resets if current is not None else 0
+    retries=len(current.retries) if current is not None else 0
+    if current is not None and (current.bad_rows or current.astra or current.recovery_used): raise ValueError('当前账本损坏或有禁止的Astra/恢复尝试')
+    if trajectories>4000 or claims>8000 or resets>8000 or retries: raise ValueError('当前4000/8000/零重试上限越界')
+    if prior_count+trajectories>tcap or prior_resets+max(claims,resets)>rcap: raise ValueError('跨轮累计上限越界')
+    return dict(prior=dict(trajectories=prior_count,reset_claims=prior_resets,sha256=fingerprint),
+                current=dict(trajectories=trajectories,reset_claims=claims,reset_count=resets,retries=retries,trajectory_cap=4000,reset_cap=8000),
+                combined=dict(trajectories=prior_count+trajectories,reset_claims=prior_resets+claims,reset_count=prior_resets+resets,
+                              trajectory_cap=tcap,reset_cap=rcap))
 TASK_COUNTS = {
     **{t: (25,25) for t in ('BinFill','VideoUnmaskSwap','ButtonUnmaskSwap','VideoPlaceButton','VideoPlaceOrder','PickHighlight','VideoRepick')},
     **{t: (13,13,12,12) for t in ('VideoUnmask','ButtonUnmask')},
@@ -107,6 +155,7 @@ def validate_config(config: dict) -> list[dict]:
     keys={identity(m,r) for m in MODELS for r in rows}
     if len(config['expected_identities'])!=4000 or set(config['expected_identities'])!=keys: raise ValueError('搬运身份manifest不符')
     if len(config['expected_publications'])!=4000 or set(config['expected_publications'])!={publication_name(k) for k in keys}: raise ValueError('搬运发布manifest不符')
+    work_budget(config)
     return rows
 
 
@@ -304,8 +353,7 @@ class Controller:
 
     def report(self):
         """读取保留的小result与共享账本，自动产生实测报告；任务失败单列。"""
-        from budget_ledger import BudgetState
-        ledger=BudgetState([json.loads(x) for x in Path(self.c['budget_ledger']).read_text().splitlines() if x.strip()])
+        ledger,current_sha=ledger_snapshot(Path(self.c['budget_ledger']))
         if ledger.bad_rows or ledger.trajectories!=4000 or ledger.resets>8000 or ledger.retries or ledger.recovery_used or ledger.astra:
             raise ValueError('最终共享预算不符合4000首试/8000reset/零重试')
         groups={}; model_stats={m:dict(accepted=0,success=0,failed=0,infra=0,episode_wall_s=0.,recorder_finalize_s=0.,chunks=0,decision_wall_ms=0.,
@@ -342,11 +390,14 @@ class Controller:
         budget=dict(trajectories=ledger.trajectories,reset_claims=sum(ledger.claimed.values())+ledger.orphan_claims,
                     reset_count=ledger.resets,retries=len(ledger.retries),recovery=ledger.recovery_used,astra=ledger.astra,
                     trajectory_cap=4000,reset_cap=8000,bad_rows=ledger.bad_rows)
-        atomic(self.control/'results-report.json',dict(self.base,expected=4000,accepted=4000,missing=0,infra=0,budget=budget,
+        combined=work_budget(self.c,current=ledger)
+        combined['current']['sha256']=current_sha
+        atomic(self.control/'results-report.json',dict(self.base,expected=4000,accepted=4000,missing=0,infra=0,budget=budget,work_budget=combined,
               models=model_stats,by_task_tier=list(groups.values()),wall_s=time.time()-self.started,time=time.time(),
               limitations=['未测GPU利用率','各片加载总耗时由worker日志提供，不能从局timing重复累加']))
         print(f"RUN_BUDGET=PASS trajectories=4000/4000 reset_claims={budget['reset_claims']}/8000 retries=0",flush=True)
         print('OOD_RESULTS=PASS models=5 expected=4000 accepted=4000 missing=0 infra=0',flush=True)
+        print(f"WORK_BUDGET=PASS trajectories={combined['combined']['trajectories']}/{combined['combined']['trajectory_cap']} reset_claims={combined['combined']['reset_claims']}/{combined['combined']['reset_cap']} prior_trajectories={combined['prior']['trajectories']} prior_reset_claims={combined['prior']['reset_claims']}",flush=True)
 
     def run(self):
         self.control.mkdir(parents=True,exist_ok=True)

@@ -111,7 +111,9 @@ def test_normal_task_failure_is_published_with_explicit_zero(tmp_path):
 
 def test_real_format_report_nullable_policy_timing(tmp_path,monkeypatch):
     import budget_ledger
-    c=config(tmp_path); controller=C.Controller(c); Path(c['budget_ledger']).write_text('')
+    c=config(tmp_path); controller=C.Controller(c)
+    caps=dict(kind='config',schema='sgeval-budget/3',trajectory_cap=4000,reset_cap=8000,planned_first_tries=4000,shared_infra_cap=0,expired_cap=0)
+    Path(c['budget_ledger']).write_text(json.dumps(caps)+'\n')
     pubs={}; results={}
     for m in C.MODELS:
         for r in identities():
@@ -125,7 +127,7 @@ def test_real_format_report_nullable_policy_timing(tmp_path,monkeypatch):
         return pubs[path.name]
     monkeypatch.setattr(C,'read',read)
     monkeypatch.setattr(budget_ledger,'BudgetState',lambda _:types.SimpleNamespace(bad_rows=0,trajectories=4000,resets=8000,
-         retries=[],recovery_used=0,astra=0,claimed={'x':8000},orphan_claims=0))
+         retries=[],recovery_used=0,astra=0,claimed={'x':8000},orphan_claims=0,config=caps))
     controller.report()
     report=json.loads((tmp_path/'control/results-report.json').read_text())
     assert report['infra']==0 and report['missing']==0
@@ -196,3 +198,41 @@ def test_controller_exception_keeps_existing_step_process_alive(tmp_path,monkeyp
         with pytest.raises(RuntimeError,match='fixture'): controller.run()
         assert child.poll() is None and not (tmp_path/'control/STOP').exists()
     finally: child.terminate(); child.wait(timeout=5)
+
+
+def prior_config(tmp_path):
+    import budget_ledger
+    c=config(tmp_path); c['run']=c['run_name']='ood-five-raw-seed7-20261010-02'
+    control=tmp_path/'control'; control.mkdir()
+    old=control/'prior-budget-ledger.jsonl'
+    old.write_bytes((HERE.parents[1]/'docs/validation/ood-five-raw-seed7-20261010-01/records/stopped-budget-ledger.jsonl').read_bytes())
+    c['prior_work']=dict(ledger=str(old),sha256=C.PRIOR_SHA256,expected_trajectories=1,expected_reset_claims=2,
+                        combined_trajectory_cap=4001,combined_reset_cap=8002)
+    budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000).check()
+    return c
+
+
+def test_cross_round_budget_start_and_final_are_read_only(tmp_path):
+    c=prior_config(tmp_path); old=Path(c['prior_work']['ledger']); original=old.read_bytes()
+    assert len(C.validate_config(c))==800
+    assert C.work_budget(c)['combined']['trajectories']==1
+    final=types.SimpleNamespace(trajectories=4000,claimed={'all':8000},orphan_claims=0,resets=8000,retries=[],bad_rows=0,astra=0,recovery_used=0)
+    report=C.work_budget(c,current=final)
+    assert report['combined']['trajectories']==4001 and report['combined']['reset_claims']==8002
+    assert old.read_bytes()==original and not old.with_suffix(old.suffix+'.lock').exists()
+
+
+@pytest.mark.parametrize('kind',['tamper','missing_prior','wrong_cap','wrong_expectation','missing_current','over_current'])
+def test_cross_round_budget_rejects_tamper_omission_and_overage(tmp_path,kind):
+    c=prior_config(tmp_path)
+    if kind=='tamper':
+        p=Path(c['prior_work']['ledger']); p.write_bytes(p.read_bytes().replace(b'4000',b'4001',1))
+    elif kind=='missing_prior': del c['prior_work']
+    elif kind=='wrong_cap': c['prior_work']['combined_reset_cap']=8000
+    elif kind=='wrong_expectation': c['prior_work']['expected_trajectories']=0
+    elif kind=='missing_current': Path(c['budget_ledger']).unlink()
+    else:
+        state=types.SimpleNamespace(trajectories=4001,claimed={'all':8001},orphan_claims=0,resets=8001,retries=[],bad_rows=0,astra=0,recovery_used=0)
+        with pytest.raises(ValueError): C.work_budget(c,current=state)
+        return
+    with pytest.raises((ValueError,KeyError)): C.validate_config(c)
