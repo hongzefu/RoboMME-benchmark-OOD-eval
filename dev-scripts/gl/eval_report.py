@@ -495,7 +495,11 @@ def _speed_section(rows_by_policy: dict[str, list[dict]]) -> dict:
                           "wall_first_ms": wall["first_mean"], "wall_steady_mean_ms": wall["steady_mean"],
                           "wall_steady_p50_ms": wall["steady_p50"], "wall_steady_p95_ms": wall["steady_p95"],
                           **{k: summary[k] for k in ("action_rtt_steady_mean_ms", "lang_steady_mean_ms", "server_infer_steady_mean_ms")}})
-    return {"rows": table, **{k: speed[k] for k in ("missing", "excluded_infra", "excluded_timeout", "excluded_reconnected", "excluded_status")}}
+    # 父组证据独立保留，不能被 Astra 原始 chunks 的子层重算补成通过；父子不相加。
+    conservation = {k: sum(group[k] for group in speed["groups"])
+                    for k in ("violations", "missing_fields", "checked", "expected")}
+    return {"rows": table, "conservation": conservation,
+            **{k: speed[k] for k in ("missing", "excluded_infra", "excluded_timeout", "excluded_reconnected", "excluded_status")}}
 
 
 def speed_table(rows_by_policy: dict[str, list[dict]]) -> list[dict]:
@@ -516,10 +520,14 @@ def speed_table_from_results(paths: list[Path]) -> dict:
 
 def speed_line(speed: dict) -> str:
     totals = {k: sum(row[k] for row in speed["rows"]) for k in ("decisions", "violations", "missing_fields", "checked", "expected")}
-    passed = not totals["violations"] and not totals["missing_fields"] and totals["checked"] == totals["expected"]
+    parent = speed.get("conservation", totals)
+    passed = all(not counts["violations"] and not counts["missing_fields"] and counts["checked"] == counts["expected"]
+                 for counts in (parent, totals))
     return (f"SPEED_TABLE={'PASS' if passed else 'FAIL'} rows={len(speed['rows'])} "
-            f"decisions={totals['decisions']} violations={totals['violations']} missing={speed['missing']} "
-            f"checked={totals['checked']} expected={totals['expected']} missing_fields={totals['missing_fields']}")
+            f"decisions={totals['decisions']} violations={parent['violations']} missing={speed['missing']} "
+            f"checked={parent['checked']} expected={parent['expected']} missing_fields={parent['missing_fields']} "
+            f"layer_violations={totals['violations']} layer_missing_fields={totals['missing_fields']} "
+            f"layer_checked={totals['checked']} layer_expected={totals['expected']}")
 
 
 def _fmt_ms(value: float | None) -> str:

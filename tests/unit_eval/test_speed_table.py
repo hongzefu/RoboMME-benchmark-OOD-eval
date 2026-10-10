@@ -95,6 +95,49 @@ def test_astra_layers_preserve_original_phases_and_empty_layers(er):
     assert er.speed_line({"rows": table, "missing": 0}).startswith("SPEED_TABLE=FAIL")
 
 
+@pytest.mark.parametrize("missing", ("all", "checked", "expected", "missing_fields", "violations"))
+def test_astra_parent_evidence_cannot_be_repaired_by_raw_layer_recalculation(er, tmp_path, missing):
+    r = row(0, model="astra")
+    r["timing"]["policy"] = timing((40,), layers=[(True, True, 1)])
+    if missing == "all":
+        r["timing"]["policy"]["conservation"] = {"kind": "serial"}
+    else:
+        del r["timing"]["policy"]["conservation"][missing]
+    # 走真实序列化与读取，不只测内存里的 Python 字典。
+    p = tmp_path / "results.jsonl"
+    p.write_text(json.dumps(r) + "\n", encoding="utf-8")
+    speed = er.speed_table_from_results([p])["speed"]
+    assert len(speed["rows"]) == 1 and speed["rows"][0]["decisions"] == 1
+    assert speed["rows"][0]["checked"] == speed["rows"][0]["expected"] == 1
+    assert speed["rows"][0]["missing_fields"] == 0
+    assert speed["conservation"]["missing_fields"] == 1
+    assert speed["conservation"]["expected"] == 1
+    if missing in ("all", "checked"):
+        assert speed["conservation"]["checked"] == 0
+    # 报表再次 JSON 往返后仍拒绝子层掩盖父组缺项。
+    restored = json.loads(json.dumps(speed))
+    line = er.speed_line(restored)
+    assert line.startswith("SPEED_TABLE=FAIL rows=1 decisions=1")
+    assert "expected=1 missing_fields=1" in line
+    assert "layer_checked=1 layer_expected=1" in line
+
+
+def test_complete_astra_parent_counts_not_duplicated_and_empty_exclusions_keep_formula(er):
+    r = row(0, model="astra")
+    r["timing"]["policy"] = timing((100, 200, 300, 40, 60), layers=[
+        (True, True, 1), (True, False, 1), (False, True, 1), (False, False, 1), (False, False, 0)])
+    speed = er._speed_section({"astra": [r]})
+    assert len(speed["rows"]) == 5
+    assert speed["conservation"] == {"violations": 0, "missing_fields": 0, "checked": 5, "expected": 5}
+    assert sum(layer["decisions"] for layer in speed["rows"]) == 5
+    assert er.speed_line(speed).startswith("SPEED_TABLE=PASS rows=5 decisions=5")
+    r["status"] = "timeout"
+    speed = er._speed_section({"astra": [r]})
+    assert speed["rows"] == [] and speed["excluded_timeout"] == 1
+    assert speed["conservation"] == {"violations": 0, "missing_fields": 0, "checked": 0, "expected": 0}
+    assert er.speed_line(speed).startswith("SPEED_TABLE=PASS rows=0 decisions=0")
+
+
 def test_full_and_sparse_multiplication(er):
     rows = [row(n, task=task) for task in ("A", "B") for n in range(3)]
     assert er.speed_table(by_policy(rows))[0]["mult"] == "2 任务 × 1 档 × 3 局 = 6"
