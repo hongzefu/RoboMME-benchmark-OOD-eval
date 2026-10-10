@@ -92,10 +92,84 @@ def test_env_build_guard_keeps_normal_terminal_results(tmp_path, first):
     rows = F.seat_results(tmp_path / "stage", LABEL)
     assert [r["status"] for r in rows] == ["fail" if first.fail_at else "timeout", "success"]
     assert all(r["accepted"] and not r["infra"] for r in rows)
+    previous = {r["result"]: Path(r["result"]).read_bytes() for r in rows}
     again = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World(),
                           stop_on_env_build_error=True, infra_retries=19)
     assert F.run_rows(again, [a, b]) == 0
     assert len(F.seat_results(tmp_path / "stage", LABEL)) == 2
+    assert all(Path(path).read_bytes() == data for path, data in previous.items())
+    assert not (tmp_path / "stage" / "attempts").exists()
+
+
+def test_retry_preserves_previous_raw_bytes_and_history(tmp_path):
+    """第三次尝试前完整保留第二次失败字节，原结果账本前缀不变。"""
+    ident = _ident()
+    world = F.World({(ident["task"], ident["builder_episode"]):
+                     [F.Plan(raise_at=1, raise_exc=_svulkan)]})
+    stage = tmp_path / "stage"
+    first = F.make_runner(stage, LABEL, F.fake_seat_policy(), world)
+    assert F.run_rows(first, [ident]) == 6
+    row = F.seat_results(stage, LABEL)[-1]
+    raw = Path(row["result"]).parent
+    (raw / "extra.bin").write_bytes(b"second-attempt\x00\xff")
+    snapshot = {str(p.relative_to(raw)): p.read_bytes() for p in raw.rglob("*") if p.is_file()}
+    history = first.results_path.read_bytes()
+    result_history = raw.parent.parent / "results.jsonl"
+    prefix = result_history.read_bytes()
+    second = F.make_runner(stage, LABEL, F.fake_seat_policy(), F.World(), infra_retries=19)
+    assert F.run_rows(second, [ident]) == 0
+    archived = stage / "attempts" / LABEL / "seed7" / ident["key"] / "a2"
+    assert {str(p.relative_to(archived)): p.read_bytes() for p in archived.rglob("*") if p.is_file()} == snapshot
+    assert second.results_path.read_bytes().startswith(history)
+    assert result_history.read_bytes().startswith(prefix)
+    assert json.loads((raw / "result.json").read_text())["attempt"] == 3
+    mappings = [json.loads(s) for s in (second.seat_dir / "attempt-archives.jsonl").read_text().splitlines()]
+    import hashlib
+    assert mappings[-1]["result_sha256"] == hashlib.sha256(snapshot["result.json"]).hexdigest()
+    assert mappings[-1]["archive"] == str(archived)
+
+
+@pytest.mark.parametrize("damage", ["missing", "identity", "attempt", "conflict", "symlink", "raw_symlink"])
+def test_retry_archive_rejects_unsafe_previous_raw(tmp_path, damage, capsys):
+    """不完整身份、已存在归档及符号链接均阻塞，不触碰旧目录或再造环境。"""
+    ident = _ident()
+    stage = tmp_path / "stage"
+    shared = F.env_client().load_sibling("budget_ledger").BudgetLedger(tmp_path / "budget.jsonl")
+    world = F.World({(ident["task"], ident["builder_episode"]): [F.Plan(raise_at=1, raise_exc=_svulkan)]})
+    first = F.make_runner(stage, LABEL, F.fake_seat_policy(), world, infra_retries=0,
+                          budget_ledger=shared)
+    assert F.run_rows(first, [ident]) == 6
+    result = Path(F.seat_results(stage, LABEL)[0]["result"])
+    raw = result.parent
+    if damage == "missing":
+        result.unlink()
+    elif damage in ("identity", "attempt"):
+        doc = json.loads(result.read_text())
+        doc["key" if damage == "identity" else "attempt"] = "wrong" if damage == "identity" else 9
+        result.write_text(json.dumps(doc))
+    elif damage == "conflict":
+        destination = stage / "attempts" / LABEL / "seed7" / ident["key"] / "a1"
+        destination.mkdir(parents=True)
+        (destination / "keep.bin").write_bytes(b"keep")
+    elif damage == "symlink":
+        (raw / "linked").symlink_to(result)
+    else:
+        moved = raw.with_name(raw.name + "-original")
+        raw.rename(moved)
+        raw.symlink_to(moved, target_is_directory=True)
+    snapshot = {str(p): p.read_bytes() for p in stage.rglob("*") if p.is_file() and not p.is_symlink()}
+    second_world = F.World()
+    second = F.make_runner(stage, LABEL, F.fake_seat_policy(), second_world, infra_retries=19,
+                           budget_ledger=shared)
+    assert F.run_rows(second, [ident]) == 3
+    assert second_world.envs == []
+    state = shared.state()
+    assert len(state.reserves) == 2 and len(state.releases) == len(state.commits) == 1
+    assert state.resets == 2
+    assert "RUN_BLOCKED reason=attempt_archive" in capsys.readouterr().out
+    for path, data in snapshot.items():
+        if "/raw/" in path or "/attempts/" in path:
+            assert Path(path).read_bytes() == data
 
 
 def _run(tmp_path, name: str):
@@ -217,14 +291,19 @@ def _abA(tmp_path):
     stage = tmp_path / "stage"
     ec = F.env_client()
     runner = F.make_runner(stage, LABEL, pol, world)
+    restore = runner._fake_restore
     try:
         recs = []
-        for ident, n in ((a, 1), (b, 1), (a, 2)):
+        for index, ident in enumerate((a, b, a)):
+            # 第三局属于独立测试运行，不能绕过正常 accepted 的不可重跑契约。
+            if index == 2:
+                runner = F.make_runner(tmp_path / "repeat-stage", LABEL, pol, world)
+            n = 1
             c = ec.Claim(ident=ident, attempt=n, path=runner.queue.create_claim(ident, n), token="t", rid=None,
                          retry=n > 1)
             recs.append(runner.run_claim(pol, c))
     finally:
-        F.episode_mod().BUILDER_FACTORY = runner._fake_restore
+        F.episode_mod().BUILDER_FACTORY = restore
         F.episode_mod().clear_builders()
     return a, b, world, server, pol, recs
 
@@ -249,10 +328,15 @@ def test_abA_resident_policy_third_episode_identical_to_first(tmp_path):
 
 def test_abA_ledger_marks_repeat_as_late(tmp_path):
     a, b, world, server, pol, recs = _abA(tmp_path)
-    assert [r["late"] for r in recs] == [False, False, True]
+    ec = F.env_client()
+    led = ec.AttemptLedger(F.seat_dir(tmp_path / "stage", LABEL) / f"{LABEL}.ledger.jsonl",
+                           seat="s00", policy=LABEL, shared=None)
+    # 晚到的旧进程结果只在账本层验证；生产入口不能重跑已接受身份。
+    assert led.attempt_end({"key": a["key"], "attempt_id": "late", "attempt_no": 2,
+                            "status": "success", "infra": False}) is True
     ledger = F.seat_ledger(tmp_path / "stage", LABEL)
     acc = [x for x in ledger if x["kind"] == "accept"]
     assert sorted(x["key"] for x in acc) == sorted([a["key"], b["key"]])
     assert [x["accepted_attempt_id"] for x in acc if x["key"] == a["key"]] == [recs[0]["attempt_id"]]
-    # 队列：A 的第二次终态不再落 accepted（第一份即权威）
-    assert [r["accepted"] for r in recs] == [True, True, False]
+    accepted = json.loads(next((F.queue_dir(tmp_path / "stage", LABEL) / "accepted").glob(f"*{a['key']}*")).read_text())
+    assert accepted["attempt_id"] == recs[0]["attempt_id"]

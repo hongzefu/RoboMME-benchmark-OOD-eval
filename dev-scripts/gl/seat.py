@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ctypes
 import fcntl
 import hashlib
 import importlib.util
@@ -1233,6 +1234,72 @@ class SeatRunner:
         self._exit(code)
 
     # ── 一局 ────────────────────────────────────────────────────────────
+    def _archive_previous_attempt(self, policy, c: Claim, result_path: Path) -> None:
+        """在已取得领取的身份锁内保留上一失败尝试；拒绝不完整结果、身份冲突、链接及归档覆盖。"""
+        if c.attempt <= 1:
+            return
+        with self.queue.lock(c.ident):
+            if self.queue.state(c.ident).accepted is not None:
+                raise ValueError("身份已有 accepted")
+            claim = read_json(c.path)
+            if not claim or claim.get("token") != c.token or claim.get("ended"):
+                raise ValueError("当前领取失效")
+            root = self.out.absolute()
+            raw = result_path.parent.absolute()
+            if any(not re.fullmatch(r"[A-Za-z0-9._-]+", part) or part in (".", "..")
+                   for part in (self.label, c.key)):
+                raise ValueError("归档标签或身份键不是安全路径分量")
+            target = root / "attempts" / self.label / f"seed{self.policy_seed}" / c.key / f"a{c.attempt - 1}"
+            for path in (raw, target):
+                relative = path.relative_to(root)
+                if any(part in ("", ".", "..") for part in relative.parts):
+                    raise ValueError("归档路径越界")
+                cursor = root
+                if cursor.is_symlink():
+                    raise ValueError("产物根是符号链接")
+                for part in relative.parts:
+                    cursor = cursor / part
+                    if cursor.is_symlink():
+                        raise ValueError(f"归档路径含符号链接：{cursor}")
+            if not raw.exists():
+                return
+            if not raw.is_dir():
+                raise ValueError("原始产物不是目录")
+            if target.exists():
+                raise ValueError(f"归档目标已存在：{target}")
+            files = []
+            for path in sorted(raw.rglob("*")):
+                if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                    raise ValueError(f"原始产物含链接或特殊文件：{path}")
+                if path.is_file():
+                    files.append({"path": str(path.relative_to(raw)), "bytes": path.stat().st_size})
+            old = read_json(result_path)
+            expected = {"key": c.key, "model": policy.model, "dataset": c.ident["dataset"],
+                        "task": c.ident["task"], "episode": int(c.ident["builder_episode"]),
+                        "policy_seed": self.policy_seed, "attempt": c.attempt - 1}
+            if not old or any(old.get(k) != v for k, v in expected.items()):
+                raise ValueError("上一尝试结果缺失或身份／尝试号不符")
+            mismatch = self.E.check_identity(old, c.ident, dataset=c.ident["dataset"])
+            if mismatch or old.get("infra") is not True:
+                raise ValueError(f"上一尝试不是同身份基础设施失败：{mismatch}")
+            digest = hashlib.sha256(result_path.read_bytes()).hexdigest()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Linux 的 RENAME_NOREPLACE 保证外部并发创建目标时也绝不覆盖。
+            rename = getattr(ctypes.CDLL(None, use_errno=True), "renameat2", None)
+            if rename is None:
+                raise ValueError("系统不支持不覆盖的原子目录归档")
+            rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+            rename.restype = ctypes.c_int
+            if rename(-100, os.fsencode(raw), -100, os.fsencode(target), 1) != 0:
+                code = ctypes.get_errno()
+                raise OSError(code, os.strerror(code), str(target))
+            mapping = {"key": c.key, "dataset": c.ident["dataset"], "attempt": c.attempt - 1,
+                       "next_attempt": c.attempt, "source": str(raw), "archive": str(target),
+                       "result_sha256": digest, "files": files}
+            append_result(self.seat_dir / "attempt-archives.jsonl", mapping)
+            print(f"ATTEMPT_ARCHIVE=PASS key={c.key} attempt={c.attempt - 1} "
+                  f"archive={target} result_sha256={digest} files={len(files)}", flush=True)
+
     def run_claim(self, policy, c: Claim) -> dict:
         """跑一次领取；返回本席位结果行。运行阻塞／额度不足抛 ``SeatStop``（已记录）。"""
         E = self.E
@@ -1255,6 +1322,14 @@ class SeatRunner:
                 "claim": str(c.path), "result": result_path, "seat": self.seat, "policy": self.args.policy,
                 "policy_seed": self.policy_seed, "host": socket.gethostname()}
         stop: SeatStop | None = None
+        try:
+            self._archive_previous_attempt(policy, c, Path(result_path))
+        except (ValueError, OSError) as e:
+            row = dict(base, status="error", run_blocked=True, infra=False,
+                       error=f"ATTEMPT_ARCHIVE_BLOCKED {type(e).__name__}: {e}"[:800])
+            self._end(c, attempt_id, row, void=True)
+            print(f"RUN_BLOCKED reason=attempt_archive key={c.key} attempt={c.attempt} detail={e}", flush=True)
+            raise SeatStop(EXIT_BLOCKED, "attempt_archive") from e
         try:
             res = E.run_episode(policy, ds, task, ep, self.out, expect=ident, attempt=c.attempt, ledger=meter,
                                 **self._episode_kw())
