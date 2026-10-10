@@ -1,5 +1,32 @@
 [
   {
+    "id": "C13-STAGED-EVAL-TOOLS",
+    "domain": "C13",
+    "source": [
+      "dev-scripts/gl/select_stage_identities.py",
+      "dev-scripts/gl/stage_report.py"
+    ],
+    "symbol": "select_rows／build_report／read_sacct",
+    "oracle": "手写身份与真实序列化队列布局，独立计算档位轮转、差集、任务宏平均及最近秩P95",
+    "positive": "2／3／4／5档任务轮转各取5局，B精确补集，C/D全量；六模型阶段白名单隔离；无帧非基础设施错误单列并计分母",
+    "negative": "非法、重复及缺项身份；accepted／result／追加行非对象、缺失、重复、尝试不符；同步篡改model；空或不全模型集合均失败",
+    "boundaries": "25项参数化纯CPU测试；A/B共享seed7目录不会互相计入；sacct只计数字工作步，整程GPU分配秒与阶段wall代理分列",
+    "nodeids": [
+      "tests/test_select_stage_identities.py::test_rotation_and_complement",
+      "tests/test_select_stage_identities.py::test_exclusion_and_invalid",
+      "tests/test_stage_report.py::test_six_models_and_stage_isolation",
+      "tests/test_stage_report.py::test_fail_closed",
+      "tests/test_stage_report.py::test_macro_mean_and_p95",
+      "tests/test_stage_report.py::test_sacct_steps",
+      "tests/test_stage_report.py::test_incomplete_models_never_stage_pass",
+      "tests/test_stage_report.py::test_non_object_fail_closed",
+      "tests/test_stage_report.py::test_model_tampering_and_error_exception"
+    ],
+    "resource": "cpu（不reset、不初始化GPU、不加载权重、不联网）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
     "id": "C13-01",
     "domain": "C13",
     "source": [

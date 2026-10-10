@@ -99,3 +99,11 @@ srun --jobid=63431430 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode
 ## 本轮资源清单
 
 既有占位 JobID：63431430、63431431、63431432、63431433。尚未提交接替作业、尚未创建运行 tmux；清理不得涉及清单外资源。
+
+## 准备验证结果
+
+工具首次固定提交审查失败，原代码代理修复后 `PRE_MERGE_REVIEW=PASS`。整合核心短测命令 `UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q` 在 186.20 秒结束，退出 1：1489 项通过、6 个条件跳过、101 项排除，两个失败都来自新增工具没有登记测试契约；资源守卫 `TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6`。
+
+补齐两个工具的 `C13-STAGED-EVAL-TOOLS` 契约后，登记改动独立固定提交审查通过，未增加豁免或放宽验收。主检出复验命令 `UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python -m pytest tests/static/test_inventory.py tests/test_select_stage_identities.py tests/test_stage_report.py -q`，退出 0，36 项通过，4.38 秒；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。其余核心短测已在前次整合运行通过；没有声称登记后重跑了全部套件。`git diff --check`、运行载体 `bash -n`、HTML 两个一级标题检查通过。
+
+本机固定运行副本及五个子模块已核实状态为空；mme-vla 的内嵌 benchmark 目录为空。起跑前将固定到本次准备完成的提交，复制至新的 NFS 目录，并核对复制后 HEAD 与字节身份。
