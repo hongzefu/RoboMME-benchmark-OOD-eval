@@ -1,0 +1,55 @@
+........................................................................ [  5%]
+........................................................................ [ 10%]
+........................................................sss............. [ 15%]
+........................................................................ [ 20%]
+........................................................................ [ 25%]
+........................................................................ [ 30%]
+........................................................................ [ 36%]
+........................................................................ [ 41%]
+........................................................................ [ 46%]
+.......................................
+GATE2_SELFTEST=PASS cases=6 line=GATE2=INCOMPLETE policy=selftest compared=3 same_terminal=3 identical_trace=1 first_diverge_obs=1 first_diverge_state=0 first_diverge_text=0 first_diverge_action=1 missing=1 first_diverge_stop=0 first_diverge_request=0 duplicate=1 missing_trace=0 bad_trace=0
+................................. [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+..............................................sss....................... [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 82%]
+........................................................................ [ 87%]
+........................................................................ [ 92%]
+........................................................................ [ 98%]
+..........................                                               [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/sapien/__init__.py:18
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/sapien/__init__.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+.venv/lib/python3.11/site-packages/mani_skill/utils/registration.py:225: 16 warnings
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/mani_skill/utils/registration.py:225: DeprecationWarning: The 'warn' method is deprecated, use 'warning' instead
+    logger.warn(f"Override registered env {uid}")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard1/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard2/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard3/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard4/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard5/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6
+1388 passed, 6 skipped, 101 deselected, 22 warnings in 168.41s (0:02:48)
+EXIT_CODE=0

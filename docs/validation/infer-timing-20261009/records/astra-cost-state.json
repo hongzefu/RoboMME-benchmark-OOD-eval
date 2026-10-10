@@ -1,0 +1,33 @@
+{
+  "cap": 5.0,
+  "committed_usd": 0.311872,
+  "counted": [
+    "10a3c5117ee04c2ba177f81117297540",
+    "476c9ed2edd649b3ac1394223352c035",
+    "47d32d14c7a24890865c8c163360009d",
+    "8d875e7f5a524700a972b58750013895"
+  ],
+  "exited": true,
+  "hard_cap": 5.0,
+  "heartbeat": 1791602772.8558702,
+  "max_episodes": 3,
+  "max_output_tokens": 2048,
+  "pid": 448045,
+  "prices": {
+    "cached_input": 1.0,
+    "checked_at": "2026-10-04",
+    "conservative_note": "\u975e\u7f13\u5b58\u8f93\u5165\u6309 cache write \u4ef7 12.5 \u8ba1\uff08\u4e0a\u754c\uff0c\u5b88\u536b\u516c\u5f0f\u4e0d\u533a\u5206\u7f13\u5b58\u5199\u5165\uff09\uff1b272K \u52a0\u4ef7\u672a\u8ba1\u5165\uff0c\u9884\u68c0\u5b9e\u6d4b\u5355\u6b21\u8f93\u5165\u91cf\u540e\u6838\u5bf9",
+    "input": 12.5,
+    "model": "gpt-6-astra",
+    "output": 50.0,
+    "reasoning_billed_separately": false,
+    "source": "https://developers.openai.com/api/docs/models/gpt-6-astra\uff08\u5b98\u65b9\uff1ainput $10\u3001cached input $1\u3001cache writes $12.5\u3001output $50 \u6bcf\u767e\u4e07 token\uff1b\u8f93\u5165\u8d85 272K \u7684\u8bf7\u6c42\u6574\u6b21 2x \u8f93\u5165\uff0f1.5x \u8f93\u51fa\uff09",
+    "unit": "usd_per_1m_tokens"
+  },
+  "projected_usd": 0.514797,
+  "reason": "astra_cost_cap",
+  "schema": "astra-guard-state/1",
+  "stop": false,
+  "unknown_usage": 0,
+  "usd": 0.311872
+}

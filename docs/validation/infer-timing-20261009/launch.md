@@ -173,3 +173,159 @@ env BENCH_PY=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-e
 ```bash
 env BENCH_PY=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/bin/python SGEVAL_AUDIT=1 SGEVAL_THIRD_PARTY=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/third_party PYTHONPATH=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/src:/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/hf-cache OPENPI_DATA_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data UV_CACHE_DIR=/home/hongzefu/.cache/uv XDG_CACHE_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache srun --jobid=63431433 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared bash dev-scripts/gl/run_eval_gl.sh --policies pp --policy-seed 7 --identities /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/identities.jsonl --budget-ledger /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl --run infer-timing-gl-pp --out /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp --seat infer-timing-pp-63431433 --gpus 0 --trajectory-cap 27 --reset-cap 54 --shared-infra-cap 6 --expired-cap 0 --planned-first-tries 21 --infra-retries 1 --client-restarts 0 --ckpt /nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/pp/ponderpounce-9b-robomme --port-base 19730 --work-dir /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/work --cfg pp_py=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/robomme_benchmark-sgeval/third_party/PonderPounce/.venv/bin/python --cfg openpi_data_home=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 --cfg jax_cache_root=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/jax-cache --cfg server_dir=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/servers
 ```
+
+## 实际执行补充（最终实测，保留以上起跑记录）
+
+以上是起跑当时的完整计划与命令，下列以最终事实补齐；原 PP-off 命令作为历史保留，但用户后来取消，未执行。
+
+### 实际锚点与启动例外
+
+六 GL 源码提交固定为 `7e9e6e5288b683aadca4358b482f3789748e29c0`，使用独立固定副本 `/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-code`。原 SimpleMemVLA 的进程记录为 `git_dirty=True`，结果只作探索性；后五变体进程均为 `git_dirty=False`，不能用后五份状态追溯覆盖旧 SimpleMemVLA。
+
+本机原 SimpleMemVLA-on 启动为 `dad678adc1ef096e5eccfd4d03a652e5aec357f2`，off 与原 FrameSamp-on 为 `7e9e6e5288b683aadca4358b482f3789748e29c0`。控制停止修复合入 `959e624c852a3bdbe4a47d3f580cfb9714f5805f` 后，其余本机命令保持原参数、只从该新 clean 源码锚点运行。原三份短结果与日志保持，不重写或复跑；本机运行源码变化仅私有控制入口及 CPU 回归测试，不追溯改变 GL 固定副本或任何模型字节。
+
+### QwenVL／MemER 首次加载失败与 r1 展开命令
+
+旧 `envs/client-env/.venv` 缺少 flash-attn，首次两次 context_load 失败各为零轨迹预约／零 reset，不填写 task_success=0/1。复用已有 `/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/venvs/client-env/bin/python` 的兼容构建，不安装依赖、不降低注意力实现；显式 `PYTHONPATH` 三段全部指向新的固定副本，挡住旧 editable 指向。原输出 `infer-timing-gl-qwen`、`infer-timing-gl-memer` 与原日志保留。
+
+以下把实际启动材料中的环境与 srun 数组展开为可复现命令；启动器的前继守卫另核对旧负载退出码、身份结果、预算和精确 PID 已退出。QwenVL 前继为旧成功 SimpleMemVLA 的 `gl-smvla.log`、`rollouts/smvla/hard-verify/seed7/results.jsonl` 与 `logs/client-smvla-gl1525.arc-ts.umich.edu-426566-r0.log`；MemER 前继为 FrameSamp 的 `gl-framesamp.log`。恢复只用全新 r1 目录，`--infra-retries=0`、`--client-restarts=0`，不再按正常失败重试。
+
+QwenVL：**1 任务（VideoUnmask）× 1 档（xhard0）× 1 局**，作业 `63431430`，节点 gl1525，席位 `infer-timing-qwen-r1-63431430`：
+
+```bash
+IT_NFS_ROOT=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+IT_GL_REPO=$IT_NFS_ROOT/RoboMME-benchmark-OOD-eval
+IT_CODE_ROOT=$IT_GL_REPO/artifacts/infer-timing-20261009/runtime-code
+IT_OUT=$IT_GL_REPO/artifacts/infer-timing-gl-qwen-r1
+cd "$IT_CODE_ROOT"
+env BENCH_PY="$IT_NFS_ROOT/sg-eval/venvs/client-env/bin/python" ROBOMME_EVAL_ROOT="$IT_CODE_ROOT" \
+  SGEVAL_AUDIT=1 SGEVAL_THIRD_PARTY="$IT_CODE_ROOT/third_party" \
+  PYTHONPATH="$IT_CODE_ROOT/src:$IT_CODE_ROOT/third_party/robomme_benchmark/src:$IT_CODE_ROOT/third_party/mme-vla/packages/openpi-client/src" \
+  PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME="$IT_NFS_ROOT/hf-cache" \
+  OPENPI_DATA_HOME="$IT_NFS_ROOT/sg-eval/openpi-data" UV_CACHE_DIR="$HOME/.cache/uv" \
+  XDG_CACHE_HOME="$IT_GL_REPO/artifacts/infer-timing-20261009/cache" \
+  srun --jobid=63431430 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared \
+  bash dev-scripts/gl/run_eval_gl.sh --policies groundsg --policy-seed 7 \
+  --identities "$IT_GL_REPO/artifacts/infer-timing-20261009/identities.jsonl" \
+  --budget-ledger "$IT_GL_REPO/artifacts/infer-timing-20261009/budget-ledger.jsonl" \
+  --run infer-timing-gl-qwen-r1 --out "$IT_OUT" --seat infer-timing-qwen-r1-63431430 --gpus 0 \
+  --trajectory-cap 27 --reset-cap 54 --shared-infra-cap 6 --expired-cap 0 --planned-first-tries 21 \
+  --infra-retries 0 --client-restarts 0 --ckpt "$IT_NFS_ROOT/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999" \
+  --port-base 19740 --work-dir "$IT_OUT/work" \
+  --cfg mme_vla_py="$IT_NFS_ROOT/robomme_benchmark-sgeval/third_party/mme-vla/.venv/bin/python" \
+  --cfg xla_mem_fraction=0.65 --cfg openpi_data_home="$IT_NFS_ROOT/sg-eval/openpi-data" \
+  --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 \
+  --cfg jax_cache_root="$IT_GL_REPO/artifacts/infer-timing-20261009/jax-cache" \
+  --cfg server_dir="$IT_OUT/servers" --qwenvl-groundsg-adapter "$IT_NFS_ROOT/sg-eval/ckpt/qwenvl-groundsg/checkpoint-1200" \
+  --groundsg-variant ground-sg-qwenvl
+```
+
+MemER：**1 任务（VideoUnmask）× 1 档（xhard0）× 1 局**，作业 `63431431`，节点 gl1512，席位 `infer-timing-memer-r1-63431431`：
+
+```bash
+IT_NFS_ROOT=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+IT_GL_REPO=$IT_NFS_ROOT/RoboMME-benchmark-OOD-eval
+IT_CODE_ROOT=$IT_GL_REPO/artifacts/infer-timing-20261009/runtime-code
+IT_OUT=$IT_GL_REPO/artifacts/infer-timing-gl-memer-r1
+cd "$IT_CODE_ROOT"
+env BENCH_PY="$IT_NFS_ROOT/sg-eval/venvs/client-env/bin/python" ROBOMME_EVAL_ROOT="$IT_CODE_ROOT" \
+  SGEVAL_AUDIT=1 SGEVAL_THIRD_PARTY="$IT_CODE_ROOT/third_party" \
+  PYTHONPATH="$IT_CODE_ROOT/src:$IT_CODE_ROOT/third_party/robomme_benchmark/src:$IT_CODE_ROOT/third_party/mme-vla/packages/openpi-client/src" \
+  PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME="$IT_NFS_ROOT/hf-cache" \
+  OPENPI_DATA_HOME="$IT_NFS_ROOT/sg-eval/openpi-data" UV_CACHE_DIR="$HOME/.cache/uv" \
+  XDG_CACHE_HOME="$IT_GL_REPO/artifacts/infer-timing-20261009/cache" \
+  srun --jobid=63431431 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared \
+  bash dev-scripts/gl/run_eval_gl.sh --policies groundsg --policy-seed 7 \
+  --identities "$IT_GL_REPO/artifacts/infer-timing-20261009/identities.jsonl" \
+  --budget-ledger "$IT_GL_REPO/artifacts/infer-timing-20261009/budget-ledger.jsonl" \
+  --run infer-timing-gl-memer-r1 --out "$IT_OUT" --seat infer-timing-memer-r1-63431431 --gpus 0 \
+  --trajectory-cap 27 --reset-cap 54 --shared-infra-cap 6 --expired-cap 0 --planned-first-tries 21 \
+  --infra-retries 0 --client-restarts 0 --ckpt "$IT_NFS_ROOT/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999" \
+  --port-base 19750 --work-dir "$IT_OUT/work" \
+  --cfg mme_vla_py="$IT_NFS_ROOT/robomme_benchmark-sgeval/third_party/mme-vla/.venv/bin/python" \
+  --cfg xla_mem_fraction=0.65 --cfg openpi_data_home="$IT_NFS_ROOT/sg-eval/openpi-data" \
+  --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 \
+  --cfg jax_cache_root="$IT_GL_REPO/artifacts/infer-timing-20261009/jax-cache" \
+  --cfg server_dir="$IT_OUT/servers" --memer-adapter "$IT_NFS_ROOT/sg-eval/ckpt/memer/grounded_subgoal/checkpoint-1300" \
+  --groundsg-variant ground-sg-memer
+```
+
+两次实际终态分别为 QwenVL `fail / task_success=0` 与 MemER `success / task_success=1`，各只一轨迹、两次 reset，不为正常失败重试。
+
+### 私有单步停止与诚实终态
+
+`infer_timing_smoke.py::install_stop` 修复后的入口在首个合法块后的第一实际环境步、且观测有效／原状态 ongoing／未自然终止时，对**返回给驱动**的五元组设置 `truncated=True、status=timeout、single_chunk_smoke`。原记录器的环境事件不改，另有 `single_chunk_smoke_stop` 事件声明控制截断、`task_success=False`；不设置 `cap_hit`，因为正式身份的 1300 步上限没触发。真实异常、None 观测、错误状态或自然终态保持，不能以属性错误冒充成功。审计开没取得合法块时最多十六步，入口明确 `SINGLE_CHUNK_SMOKE=FAIL`；finally 仍记预算。Astra `--it-formal` 只包预算，不安装短停止。
+
+### 媒体恢复：固定渲染库与后处理参数
+
+六份原 `result.json` 的 `video=null / video_error=ffprobe not found` 原文不回写。恢复只读取已有原始帧、动作数组与轨迹，独立写 `recovered-video/`；Astra／模型请求、轨迹生成与 reset 均为零。渲染库仍从 **7e9e6e5** 固定副本导入，明确程序为 `/usr/bin/ffmpeg` 与 `/usr/bin/ffprobe`；`OMP_NUM_THREADS=OPENBLAS_NUM_THREADS=MKL_NUM_THREADS=NUMEXPR_NUM_THREADS=2`，使用主仓 uv 环境，`PYTHONDONTWRITEBYTECODE=1`。
+
+实际调用 `official_render::render_episode` 的参数如下，按每行 raw/result 原终态及 task_goal 推导 safe_filename，六行输入映射在随后表中。调用前新输出目录必须不存在，执行后核对原 result、results、logs、frames、arrays 与 trace 的全量 sha256／字节数不变，不覆盖旧视频：
+
+```python
+renderer.render_episode(
+    raw,
+    official_root=Path("/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-code"),
+    ffmpeg="/usr/bin/ffmpeg",
+    source="raw",
+    overwrite=False,
+    max_memory_mib=6144,
+    output=recovered_dir / renderer.safe_filename(f"VideoUnmask_ep3_{result['status']}_{result['task_goal']}_xhard0.mp4"),
+    sidecar=recovered_dir / "render.json",
+    episode_id=3,
+    terminal=result["status"],
+)
+```
+
+输出验证为官方版式 AV1/yuv420p/30fps、两路原始 AV1/yuv444p；原有 AV1 有损编码，记录 `skipped-lossy-av1`，不声称逐像素还原。恢复不改变原 task_success，也不把后处理 CPU 时间混进推理速度。下表路径均相对主仓 `artifacts/`；新视频在对应运行根的 `recovered-video/`。
+
+| 变体 | 原结果 | 新视频文件名 |
+| --- | --- | --- |
+| smvla | `infer-timing-gl-smvla/rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json` | `VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4` |
+| framesamp | `infer-timing-gl-framesamp/rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json` | `VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4` |
+| oracle | `infer-timing-gl-oracle/rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json` | `VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4` |
+| pp | `infer-timing-gl-pp/rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json` | `VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4` |
+| qwen-r1 | `infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json` | `VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4` |
+| memer-r1 | `infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json` | `VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4` |
+
+程序指纹：固定 `official_render.py` 为 `8cd2681d8d6180dfae48503cb84d34b895477235fd1099476769f716ccefecf2`（53521 字节），`/usr/bin/ffmpeg` 为 `ed16af623947494a72e284b6eb8ff225f2da22b38b5d5069c2fd4b4ba3384e41`（342488 字节），`/usr/bin/ffprobe` 为 `272f6ebc634a63d9c8b4ca68e964119d980f25154e5aa2c35e5487da48e9a58f`（191888 字节）；实际恢复关联与全部守卫原文在 `records/gl-*-recovery.json`、`records/gl-*-media.summary.log`。六份恢复守卫核对原始文件 134 项全部不变；仅作数据搬运的 206 文件指纹位于三个 transfer 记录，NFS 源保留。
+
+### 实际会话与资源清单
+
+GL 已确认完整名称：`it-gl-smvla`、`it-gl-framesamp`、`it-gl-oracle`、`it-gl-pp`、`it-gl-qwen`、`it-gl-memer`、`it-gl-qwen-r1`、`it-gl-memer-r1`。前六含原两次零轨迹语言加载失败；r1 各新一次，原四份正式结果保留，用户原四个 hold 没取消。
+
+本机实际会话完整名称：`it-smvla-on`、`it-smvla-off`、`it-framesamp-on`、`it-framesamp-off`、`it-oracle-on`、`it-oracle-off`、`it-qwen-on`、`it-qwen-off`、`it-memer-on`、`it-memer-off`、`it-pp-on`、`it-astra-on`、`it-astra-off`、`it-astra-formal`。PP-on 为 CUDA 驱动不兼容启动失败、零实际步／reset；PP-on 恢复与 PP-off 取消未启，没有制造对应新会话。
+
+六个已实际执行并结束的媒体会话：`ev-infer-media-framesamp`（PID331933）、`ev-infer-media-pp`（332712）、`ev-infer-media-smvla`（335247）、`ev-infer-media-oracle`（343157）、`ev-infer-media-qwen-r1`（383036）、`ev-infer-media-memer-r1`（388647）。完成产物为各 `recovered-video/recovery.json` 与 `media-finish.log`；原文件守卫逐项通过，精确 worker 已退出，不只凭准备材料模板认定完成。
+
+预算阶段快照先为 17 预约／32 实际 reset claim／0 Astra 预约；Astra-on 中断后为 18／32／1，当时无任务结果、API 零次／零费用、partial 保留。该 rid 后按独立零 build/reset 证据结算 interrupted／exit143，未 release 或复用；最终 off／正式已完成，预算为 20/27 轨迹尝试、36/54 reset、Astra3/3、shared_infra0/6，详情与命令原文见 `records/budget-final.txt`。
+
+PP 本机原 NFS 环境 torch 2.14.0+cu130／transformers 5.13.1 与 driver 570.211.01／API12080 不兼容；已有本机 cu128 环境 transformers 4.57.3 不具 Qwen3.5，不能径直换作完整 PP 环境。用户取消本机 PP，未建新环境或安装依赖。所有日志与产物保持本次共享账本及原输出，没有清理他人会话、取消用户既有 hold 或另建账本。
+
+### 用户最新收尾范围与 Astra 剩余两条实际命令
+
+最新用户原话依次为「PP 本机不跑了」「astra跑完收尾」。取消 PP-on 恢复及 PP-off，GL PonderPounce 正式成功不变，原 PP-on 加载失败零 reset／零步、无任务成功字段；不建新 PP 环境，不执行或合入专属恢复入口 `32ab713`，其补充计划只在 `artifacts/cancelled-pp-recovery-plan.html`，不进入本轮 Git 写集。
+
+Astra-on 的加载下载根因是 `USE_HF` 默认 0 选择 ModelScope master，HF 离线变量不约束它；不是 HF 自己触发。固定 `ebb281ec70b05090aa6165b016eac8ec08e71b17` 的完整旧 HF snapshot 通过 `rsync -aL --info=progress2 <同锚snapshot>/ <本轮astra-monitor-base>/` 复用为实体目录，十四文件／8,887,292,732 字节，源十四指纹全部一致、零下载，旧权重缓存与 ModelScope partial 不动。实际源／目标绝对路径、完整复制命令、全量哈希及指纹来源见 [资产实测](records/astra-assets-evidence.json)，不归档权重。
+
+本机启动器 SHA256 从 `5497e2f088b27b927da308a3c42d57eaecda59c750e21750c3f56d419895ad67` 更新为 `3455d14e65ecccefb1f767c21809d56e4d587e7586d6dab797ceca40c8d57551`，唯一改动为 Astra 的 `--cfg astra_monitor_base=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-monitor-base`，其余参数、GPU、预算、费用与密钥读取逻辑不变。源码仍锁 959e624，GL 副本仍锁 7e9e6e5；下面保存同一原命令加这一条参数，不引用临时 shell 作为唯一还原来源。
+
+Astra-off：**1 任务（VideoUnmask）× 1 档（xhard0）× 1 次短冒烟**，实际 `it-astra-off`、pane 443420，已 `EXIT_CODE=0`，一步／一块／两 reset，控制终态 timeout、task_success=0：
+
+```bash
+env ROBOMME_EVAL_ROOT=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime IT_BUDGET_LEDGER=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl SGEVAL_AUDIT=0 SGEVAL_THIRD_PARTY=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party PYTHONPATH=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/src:/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/robomme_benchmark/src PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/hf-cache OPENPI_DATA_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data UV_CACHE_DIR=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache/uv XDG_CACHE_HOME=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache /data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/bin/python /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/dev-scripts/checks/infer_timing_smoke.py --model astra --dataset hard-verify --tasks VideoUnmask --episodes 0:1 --seed 0 --out /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off --gpus 1\,0 --ckpt /nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --port-base 19760 --cfg astra_ledger=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.json --cfg astra_prices=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/split-accept-20261008-01/astra-cost/astra-prices.json --cfg astra_cap_usd=5 --cfg astra_max_episodes=3 --cfg astra_registration_prefix=off --cfg astra_monitor_adapter=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/astra-monitor --cfg astra_vla_python=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/robomme_benchmark-sgeval/third_party/mme-vla/.venv/bin/python --cfg astra_root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/Astra-on-RoboMME --cfg openpi_data_home=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 --cfg jax_cache_root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/jax-cache --cfg astra_monitor_base=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-monitor-base
+```
+
+Astra 正式：**1 任务（VideoUnmask）× 1 档（xhard0）× 1 正式局**，实际 `it-astra-formal`、pane 447880；已退出0，success／task_success=1／274实际步／18块／两reset：
+
+```bash
+env ROBOMME_EVAL_ROOT=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime IT_BUDGET_LEDGER=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl SGEVAL_AUDIT=1 SGEVAL_THIRD_PARTY=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party PYTHONPATH=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/src:/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/robomme_benchmark/src PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/hf-cache OPENPI_DATA_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data UV_CACHE_DIR=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache/uv XDG_CACHE_HOME=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache /data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/bin/python /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/dev-scripts/checks/infer_timing_smoke.py --it-formal --model astra --dataset hard-verify --tasks VideoUnmask --episodes 0:1 --seed 0 --out /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra --gpus 1\,0 --ckpt /nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --port-base 19760 --cfg astra_ledger=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.json --cfg astra_prices=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/split-accept-20261008-01/astra-cost/astra-prices.json --cfg astra_cap_usd=5 --cfg astra_max_episodes=3 --cfg astra_registration_prefix=formal --cfg astra_monitor_adapter=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/astra-monitor --cfg astra_vla_python=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/robomme_benchmark-sgeval/third_party/mme-vla/.venv/bin/python --cfg astra_root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/Astra-on-RoboMME --cfg openpi_data_home=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 --cfg jax_cache_root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/jax-cache --cfg astra_monitor_base=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-monitor-base
+```
+
+首次 on rid `d430cd2af124468182bac0626cc29195` 已由主会话依据零 build/reset 证明补记 `resets=0,status=interrupted,exit=143`；结算不释放、不退款或复用额度，原文 `ASTRA_INTERRUPTED_SETTLEMENT=PASS attempts18 actual_resets32 astra_attempts1 released0 api_calls0 fee_usd0`。最终实际二十次尝试／三十六次真实 reset／Astra三次，0 release／0 open；费用账本四次API／输入32012／输出68／cached7972／reasoning0、按配置保守价格折算0.311872美元，其中off0.1006875、正式0.2111845。原27／54／3／5美元硬限不变，没为凑planned_first21添加第21次。
+
+本机与媒体会话完整名称见上表。on中断的client408888／guard409172／VLA409192、off的pane443420／guard443615／VLA443618、正式的pane447880／guard448045／VLA448047均已退出；原用户三个site会话保留。用户四个GL hold是原有多日作业，本轮复用而非新建48小时，不取消、不统计其sleep时长。墙钟 `overhead_pct_p50` 是未被语言／动作RTT解释的原有路径残差，包括pack_buffer、预处理、客户端记录等，不等于新增计时或审计成本，不能凭单局首块独立开关比较判因果。
+
+### 用户追加整程耗时口径
+
+用户原话「收尾后报告Great Lakes的所有任务和Astra本地的任务的耗时。」实际十一行完整表见 `result.md::六 硬件与耗时`，原始Start/End/ElapsedRaw及Astra日志birth/退出mtime、原start/finished_at观察值分别在最新 `records/runner-{A,B,C,D}-record.json` 与 `records/local-runner-record.json`。GL八step累计2308秒、六完整step累计2010秒，含gap全跨度2962秒；Astra三日志窗口累计463.954584秒、含资产准备等待全跨度1519.563647秒。没有把局内62.042169秒、编码CPU秒或hold sleep冒充整程耗时。

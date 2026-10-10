@@ -1,0 +1,169 @@
+{
+  "model": "oracle",
+  "状态": "已完成，真实单局及计时验收通过",
+  "源码提交": "7e9e6e5288b683aadca4358b482f3789748e29c0",
+  "启动器sha256": "67405e981ba2c951892885e9d29fd2e89134f42ea02618bcb94bf3819df42b53",
+  "job": 63431432,
+  "节点": "gl1512",
+  "会话": "it-gl-oracle",
+  "pane_pid": 1565491,
+  "启动命令": "ssh greatlakes 'if tmux has-session -t '\\''=it-gl-oracle'\\'' 2>/dev/null; then printf '\\''ORACLE_DUPLICATE=session\\n'\\''; exit 9; fi\nif [ -e '\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle'\\'' ] || [ -L '\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle'\\'' ]; then printf '\\''ORACLE_DUPLICATE=output\\n'\\''; exit 9; fi\ntmux new-session -d -s it-gl-oracle '\\''set -o pipefail\ncd '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-code'\\''\\'\\'''\\''\nPYTHONUNBUFFERED=1 bash '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-gl-launch.sh'\\''\\'\\'''\\'' --root '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-code'\\''\\'\\'''\\'' --model oracle --identities '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/identities.jsonl'\\''\\'\\'''\\'' --budget-ledger '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl'\\''\\'\\'''\\'' --out '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle'\\''\\'\\'''\\'' --execute 2>&1 | tee '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-oracle.log'\\''\\'\\'''\\''\nrc=${PIPESTATUS[0]}\nprintf '\\''\\'\\'''\\''EXIT_CODE=%s\\n'\\''\\'\\'''\\'' \"$rc\" | tee -a '\\''\\'\\'''\\''/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-oracle.log'\\''\\'\\'''\\''\nexit \"$rc\"'\\''\ntmux display-message -p -t '\\''=it-gl-oracle'\\'' '\\''SESSION=#{session_name} PANE_PID=#{pane_pid} DEAD=#{pane_dead}'\\'''",
+  "会话内完整命令": "set -o pipefail\ncd '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-code'\nPYTHONUNBUFFERED=1 bash '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-gl-launch.sh' --root '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-code' --model oracle --identities '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/identities.jsonl' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --out '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle' --execute 2>&1 | tee '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-oracle.log'\nrc=${PIPESTATUS[0]}\nprintf 'EXIT_CODE=%s\\n' \"$rc\" | tee -a '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-oracle.log'\nexit \"$rc\"",
+  "日志": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-oracle.log",
+  "输出": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle",
+  "退出码": 0,
+  "task_success": 1,
+  "本任务reset用量": 2,
+  "本任务轨迹尝试": 1,
+  "说明": "单任务×单档×单局；不自行追加探针或重试。初次 tmux display-message 使用会话精确匹配写法导致显示失败；后续只读 list-panes 确认会话已启动，未重复启动。",
+  "srun_pid": 1565492,
+  "客户端_pid": 1904991,
+  "服务端_pid": 1905006,
+  "模型端口": 19720,
+  "服务加载秒": 34.029,
+  "预热秒": 52.467,
+  "整体日志起止": "2026-10-09T22:12:28-04:00 至 2026-10-09T22:14:59-04:00",
+  "运行结果": {
+    "status": "success",
+    "task_success": 1,
+    "steps": 301,
+    "decisions": 19,
+    "attempt": 1,
+    "reset_calls": 2,
+    "budget_reservations": 1,
+    "budget_reset_claims": 2,
+    "gpu": "NVIDIA A40",
+    "chunk_summary": {
+      "action_rtt_ms": {
+        "first": 132.208,
+        "n": 19,
+        "second": 123.312,
+        "steady_mean": 125.7600625,
+        "steady_p50": 125.826,
+        "steady_p95": 128.17525,
+        "third": 124.592
+      },
+      "decision_wall_ms": {
+        "first": 323.265,
+        "n": 19,
+        "second": 161.4,
+        "steady_mean": 169.5429375,
+        "steady_p50": 169.865,
+        "steady_p95": 173.672,
+        "third": 163.15
+      },
+      "lang_ms": {
+        "first": 0,
+        "n": 19,
+        "second": 0,
+        "steady_mean": 0,
+        "steady_p50": 0,
+        "steady_p95": 0,
+        "third": 0
+      },
+      "n_decisions": 19,
+      "server_infer_ms": {
+        "first": 131.367,
+        "n": 19,
+        "second": 122.541,
+        "steady_mean": 124.8208125,
+        "steady_p50": 124.825,
+        "steady_p95": 127.30725000000001,
+        "third": 123.727
+      },
+      "steady_short": false
+    },
+    "conservation": {
+      "checked": 19,
+      "expected": 19,
+      "kind": "serial",
+      "missing_fields": 0,
+      "overhead_pct_p50": 0.25942639985749066,
+      "violations": 0
+    },
+    "result_path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+    "official_videos": [
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4"
+    ],
+    "raw_dir": "raw/VideoUnmask_ep3_xhard0",
+    "video": null,
+    "recorder_verify": "PASS",
+    "evidence": [
+      "CHUNK_TIMING=PASS model=groundsg-oracle chunks=19 decisions=19 steps=301 missing=0 gpu=NVIDIA_A40",
+      "WALL_DECOMP=PASS model=groundsg-oracle kind=serial chunks=19 checked=19 violations=0 min_gap_ms=38.088 max_gap_ms=191.057 lang_ms=0 orphan_lang_ms=0.0"
+    ]
+  },
+  "数量口径": "VideoUnmask 1任务 × xhard0 1档 × 1局；本身份 attempt=1，reset(build/reset)=2，重试=0",
+  "残留核验": [
+    "SERVER_STOPPED name=groundsg-ground-sg-oracle port=19720 pid=1905006 how=term gpu_free=True",
+    "it-gl-oracle 会话已结束；pane/srun/tee PID 1565491/1565492/1565493 均不存在",
+    "squeue --steps 63431432 仅 batch/extern，工作负载 step 已结束；占位作业仍 RUNNING，未取消",
+    "本代理 tail 监听已精确中止，工具退出130；工作负载日志两个 EXIT_CODE 均为0"
+  ],
+  "timings": {
+    "完整负载": {
+      "step_id": "63431432.1",
+      "source": "ssh greatlakes sacct -j 63431432.1 --format=JobIDRaw,Submit,Eligible,Start,End,ElapsedRaw,State,ExitCode -P -n",
+      "raw": "63431432.1|2026-10-09T22:12:14|2026-10-09T22:12:14|2026-10-09T22:12:14|2026-10-09T22:14:59|165|COMPLETED|0:0",
+      "timezone": "America/Detroit EDT -0400",
+      "submit": "2026-10-09T22:12:14-04:00",
+      "eligible": "2026-10-09T22:12:14-04:00",
+      "start": "2026-10-09T22:12:14-04:00",
+      "end": "2026-10-09T22:14:59-04:00",
+      "elapsed_raw_s": 165,
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "step_submit_to_start_reported_s": 0,
+      "排队边界": "步骤 Submit/Eligible/Start 在 sacct 秒级记录中相同；记录外的 SSH/tmux 至提交等待无起止证据，未知。未采用占位作业从 10 月 7 日开始的占位等待。",
+      "范围": "完整 GL srun 负载，包含该步骤内加载、预热、环境、单局及当时媒体录制收尾；不含 hold sleep/batch/extern、历史步骤 .0 和后续另行媒体恢复。"
+    },
+    "身份定位": {
+      "basis": "本轮固定 Oracle 启动命令指定 Job63431432/port19720/out infer-timing-gl-oracle；gl-oracle.log 的 GL_SEAT_START 与 GL_SEAT_DONE 落在 .1，结束与 .1 精确吻合。",
+      "log_start": "2026-10-09T22:12:28-04:00",
+      "log_end": "2026-10-09T22:14:59-04:00",
+      "logged_runner_wall_s": 151,
+      "step_before_logged_runner_s": 14,
+      "说明": "步骤启动至 GL_SEAT_START 的 14 秒是日志范围之前的执行时间；不能当作排队时间。",
+      "excluded_historical_step": "63431432.0|2026-10-08T21:27:02|2026-10-08T21:36:21|559|COMPLETED|0:0"
+    },
+    "局内独立区间": {
+      "result_source": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "t_start": 1791598443.0818112,
+      "t_end": 1791598488.5272307,
+      "episode_t_end_minus_t_start_s": 45.44541954994202,
+      "episode_timing_wall_s": 36.796,
+      "policy_episode_s": 33.87646097782999,
+      "server_load_ready_s": 34.029,
+      "warmup_s": 52.467,
+      "env": {
+        "demo_frames": 66,
+        "env_build_s": 2.868579475209117,
+        "env_close_s": 0.14320555422455072,
+        "record_overhead_s": 23.883720830082893,
+        "reset_s": 0.7649398446083069,
+        "step_first_s": 0.008859310299158096,
+        "step_mean_s": 0.009601854162284503,
+        "step_n": 301,
+        "step_p50_s": 0.008843300864100456,
+        "step_p95_s": 0.014480400830507278,
+        "step_total_s": 2.8901581028476357
+      },
+      "recorder": {
+        "finalize_s": 8.325,
+        "verify_s": 0.404,
+        "encode_cpu_s": 71.091,
+        "queue_wait_s": 23.122
+      },
+      "chunks": 19,
+      "summed_decision_wall_s": 3.3605020000000003,
+      "summed_action_rtt_s": 2.3922729999999994,
+      "summed_server_infer_s": 2.3747679999999995,
+      "task_success": 1,
+      "attempt": 1,
+      "t_start_America_Detroit": "2026-10-09T22:14:03.081811-04:00",
+      "t_end_America_Detroit": "2026-10-09T22:14:48.527231-04:00"
+    },
+    "判定": "RUN_WALL=PASS model=groundsg-oracle step=63431432.1 elapsed_raw_s=165 state=COMPLETED exit=0:0 actual_runs=1 task_success=1",
+    "注意": "episode.t_end-t_start=45.44541954994202 秒包含单局收尾；timing.episode_wall_s=36.796 秒和 policy.episode_s=33.87646097782999 秒是不同内层区间，均不可代替完整负载 165 秒。媒体 encode_cpu_s 是多线程 CPU 时间，不与墙钟区间简单相加。"
+  }
+}

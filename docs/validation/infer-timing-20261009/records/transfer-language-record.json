@@ -1,0 +1,943 @@
+{
+  "time_utc": "2026-10-10T02:57:01.425759+00:00",
+  "method": "两个固定 r1 源目录逐个 rsync -a --info=progress2；普通文件两端分别 SHA256/字节数/路径全集校验；符号链接不穿透逐项核对",
+  "scope": "只搬运 qwen-r1 与 memer-r1 已完成产物；不复制首次加载失败目录、不修改其它记录；内部 provenance 绝对路径逐字保留；未执行模型/仿真/GPU/API/reset",
+  "commands": [
+    "rsync -a --info=progress2 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/",
+    "rsync -a --info=progress2 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/"
+  ],
+  "targets_precheck": "两个本机目标在复制前均不存在；BASE/artifacts 和两个 NFS 源均为实体目录",
+  "models": [
+    {
+      "model": "qwen-r1",
+      "source": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1",
+      "target": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1",
+      "files": 36,
+      "bytes": 4117606,
+      "symlinks": [],
+      "mismatch": 0,
+      "mismatches": [],
+      "file_manifest": [
+        {
+          "path": "logs/client-groundsg-ground-sg-qwenvl-gl1525.arc-ts.umich.edu-455505-r0.log",
+          "source": {
+            "bytes": 37551,
+            "sha256": "0ebe094ca2c8cbe273a54d04a76dd7248f087e6c09b859281ff7314e143c21e4"
+          },
+          "target": {
+            "bytes": 37551,
+            "sha256": "0ebe094ca2c8cbe273a54d04a76dd7248f087e6c09b859281ff7314e143c21e4"
+          },
+          "match": true
+        },
+        {
+          "path": "logs/run_eval_gl-gl1525.arc-ts.umich.edu-455505.log",
+          "source": {
+            "bytes": 40432,
+            "sha256": "0b5c5c5e159a70e9154f34a049c579ff6f977ecc2e110d93d82a40ec5cd2703c"
+          },
+          "target": {
+            "bytes": 40432,
+            "sha256": "0b5c5c5e159a70e9154f34a049c579ff6f977ecc2e110d93d82a40ec5cd2703c"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/groundsg-ground-sg-qwenvl/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json",
+          "source": {
+            "bytes": 470,
+            "sha256": "4e45e06fd939623416d3019284dd61034bd30dd3d83366516b974ab7700067c6"
+          },
+          "target": {
+            "bytes": 470,
+            "sha256": "4e45e06fd939623416d3019284dd61034bd30dd3d83366516b974ab7700067c6"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/groundsg-ground-sg-qwenvl/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json",
+          "source": {
+            "bytes": 501,
+            "sha256": "d925b6496abb3af834a2c408abc6e54fd99aad749b4ed9b0b913256e259bcf2d"
+          },
+          "target": {
+            "bytes": 501,
+            "sha256": "d925b6496abb3af834a2c408abc6e54fd99aad749b4ed9b0b913256e259bcf2d"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/groundsg-ground-sg-qwenvl/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock",
+          "source": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "target": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+          "source": {
+            "bytes": 727761,
+            "sha256": "ac7520389c2578a43fbc2708834c1b6aa8203263ba8c8959ec2c9d2aceb60bb7"
+          },
+          "target": {
+            "bytes": 727761,
+            "sha256": "ac7520389c2578a43fbc2708834c1b6aa8203263ba8c8959ec2c9d2aceb60bb7"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/media-finish.log",
+          "source": {
+            "bytes": 361,
+            "sha256": "e6b996490257b4d6e3675f3cacfc5d5a9f199a629328d2db2fd55f7d09095c71"
+          },
+          "target": {
+            "bytes": 361,
+            "sha256": "e6b996490257b4d6e3675f3cacfc5d5a9f199a629328d2db2fd55f7d09095c71"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-result.json",
+          "source": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "target": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-results.jsonl",
+          "source": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "target": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/recovery.json",
+          "source": {
+            "bytes": 20199,
+            "sha256": "8fe9998bdfb00bf25dc3c089a2e6389a4019ef755770e468ea4926e6b05b2759"
+          },
+          "target": {
+            "bytes": 20199,
+            "sha256": "8fe9998bdfb00bf25dc3c089a2e6389a4019ef755770e468ea4926e6b05b2759"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/render.json",
+          "source": {
+            "bytes": 4306,
+            "sha256": "d962f4de1e15ae64c3c55eff642e27a734e5966d4c4aaa853ca67d0b4e95c5cf"
+          },
+          "target": {
+            "bytes": 4306,
+            "sha256": "d962f4de1e15ae64c3c55eff642e27a734e5966d4c4aaa853ca67d0b4e95c5cf"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/source-before.json",
+          "source": {
+            "bytes": 9128,
+            "sha256": "b7aeac3ac0c57cc23f0ab12cefd3385903da3b57993b53b12f337c171e538aaf"
+          },
+          "target": {
+            "bytes": 9128,
+            "sha256": "b7aeac3ac0c57cc23f0ab12cefd3385903da3b57993b53b12f337c171e538aaf"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/progress.json",
+          "source": {
+            "bytes": 205,
+            "sha256": "1910041f8d8c82189d886c3b22004bf69648212b793e2dc6668ea51065077621"
+          },
+          "target": {
+            "bytes": 205,
+            "sha256": "1910041f8d8c82189d886c3b22004bf69648212b793e2dc6668ea51065077621"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+          "source": {
+            "bytes": 212421,
+            "sha256": "0e5b78f41e828ecc8bd757b6dd066e5b37a09edfdf987442ee9ad18c7dbcf2e2"
+          },
+          "target": {
+            "bytes": 212421,
+            "sha256": "0e5b78f41e828ecc8bd757b6dd066e5b37a09edfdf987442ee9ad18c7dbcf2e2"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+          "source": {
+            "bytes": 445192,
+            "sha256": "ea5ca8c6102a5af7d707a01706dac4e56f628aee2907e528cbbc320cee124e69"
+          },
+          "target": {
+            "bytes": 445192,
+            "sha256": "ea5ca8c6102a5af7d707a01706dac4e56f628aee2907e528cbbc320cee124e69"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/ep3a1_QwenVL_log.jsonl",
+          "source": {
+            "bytes": 21186,
+            "sha256": "861444b736803d767ef86d51aad9e5f80ae087d13b265e061a82685054d0ca84"
+          },
+          "target": {
+            "bytes": 21186,
+            "sha256": "861444b736803d767ef86d51aad9e5f80ae087d13b265e061a82685054d0ca84"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+          "source": {
+            "bytes": 250592,
+            "sha256": "b0c6d70a3eba1b2a33a070111cc933ef1a0fa2863e3465e86e60b0b2870d991a"
+          },
+          "target": {
+            "bytes": 250592,
+            "sha256": "b0c6d70a3eba1b2a33a070111cc933ef1a0fa2863e3465e86e60b0b2870d991a"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl",
+          "source": {
+            "bytes": 42426,
+            "sha256": "f6462a4dc766d6da00b1bcb322e40f33e6bc1f2a3b726c30fd81e75f2ad9b809"
+          },
+          "target": {
+            "bytes": 42426,
+            "sha256": "f6462a4dc766d6da00b1bcb322e40f33e6bc1f2a3b726c30fd81e75f2ad9b809"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl",
+          "source": {
+            "bytes": 42492,
+            "sha256": "01d1a2c3fca72443815fd8f65e0394f0381c127da9fb64ee2c51a58bef30ff66"
+          },
+          "target": {
+            "bytes": 42492,
+            "sha256": "01d1a2c3fca72443815fd8f65e0394f0381c127da9fb64ee2c51a58bef30ff66"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv",
+          "source": {
+            "bytes": 168209,
+            "sha256": "d4565ed68186006846dac4f03cb272c1e71285c1e00854ee8c7fab6171951fdb"
+          },
+          "target": {
+            "bytes": 168209,
+            "sha256": "d4565ed68186006846dac4f03cb272c1e71285c1e00854ee8c7fab6171951fdb"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+          "source": {
+            "bytes": 143383,
+            "sha256": "99338d64dd1808c8eedae9bca7f479dd835cc2cab889868be00b6cf9d7fa86df"
+          },
+          "target": {
+            "bytes": 143383,
+            "sha256": "99338d64dd1808c8eedae9bca7f479dd835cc2cab889868be00b6cf9d7fa86df"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json",
+          "source": {
+            "bytes": 1303,
+            "sha256": "6dfe5f0f9c90196cf136c5a605327c6f628b74c1ac0dc29434685dc0c6a41338"
+          },
+          "target": {
+            "bytes": 1303,
+            "sha256": "6dfe5f0f9c90196cf136c5a605327c6f628b74c1ac0dc29434685dc0c6a41338"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4",
+          "source": {
+            "bytes": 903794,
+            "sha256": "bb79d4b00c230050e0c7af87a5f98123f4ebd11086b729d602e590780909c386"
+          },
+          "target": {
+            "bytes": 903794,
+            "sha256": "bb79d4b00c230050e0c7af87a5f98123f4ebd11086b729d602e590780909c386"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json",
+          "source": {
+            "bytes": 1650,
+            "sha256": "120728efd4ee4be288de5ac13dada97f5ba84f6436bb2249e50cdd457e3ec494"
+          },
+          "target": {
+            "bytes": 1650,
+            "sha256": "120728efd4ee4be288de5ac13dada97f5ba84f6436bb2249e50cdd457e3ec494"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+          "source": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "target": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json",
+          "source": {
+            "bytes": 671,
+            "sha256": "a09bf0cb4b59aaaa576d81415203d71da37cebc0de9f6a377f83f69b19cb418c"
+          },
+          "target": {
+            "bytes": 671,
+            "sha256": "a09bf0cb4b59aaaa576d81415203d71da37cebc0de9f6a377f83f69b19cb418c"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+          "source": {
+            "bytes": 257842,
+            "sha256": "b1910205d181f73d68883e02b2e895589e40a75aee3d6be4703ede5dd1136c75"
+          },
+          "target": {
+            "bytes": 257842,
+            "sha256": "b1910205d181f73d68883e02b2e895589e40a75aee3d6be4703ede5dd1136c75"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv",
+          "source": {
+            "bytes": 710065,
+            "sha256": "4afff44dc63ae8a9365e0f08e030df0be8db3195986d00c0bc8f589f704e6df3"
+          },
+          "target": {
+            "bytes": 710065,
+            "sha256": "4afff44dc63ae8a9365e0f08e030df0be8db3195986d00c0bc8f589f704e6df3"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/results.jsonl",
+          "source": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "target": {
+            "bytes": 15275,
+            "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/groundsg-ground-sg-qwenvl.ledger.jsonl",
+          "source": {
+            "bytes": 2562,
+            "sha256": "759807976b240d1fc2f0aed1fd0b4248ecf612ba59b689fd2eded427bc14fa03"
+          },
+          "target": {
+            "bytes": 2562,
+            "sha256": "759807976b240d1fc2f0aed1fd0b4248ecf612ba59b689fd2eded427bc14fa03"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/process-455607.json",
+          "source": {
+            "bytes": 900,
+            "sha256": "15532fc6ee5c96de341f0c247e68e0752c95e51497c0f780f36b30e4bd28b303"
+          },
+          "target": {
+            "bytes": 900,
+            "sha256": "15532fc6ee5c96de341f0c247e68e0752c95e51497c0f780f36b30e4bd28b303"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/progress.json",
+          "source": {
+            "bytes": 295,
+            "sha256": "ef17ec302e95f6f97673ba61ce9f10fd3cc03bb68d04ca35ed5c64fd318d5c10"
+          },
+          "target": {
+            "bytes": 295,
+            "sha256": "ef17ec302e95f6f97673ba61ce9f10fd3cc03bb68d04ca35ed5c64fd318d5c10"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/seat-results.jsonl",
+          "source": {
+            "bytes": 1358,
+            "sha256": "cfd42fa4704acf6356375ca28050479e48389e677585b77efc089f0d422aaf18"
+          },
+          "target": {
+            "bytes": 1358,
+            "sha256": "cfd42fa4704acf6356375ca28050479e48389e677585b77efc089f0d422aaf18"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/ckpt-fingerprint-groundsg-ground-sg-qwenvl.txt",
+          "source": {
+            "bytes": 223,
+            "sha256": "666794970ad7ff3d19ff8ec3b30313222c0a99d7515760543c60babb45b0e187"
+          },
+          "target": {
+            "bytes": 223,
+            "sha256": "666794970ad7ff3d19ff8ec3b30313222c0a99d7515760543c60babb45b0e187"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/groundsg-ground-sg-qwenvl-19740.log",
+          "source": {
+            "bytes": 8091,
+            "sha256": "c8b8584b4cee861a7ea31c53de9993290d6f4c32434f5872a40d16cbed0066ba"
+          },
+          "target": {
+            "bytes": 8091,
+            "sha256": "c8b8584b4cee861a7ea31c53de9993290d6f4c32434f5872a40d16cbed0066ba"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/server-wrap-metadata-19740.json",
+          "source": {
+            "bytes": 937,
+            "sha256": "c4111a19a6ca3a6657823c0f05cd600006df8773e22b31b86fa98f67ae031aa1"
+          },
+          "target": {
+            "bytes": 937,
+            "sha256": "c4111a19a6ca3a6657823c0f05cd600006df8773e22b31b86fa98f67ae031aa1"
+          },
+          "match": true
+        }
+      ],
+      "recovered_videos": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/recovered-video/VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4"
+      ],
+      "results_paths": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/results.jsonl"
+      ],
+      "result_summaries": [
+        {
+          "model": "groundsg",
+          "task_success": 0,
+          "status": "fail",
+          "steps": 289,
+          "exec_steps": 289,
+          "decisions": 19,
+          "attempt": 1
+        }
+      ],
+      "source_retained": true,
+      "provenance_modified": false,
+      "rsync_exit_code": 0,
+      "verdict": "TRANSFER=PASS model=qwen-r1 files=36 bytes=4117606 mismatch=0 symlinks=0"
+    },
+    {
+      "model": "memer-r1",
+      "source": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1",
+      "target": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1",
+      "files": 36,
+      "bytes": 4800255,
+      "symlinks": [],
+      "mismatch": 0,
+      "mismatches": [],
+      "file_manifest": [
+        {
+          "path": "logs/client-groundsg-ground-sg-memer-gl1512.arc-ts.umich.edu-1923994-r0.log",
+          "source": {
+            "bytes": 88830,
+            "sha256": "4b7f426c189843ad8b00085e391e5524a10fa7aee8b5c3ef22e2f4d5a989be98"
+          },
+          "target": {
+            "bytes": 88830,
+            "sha256": "4b7f426c189843ad8b00085e391e5524a10fa7aee8b5c3ef22e2f4d5a989be98"
+          },
+          "match": true
+        },
+        {
+          "path": "logs/run_eval_gl-gl1512.arc-ts.umich.edu-1923994.log",
+          "source": {
+            "bytes": 91707,
+            "sha256": "db42804d5d7b5e5251eaf393b97677063cbf7239438697644bac5c1a7b064007"
+          },
+          "target": {
+            "bytes": 91707,
+            "sha256": "db42804d5d7b5e5251eaf393b97677063cbf7239438697644bac5c1a7b064007"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/groundsg-ground-sg-memer/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json",
+          "source": {
+            "bytes": 476,
+            "sha256": "3c600d8a3c90d02fe7c60d84e6292535b4a8c0da9e1f4d02e56c498030e0e794"
+          },
+          "target": {
+            "bytes": 476,
+            "sha256": "3c600d8a3c90d02fe7c60d84e6292535b4a8c0da9e1f4d02e56c498030e0e794"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/groundsg-ground-sg-memer/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json",
+          "source": {
+            "bytes": 503,
+            "sha256": "4bc08a16f92f65034821c7648d091bb73b9bd7c94a5150269b13beb02e7d24dc"
+          },
+          "target": {
+            "bytes": 503,
+            "sha256": "4bc08a16f92f65034821c7648d091bb73b9bd7c94a5150269b13beb02e7d24dc"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/groundsg-ground-sg-memer/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock",
+          "source": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "target": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+          "source": {
+            "bytes": 797557,
+            "sha256": "465a5f5fb8d0e1bd0a82feb25235e7b5f106c6cfc07cea3923610d33ac8d46b7"
+          },
+          "target": {
+            "bytes": 797557,
+            "sha256": "465a5f5fb8d0e1bd0a82feb25235e7b5f106c6cfc07cea3923610d33ac8d46b7"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/media-finish.log",
+          "source": {
+            "bytes": 369,
+            "sha256": "20098044c22deb63bd4eca4d560f2932342f258068c7593eb4ec825e862f83a5"
+          },
+          "target": {
+            "bytes": 369,
+            "sha256": "20098044c22deb63bd4eca4d560f2932342f258068c7593eb4ec825e862f83a5"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-result.json",
+          "source": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "target": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-results.jsonl",
+          "source": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "target": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/recovery.json",
+          "source": {
+            "bytes": 20230,
+            "sha256": "f07e7ffbe9362fabfc5c9b72c0cf7c4e37f5ec4ed5e6442a90012a031725529a"
+          },
+          "target": {
+            "bytes": 20230,
+            "sha256": "f07e7ffbe9362fabfc5c9b72c0cf7c4e37f5ec4ed5e6442a90012a031725529a"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/render.json",
+          "source": {
+            "bytes": 4327,
+            "sha256": "c82d8820529b44ab04fc1f3b3f419e519b229547f6a0b42f65ff6f9d3c33b9e4"
+          },
+          "target": {
+            "bytes": 4327,
+            "sha256": "c82d8820529b44ab04fc1f3b3f419e519b229547f6a0b42f65ff6f9d3c33b9e4"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/source-before.json",
+          "source": {
+            "bytes": 9140,
+            "sha256": "a9e50b74cf169d5d8374cb351eb7e24498c27d60897be7b153aecca3c4d83a06"
+          },
+          "target": {
+            "bytes": 9140,
+            "sha256": "a9e50b74cf169d5d8374cb351eb7e24498c27d60897be7b153aecca3c4d83a06"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/progress.json",
+          "source": {
+            "bytes": 206,
+            "sha256": "4ae545061b7f5555fdafc349ab945ea3087d29e3c42a5732587ad654cc431c30"
+          },
+          "target": {
+            "bytes": 206,
+            "sha256": "4ae545061b7f5555fdafc349ab945ea3087d29e3c42a5732587ad654cc431c30"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+          "source": {
+            "bytes": 239653,
+            "sha256": "287656e29ad18b27c4e55f5c927f03b0f165fdce3d1fa8bf211dd4098687b846"
+          },
+          "target": {
+            "bytes": 239653,
+            "sha256": "287656e29ad18b27c4e55f5c927f03b0f165fdce3d1fa8bf211dd4098687b846"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+          "source": {
+            "bytes": 501358,
+            "sha256": "074de5d09112c9fbe42df052938420bfbd035e29c77fa94a80c670e6f94b1c83"
+          },
+          "target": {
+            "bytes": 501358,
+            "sha256": "074de5d09112c9fbe42df052938420bfbd035e29c77fa94a80c670e6f94b1c83"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/ep3a1_MemER_log.jsonl",
+          "source": {
+            "bytes": 78102,
+            "sha256": "4878484fc261f3e5f9637dd3789e94b561460562ec80d3d4498500688fa3d538"
+          },
+          "target": {
+            "bytes": 78102,
+            "sha256": "4878484fc261f3e5f9637dd3789e94b561460562ec80d3d4498500688fa3d538"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+          "source": {
+            "bytes": 278574,
+            "sha256": "e1ab8042df07416c965fc1ffbe291d7e48084eda3399fe5bf17edbf1bfe20303"
+          },
+          "target": {
+            "bytes": 278574,
+            "sha256": "e1ab8042df07416c965fc1ffbe291d7e48084eda3399fe5bf17edbf1bfe20303"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl",
+          "source": {
+            "bytes": 46903,
+            "sha256": "c60bf69f43d6e90a483ec06b4a7022f3a0b2f57e567f4428bba64c9aef0f7a77"
+          },
+          "target": {
+            "bytes": 46903,
+            "sha256": "c60bf69f43d6e90a483ec06b4a7022f3a0b2f57e567f4428bba64c9aef0f7a77"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl",
+          "source": {
+            "bytes": 46969,
+            "sha256": "9e2dfcc24a35f64ebdcc70fae3898cb3dd4c6bb9d09c6900ab23550a823a5f36"
+          },
+          "target": {
+            "bytes": 46969,
+            "sha256": "9e2dfcc24a35f64ebdcc70fae3898cb3dd4c6bb9d09c6900ab23550a823a5f36"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv",
+          "source": {
+            "bytes": 187636,
+            "sha256": "d9a23828bc47baced13fca349c1a09be61c98abd94ccf6ef6ac39919f3d2b4cf"
+          },
+          "target": {
+            "bytes": 187636,
+            "sha256": "d9a23828bc47baced13fca349c1a09be61c98abd94ccf6ef6ac39919f3d2b4cf"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+          "source": {
+            "bytes": 220672,
+            "sha256": "015734026a3f319a27ae6b620c219eec0c5e5270f6588320953edaf967d265f1"
+          },
+          "target": {
+            "bytes": 220672,
+            "sha256": "015734026a3f319a27ae6b620c219eec0c5e5270f6588320953edaf967d265f1"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json",
+          "source": {
+            "bytes": 1303,
+            "sha256": "5e3a20a3652a92499d12915820f8c458681899e5fce1b61e71873cdd61b298f7"
+          },
+          "target": {
+            "bytes": 1303,
+            "sha256": "5e3a20a3652a92499d12915820f8c458681899e5fce1b61e71873cdd61b298f7"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4",
+          "source": {
+            "bytes": 1004997,
+            "sha256": "6c7a3fe25c7f106bc679939dd81db3a19b32aeeccb8f8bcae20d3db15cc86a31"
+          },
+          "target": {
+            "bytes": 1004997,
+            "sha256": "6c7a3fe25c7f106bc679939dd81db3a19b32aeeccb8f8bcae20d3db15cc86a31"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json",
+          "source": {
+            "bytes": 1756,
+            "sha256": "f0e356b9d11f12f7de91047ed1f6dbfe0dcd5ce98e1ff9c095df762f372646ac"
+          },
+          "target": {
+            "bytes": 1756,
+            "sha256": "f0e356b9d11f12f7de91047ed1f6dbfe0dcd5ce98e1ff9c095df762f372646ac"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+          "source": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "target": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json",
+          "source": {
+            "bytes": 672,
+            "sha256": "87c11568cc682050e9fbfca66d30cfdb342e3d07634ce0ef50f3cb0bfedf7f53"
+          },
+          "target": {
+            "bytes": 672,
+            "sha256": "87c11568cc682050e9fbfca66d30cfdb342e3d07634ce0ef50f3cb0bfedf7f53"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+          "source": {
+            "bytes": 287835,
+            "sha256": "cc0b57686ae9815eb66ad0c895ec593c86aa040dee37c237f2e76ea6f53df13a"
+          },
+          "target": {
+            "bytes": 287835,
+            "sha256": "cc0b57686ae9815eb66ad0c895ec593c86aa040dee37c237f2e76ea6f53df13a"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv",
+          "source": {
+            "bytes": 811449,
+            "sha256": "7b52edc3aed4ae14171c62cbab42500704d9ab6a08f3d2853c0848b102712dd9"
+          },
+          "target": {
+            "bytes": 811449,
+            "sha256": "7b52edc3aed4ae14171c62cbab42500704d9ab6a08f3d2853c0848b102712dd9"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/groundsg-ground-sg-memer/hard-verify/seed7/results.jsonl",
+          "source": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "target": {
+            "bytes": 16162,
+            "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/groundsg-ground-sg-memer.ledger.jsonl",
+          "source": {
+            "bytes": 2574,
+            "sha256": "f65e90edc8ed9cf8c1e0192b0d8ce7fbe369cd9bc533ff1c58d679c5a4c3548a"
+          },
+          "target": {
+            "bytes": 2574,
+            "sha256": "f65e90edc8ed9cf8c1e0192b0d8ce7fbe369cd9bc533ff1c58d679c5a4c3548a"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/process-1924078.json",
+          "source": {
+            "bytes": 900,
+            "sha256": "ba3a88b719e5e09b15393f71048a078abf1957979dcd27b9798373accad71d54"
+          },
+          "target": {
+            "bytes": 900,
+            "sha256": "ba3a88b719e5e09b15393f71048a078abf1957979dcd27b9798373accad71d54"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/progress.json",
+          "source": {
+            "bytes": 296,
+            "sha256": "57346e2d530bc18a794d80a0a0778e8106f4416289de91394cfa3d28be2c3956"
+          },
+          "target": {
+            "bytes": 296,
+            "sha256": "57346e2d530bc18a794d80a0a0778e8106f4416289de91394cfa3d28be2c3956"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/seat-results.jsonl",
+          "source": {
+            "bytes": 1361,
+            "sha256": "7aa0ebd39a91c7a58a438e3143226b46a578612731b6bcf9c9633efed15ff392"
+          },
+          "target": {
+            "bytes": 1361,
+            "sha256": "7aa0ebd39a91c7a58a438e3143226b46a578612731b6bcf9c9633efed15ff392"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/ckpt-fingerprint-groundsg-ground-sg-memer.txt",
+          "source": {
+            "bytes": 223,
+            "sha256": "a94c1af09435d6dffd4ddc771db70be791eaa6b35798be68ca6a8a6b7d6f2211"
+          },
+          "target": {
+            "bytes": 223,
+            "sha256": "a94c1af09435d6dffd4ddc771db70be791eaa6b35798be68ca6a8a6b7d6f2211"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/groundsg-ground-sg-memer-19750.log",
+          "source": {
+            "bytes": 8090,
+            "sha256": "cf935454f96864a775ec7d20e0c97399961c05ee23774c59dd190c5b3e4b65e6"
+          },
+          "target": {
+            "bytes": 8090,
+            "sha256": "cf935454f96864a775ec7d20e0c97399961c05ee23774c59dd190c5b3e4b65e6"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/server-wrap-metadata-19750.json",
+          "source": {
+            "bytes": 939,
+            "sha256": "9b1a78289e75c85f45dec2b4508ad7add3025e7f017ffb1368a536255df39bfe"
+          },
+          "target": {
+            "bytes": 939,
+            "sha256": "9b1a78289e75c85f45dec2b4508ad7add3025e7f017ffb1368a536255df39bfe"
+          },
+          "match": true
+        }
+      ],
+      "recovered_videos": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4"
+      ],
+      "results_paths": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/results.jsonl"
+      ],
+      "result_summaries": [
+        {
+          "model": "groundsg",
+          "task_success": 1,
+          "status": "success",
+          "steps": 326,
+          "exec_steps": 326,
+          "decisions": 21,
+          "attempt": 1
+        }
+      ],
+      "source_retained": true,
+      "provenance_modified": false,
+      "rsync_exit_code": 0,
+      "verdict": "TRANSFER=PASS model=memer-r1 files=36 bytes=4800255 mismatch=0 symlinks=0"
+    }
+  ],
+  "pass": true
+}

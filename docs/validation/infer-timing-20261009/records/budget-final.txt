@@ -1,0 +1,4 @@
+命令：UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python dev-scripts/gl/budget_ledger.py --ledger /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl --trajectory-cap 27 --reset-cap 54 --astra-cap 3 --shared-infra-cap 6 --expired-cap 0 --planned-first-tries 21 report
+BUDGET_DETAIL ledger=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl reserves=20 committed=20 released=0 open=0 expired=0/0 reset_cap_exceeded=0 first_started=20/21 recovery=0/6 config=present
+BUDGET_ENFORCEMENT=PASS trajectories=20/27 resets=36/54 astra=3/3 shared_infra=0/6
+EXIT_CODE=0

@@ -1,0 +1,6 @@
+OFFICIAL_VIDEO=PASS model=qwen frames=356 fps=30 codec=av1 pix_fmt=yuv420p
+RAW_STREAMS=PASS model=qwen streams=2 codec=av1 pix_fmt=yuv444p
+ARRAYS_TRACE=PASS model=qwen precision=verified-original byte_changes=0
+MEDIA_RECOVERY=PASS model=qwen originals=30 task_success=0 status=fail reset=0 trajectory=0 api=0
+ORIGINAL_BYTES=PASS model=qwen files=30
+EXIT_CODE=0

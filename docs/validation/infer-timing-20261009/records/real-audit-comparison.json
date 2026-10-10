@@ -1,0 +1,585 @@
+{
+  "schema": "infer-timing-real-audit-comparison/1",
+  "方法": "仅只读已有NPZ、轨迹及事件；sha256针对连续数组原始字节，按零容差逐项比较，不执行仓库脚本、模型或仿真。",
+  "边界": [
+    "真实独立两次运行，不是CPU假输入/真实包装器的OBS_EQ门禁。",
+    "输入相同及数值不同不证明因果；不把残差当新增审计成本，不放宽阈值、不追加运行。",
+    "Oracle/Qwen完整模型块未保存，不凭摘要代替逐数验证。"
+  ],
+  "文字与实测校准": {
+    "qwen_reported_max_abs_diff": 0.0009763676754810202,
+    "qwen_npz_readback_max_abs_diff": 0.0009763676757810202,
+    "处理": "两值相差约3e-13；正文使用实际NPZ读回值，保留此前文字回执，不改比较阈值或零容差差异结论。"
+  },
+  "models": {
+    "smvla": {
+      "sides": {
+        "on": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "7e889a9a7abcb8ce2ec1ea7db7940a865c3fc5b01119679d1e173f704f8982a7",
+              "bytes": 29626
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "97e4c7cc789207f26b5d10e3a74a068eab0b8a2d58217c7ca06ee5afe6f971d9",
+              "bytes": 13911
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "9d2a83098a70a7e561aa85e4a51c59575cff4eb1bee825ae98eae001267f1223",
+              "bytes": 23888
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "dd2b8845698d0590a1058de640a3909a6680587d4b16f5b0d24b2b209396e4a9",
+              "bytes": 16788
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "a0067ab89678bf7de2a07613d62117e989b07ed4f5974824d4e57319f137ef06",
+              "bytes": 2763
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-on/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "5cddb935299aa7f5db7b22dd85ecfc907ae3ab3faecf5e430db583591bd293bd",
+              "bytes": 7323
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 9372,
+              "sha256": "9c2483558824db657c3bda25d6b8f1d53d432f207f6d9c10fd7a9ec0104a78a7",
+              "step": 0
+            }
+          ],
+          "first_infer_send": "4be3c1675f33d808c3c82c1f68a0aba6c80c53cb5c7ba0db9c516015de1bc394",
+          "subgoal": "pick up the container that hides the green cube"
+        },
+        "off": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "7e889a9a7abcb8ce2ec1ea7db7940a865c3fc5b01119679d1e173f704f8982a7",
+              "bytes": 29626
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "97e4c7cc789207f26b5d10e3a74a068eab0b8a2d58217c7ca06ee5afe6f971d9",
+              "bytes": 13911
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "9d2a83098a70a7e561aa85e4a51c59575cff4eb1bee825ae98eae001267f1223",
+              "bytes": 23888
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "09ecba22b5b99e98152359141137d69ee68959db0d4fb62852b579f1292cb5d9",
+              "bytes": 16789
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "7238b0a53f5e42fb85511ee9678cc0460f483c662a1942fd4342e58eed7c48e2",
+              "bytes": 1091
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-smvla-off/rollouts/smvla/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "71a1fa5e35e74ae9fecabbfdbf954e80546b55034b3299f0fed04c6dc0725653",
+              "bytes": 7036
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 9372,
+              "sha256": "9c2483558824db657c3bda25d6b8f1d53d432f207f6d9c10fd7a9ec0104a78a7",
+              "step": 0
+            }
+          ],
+          "first_infer_send": "4be3c1675f33d808c3c82c1f68a0aba6c80c53cb5c7ba0db9c516015de1bc394",
+          "subgoal": "pick up the container that hides the green cube"
+        }
+      },
+      "infer_input_equal": true,
+      "arrays": {
+        "model_action__00000": {
+          "observed": true,
+          "shape": [
+            30,
+            8
+          ],
+          "dtype": "float32",
+          "on_sha256": "6d83af7509de16e4377dc59e0f642914e0b5a5bf5674a24b878f162504936da3",
+          "off_sha256": "6d83af7509de16e4377dc59e0f642914e0b5a5bf5674a24b878f162504936da3",
+          "byte_equal": true,
+          "different_values": 0,
+          "values": 240,
+          "max_abs_diff": 0
+        },
+        "exec_action__00000": {
+          "observed": true,
+          "shape": [
+            8
+          ],
+          "dtype": "float64",
+          "on_sha256": "c70e7f7aed29ffe0144963add455ca8eaa90ec6ad8b920c2ee325d466061b8fb",
+          "off_sha256": "c70e7f7aed29ffe0144963add455ca8eaa90ec6ad8b920c2ee325d466061b8fb",
+          "byte_equal": true,
+          "different_values": 0,
+          "values": 8,
+          "max_abs_diff": 0
+        }
+      }
+    },
+    "framesamp": {
+      "sides": {
+        "on": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "046726150b60debd4b80f3ef0089859c729b76fc714292cb6a7d01408c344024",
+              "bytes": 9558
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "f9777e0c6d6de820dddd12a30dbda996399de75694252eabe614a95032fb59c0",
+              "bytes": 1503
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "19e678ed8e99c59a1aa76421d725a5d2b7264a03b6ec8da508e1db2cc8065e56",
+              "bytes": 24201
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "8818c4e5c010bf586234c14b3cfccd1df8fbb89c1fb3a0f850d0122da5916fc6",
+              "bytes": 27550
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "693f3ed8e540c3f7af5eb5ff71da15f807e243b096ae95266571a6672435a091",
+              "bytes": 2404
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "0aa25da417428100076cdc50b388526448551dcd3231ecf70033dc31fa00f4bb",
+              "bytes": 6480
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "reset",
+              "nbytes": 8,
+              "sha256": "290cd8c468f06e7b3e7517a76ab4949fc261bf5cafec659d2c2e06230997a728",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "add_buffer",
+              "nbytes": 13175021,
+              "sha256": "16caf0316bc5a67591c6e739fd75af3a2ca3d3aa505b6c5909247ecea241f954",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 393595,
+              "sha256": "4a105980fc4d1390308e92b004306483ad50699fde502df5011321fed99f7918",
+              "step": 0
+            }
+          ],
+          "first_infer_send": null,
+          "subgoal": null
+        },
+        "off": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "b2ac76b795ddb86b47a572c724d4994178638f58b8c9683c7d2d9bbc6769fe32",
+              "bytes": 9558
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "8894b49711cea877041e88758f94c02961f2cd921fdcc4acbfaf6629bbdd84b6",
+              "bytes": 1503
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "bce96e252044b4f1a8dfc9d43458f05155e16f715d29711f3915ea9d057b9a52",
+              "bytes": 24201
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "4369b529ee9cfbddf4ba79b3e75820c5a31e5bb89dac6699a0d2e0158ba0e4c9",
+              "bytes": 27716
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "e7dc64639b7f88513891ba476344b57d2bda064206d7e3f88fbb376e6bcc52e8",
+              "bytes": 1166
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "43166145f3087321db45f926425d914aaa868dd20152a9ace218b0c564865f3c",
+              "bytes": 6178
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "reset",
+              "nbytes": 8,
+              "sha256": "290cd8c468f06e7b3e7517a76ab4949fc261bf5cafec659d2c2e06230997a728",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "add_buffer",
+              "nbytes": 13175021,
+              "sha256": "16caf0316bc5a67591c6e739fd75af3a2ca3d3aa505b6c5909247ecea241f954",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 393595,
+              "sha256": "4a105980fc4d1390308e92b004306483ad50699fde502df5011321fed99f7918",
+              "step": 0
+            }
+          ],
+          "first_infer_send": null,
+          "subgoal": null
+        }
+      },
+      "infer_input_equal": true,
+      "arrays": {
+        "model_action__00000": {
+          "observed": true,
+          "shape": [
+            20,
+            8
+          ],
+          "dtype": "float64",
+          "on_sha256": "fd74ce4a0d676326b25545d7a8df9f72496556edc948a800214d1d3950d4e927",
+          "off_sha256": "9ff30718967c54def607001f7818bbfc09f06ab0f2fee11d789b806647f1be94",
+          "byte_equal": false,
+          "different_values": 116,
+          "values": 160,
+          "max_abs_diff": 0.00158659747314438
+        },
+        "exec_action__00000": {
+          "observed": true,
+          "shape": [
+            8
+          ],
+          "dtype": "float64",
+          "on_sha256": "d12fd8f91764eea0e098c24154d841633727700e1faea2c6d06c90e5f4766eb0",
+          "off_sha256": "0818c65d6f3d8e7b89c8a98c09078509e47dba0d120ea87c774a9b8d2a65a6fb",
+          "byte_equal": false,
+          "different_values": 7,
+          "values": 8,
+          "max_abs_diff": 0.0004883030233977514
+        }
+      }
+    },
+    "oracle": {
+      "sides": {
+        "on": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "65bf2b0682b18a60237ef254f17e153292d58a6c19fbfe930180b1fdb13c4b82",
+              "bytes": 8008
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "4beb195a3c85c45d6018182170d21e87912b5abb85947814dc6f87c102f7ac5b",
+              "bytes": 1317
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "972faa3fb55070f15d35d1c7dd783bcabe9397e0ac6e2fa2257d30f82649faea",
+              "bytes": 24392
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "0dcd73904202d8fb4a1f36734f4ac66edf64d90ecd729bbc0edc6a4d3c657b58",
+              "bytes": 26142
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "ead4ddf54e964d8d8d48e33ecb68afede281e9d21df99ddddab75643645c80c6",
+              "bytes": 5287
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "ea88eac622cdb2569a465d273f6fa49bc92c3ee6014f65c177dfc5fc32f3ed81",
+              "bytes": 7478
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "reset",
+              "nbytes": 18,
+              "sha256": "08b4a9021ea16363d422de5ba33f27e671a889ecebff20031177ba0946fc3d38",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "add_buffer",
+              "nbytes": 13174990,
+              "sha256": "5efd3ae3bf98e85a6dbed3333c40ae85e5c264ce09a278c0749fbfc1561b1cea",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 393692,
+              "sha256": "d91d1b31c5fbc82f36cbeada6a7a4feedbb61dcec262a9bf3aa4c59f1c57272f",
+              "step": 0
+            }
+          ],
+          "first_infer_send": null,
+          "subgoal": "pick up the container at <84, 125> that hides the green cube"
+        },
+        "off": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "3b2108477edb344b1de6c376b8d8af81c8f036d98402387a5123888cbd29d189",
+              "bytes": 8008
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "7aeea62a326f8d7e1f199d10a3f70e1f35c707fbf2d37d9f2cfc6222d9c00244",
+              "bytes": 1317
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "e968e6ded7f03a430c08edf7b08c13fd1f6963be50ed78ed72d9eebb718bee6d",
+              "bytes": 24392
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "dca46990ba3a7e3a130706a4c19c15896df44f30a834e6b4e1d3a86fe7748e36",
+              "bytes": 26142
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "c0310b5612839ebe77c52608cb5935f4d70c449f261044bcf1ce82b942f5841e",
+              "bytes": 1379
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "5e423eb8be1828450997328abb4ce9d42c07d1e1fa9691ee083d3cf76e32c433",
+              "bytes": 7362
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "reset",
+              "nbytes": 18,
+              "sha256": "08b4a9021ea16363d422de5ba33f27e671a889ecebff20031177ba0946fc3d38",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "add_buffer",
+              "nbytes": 13174990,
+              "sha256": "5efd3ae3bf98e85a6dbed3333c40ae85e5c264ce09a278c0749fbfc1561b1cea",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 393692,
+              "sha256": "d91d1b31c5fbc82f36cbeada6a7a4feedbb61dcec262a9bf3aa4c59f1c57272f",
+              "step": 0
+            }
+          ],
+          "first_infer_send": null,
+          "subgoal": "pick up the container at <84, 125> that hides the green cube"
+        }
+      },
+      "infer_input_equal": true,
+      "arrays": {
+        "model_action__00000": {
+          "observed": false,
+          "reason": "完整模型张量未保存，不能逐数核验"
+        },
+        "exec_action__00000": {
+          "observed": true,
+          "shape": [
+            8
+          ],
+          "dtype": "float64",
+          "on_sha256": "1fe6534b4430fb34f8bc857845a380ea251d1fa7be8a25087e2617daf62c5c83",
+          "off_sha256": "2ded12f3a61e8ab14f8889cf91661f4c15dfad703168b98161055f0f7019cdc4",
+          "byte_equal": false,
+          "different_values": 4,
+          "values": 8,
+          "max_abs_diff": 0.00020051194312420417
+        }
+      }
+    },
+    "qwen": {
+      "sides": {
+        "on": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "3b626f8643010397eaed8de798cc694e912f3c92844b0357849c0885ac4d9439",
+              "bytes": 8008
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "4b940e1645ea6d0b655ed57ac050afc7f5da252e314dfdc7a2744261f8143c46",
+              "bytes": 1317
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "0a548d243982912ca0c005824afd3043a5ef87611fd0454665b8fb743383b39c",
+              "bytes": 24392
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "ba769acac44383334c3476a34da32451c77fa4a75178b92dcbee2fb338ded257",
+              "bytes": 26147
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "c0019774fec2c7ec967e2e3485e0dd5d4104139da85f278d9e6d9d8a78f3f645",
+              "bytes": 7434
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "d8d8ba0e14183d1b940c012b1f198c2dc4ed3b6cca5bafb74bd046141ef7768c",
+              "bytes": 8452
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "reset",
+              "nbytes": 18,
+              "sha256": "08b4a9021ea16363d422de5ba33f27e671a889ecebff20031177ba0946fc3d38",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "add_buffer",
+              "nbytes": 13174990,
+              "sha256": "5efd3ae3bf98e85a6dbed3333c40ae85e5c264ce09a278c0749fbfc1561b1cea",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 393692,
+              "sha256": "1c8a6ad6cfec52c7e77e95466ea35829ba4ee9d9ff6300eee97ec7a2af25c64a",
+              "step": 0
+            }
+          ],
+          "first_infer_send": null,
+          "subgoal": "pick up the container at <80, 120> that hides the green cube"
+        },
+        "off": {
+          "raw": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0",
+          "sources": {
+            "arrays.npz": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+              "sha256": "9f88bb8e9ac5a34f57877d2fa76a9388d6c76aad90c042a3df98d43524f9f023",
+              "bytes": 8008
+            },
+            "arrays-index.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+              "sha256": "a1f826f0ff28ffdf916a648e73362cd7395bd45805e0b56178bb8b80146a5022",
+              "bytes": 1317
+            },
+            "trace.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+              "sha256": "c3e20eb33b2cb80659fb2682ac54c3a34f9a4ffcafca49850153b3633968048d",
+              "bytes": 24392
+            },
+            "events.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+              "sha256": "2a014e2165c1ae9d701f8da1ce3bc22f5919dc6fa270b25e907b1e85f17bdc02",
+              "bytes": 26155
+            },
+            "language.jsonl": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+              "sha256": "31f5489d8ce97a909edf8746f1b468e63aa6d9380e72c8147052bbbb15619a63",
+              "bytes": 3527
+            },
+            "result.json": {
+              "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+              "sha256": "d3d8126b487e2d90334adfe3b3cac3bb8b3745762aefbaf06cfddef043ba6636",
+              "bytes": 8362
+            }
+          },
+          "requests": [
+            {
+              "kind": "request",
+              "name": "reset",
+              "nbytes": 18,
+              "sha256": "08b4a9021ea16363d422de5ba33f27e671a889ecebff20031177ba0946fc3d38",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "add_buffer",
+              "nbytes": 13174990,
+              "sha256": "5efd3ae3bf98e85a6dbed3333c40ae85e5c264ce09a278c0749fbfc1561b1cea",
+              "step": 0
+            },
+            {
+              "kind": "request",
+              "name": "infer",
+              "nbytes": 393692,
+              "sha256": "1c8a6ad6cfec52c7e77e95466ea35829ba4ee9d9ff6300eee97ec7a2af25c64a",
+              "step": 0
+            }
+          ],
+          "first_infer_send": null,
+          "subgoal": "pick up the container at <80, 120> that hides the green cube"
+        }
+      },
+      "infer_input_equal": true,
+      "arrays": {
+        "model_action__00000": {
+          "observed": false,
+          "reason": "完整模型张量未保存，不能逐数核验"
+        },
+        "exec_action__00000": {
+          "observed": true,
+          "shape": [
+            8
+          ],
+          "dtype": "float64",
+          "on_sha256": "647dd01e5c6e7cf376f299d8675c0001a49fcae63bf8dafe4c179854ca899af5",
+          "off_sha256": "4422f500ec4cf694a540f6405eb1dfd5397b2ea0a98556c498ea40cf1af4766c",
+          "byte_equal": false,
+          "different_values": 6,
+          "values": 8,
+          "max_abs_diff": 0.0009763676757810202
+        }
+      }
+    }
+  },
+  "判定行": "REAL_AUDIT_READBACK=PASS pairs=4 input_infer_hash_equal=4 numeric_differences_preserved=3 new_model_calls=0"
+}
