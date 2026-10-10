@@ -369,3 +369,15 @@ def test_notification_timeout_and_recipient_guard(tmp_path,monkeypatch):
     assert r['state']=='failed' and r['error_kind']=='TimeoutExpired' and r['rc'] is None
     c['notification']['to']='other@example.com'
     with pytest.raises(ValueError): S.notification_config(c)
+
+
+@pytest.mark.parametrize('resume',[False,True])
+def test_supervisor_resume_flag_is_only_explicit_cli_passthrough(monkeypatch,resume):
+    calls=[]
+    monkeypatch.setattr(S,'run',lambda path,**kwargs:calls.append((path,kwargs)) or 0)
+    argv=['supervisor','run','--config','fixture.json']
+    if resume: argv+=['--resume-completed-smokes','--orchestration-commit','c'*40]
+    monkeypatch.setattr(sys,'argv',argv)
+    assert S.main()==0
+    assert calls[0][1]['resume_completed_smokes'] is resume
+    assert calls[0][1]['orchestration_commit']==('c'*40 if resume else None)

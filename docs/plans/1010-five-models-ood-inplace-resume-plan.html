@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>五模型原始录像：原作业内人工接续</title><style>body{font:16px/1.7 system-ui;color:#203044;max-width:1100px;margin:30px auto;padding:0 22px}table{border-collapse:collapse;width:100%;margin:16px 0}td,th{border:1px solid #becbdd;padding:9px;text-align:left}th{background:#edf3fa}code,pre{background:#eef2f6}pre{padding:16px;overflow:auto}.notice{background:#fff4d8;padding:16px;border-left:5px solid #b77810}svg{width:100%;height:auto}</style></head><body>
+<div class="notice"><strong>本方案按用户最新授权接续，修补通过后直接启动，不再询问CPU启动许可。</strong>用户原话：「可以再次启动这个CPU的任务。你可以随意地启动CPU的任务，不需要每次都问用户。」这覆盖此前监督器一次启动的执行限制；CPU占位、GPU不主动停止与尝试预算仍保持。旧 CPU bootstrap 与 worker 执行快照保持原字节，新监督使用原CPU内额外srun。</div>
+<p>工作副本 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>、分支 <code>dev</code>；方案基线 <code>f24f0886b6e6d1201699ead70cd5dffd6ef46cea</code>。worker 唯一执行源仍为 <code>656c591f32238703c54967d0f550220cf0cec074</code>，原配置 SHA256 <code>5cc29c377a607186a6a21b27791b02eec480b2fd7bd2f390ff64043a07f4c9b3</code>。私有编排程序的修补提交单独锁定，不把新编排版本伪装成旧版本；全部模型算法、公开接口、权重、五 gitlink 不变。</p>
+<h1>第一部分（给人看）</h1>
+<h2>一、做什么与已定口径</h2>
+<p>同一轮 <code>ood-five-raw-seed7-20261010-02</code>、同一 CPU 和四 GPU 作业中，人工启动一次修补后的监督／控制程序，复用三个已完成首局，只做尚未执行的身份，不重跑、不新增资源、不增加尝试上限。不是重新开始第三轮全量。</p>
+<ol><li>用户原话：「监督器只要复发他自己的停止，不要对于GPU任务进行停止，CPU持续占位。」异常继续只停止自身，不停止 GPU 工作或占位；CPU 持续到原期限。</li><li>用户已批准：「批准完整恢复方案并启动」，并追加CPU启动免重复询问授权。先验证修补，再进行必要CPU接续，不建立无限重试循环，不把CPU启动授权扩成GPU轨迹重跑或额外预算。</li><li>用户已选择：「独立邮件通知，先验证投递链路」，并确认：「已收到该探针邮件」。同 CPU、同地址、同通知代码使用已有实收证明；不再发第二封探针。故障邮件每次人工监督实例最多一次，仍如实区分提交与收到。</li><li>旧轮 1／2、新轮 4000／8000、跨轮 4001／8002 的硬上限不变；正常任务失败独立计分，不为成功重试。</li></ol>
+<table><tr><th>部分</th><th>实际或尚待工作</th><th>是否新增尝试</th></tr>
+<tr><td>原轮 -01</td><td>PP × 1任务 × 1档 × 1首试 = 1轨迹／2 reset；原账本只读锁定。</td><td>零；不退款或补成功。</td></tr>
+<tr><td>-02 已执行</td><td>QwenVL、SMVLA、PP：3模型 × 1任务 VideoUnmask × 1档 xhard1 × 1首试 = 3轨迹／6 reset；三个原步骤均 COMPLETED、0:0。</td><td>零；读取原结果和原始录像。</td></tr>
+<tr><td>余下首局</td><td>Oracle、FrameSamp：2模型 × 1任务 VideoUnmask × 1档 xhard1 × 1首试 = 2。</td><td>包含在原4000内。</td></tr>
+<tr><td>首局之后</td><td>每模型800（任务／档位乘式见原完整计划），五模型共4000；扣除五个正式首局后3995。</td><td>仍在原4000内；从当前3次起，最多3997新首试。</td></tr>
+<tr><td>整体计量</td><td>当前旧1＋新3＝4轨迹，旧2＋新6＝8 reset；最终最多4001／8002。</td><td>基础设施重试、递补、额外采样均0。</td></tr></table>
+<h2>二、为什么退出与修什么</h2>
+<p>PP 原结果是真实正常终态：276步、<code>task_success=1</code>、<code>infra=false</code>，原 GPU 步骤 <code>63664393.1</code> 正常退出。控制器在 <code>Controller.scan</code> 先读报告，再看到进程退出码0，就立即检查已发布身份；当这一扫描没有读到报告时抛出“worker正常退出但缺结果”。原结果文件时间比报错早约19.35秒，路径和标签契约一致，不能把模型失败或路径错误当原因；NFS可见性与扫描竞态的具体触发尚不能区分。</p>
+<p>修补为：运行中仍严格检查120秒心跳；进程正常退出后，直接打开并补读真实 JSONL，保留 active 状态，在120秒单调时钟窗口内确认全部预期身份；不重起进程、不标虚假完成。非法／重复／跨身份报告照旧失败，永久缺失写出路径、字节数、行数、缺身份与退出码的证据。120秒是确认循环窗口，不能抢占操作系统阻塞的 NFS 读取。</p>
+<h2>三、如何只复用而不重复执行</h2>
+<figure><svg viewBox="0 0 1050 150" role="img" aria-label="三个原首局复用到正式接续"><g fill="#eaf2fb" stroke="#52769e"><rect x="5" y="25" width="250" height="100" rx="8"/><rect x="280" y="25" width="250" height="100" rx="8"/><rect x="555" y="25" width="220" height="100" rx="8"/><rect x="800" y="25" width="245" height="100" rx="8"/></g><g fill="#203044" font-size="17" text-anchor="middle"><text x="130" y="65">原3首局已结束＋预算已结算</text><text x="130" y="95">原日志／结果／录像不改</text><text x="405" y="65">严格复用检查与发布</text><text x="405" y="95">新增轨迹0／reset 0</text><text x="665" y="65">原余下2正式首局</text><text x="665" y="95">完整本机解码验收</text><text x="920" y="65">原40片剩余身份接续</text><text x="920" y="95">首正式合法一步才交接</text></g></svg></figure>
+<p>仅允许 <code>--resume-completed-smokes</code> 显式人工入口。先证明所有原 worker 步骤已结束，三个原首局的 dispatch／progress／JSONL／账本 commit／raw result 都与同一 run、配置、JobID 和唯一身份匹配；全部核验通过后才复用发布。未知退出、在途、半行、重复、未结算或 infra 失败一律拒绝。已完成首局直接进入已发布与已冒烟集合，绝不重新调用客户端；另外两个首局及余下身份沿原 worker 快照和同一预算继续。</p>
+<p>版本分两份明确记账：<code>exec_commit=656c591…</code> 仍表示全部 worker 及其公开策略代码；新私有编排程序另记完整 <code>orchestration_commit</code> 和逐文件 SHA。原配置字节、模型参数、worker 路径和 mover manifest 不改。新编排只更新报告确认与复用状态，不改任何模型数值链路。</p>
+<h2>四、资源与通知</h2>
+<table><tr><th>对象</th><th>保持方式</th></tr><tr><td>CPU63664373</td><td>原 standard/1CPU/4G/120小时 holder继续；人工监督使用该作业内额外纯CPU srun，不改原bootstrap。EndTime仍2026-10-15 17:52:59 America/Detroit。</td></tr><tr><td>GPU63664391／63664392／63664393／63664404</td><td>原1GPU/1CPU/24G/120小时，不取消、不重提；第四排队正常等待。原三个worker已正常结束，禁止接管在途程序。</td></tr><tr><td>搬运</td><td>原 <code>ev-ood-five-raw-mover-20261010-02</code> 继续，配置与输出根不改，不重起。</td></tr><tr><td>新人工监督启动载体</td><td>唯一 <code>ev-ood-five-raw-supervisor-resume-20261010-02</code>，detached tmux持有SSH/srun，日志pipefail/tee/EXIT_CODE。不得杀其他会话。</td></tr><tr><td>失败历史</td><td>批准后先逐文件核SHA并原字节保留原错误、心跳、守卫与故障邮件回执，再从活动控制槽移至 <code>control/attempts/initial-failure/</code>；不删日志，不动配置／账本／已完成结果。新实例如失败仍只自退出。</td></tr></table>
+<h2>五、验收与阶段</h2>
+<table><tr><th>判据</th><th>查什么／成立说明</th></tr><tr><td>WORKER_REPORT_FIX_REVIEW</td><td>固定代码审查；退出后有界补读、不放宽运行心跳、不重启或取消。</td></tr><tr><td>RESUME_PREFLIGHT</td><td>原三个步骤退出0、三身份一致、预算已结算、原报告完整；未完成和错误不能当复用成功。</td></tr><tr><td>RESUME_NO_REPLAY</td><td>真实CPU序列化夹具证明三个首局不再次启动／reserve／reset，旧预算原字节不变。</td></tr><tr><td>ORCHESTRATION_LOCK</td><td>新编排提交与逐文件SHA、原worker提交与原配置SHA分别绑定，旧执行快照未修改。</td></tr><tr><td>RAW_SMOKE／FIRST_DISPATCH／AGENT_HANDOFF</td><td>五个正式首局本机媒体完整解码、轨迹检查后，首正式分片真实合法一步且CPU／搬运心跳健康、错误零；其前代理不退出。</td></tr></table>
+<table><tr><th>阶段</th><th>内容</th><th>状态</th></tr><tr><td>C0</td><td>保留原错误与三首局，修补／固定审查／CPU测试</td><td>不启动恢复。</td></tr><tr><td>C1</td><td>本完整人工方案获批，固定新编排并在原CPU做只读实产物预检</td><td>无新增作业或轨迹。</td></tr><tr><td>C2</td><td>归档活动失败槽，人工额外srun启动一次监督器</td><td>不自动重起，失败再次只自退。</td></tr><tr><td>C3</td><td>复用原3、完成余2首局及首正式合法一步</td><td>真实门禁后交接。</td></tr></table>
+<h2>六、子代理分工与合并（简述）</h2>
+<p>Luna只读定位原结果与命名契约；Sol控制实现代理先提交有界补读B4，再提交显式人工复用B5，各自固定提交交独立Sol审查。主会话整合保留子提交、验证与推送，独占计划、资源、归档和版本锁；运行代理只有用户批准后才拿确定命令启动，不修代码、不停止资源。</p>
+<h1>第二部分（技术细节，供 agent 追踪）</h1>
+<h2>一、红线与写集</h2>
+<ol><li>不改原 <code>runtime-code/</code> 或 <code>bootstrap/</code>，不改任一模型/benchmark源码或公开接口；不改run-config原字节、seed7／严格1800／43格身份。</li><li>不申请新job、不取消已有GPU/CPU、不重放三个首局、不重置或退款账本；未结算或infra失败不能复用。</li><li>只人工一次恢复，不自动恢复；在途worker或未知sacct必须阻止启动。禁止把旧错误清空后直接从头Controller.run。</li><li>失败原字节先归档核SHA，活动槽只做逐明确文件的移存，不覆盖原日志或原错误；程序尚未验证的功能不得标已可用。</li></ol>
+<table><tr><th>文件／锚点</th><th>改什么</th><th>默认与人工模式</th></tr><tr><td>raw_ood_controller.py::Controller.scan</td><td>退出后120秒确认及详细缺失证据</td><td>两模式均严格完整身份确认，无重跑。</td></tr><tr><td>raw_ood_controller.py::--resume-completed-smokes</td><td>已结束首局的跨dispatch/progress/report/ledger/raw绑定与复用</td><td>默认不开；显式模式预检完全部对象才发布。</td></tr><tr><td>raw_ood_supervisor.py::run／CLI</td><td>显式人工flag仅透传controller</td><td>默认不恢复，异常自退策略保持。</td></tr><tr><td>tests/unit/test_raw_ood_controller.py／test_raw_ood_supervisor.py</td><td>真实JSONL退出后确认、复用与误身份／未知状态负例</td><td>CPU替身，不真实仿真、GPU或费用。</td></tr><tr><td>主会话artifacts启动载体／lock与本文</td><td>固定新编排，归档名单与唯一tmux，双版本来源证明</td><td>未获本方案批准不执行人工监督。</td></tr></table>
+<h2>二、子代理分配表</h2>
+<table><tr><th>任务</th><th>目标与唯一写集</th><th>禁触／依赖／验收／资源</th></tr><tr><td>L1 Luna</td><td>只读冻结656c591及原日志，核路径与实际文件</td><td>无写集、运行、SSH、GPU、下派；根因未证之处如实保留。</td></tr><tr><td>B4 Sol</td><td>独立raw-ood-control工作树；controller及其test</td><td>禁模型/原快照/预算；以f24f088为BASE，先合；controller CPU短测与固定审查。</td></tr><tr><td>B5 Sol</td><td>同工作树持久续用；controller/supervisor及其两tests</td><td>B4依赖；不真实恢复/资源/下派；真实JSON往返＋无重放＋错身份等负例。</td></tr><tr><td>C Sol</td><td>固定BASE/TIP独立静态审查</td><td>无写集、不执行、不看并列在途；FAIL回原owner。</td></tr><tr><td>D Sol</td><td>获批后仅执行原CPU额外srun与唯一监督tmux；只写本轮运行日志</td><td>完整固定版本/命令/5JobID/双锁交付后派；预算剩3997首试以内、重试0，最长原EndTime。失败不取消任何job或tmux。</td></tr><tr><td>主会话</td><td>计划／归档／新编排lock／启动载体／资源清单／no-ff整合</td><td>共享文件唯一owner；tests＜5分钟，立即push；不触旧大产物。</td></tr></table>
+<h2>三、闸门与运行手册</h2>
+<p>先 <code>git diff --check</code>、四个raw-ood定向CPU测试、固定B4/B5审查；新编排仅复制固定提交的controller、supervisor、guard及必要budget模块，逐文件比对Git blob SHA后rsync到本轮实体目录，不在GL执行Git。新编排版本、来源hash与原worker版本分开留档。源文件集合和最终提交在代码稳定后填入，未固定前禁止起跑。</p>
+<pre># 仅示意位置；实施前把ORCHESTRATION固定为通过审查的提交／路径。
+# 同CPU只读预检：原GPU .1均COMPLETED/0:0；原3首局报告和预算互证。
+# 主会话批准后保留指定控制错误原字节，不动run-config/launch.ready/worker/ledger。
+# 唯一监督tmux载体：pipefail＋PYTHONUNBUFFERED＋tee＋EXIT_CODE。
+srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python \
+  &lt;固定新编排路径&gt;/raw_ood_supervisor.py run \
+  --config /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/run-config.json \
+  --resume-completed-smokes</pre>
+<p>预检拒绝或人工实例失败：只保存证据并停止该恢复，不另起／不重复当前首局、不扩预算、不取消GPU/CPU。只有尚未完成身份按原队列继续；原3首局分别计为已完成，不能为了重新走接续而覆盖结果或再生成。</p>
+<h2>四、风险与盲区</h2>
+<p>原故障具体NFS可见性触发尚未重现，退出后补读修补是可测的设计缺口封闭。确认窗口无法截断内核阻塞IO；测试只能证明状态机对延迟文件与真实JSON的处理，不能替代GL实产物预检。新私有编排与旧worker分开锁版本是明确的来源口径变化，需随本完整方案获批。原4GPU及CPU保持空占可能持续到期限，符合用户要求。接续与完整4000／原始媒体交付未实测前均为待验；本机与GL不混跑，不新增利用率采样。</p>
+<h2>五、留档与提交纪律</h2>
+<p>沿用-02档案，新增原错误快照、三首局结果与sacct、B4/B5审查／CPU测试、新编排锁、人工恢复原话和实际命令。records零.sh/零.yaml、不放权重；artifacts载体独立留存。保留子提交no-ff整合、中文版本提交立即推dev，不同步main。原失败与新恢复分别记录，不把失败记录改成PASS。</p>
+<h2>六、实产物预检与用户最新录像裁决</h2>
+<p>主会话整合私有编排修补后，143项定向测试通过36.72秒，资源守卫全零；B4与B5修正后固定审查通过。真正CPU只读预检拒绝Qwen原首局 <code>official/*.mp4</code>，未启动恢复、未发布任何新身份。已确认外层 <code>--no-render</code> 只关网站后制视频，GroundSG内部 <code>run_episode</code> 固定保留原官方视频；原官方循环无关闭临时编码的既有API。</p>
+<p>用户裁决：「只交付原始录像，允许内部临时 MP4」。据此后续只修评估外层的保存开关，不改上游evaluator/recorder、模型算法或五gitlink。原Qwen额外官方文件原字节另存，不交付、不删除；三个原首局复用，原worker快照不覆盖。后续worker须用修补后的新clean快照，来源与三个旧首局分别记录；原配置不覆盖，新增接续配置与旧来源绑定。前文“全部worker仍旧656／原配置直接续用”的方案在实产物预检前成立，此处明确替代该部分，不能以旧源码执行而声称保存开关已修复。</p>
+<p>实施前补齐稳定新版本、接续配置及其SHA、旧来源绑定、实际CLI预检与唯一CPU恢复命令。CPU启动沿已获免反复询问授权，不再请示；额外GPU轨迹、费用、reset与源码算法均不扩范围。</p>
+</body></html>

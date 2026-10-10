@@ -161,7 +161,7 @@ def fail(config: dict, error: BaseException, *, process=None) -> int:
     return 1
 
 
-def run(config_path: Path) -> int:
+def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=None) -> int:
     c=load_config(config_path)
     control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
@@ -197,7 +197,14 @@ def run(config_path: Path) -> int:
         guard_monitor=threading.Thread(target=watch_guards,daemon=True); guard_monitor.start()
         start_guardians(c,guardians)
         log=(control/'controller.log').open('a')
-        controller=subprocess.Popen([c['python'],str(Path(__file__).with_name('raw_ood_controller.py')),'run','--config',str(config_path)],
+        controller_command=[c['python'],str(Path(__file__).with_name('raw_ood_controller.py')),'run','--config',str(config_path)]
+        if resume_completed_smokes:
+            import re
+            if not re.fullmatch('[0-9a-f]{40}',str(orchestration_commit)): raise ValueError('手动恢复须明确orchestration_commit')
+            controller_command+=['--resume-completed-smokes','--orchestration-commit',orchestration_commit]
+            atomic(control/'orchestration-started.json',dict(base,orchestration_commit=orchestration_commit,
+                   resume_completed_smokes=True,time=time.time()))
+        controller=subprocess.Popen(controller_command,
                                     stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=dict(os.environ,PYTHONUNBUFFERED='1'))
         atomic(control/'supervisor-started.json',dict(base,pid=os.getpid(),controller_pid=controller.pid,time=time.time()))
         while True:
@@ -311,10 +318,11 @@ def self_test(root: Path) -> int:
 def main():
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='command',required=True)
     p=sub.add_parser('run'); p.add_argument('--config',type=Path,required=True)
+    p.add_argument('--resume-completed-smokes',action='store_true'); p.add_argument('--orchestration-commit',default=None)
     p=sub.add_parser('self-test'); p.add_argument('--root',type=Path,required=True)
     p=sub.add_parser('notification-probe'); p.add_argument('--config',type=Path,required=True)
     args=ap.parse_args()
     if args.command=='notification-probe': return notification_probe(args.config)
-    return run(args.config) if args.command=='run' else self_test(args.root)
+    return run(args.config,resume_completed_smokes=args.resume_completed_smokes,orchestration_commit=args.orchestration_commit) if args.command=='run' else self_test(args.root)
 
 if __name__=='__main__': raise SystemExit(main())

@@ -236,3 +236,217 @@ def test_cross_round_budget_rejects_tamper_omission_and_overage(tmp_path,kind):
         with pytest.raises(ValueError): C.work_budget(c,current=state)
         return
     with pytest.raises((ValueError,KeyError)): C.validate_config(c)
+
+
+def scan_fixture(tmp_path,*,rc=0):
+    import time
+    c=config(tmp_path); ctl=C.Controller(c); ident=ctl.shards['pp-00']['rows'][0]
+    inv=tmp_path/'control/invocations/pp-00-smoke'; inv.mkdir(parents=True)
+    progress=inv/'progress.json'; results=Path(c['gl_root'])/'seats/pp/seed7/s3-pp-00-smoke/seat-results.jsonl'
+    results.parent.mkdir(parents=True)
+    C.atomic(progress,dict(label='pp',phase='finished',key=None,pid=1000,t=time.time()-300,slurm_job_id='103',slurm_step_id='1'))
+    directory=Path(c['gl_root'])/'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
+    for name in ('front.mkv','wrist.mkv','arrays.npz','trace.jsonl','meta.json','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'):
+        (directory/name).write_text('fixture')
+    result=directory/'result.json'; C.atomic(result,dict(key=ident['key'],dataset='ood',infra=False,task_success=1))
+    row=dict(key=ident['key'],infra=False,final=True,accepted=True,result=str(result),exec_steps=276,
+             task_success=1,budget_exhausted=False,run_blocked=False)
+    a=dict(process=types.SimpleNamespace(poll=lambda:rc),log=(inv/'worker.log').open('a'),seat=c['seats'][2],shard='pp-00',
+           smoke=True,model='pp',progress=progress,results=results,rows=[ident],offset=0,started=time.time()-300,
+           acked=False,phase_key=None,phase_start=time.time()-300,step_id='103.1',worker_name='raw-ood-worker-pp-00-smoke')
+    ctl.active['103']=a
+    return ctl,a,row
+
+
+def test_terminal_single_lf_report_is_read_once_despite_stale_heartbeat(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); a['results'].write_text(json.dumps(row)+'\n')
+    ctl.scan()
+    assert 'pp' in ctl.smoked and not ctl.active and a['offset']==1
+    proof=C.read(a['progress'].parent/'final-confirmation.json')
+    assert proof['state']=='confirmed' and proof['rc']==0 and proof['consumed_lines']==1 and proof['missing_identities']==[]
+
+
+def test_terminal_file_appears_late_without_relaunch_or_republish(tmp_path,monkeypatch):
+    ctl,a,row=scan_fixture(tmp_path); clock=[10.]
+    monkeypatch.setattr(C.time,'monotonic',lambda:clock[0])
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**k:pytest.fail('不得重新启动worker'))
+    monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:pytest.fail('已退出worker不应查询或取消作业'))
+    ctl.scan(); assert ctl.active and not ctl.smoked and a['offset']==0
+    clock[0]=30; a['results'].write_text(json.dumps(row)+'\n'); ctl.scan()
+    assert not ctl.active and ctl.smoked=={'pp'} and a['offset']==1 and len(ctl.published)==1
+
+
+def test_terminal_partial_tail_becomes_complete_jsonl(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); text=json.dumps(row)
+    a['results'].write_text(text[:len(text)//2]); ctl.scan()
+    assert ctl.active and a['offset']==0
+    a['results'].write_text(text+'\n'); ctl.scan()
+    assert not ctl.active and a['offset']==1
+
+
+def test_terminal_permanent_missing_fails_at_bounded_deadline_with_evidence(tmp_path,monkeypatch):
+    ctl,a,row=scan_fixture(tmp_path); clock=[0.]
+    monkeypatch.setattr(C.time,'monotonic',lambda:clock[0])
+    ctl.scan(); clock[0]=119; ctl.scan(); assert ctl.active
+    clock[0]=120
+    with pytest.raises(ValueError,match='WORKER_REPORT_CONFIRMATION=FAIL'): ctl.scan()
+    proof=C.read(a['progress'].parent/'final-confirmation.json')
+    assert proof['state']=='failed' and proof['elapsed_s']==120 and proof['expected_path']==str(a['results'])
+    assert proof['path_exists'] is False and proof['stat_size'] is None and proof['consumed_lines']==0
+    assert len(proof['missing_identities'])==1 and proof['rc']==0
+    a['log'].close()
+
+
+@pytest.mark.parametrize('kind',['bad_json','duplicate','cross_identity','wrong_slurm'])
+def test_terminal_confirmation_never_accepts_invalid_reports_or_identity(tmp_path,kind):
+    ctl,a,row=scan_fixture(tmp_path)
+    if kind=='bad_json': text='{bad}\n'
+    elif kind=='duplicate': text=(json.dumps(row)+'\n')*2
+    elif kind=='cross_identity': row['key']='foreign'; text=json.dumps(row)+'\n'
+    else:
+        p=C.read(a['progress']); p['slurm_job_id']='104'; C.atomic(a['progress'],p); text=json.dumps(row)+'\n'
+    a['results'].write_text(text)
+    with pytest.raises((ValueError,json.JSONDecodeError)): ctl.scan()
+    assert ctl.active and not ctl.smoked
+    a['log'].close()
+
+
+def test_live_worker_heartbeat_gate_is_not_relaxed(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path,rc=None)
+    with pytest.raises(RuntimeError,match='心跳失效'): ctl.scan()
+    a['log'].close()
+
+
+def resume_fixture(tmp_path,monkeypatch):
+    import budget_ledger, time
+    c=config(tmp_path); rows=identities()
+    for row in rows: row['seed']=int(row['key'].rsplit('_',1)[1])
+    p=Path(c['identities']); p.write_text(''.join(json.dumps(r)+'\n' for r in rows)); c['identities_sha256']=C.sha(p)
+    led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    led.check(); creator=C.Controller(c)
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=999))
+    for index,model in enumerate(('qwenvl','smvla','pp')):
+        seat=c['seats'][index]; creator.start(seat,model+'-00',smoke=True); a=creator.active[str(seat['job_id'])]; ident=a['rows'][0]
+        seat_name=f"{seat['seat']}-{model}-00-smoke"; label=c['models'][model]['label']
+        C.atomic(a['progress'],dict(label=label,phase='finished',rc=0,episodes_done=1,pid=1000,seat=seat_name,policy_seed=7,
+                                   slurm_job_id=seat['job_id'],slurm_step_id='1',key=None,t=time.time()))
+        route=c['models'][model]['policy']+('/'+C.ROUTES[model][2] if C.ROUTES[model][2] else '')+'/seed7/new'; token=route+'|'+ident['key']+'|a1'
+        rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id=seat['job_id'])
+        led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id=seat['job_id'])
+        directory=Path(c['gl_root'])/'rollouts'/label/'ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
+        for name in ('front.mkv','wrist.mkv','arrays.npz','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'): (directory/name).write_text('fixture')
+        C.atomic(directory/'meta.json',dict(identity=ident,pid=1000))
+        C.atomic(directory/'summary.json',dict(RECORDER_VERIFY='PASS',errors=[],decode_mismatch=0,summary={'exec_steps':1},
+            streams={s:dict(error=None,mismatch=0,timestamps_ok=True,encoded=1,decoded=1) for s in ('front','wrist')}))
+        (directory/'trace.jsonl').write_text(json.dumps(dict(kind='header',identity=ident))+'\n'+json.dumps(dict(kind='end',exec_steps=1))+'\n')
+        result=dict(ident,infra=False,policy_label=label,policy_seed=7,recorder_verify='PASS',exec_steps=1,task_success=1,status='success')
+        C.atomic(directory/'result.json',result)
+        report=dict(key=ident['key'],dataset='ood',seat=seat_name,attempt=1,attempt_id='fixture-'+model,policy_seed=7,policy=c['models'][model]['policy'],exec_steps=1,budget_rid=rid,budget_token=token,
+                    status='success',infra=False,final=True,accepted=True,result=str(directory/'result.json'),task_success=1,budget_exhausted=False,run_blocked=False)
+        a['results'].parent.mkdir(parents=True,exist_ok=True); a['results'].write_text(json.dumps(report)+'\n'); a['log'].close()
+        C.atomic(Path(c['gl_root'])/'queue'/label/'seed7/accepted'/('ood__'+ident['key']+'.json'),
+                 dict(key=ident['key'],dataset='ood',attempt=1,seat=seat_name,result=str(directory/'result.json'),attempt_id=report['attempt_id']))
+    ctl=C.Controller(c)
+    def query(cmd,**kw):
+        if cmd[0]=='squeue': return types.SimpleNamespace(returncode=0,stdout='',stderr='')
+        step=cmd[cmd.index('-j')+1]; model=('qwenvl','smvla','pp')[int(step.split('.')[0])-101]
+        return types.SimpleNamespace(returncode=0,stdout=step+'|raw-ood-worker-'+model+'-00-smoke|COMPLETED|0:0\n',stderr='')
+    monkeypatch.setattr(C.subprocess,'run',query)
+    return ctl,query
+
+
+def test_manual_resume_validates_all_closed_smokes_then_skips_existing(tmp_path,monkeypatch):
+    ctl,query=resume_fixture(tmp_path,monkeypatch); ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
+    ctl.resume_completed_smokes('c'*40)
+    assert ctl.smoked=={'qwenvl','smvla','pp'} and len(ctl.published)==3 and ledger.read_bytes()==before
+    assert C.read(ctl.control/'resume-completed-smokes.json')['orchestration_commit']=='c'*40
+    launches=[]
+    def run(cmd,**kw): return types.SimpleNamespace(returncode=0,stdout='RUNNING\n',stderr='')
+    monkeypatch.setattr(C.subprocess,'run',run)
+    for seat in ctl.c['seats']:
+        C.atomic(ctl.control/f"guardian-ready-{seat['job_id']}.json",dict(ctl.base,gpu_job_id=seat['job_id'],pid=2000,time=C.time.time(),step_id='2'))
+    def launch(seat,shard,smoke=False):
+        launches.append(shard); ctl.active[str(seat['job_id'])]={'model':shard.rsplit('-',1)[0]}
+    monkeypatch.setattr(ctl,'start',launch)
+    ctl.dispatch()
+    assert launches==['oracle-00','framesamp-00']
+
+
+@pytest.mark.parametrize('kind',['running','unknown_exit','wrong_job','half_line','duplicate','uncommitted','missing_field','media_identity','missing_accepted'])
+def test_resume_rejects_before_any_publication_and_never_changes_budget(tmp_path,monkeypatch,kind):
+    ctl,query=resume_fixture(tmp_path,monkeypatch); ledger=Path(ctl.c['budget_ledger'])
+    inv=ctl.control/'invocations/pp-00-smoke'; path=Path(ctl.c['gl_root'])/'seats/pp/seed7/s103-pp-00-smoke/seat-results.jsonl'
+    if kind=='running': monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:types.SimpleNamespace(returncode=0,stdout='103.1 raw-ood-worker-pp-00-smoke RUNNING\n',stderr=''))
+    elif kind=='unknown_exit': monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:types.SimpleNamespace(returncode=0,stdout='',stderr=''))
+    elif kind=='wrong_job':
+        p=C.read(inv/'progress.json'); p['slurm_job_id']='104'; C.atomic(inv/'progress.json',p)
+    elif kind=='half_line':
+        path.write_text(path.read_text()[:-1]); clock=[0]
+        monkeypatch.setattr(C.time,'monotonic',lambda:clock[0]); monkeypatch.setattr(C.time,'sleep',lambda x:clock.__setitem__(0,clock[0]+121))
+    elif kind=='duplicate': path.write_text(path.read_text()*2)
+    elif kind=='uncommitted':
+        rows=[json.loads(x) for x in ledger.read_text().splitlines()]; rows=[r for r in rows if not (r['kind']=='commit' and r['slurm_job_id']=='103')]
+        # 原fixture commit默认无job；按PP报告rid准确删除。
+        rid=json.loads(path.read_text())['budget_rid']; rows=[r for r in rows if not (r['kind']=='commit' and r['rid']==rid)]
+        ledger.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    elif kind=='missing_field':
+        r=json.loads(path.read_text()); del r['final']; path.write_text(json.dumps(r)+'\n')
+    elif kind=='media_identity':
+        result=Path(json.loads(path.read_text())['result']); meta=C.read(result.parent/'meta.json'); meta['identity']['key']='foreign'; C.atomic(result.parent/'meta.json',meta)
+    else:
+        p=ctl.gl/'queue/pp/seed7/accepted'/('ood__'+ctl.shards['pp-00']['rows'][0]['key']+'.json'); p.unlink()
+    original=ledger.read_bytes()
+    with pytest.raises((ValueError,KeyError,FileNotFoundError)): ctl.resume_completed_smokes('c'*40)
+    assert not (ctl.gl/'published').exists() and not ctl.smoked and ledger.read_bytes()==original
+
+
+def test_resume_preflight_reads_without_publishing_or_marking_smoked(tmp_path,monkeypatch):
+    ctl,query=resume_fixture(tmp_path,monkeypatch); original=Path(ctl.c['budget_ledger']).read_bytes()
+    proof=ctl.resume_completed_smokes('c'*40,preflight=True)
+    assert proof['reused']==3 and len(proof['identities'])==3
+    assert not ctl.smoked and not ctl.published and not (ctl.gl/'published').exists()
+    assert not (ctl.control/'resume-completed-smokes.json').exists() and Path(ctl.c['budget_ledger']).read_bytes()==original
+
+
+def test_resume_waits_for_complete_report_visibility_without_new_attempt(tmp_path,monkeypatch):
+    import threading,time
+    ctl,query=resume_fixture(tmp_path,monkeypatch)
+    path=ctl.gl/'seats/pp/seed7/s103-pp-00-smoke/seat-results.jsonl'; complete=path.read_bytes()
+    path.write_bytes(complete[:len(complete)//2]); original=Path(ctl.c['budget_ledger']).read_bytes()
+    producer=threading.Thread(target=lambda:(time.sleep(.05),path.write_bytes(complete)))
+    producer.start()
+    try: ctl.resume_completed_smokes('c'*40)
+    finally: producer.join()
+    assert ctl.smoked=={'qwenvl','smvla','pp'} and Path(ctl.c['budget_ledger']).read_bytes()==original
+
+
+def test_unacked_full_terminal_publication_writes_real_first_step_ack(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); a['smoke']=False
+    ctl.publish(a,row)
+    ack=C.read(ctl.control/'first_dispatch.json')
+    assert ack['proof']==row['result'] and ack['first_step']==276 and ack['client_pid']==1000
+    assert ack['step_id']=='103.1' and a['acked'] and len(ctl.published)==1
+
+
+def test_resume_wait_is_inside_live_heartbeat_and_thread_stops_on_failure(tmp_path,monkeypatch):
+    import threading,time
+    ctl=C.Controller(config(tmp_path)); ctl.control.mkdir()
+    C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
+    entered=threading.Event(); release=threading.Event(); errors=[]
+    def resume(*a,**kw):
+        entered.set(); release.wait(timeout=3); raise ValueError('fixture resume stop')
+    monkeypatch.setattr(ctl,'resume_completed_smokes',resume)
+    def run():
+        try: ctl.run(resume_completed_smokes=True,orchestration_commit='c'*40)
+        except ValueError as e: errors.append(str(e))
+    worker=threading.Thread(target=run); worker.start()
+    try:
+        assert entered.wait(timeout=2)
+        deadline=time.monotonic()+2
+        while not (ctl.control/'controller-heartbeat.json').exists() and time.monotonic()<deadline: time.sleep(.01)
+        beat=C.read(ctl.control/'controller-heartbeat.json')
+        assert beat['pid']>0 and time.time()-beat['t']<2
+        assert any(t.name=='raw-ood-controller-heartbeat' and t.is_alive() for t in threading.enumerate())
+    finally: release.set(); worker.join(timeout=3)
+    assert errors==['fixture resume stop'] and not worker.is_alive()
+    assert not any(t.name=='raw-ood-controller-heartbeat' and t.is_alive() for t in threading.enumerate())
