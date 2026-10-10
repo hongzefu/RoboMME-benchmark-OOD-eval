@@ -374,9 +374,10 @@ class AttemptLedger:
         if self.shared is None:
             return self.infra_retries_left() > 0
         kw = {"token": token} if token else {}
+        if int(self.infra_retry_budget or 0) > 1:
+            kw["max_attempts"] = 1 + int(self.infra_retry_budget)
         return bool(self.shared.claim_retry(route=self.route, key=key,
                                             interrupt=interrupt or self.retry_interrupt(key),
-                                            max_attempts=1 + int(self.infra_retry_budget or 0),
                                             seat=self.seat, policy=self.policy, **kw))
 
     def expired_jobs(self) -> set[str]:
@@ -656,7 +657,7 @@ def entry_blockers(args) -> tuple[str, str] | None:
     if vp:
         return "variant_pairing", "; ".join(vp)
     if not 0 <= int(getattr(args, "infra_retries", 0) or 0) <= 19:
-        return "args", "--infra-retries 须为 0 至 19 的整数（每身份至多 20 次尝试）"
+        return "args", "--infra-retries 须为非负整数且不超过 19（每身份至多 20 次尝试）"
     return None
 
 
@@ -1368,6 +1369,11 @@ class SeatRunner:
                    exec_steps=d.get("exec_steps"), cap_hit=d.get("cap_hit"), reset_calls=d.get("reset_calls"),
                    budget_exhausted=bool(d.get("budget_exhausted")), run_blocked=bool(d.get("run_blocked")),
                    video=d.get("video"), video_error=d.get("video_error"), raw_dir=d.get("raw_dir"))
+        if row["budget_exhausted"]:
+            self._end(c, attempt_id, row, void=True)
+            print(f"RESET_BUDGET_EXHAUSTED policy={self.args.policy} seat={self.seat} key={c.key} "
+                  f"detail={row.get('error')}", flush=True)
+            raise SeatStop(EXIT_BUDGET, "reset_budget")
         self._end(c, attempt_id, row, void=False)
         self.episodes_done += 1
         self.progress("done")
