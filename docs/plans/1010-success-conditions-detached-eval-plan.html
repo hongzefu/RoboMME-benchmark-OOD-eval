@@ -3,84 +3,125 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>两个 OOD 任务判据修改与 benchmark 子模块锁定</title>
+<title>StopCube、MoveCube 修改与 benchmark 提交锁定</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f1f5f8;color:#213342;font:16px/1.75 system-ui,sans-serif}main{max-width:1060px;margin:28px auto;padding:34px 42px;background:white;border-radius:12px}h1{font-size:26px;margin:36px 0 16px}h2{font-size:20px;margin:24px 0 10px}p{margin:10px 0}a{color:#17658d}code{font:13px/1.6 ui-monospace,monospace;overflow-wrap:anywhere;background:#edf3f7;padding:2px 4px}pre{background:#edf3f7;padding:14px;overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px;margin:14px 0}td,th{border:1px solid #d5e0e8;padding:9px;text-align:left;vertical-align:top}th{background:#eaf2f7}.note{background:#eaf4fb;padding:12px 16px;border-left:4px solid #17658d}.muted{color:#526575;font-size:14px}svg{display:block;width:100%;height:auto}blockquote{margin:12px 0;padding:10px 16px;background:#f6f8fa;border-left:3px solid #acbecb}footer{border-top:1px solid #d5e0e8;margin-top:26px;padding-top:14px}@media(max-width:720px){main{margin:0;padding:20px 16px}h1{font-size:23px}}@media print{body{background:white}main{margin:0;padding:0}tr{break-inside:avoid}}
+*{box-sizing:border-box}body{margin:0;background:#f1f5f8;color:#213342;font:16px/1.75 system-ui,sans-serif}main{max-width:1060px;margin:28px auto;padding:30px 38px;background:#fff;border-radius:12px}h1{font-size:26px;margin:32px 0 14px}h2{font-size:20px;margin:22px 0 10px}p{margin:10px 0}a{color:#17658d}code{font:13px/1.6 ui-monospace,monospace;overflow-wrap:anywhere;background:#edf3f7;padding:2px 4px}pre{background:#edf3f7;padding:14px;overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px;margin:14px 0}td,th{border:1px solid #d5e0e8;padding:9px;text-align:left;vertical-align:top}th{background:#eaf2f7}.note{background:#eaf4fb;padding:12px 16px;border-left:4px solid #17658d}.muted,figcaption{color:#526575;font-size:14px}figure{margin:16px 0;padding:8px;border:1px solid #d5e0e8;border-radius:10px}ol{padding-left:24px}footer{border-top:1px solid #d5e0e8;margin-top:22px;padding-top:12px}@media(max-width:720px){main{margin:0;padding:18px 14px}h1{font-size:23px}}@media print{body{background:white}main{margin:0;padding:0}tr,figure{break-inside:avoid}}
 </style>
 </head>
 <body><main>
-<p class="muted">2026-10-10 · 精简修订 · 本轮只修改方案文档</p>
-<div class="note"><strong>实施范围只有两个任务的成功判据，加上评估仓必要的子模块指针更新。</strong>代理退出只作说明；不修改调度、监督或 Evaluation Report，不启动实际 evaluate，也不做新旧对跑和最后验收。</div>
+<p class="muted">2026-10-10 · 完整重构 · 本轮只修改计划</p>
+<div class="note"><strong>只改两个 OOD 任务的成功判据，再让评估仓锁定 benchmark 的新提交。</strong>不做实际 evaluate、新旧对跑或最后评估验收。本文的源码修改、提交锁定步骤仍待批准实施。</div>
 <h1 id="human">第一部分（给人看）</h1>
 <h2>一、两个任务改什么</h2>
 <table>
-<tr><th>任务</th><th>只在 OOD 新档生效</th><th>保留的规则</th></tr>
-<tr><td>StopCube</td><td><code>xhard1～xhard5</code>：距离倍率 <code>3 → 2.5</code>，即 <strong>6 → 5 厘米</strong>。</td><td>原档／hard-verify 仍为 6 厘米；停止状态、按键时机和失败规则保留。</td></tr>
-<tr><td>MoveCube</td><td><code>xhard4</code>：仅执行阶段的杆推、夹爪推两项，<code>must_gripper_open=False</code>。</td><td>原档执行、所有演示仍为 True；抓取放置不改。False 表示取消张开检查。</td></tr>
+<tr><th>任务</th><th>OOD 新档修改</th><th>保留</th></tr>
+<tr><td>StopCube</td><td><code>xhard1～xhard5</code>：停止距离倍率 <code>3 → 2.5</code>，即 <strong>6 → 5 厘米</strong>。</td><td>原档／hard-verify 仍为 6 厘米；停止、按键时机和失败规则保留。</td></tr>
+<tr><td>MoveCube</td><td><code>xhard4</code>：杆推、夹爪推的<strong>执行阶段</strong>两项设 <code>must_gripper_open=False</code>。</td><td>原档执行和所有演示仍为 True；抓取放置不改。False 表示不检查张开。</td></tr>
 </table>
-<p>两处都用已有 <code>is_newvalue_difficulty(self.difficulty)</code> 判断 OOD。hard-verify 虽标记为 xhard0，实际传入环境的是 <code>hard</code>，因此不会进入新规则。</p>
-<h2>二、改 benchmark，再重新锁定子模块</h2>
-<p>源码改在 <code>/data/hongzefu/RoboMME-benchmark-OOD</code> 的专用分支：StopCube 改停止距离 helper，MoveCube 改执行任务列表。<strong>不直接在评估仓的子模块里编辑源码。</strong></p>
-<p><strong>锁定顺序：</strong>从当前锁定提交建 benchmark 专用分支 → 修改、提交并推送 → 取得新提交的完整 40 位 SHA → 评估仓将 <code>third_party/robomme_benchmark</code> 切到该 SHA → 在评估仓 dev 提交并推送这个 gitlink。子模块锁的是提交 SHA，远端分支以后移动也不会自动换版本；<code>.gitmodules</code> 的地址不用改。</p>
-<h2>三、代理退出只作说明，不纳入实施</h2>
-<p>目前已有调度程序能接续评估，但其自身异常和完整收尾仍需人工处理。以后若要一次交接后代理退出，可用独立 <code>tmux</code> 运行调度与普通监督程序：监督进程是否存活、有无进展，并在异常时留报告。<strong>本任务不实现或验证这套机制，也不宣称现在已经支持无人值守完成。</strong></p>
-<h2>四、这次怎么结束</h2>
-<p>一次改两个任务 → 做不启动环境的必要代码短测 → 提交 benchmark 专用分支 → 更新并提交 eval 的子模块指针 → 结束。<strong>不运行 scripts/evaluate.py，不跑 dummy、reset、rollout、正式评估或最后验收。</strong>具体文件、命令及分工见第二部分。</p>
+<p>用已有 <code>is_newvalue_difficulty</code> 区分 OOD。hard-verify 实际传入环境的难度为 <code>hard</code>，继续使用原规则。</p>
+<h2>二、实际锁定的是哪一个提交</h2>
+<p><strong>锁定位置：</strong>评估仓 dev 的 <code>third_party/robomme_benchmark</code> 记录一条 gitlink，值是 benchmark 的完整 40 位提交 SHA。当前为 <code>a5efb992…</code>，该提交的标签是 <code>v1.0-ood</code>；benchmark 的 main 已到 <code>v1.1-ood</code>，评估仓仍保持原 SHA。</p>
+<figure>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 450" width="920" role="img" aria-labelledby="locktree-title locktree-desc" aria-label="子模块锁定提交示意图：评估仓当前锁定旧提交，实施后改锁专用分支的新提交，两仓主分支和旧标签不变。" style="display:block;width:100%;max-width:920px;height:auto">
+  <title id="locktree-title">子模块锁定提交，不锁分支或标签</title>
+  <desc id="locktree-desc">左侧是 benchmark 仓库历史：旧提交 a5efb992e769b7011281a1d31739b76d8868602a 对应 v1.0-ood 标签；main 已继续到 v1.1-ood。未来从旧提交建立专用分支，仅修改两个任务，产生并推送尚不存在的 NEW_SHA。右侧是独立的评估仓库，其 dev 分支当前的 gitlink 指向旧提交，实施后改指向 NEW_SHA。两仓 main 和旧标签均不修改。</desc>
+  <defs>
+    <marker id="locktree-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10Z" fill="#52677d"/>
+    </marker>
+    <style>
+      .locktree-text{font-family:"Noto Sans CJK SC",system-ui,sans-serif;fill:#203449;font-size:17px}
+      .locktree-heading{font-size:20px;font-weight:700}
+      .locktree-code{font-family:"Noto Sans Mono CJK SC","Noto Sans CJK SC",monospace;font-size:16px}
+      .locktree-line{fill:none;stroke:#52677d;stroke-width:2;marker-end:url(#locktree-arrow)}
+      .locktree-future{stroke-dasharray:7 5}
+    </style>
+  </defs>
+  <rect width="920" height="450" rx="16" fill="#fff"/>
+  <text class="locktree-text locktree-heading" x="30" y="38">benchmark 仓库：提交历史</text>
+  <text class="locktree-text locktree-heading" x="630" y="38">评估仓库：dev 的 gitlink</text>
+  <rect x="30" y="80" width="500" height="100" rx="12" fill="#edf4ff" stroke="#b6cbe6"/>
+  <text class="locktree-text" x="50" y="116">旧提交（v1.0-ood 标签所在）</text>
+  <text class="locktree-text locktree-code" x="50" y="150">a5efb992e769b7011281a1d31739b76d8868602a</text>
+  <path class="locktree-line" d="M130 180 V280"/>
+  <path class="locktree-line locktree-future" d="M380 180 V280"/>
+  <text class="locktree-text" x="42" y="230">既有演进</text>
+  <text class="locktree-text" x="395" y="220">从旧提交建分支</text>
+  <text class="locktree-text" x="395" y="248">改两个任务并推送</text>
+  <rect x="30" y="280" width="185" height="100" rx="12" fill="#f3f5f7" stroke="#c9d2db"/>
+  <text class="locktree-text" x="46" y="319">main → v1.1-ood</text>
+  <text class="locktree-text" x="46" y="350">本轮不改</text>
+  <rect x="230" y="280" width="300" height="100" rx="12" fill="#eef9f2" stroke="#9ec7ae" stroke-dasharray="7 5"/>
+  <text class="locktree-text locktree-code" x="240" y="319">codex/ood-success-conditions</text>
+  <text class="locktree-text" x="250" y="350">NEW_SHA（待实施）</text>
+  <rect x="630" y="80" width="260" height="100" rx="12" fill="#edf4ff" stroke="#b6cbe6"/>
+  <text class="locktree-text" x="650" y="116">当前：锁定旧提交</text>
+  <text class="locktree-text locktree-code" x="650" y="150">gitlink = a5efb992…</text>
+  <path class="locktree-line" d="M630 130 H530"/>
+  <path class="locktree-line locktree-future" d="M760 180 V280"/>
+  <text class="locktree-text" x="655" y="230">新提交推送后再升级</text>
+  <rect x="630" y="280" width="260" height="100" rx="12" fill="#eef9f2" stroke="#9ec7ae" stroke-dasharray="7 5"/>
+  <text class="locktree-text" x="650" y="319">改完后：锁定新提交</text>
+  <text class="locktree-text locktree-code" x="650" y="350">gitlink = NEW_SHA</text>
+  <path class="locktree-line locktree-future" d="M630 330 H530"/>
+  <text class="locktree-text" x="30" y="425">跨仓箭头表示提交引用；两仓 main 与旧标签均不改动。虚线表示待实施。</text>
+</svg>
+<figcaption>树状图由 Astra 子代理绘制。右侧箭头指向的<strong>提交节点</strong>就是实际锁定对象；分支和 tag 是定位提交的名字。虚线 <code>NEW_SHA</code> 尚未产生，不是假定的新版本号。</figcaption>
+</figure>
+<h2>三、改完后怎样重新锁定</h2>
+<ol>
+<li><strong>benchmark：</strong>从当前锁定提交建 <code>codex/ood-success-conditions</code> 专用分支，改两个任务，提交并推送，取得新的完整 SHA。</li>
+<li><strong>评估仓：</strong>将子模块切到这个新 SHA，在 dev 上提交并推送新的 gitlink；<code>.gitmodules</code> 地址不用改。</li>
+<li><strong>结果：</strong>以后恢复这个 eval 提交就得到新 benchmark 版本。两个仓库的 main 与旧标签都不动；不需要移动 <code>v1.0-ood</code> 或额外打标签。</li>
+</ol>
+<p class="muted">一个代码子任务负责 benchmark 两个源文件；主会话推专用分支并更新 eval 指针。仅做必要代码短测，不启动评估。具体文件和命令见第二部分。</p>
 <h1 id="technical">第二部分（技术细节，供 agent 追踪）</h1>
-<h2>一、代码锚点与红线</h2>
-<p>benchmark 当前锁定 <code>a5efb992e769b7011281a1d31739b76d8868602a</code>；本次修订前 eval HEAD 为 <code>60bace606e1bbcba945e840efa06e3be8adfa15d</code>。实施时从该 benchmark pin 建专用分支，评估仓只在 dev 更新 gitlink。当前只有计划修订授权，尚不修改判据。</p>
-<p>不触官方 <code>src/robomme/</code>、录像器、模型代码、Evaluation Report、调度程序、预算和旧产物；不申请／停止任何作业。现有 SimpleMemVLA、validation 索引和并发运行档案绕开，不提交或清理。修改判据后只记录必要代码检查，不生成评估结果或验收报告。</p>
-<h2>二、具体文件与改法</h2>
+<h2>一、基线与具体改动</h2>
+<p>benchmark 基线：<code>a5efb992e769b7011281a1d31739b76d8868602a</code>，对应 <code>v1.0-ood</code>；本次计划修订前 eval HEAD：<code>f5a5ade79751f0832f9552422b7d059c39012303</code>。不从 main 最新版本起分支，避免带入 v1.1 的包改名与其他变更。</p>
 <table>
-<tr><th>仓库／文件</th><th>符号锚点与精确改动</th></tr>
-<tr><td>benchmark：<code>src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py</code></td><td><code>is_obj_stopped_onto</code> 目前先赋倍率 2.5，再被 3 覆盖。导入同包 difficulty 中已有的 <code>is_newvalue_difficulty</code>，删除重复赋值，按下面表达式取倍率。该 helper 仅 StopCube 调用；任务到位与提前按键检查共用它。</td></tr>
-<tr><td>benchmark：<code>src/robomme_hard/robomme_env/MoveCube.py</code></td><td><code>evaluate</code> 中定位 <code>peg_push</code> 和 <code>gripper_push</code> 的 <code>demonstration=False</code> “推到目标”项，只替换两处参数表达式。已有难度 helper 导入可复用；演示项保持常量 True。</td></tr>
-<tr><td>eval：<code>third_party/robomme_benchmark</code></td><td>仅更新 gitlink 到上述 benchmark 新提交的 40 位 SHA；不复制源码，不改 .gitmodules，不追踪远端最新 HEAD。</td></tr>
+<tr><th>文件／符号锚点</th><th>修改范围</th></tr>
+<tr><td>benchmark：<code>src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py::is_obj_stopped_onto</code></td><td>导入同包 difficulty 的 <code>is_newvalue_difficulty</code>；删除先设 2.5 再被 3 覆盖的重复赋值，按新档选倍率。该 helper 只由 StopCube 调用，任务到位和提前按键检查共同使用它。</td></tr>
+<tr><td>benchmark：<code>src/robomme_hard/robomme_env/MoveCube.py::evaluate</code></td><td>只替换 peg_push、gripper_push 中 <code>demonstration=False</code> 的两个推目标项参数；现有 difficulty 导入可复用，演示两处常量 True 不改。</td></tr>
+<tr><td>eval：<code>third_party/robomme_benchmark</code></td><td>仅更新 gitlink 至上述新提交；不复制源码，不修改 .gitmodules 或其他模型子模块。</td></tr>
 </table>
-<pre><code># StopCube：只赋一次阈值；保留原档和轻量替身的默认行为
+<pre><code># StopCube：保留原档及轻量替身默认行为
 factor = 2.5 if is_newvalue_difficulty(getattr(self, "difficulty", None)) else 3
 distance_threshold = self.cube_half_size * factor
 
-# MoveCube：只用于两个执行任务项；演示两处不改
+# MoveCube：仅两个执行阶段任务项
 must_gripper_open=not is_newvalue_difficulty(self.difficulty)</code></pre>
-<p>StopCube 仍检查水平 XY 距离与 stop，并仅记录首次停止步；MoveCube 距离仍为 <code>cube_half_size * 2 * 1.2 = 0.048 m</code>，错误抓取和任务顺序不改。原档现有测试期望继续保留，不新增或改测试文件来扩大任务。</p>
-<h2>三、子代理分工与合并</h2>
-<table>
-<tr><th>职责</th><th>可写范围与边界</th></tr>
-<tr><td>代码代理：Sol</td><td>benchmark 独立 worktree、<code>codex/ood-success-conditions</code> 专用分支，从当前 pin 起；只写上表两个源文件。不 push，不碰 eval 主检出或其他文件。</td></tr>
-<tr><td>主会话</td><td>核对两处任务参数和 OOD 条件，记录必要短测；保留子提交，推 benchmark 专用分支；再在 eval dev 更新 gitlink、提交并 push。无需运行代理、调度代理或监督代理。</td></tr>
-</table>
-<p>子代理显式用 <code>gpt-6.1-sol</code>，工作树在 benchmark 的 <code>artifacts/dev-worktrees/</code>；写入前核根目录与分支，不回滚他人改动。GPU、reset、轨迹、Astra 请求均为零。独立静态审查如需执行，只读固定 BASE/TIP，不启动任何仿真。</p>
-<h2>四、重新锁定的命令顺序</h2>
-<p>以下为实施步骤，<code>NEW_BENCH_SHA</code> 由 benchmark 新提交取得，必须是完整 40 位 SHA；本轮只写计划，不执行这些命令。</p>
-<pre><code># 1. 在 benchmark 权威仓建独立 worktree，基线不是 main 最新提交
+<p>StopCube 仍用 XY 距离、stop 和首次停止步；MoveCube 距离仍为 <code>0.048 m</code>，错误抓取、任务顺序和抓取放置不改。原档及演示测试期望保留，不新增测试文件。</p>
+<h2>二、从修改到新 gitlink 的执行步骤</h2>
+<p>下面是未来实施命令，本轮不执行。benchmark 专用分支由主会话推送；新提交必须已在远端可取得，才更新 eval。源码修改和 gitlink 提交是两个仓库的两次独立记录。</p>
+<pre><code># 1. 在 benchmark 权威仓，从原锁定 SHA 建独立 worktree
 cd /data/hongzefu/RoboMME-benchmark-OOD
 git worktree add -b codex/ood-success-conditions \
   artifacts/dev-worktrees/ood-success-conditions \
   a5efb992e769b7011281a1d31739b76d8868602a
 
-# 2. 在该专用 worktree 修改、短测、逐文件提交，主会话推送专用分支
-# 子代理如作 sub/B1 提交，主会话保留，不 squash/amend
+# 2. 在此 worktree 修改两文件、短测、逐路径提交；再由主会话推送
 cd /data/hongzefu/RoboMME-benchmark-OOD/artifacts/dev-worktrees/ood-success-conditions
+# 提交必须包含两项修改；保留子提交，不 squash/amend
 NEW_BENCH_SHA=$(git rev-parse HEAD)
 git push origin HEAD:refs/heads/codex/ood-success-conditions
 
-# 3. 在 eval dev，只把子模块指向已推送的新 SHA
+# 3. 回 eval dev，取得新提交并更新子模块指针
 cd /data/hongzefu/RoboMME-benchmark-OOD-eval
 git -C third_party/robomme_benchmark fetch origin codex/ood-success-conditions
 git -C third_party/robomme_benchmark switch --detach "$NEW_BENCH_SHA"
 git add third_party/robomme_benchmark
 git diff --cached --submodule=short -- third_party/robomme_benchmark
-# 确认只改变该 gitlink，再提交中文说明并立即 git push</code></pre>
-<p>未来评估用这个 eval commit 的 gitlink 恢复 benchmark；GL 由本机同步固定版本，不在 GL clone 或做 git 操作。<strong>这里仅说明正式评估会读哪版环境，本任务不启动或修改评估链路。</strong>不用 <code>git submodule update --remote</code>，不强推，不覆盖脏子模块；fetch／push 被拒即停并保留原始报错。</p>
-<h2>五、必要代码检查、风险与未验证边界</h2>
-<p>仅做现有纯 CPU 短测或轻量函数检查：在修改后实现内检查 StopCube 新档 0.05 米／原档 0.06 米，以及 MoveCube 新档两执行项 False／原档与演示 True。用 uv，显式设置 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>；不得调用 evaluate 入口、构造真实环境或加载模型，不运行旧版作对照。本任务不建立最后验收阶段。</p>
-<p>判据收紧可能改变 StopCube 后续成功状态；没有实际评估就不报告成功率。官方目录冻结，新 helper 必须有 OOD 分支以免影响 hard-verify。已有调度不等于完整无人值守，代理退出方案未实施，聊天通知未建立；这些均不在此次写集内。</p>
-<h2>六、提交与文档记录</h2>
-<p>benchmark 先推专用分支再更新 eval gitlink；每次只暂存自己明确文件，中文提交，eval dev commit 后立即 push。此轮仅压缩本 HTML，编号接续 <code>1.88</code>；不修改 benchmark pin。本计划文档只检查结构、链接和 diff，不运行任何评估；过程放 commit body，不新增运行档案或规则账本。</p>
-<h2>七、用户最新口径</h2>
-<blockquote>“我只在乎这两个 task 改什么，然后怎么去 lock 这个 submodule 正式评估的这个链路，现在是怎么样能够做到说可以代理退出的。”<br>“极致精简你的这个HTML第一部分，现在太长了。”</blockquote>
-<blockquote>“我说的后面这个代理能退出只作为计划中对于用户的说明，并不需要，是不是现在不需要修改任何文件。然后这个任务只做这个两个任务的两个 ENV 的修改，就是不做任何实际 evaluate 的评估。就实际 evaluate 能退出这个问题只是作为给用户的这个说明。”</blockquote>
-<p class="muted">最新口径覆盖此前“修改后正式起跑”：这项任务只修改两个 ENV 的判据并重新锁定依赖，代理退出仅说明，不改报告／监督／调度代码，也不跑实际评估。</p>
-<footer class="muted">源码依据：<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py">StopCube helper</a>、<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/MoveCube.py">MoveCube</a>、<a href="../../third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_builder.py">数据集与难度映射</a>。当前交付是精简方案，源码修改和子模块重新锁定尚未实施。</footer>
+# 只含此 gitlink 更新，按版本体例中文提交并立即 git push</code></pre>
+<p>提交指针时核 <code>git ls-tree HEAD third_party/robomme_benchmark</code> 是否记录新 SHA；这只是 Git 指针检查，不是运行评估。之后正常 <code>git submodule update --init third_party/robomme_benchmark</code> 会恢复这个固定提交。不得使用 <code>--remote</code> 追随移动分支，也不初始化模型内部的嵌套 benchmark。</p>
+<h2>三、分工、检查与边界</h2>
+<table>
+<tr><th>职责</th><th>写集与交付</th></tr>
+<tr><td>实现：Sol 子代理</td><td>独立 benchmark worktree，从原 pin 起，只写上表两个源文件；记录必要纯 CPU 短测，可作 sub/B1 提交，不 push。</td></tr>
+<tr><td>主会话</td><td>核修改范围，保留子提交、推 benchmark 专用分支，再更新 eval gitlink、中文提交并 push。图仅由用户指定的 Astra 子代理绘制，当前只返回 SVG，不写仓库。</td></tr>
+</table>
+<p>实现用 <code>gpt-6.1-sol</code>；本图按用户要求使用 <code>gpt-6-astra</code>，不把该选择扩大到其他职责。必要检查只执行修改后实现的现有纯 CPU 短测／轻量函数检查，使用 uv 并显式设 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>；不构造真实环境、不加载模型、不调用 scripts/evaluate.py，不运行新旧回合。</p>
+<p><strong>风险与未验证边界：</strong>两个条件必须带 OOD 判断，避免改变 hard-verify；MoveCube 不能全局替换 True。没有实际评估就不报告成功率。官方 src/robomme、录像器、其他模型和旧产物不触；两个 main、旧 tag 保留。任何源工作区脏内容绕开，目标子模块脏时停止切换；fetch／push 被拒即停，不 force。</p>
+<h2>四、文档与提交纪律</h2>
+<p>本轮只重构此 HTML；必要文档检查为两部分标题、内联 SVG 解析、相对链接与 <code>git diff --check</code>。逐文件暂存，接续 eval 最新编号提交并立即 push；过程记 commit body，不新增运行档案。其他会话的 SimpleMemVLA 修改及运行档案不处理。</p>
+<footer class="muted">源码依据：<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py">StopCube helper</a>、<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/MoveCube.py">MoveCube</a>、<a href="../../third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_builder.py">难度映射</a>。当前仅交付重构计划；两个任务的代码修改和新 SHA 锁定尚未实施。</footer>
 </main></body></html>
