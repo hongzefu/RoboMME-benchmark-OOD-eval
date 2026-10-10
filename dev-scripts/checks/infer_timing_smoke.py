@@ -10,8 +10,8 @@ import uuid
 
 
 def install_stop(episode, timing, *, audit: bool):
-    """审计开时等待首个合法块再执行一步；审计关时最多执行一步。"""
-    state = {"chunk": False, "steps_after_chunk": 0, "steps": 0}
+    """在目标真实步的有效非终态返回上标记冒烟截断，不抛出正常控制停止异常。"""
+    state = {"chunk": False, "steps_after_chunk": 0, "steps": 0, "stopped": False, "stop_reason": None}
     original_close = timing.ChunkTimer.close
 
     def close(timer, **kwargs):
@@ -22,18 +22,36 @@ def install_stop(episode, timing, *, audit: bool):
     timing.ChunkTimer.close = close
     original_session = episode.EnvSession
 
+    def stop_due():
+        return ((state["chunk"] and state["steps_after_chunk"] >= 1)
+                or (not audit and state["steps"] >= 1) or state["steps"] >= 16)
+
     class SmokeSession(original_session):
         def step(self, action):
             # 仅限制评估仓外层会话，不覆盖 benchmark 环境或第三方源码。
-            if ((state["chunk"] and state["steps_after_chunk"] >= 1)
-                    or (not audit and state["steps"] >= 1)
-                    or state["steps"] >= 16):
-                self._cap_hit = True
-                raise episode.StepCapReached("SINGLE_CHUNK_SMOKE: 外层主动停止")
+            if stop_due():
+                raise RuntimeError("SINGLE_CHUNK_SMOKE: 驱动未遵守冒烟截断，拒绝额外环境步")
             out = super().step(action)
             state["steps"] += 1
             if state["chunk"]:
                 state["steps_after_chunk"] += 1
+            obs, reward, terminated, truncated, info = out
+            # 原始异常、空观测、错误状态和自然终态原样交付，不据此伪造冒烟通过。
+            obs_keys = ("front_rgb_list", "wrist_rgb_list", "joint_state_list", "gripper_state_list")
+            valid_obs = isinstance(obs, dict) and all(
+                isinstance(obs.get(key), (list, tuple)) and len(obs[key]) > 0 for key in obs_keys)
+            if (stop_due() and valid_obs and isinstance(info, dict) and info.get("status") == "ongoing"
+                    and not terminated and not truncated):
+                reason = "first_chunk" if state["chunk"] else ("audit_off" if not audit else "no_chunk_step_limit")
+                state.update(stopped=True, stop_reason=reason)
+                marker = {"kind": "single_chunk_smoke_stop", "steps": state["steps"], "chunk": state["chunk"],
+                          "steps_after_chunk": state["steps_after_chunk"], "reason": reason, "task_success": False}
+                rec = getattr(self, "_rec", None)
+                if rec is not None:
+                    rec.add_event(marker)
+                # 保留真实环境步的原始记录；只在私有入口给驱动返回带明确标记的截断。
+                # 不设置 cap_hit：这里并没有触发正式身份的 1300/1800 步上限。
+                return obs, reward, terminated, True, {**info, "status": "timeout", "single_chunk_smoke": marker}
             return out
 
     episode.EnvSession = SmokeSession
@@ -88,13 +106,16 @@ def main():
     print(f"SMOKE_IMPORT=PASS root={root} model={model} out={out}", flush=True)
     try:
         runpy.run_path(str(root / "scripts/evaluate.py"), run_name="__main__")
+        if not formal and os.environ.get("SGEVAL_AUDIT", "1") != "0" and not state["chunk"]:
+            raise RuntimeError("SINGLE_CHUNK_SMOKE=FAIL: 审计开时没有获得合法动作块")
     finally:
         ledger.commit(rid, resets=claims["n"], route=route)
         if formal:
             print(f"FORMAL_BUDGET_DONE model={model} resets={claims['n']}", flush=True)
         else:
             print(f"SINGLE_CHUNK_STOP steps={state['steps']} chunk={int(state['chunk'])} "
-                  f"steps_after_chunk={state['steps_after_chunk']} resets={claims['n']}", flush=True)
+                  f"steps_after_chunk={state['steps_after_chunk']} resets={claims['n']} "
+                  f"stopped={int(state['stopped'])} reason={state['stop_reason']}", flush=True)
 
 
 if __name__ == "__main__":
