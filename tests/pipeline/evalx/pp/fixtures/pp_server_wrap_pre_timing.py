@@ -1,3 +1,5 @@
+# 来源：3560a7a3d598dfdb1c6d2e76070b85c7351b676a（与 d22e323 原包装器相同）。
+# 用途：仅作 OBS_EQ 审计关基准；下方原样快照禁止修改。
 #!/usr/bin/env python3
 """PonderPounce server wrapper: attaches the model's own subgoal to every ACTION reply.
 
@@ -41,10 +43,6 @@ Audit additions:
 - The wrapper's own argument ``--sgeval-metadata-out <path>``: stripped from argv at startup (the rest goes
   unchanged to vla_eval); writes server metadata ``server-metadata-<port>.json`` (``policy_seed`` is
   ``--args.seed``, ``argv``, ``pid``, ``port``).
-- With audit enabled, ``pp_timing`` measures the entire S2 trigger (including initial context construction) and
-  the S1 inference, synchronizing CUDA before closing each measurement. Per-generation ``s2_fire_ms`` observes
-  only the context fire. Cursor=1 is a candidate fresh flag; clients must also require an increased S1 fire count
-  to reject repeated exhausted H=1 chunks. Audit off adds no timing attributes, hardware query or synchronization.
 
 Startup (arguments exactly as for the original server, cwd in the third-party PonderPounce directory, script by
 absolute path)::
@@ -61,7 +59,6 @@ import hashlib
 import json
 import os
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -94,25 +91,6 @@ METADATA_FLAG = "--sgeval-metadata-out"
 #: private attribute on Episode instances: System 2 generation blocks accumulated before this reply (cleared after
 #: each reply)
 _GEN_ATTR = "_sgeval_generations"
-_GPU_NAME = None
-_GPU_CHECKED = False
-
-
-def _cuda_sync() -> None:
-    import torch
-
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-
-
-def _gpu_name():
-    global _GPU_NAME, _GPU_CHECKED
-    if not _GPU_CHECKED:
-        import torch
-
-        _GPU_NAME = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
-        _GPU_CHECKED = True
-    return _GPU_NAME
 
 
 def audit_enabled() -> bool:
@@ -211,10 +189,8 @@ class _S2Watch:
             self.restores = 0
             self._await_obs, self._pending, self._restored = True, None, False
             self._fire_pils = a[0] if a else k.get("obs_pils")
-            t0 = time.perf_counter()
             try:
                 result = orig_fire(*a, **k)
-                fire_ms = (time.perf_counter() - t0) * 1000
             finally:
                 self._await_obs, self._fire_pils = False, None
             pending, self._pending = self._pending, None
@@ -222,7 +198,6 @@ class _S2Watch:
             rollbacks = max(0, self.restores - (1 if prefix_restore else 0))
             sg_tokens = getattr(result, "subgoal_tokens", None)
             self.sink.append({
-                "s2_fire_ms": fire_ms,
                 "fire_index": self.fire_index,
                 "subgoal_text": getattr(result, "subgoal_text", None),
                 "reasoning_text": getattr(result, "reasoning_text", None),
@@ -356,18 +331,6 @@ class SubgoalReportingServer(PonderPounceRoboMMEServer):
 
     def _fire_s2(self, ep, obs, now: int) -> None:
         if not audit_enabled():
-            return self._fire_s2_inner(ep, obs, now)
-        t0 = time.perf_counter()
-        try:
-            return self._fire_s2_inner(ep, obs, now)
-        finally:
-            _cuda_sync()
-            setattr(ep, "_sgeval_s2_fired", True)
-            setattr(ep, "_sgeval_s2_ms", getattr(ep, "_sgeval_s2_ms", 0.0)
-                    + (time.perf_counter() - t0) * 1000)
-
-    def _fire_s2_inner(self, ep, obs, now: int) -> None:
-        if not audit_enabled():
             return super()._fire_s2(ep, obs, now)
         sink = getattr(ep, _GEN_ATTR, None)
         if sink is None:
@@ -397,17 +360,9 @@ class SubgoalReportingServer(PonderPounceRoboMMEServer):
     def _fire_s1(self, ep, obs, now: int) -> None:
         current = latest_visible_subgoal(ep.cognitions, now, getattr(ep, _ATTR, None))
         setattr(ep, _ATTR, current)
-        enabled = audit_enabled()
-        if enabled:
-            t0 = time.perf_counter()
         super()._fire_s1(ep, obs, now)
-        if enabled:
-            _cuda_sync()
-            ms = (time.perf_counter() - t0) * 1000
         if ep.chunk is not None:
             setattr(ep.chunk, _ATTR, current)
-            if enabled:
-                setattr(ep.chunk, "_sgeval_s1_ms", ms)
 
     def _dispense(self, ep, obs):
         action = super()._dispense(ep, obs)
@@ -416,19 +371,6 @@ class SubgoalReportingServer(PonderPounceRoboMMEServer):
         out[SUBGOAL_KEY] = subgoal
         if audit_enabled():
             out[AUDIT_KEY] = self._audit_block(ep)
-            out[AUDIT_KEY]["pp_timing"] = self._pp_timing(ep)
-        return out
-
-    def _pp_timing(self, ep) -> dict:
-        fresh = ep.chunk is not None and ep.chunk.cursor == 1
-        fired = bool(getattr(ep, "_sgeval_s2_fired", False))
-        out = {"chunk_fresh": fresh,
-               "s1_infer_ms": getattr(ep.chunk, "_sgeval_s1_ms", None) if fresh else None,
-               "s2_fired": fired,
-               "s2_infer_ms": getattr(ep, "_sgeval_s2_ms", 0.0) if fired else None,
-               "n_s1_fires": ep.n_s1_fires, "n_s2_fires": ep.n_s2_fires, "gpu": _gpu_name()}
-        setattr(ep, "_sgeval_s2_fired", False)
-        setattr(ep, "_sgeval_s2_ms", 0.0)
         return out
 
     def _audit_block(self, ep) -> dict:
