@@ -1762,6 +1762,9 @@ class AstraPolicy(Policy):
                 check_episode_cap(self.state_path, max_episodes=self.max_episodes if self.max_episodes_explicit else None)
             except AstraStop as exc:
                 self._stop = exc
+            except GuardRefused as exc:
+                print(f"ASTRA_STOP reason=guard_refused key={spec.key} error={exc}", flush=True)
+                self._stop = AstraStop("guard_refused", str(exc))
 
     def close(self) -> None:
         """Stop the VLA server process group first, then the guard (which writes exited=true); release the monitor

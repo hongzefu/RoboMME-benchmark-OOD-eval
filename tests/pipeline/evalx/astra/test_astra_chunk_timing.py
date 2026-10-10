@@ -409,6 +409,48 @@ def test_explicit_three_load_resets_and_restart_reuse_ledger(tmp_path, monkeypat
     assert net.calls == 0
 
 
+@pytest.mark.parametrize("guard_change,reason", [
+    ({"stop": True, "committed_usd": 4.9, "projected_usd": 5.1, "reason": "projected_cost"}, "stopped"),
+    ({"exited": True}, "exited"),
+    ({"heartbeat": 0}, "heartbeat age"),
+    ({"max_episodes": 3}, "episode limit mismatch"),
+])
+@pytest.mark.parametrize("successful", [True, False])
+def test_guard_refusal_after_terminal_preserves_result_and_timing(tmp_path, monkeypatch, guard_change, reason, successful):
+    net = NetCounter().install(monkeypatch)
+    with astra_session() as (actual, upstream):
+        h = Harness(tmp_path, monkeypatch, actual, upstream,
+                    env_plan=lambda builder, episode: FakeEnv(terminal_step=40, step_error_at=None if successful else 1))
+        policy = h.load()
+        run_one = actual.run_one
+
+        def terminal_then_guard_refuses(*args, **kwargs):
+            result = run_one(*args, **kwargs)
+            state = json.loads(policy.state_path.read_text())
+            state.update(guard_change)
+            policy.state_path.write_text(json.dumps(state))
+            return result
+
+        monkeypatch.setattr(actual, "run_one", terminal_then_guard_refuses)
+        result = h.run("hard-verify", "VideoUnmask")
+        assert result.status == ("success" if successful else "fail")
+        assert result.task_success == int(successful)
+        assert policy.episode_results[-1]["status"] == ("success" if successful else "error")
+        chunks = result.timing["policy"]["chunks"]
+        assert len(chunks) == result.extra["action_decisions"] == (3 if successful else 1)
+        assert result.timing["policy"]["conservation"]["violations"] == 0
+        assert policy._stop.reason == "guard_refused" and reason in str(policy._stop)
+        registered = actual.registered_episodes(policy.state_path)
+        with pytest.raises(actual.AstraStop, match=reason):
+            policy.reset(None)
+        assert actual.registered_episodes(policy.state_path) == registered
+        assert len(h.cls.make_calls) == 1
+        with pytest.raises(actual.GuardRefused, match=reason):
+            policy.gate.read_state()
+        policy.close()
+    assert net.calls == 0
+
+
 def test_named_timing_gates(rig):
     for index, script in enumerate((["planner", "infer"], ["monitor", "review", "planner", "infer"], ["infer"])):
         rig.ctx.t = index * 16
