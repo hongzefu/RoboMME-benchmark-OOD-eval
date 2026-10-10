@@ -121,6 +121,21 @@
  ],
  "entries": [
   {
+    "id": "C13-FULL-EVAL-CONTINUATION",
+    "domain": "C13",
+    "source": ["dev-scripts/gl/continue_full_eval.py"],
+    "symbol": "Controller.tick／replace_expired／env_build_settled／report",
+    "oracle": "假Slurm与精确tmux回执、实际生产结算生成的账本、真实报告结构写入JSON后读回",
+    "positive": "四席接手不重复启动；正常失败作为accepted；到期确认后48小时接替且只续未完成；六模型完整媒体报告后连续四阶段",
+    "negative": "空白到期记录、未知提交回执、重复席位、改种子或预算、错完整身份、缺退出码、缺共享结算、缺报告零字段或媒体身份均拒绝",
+    "boundaries": "纯CPU夹具；二十次权威来自旧队列与预算，诊断按模型种子隔离；不保证代理自动唤醒；实际生产接手另验",
+    "nodeids": ["tests/test_continue_full_eval.py"],
+    "resource": "cpu（不reset、不初始化GPU、不加载权重、不联网）",
+    "mutants": [],
+    "status": "verified",
+    "merged_from": ["tests/pipeline/eval/contracts.delta.json"]
+  },
+  {
     "id": "C13-INFRA-RECOVERY",
     "domain": "C13",
     "source": ["dev-scripts/gl/seat.py", "dev-scripts/gl/budget_ledger.py"],
@@ -3569,6 +3584,7 @@
   }
  ],
  "files": {
+  "dev-scripts/gl/continue_full_eval.py": ["C13-FULL-EVAL-CONTINUATION"],
   "dev-scripts/gl/select_stage_identities.py": ["C13-STAGED-EVAL-TOOLS"],
   "dev-scripts/gl/stage_report.py": ["C13-STAGED-EVAL-TOOLS"],
   "dev-scripts/checks/infer_timing_smoke.py": [

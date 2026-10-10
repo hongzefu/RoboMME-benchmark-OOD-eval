@@ -148,6 +148,14 @@ env PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_
 
 汇总验收在 GL 63431431 上用同一主解释器运行 `check-smoke.py`，完整解码六模型的原始两路与官方视频、核 identity/cap/accepted/result、核恢复证明，再执行固定 `dev-scripts/checks/trace_arrays_check.py <NFS产物根>/smoke/rollouts --json <NFS产物根>/smoke/trace-arrays-report.json`；退出 0，SMOKE 与 TRACE_ARRAYS 通过，账本 open=0。六个 smoke 身份与 A 相同，逐字节拷贝126文件至seed7输出，复用其accepted，不重复执行或新建账本。
 
+## 独立进程恢复与连续接续
+
+SimpleMemVLA 原 A 会话因连续环境构建失败精确停止，占位 63431432 保留。固定干净 r2 执行副本提交 `43e4dd0e214cae4a16efafe04c6ee3a4541f9c14`，评估 `src/` 和模型 gitlink 与原 a02 相同，仅私有席位／预算工具变化。每身份总上限 20，原阶段预算不变。02:33:23 EDT 起的 `fe-A-smvla-r2-check-63431432` 按原 A 清单仅续跑 BinFill／xhard1 两身份 `16400100`、`16400200` 的第三次，均正常失败接受后自然退出 0；03:00:18 起的 `fe-A-smvla-r2-next-63431432` 仅续跑原 A 的 BinFill／xhard2 身份 `18400100` 第三次。日志均为 NFS 根 `logs/<会话名>.log`，预算与两个原 a2 raw 副本保留。
+
+连续调度器从全新 r3 冻结副本启动，旧 a02 与 r2 执行副本保持。参数由本轮产物 `controller-config.json` 明确给出：原四 JobID／slot、三个仍在运行的 A 会话和上述 r2 单身份会话，六模型优先顺序 `smvla,pp,oracle,perceptual-framesamp-modul,memer,qwen`，A/B 种子 7、C 种子 0、D 种子 42，原身份清单、原阶段账本与十倍硬上限。载体 `run-model-r3.sh` 仅改变执行副本路径，沿 r2 所有模型解释器、ckpt、adapter、端口分段、20 次上限与环境创建失败护栏。每个 SMVLA 身份独立加载／关闭，其他模型按阶段常驻。
+
+主会话准备的启动命令为 `PYTHONUNBUFFERED=1 <NFS主uv解释器> <r3>/dev-scripts/gl/continue_full_eval.py --config <NFS产物根>/controller-config.json`，在登录端独立 tmux `fe-full-eval-controller-20261010` 中按 pipefail／tee／EXIT_CODE 三件套执行，日志 `<NFS产物根>/logs/fe-full-eval-controller-20261010.log`；状态与事件在 `<NFS产物根>/controller/`。此刻尚未实际接手，起跑回执与 r3 完整提交另记。程序只接手清单会话，新增 worker 命名 `fe-controller-<阶段>-<模型>-<slot>-<序号>`；报告会话 `fe-controller-report-<阶段>`，全部逐项登记。到期接替只在原作业明确 TIMEOUT 后提交 `chaijy2/spgpu/gpu:1/cpu4/64G/48h`，四席上限不变；提交不明停止核查、不重复提交。
+
 ## 正式阶段 A 起跑
 
 2026-10-10 EDT，四席使用 `run-model-r1.sh A <模型> <job> <seat> formal <slot>`，代码仍固定 a02a4da；70 行 A 身份清单中每模型已完成1个 smoke 身份，`RUN_PLAN total=70 claimable=69 max_attempts=2`，不会重复执行已接受身份。其余 FrameSamp／Oracle 在短模型 A 清空后使用同一既有作业依次运行，空闲席再并入长模型队列。
