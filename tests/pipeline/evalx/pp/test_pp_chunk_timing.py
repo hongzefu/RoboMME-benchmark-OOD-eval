@@ -180,7 +180,7 @@ def test_snapshot_is_fixed_original():
     out = subprocess.run(["git", "show", f"{BASE}:src/robomme_ood_eval/servers/pp_server_wrap.py"],
                          cwd=TREE, capture_output=True, timeout=20)
     assert out.returncode == 0
-    assert SNAPSHOT.read_bytes().split(b"\n", 2)[2].rstrip(b"\n") == out.stdout.rstrip(b"\n")
+    assert SNAPSHOT.read_bytes().split(b"\n", 2)[2] == out.stdout
 
 
 def test_chunk_fresh_timing_language_conservation_and_obs_eq():
