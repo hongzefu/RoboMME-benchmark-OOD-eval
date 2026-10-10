@@ -315,3 +315,106 @@ def test_live_worker_heartbeat_gate_is_not_relaxed(tmp_path):
     ctl,a,row=scan_fixture(tmp_path,rc=None)
     with pytest.raises(RuntimeError,match='心跳失效'): ctl.scan()
     a['log'].close()
+
+
+def resume_fixture(tmp_path,monkeypatch):
+    import budget_ledger, time
+    c=config(tmp_path); rows=identities()
+    for row in rows: row['seed']=int(row['key'].rsplit('_',1)[1])
+    p=Path(c['identities']); p.write_text(''.join(json.dumps(r)+'\n' for r in rows)); c['identities_sha256']=C.sha(p)
+    led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    led.check(); creator=C.Controller(c)
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=999))
+    for index,model in enumerate(('qwenvl','smvla','pp')):
+        seat=c['seats'][index]; creator.start(seat,model+'-00',smoke=True); a=creator.active[str(seat['job_id'])]; ident=a['rows'][0]
+        seat_name=f"{seat['seat']}-{model}-00-smoke"; label=c['models'][model]['label']
+        C.atomic(a['progress'],dict(label=label,phase='finished',rc=0,episodes_done=1,pid=1000,seat=seat_name,policy_seed=7,
+                                   slurm_job_id=seat['job_id'],slurm_step_id='1',key=None,t=time.time()))
+        route=c['models'][model]['policy']+('/'+C.ROUTES[model][2] if C.ROUTES[model][2] else '')+'/seed7/new'; token=route+'|'+ident['key']+'|a1'
+        rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id=seat['job_id'])
+        led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id=seat['job_id'])
+        directory=Path(c['gl_root'])/'rollouts'/label/'ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
+        for name in ('front.mkv','wrist.mkv','arrays.npz','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'): (directory/name).write_text('fixture')
+        C.atomic(directory/'meta.json',dict(identity=ident,pid=1000))
+        C.atomic(directory/'summary.json',dict(RECORDER_VERIFY='PASS',errors=[],decode_mismatch=0,summary={'exec_steps':1},
+            streams={s:dict(error=None,mismatch=0,timestamps_ok=True,encoded=1,decoded=1) for s in ('front','wrist')}))
+        (directory/'trace.jsonl').write_text(json.dumps(dict(kind='header',identity=ident))+'\n'+json.dumps(dict(kind='end',exec_steps=1))+'\n')
+        result=dict(ident,infra=False,policy_label=label,policy_seed=7,recorder_verify='PASS',exec_steps=1,task_success=1,status='success')
+        C.atomic(directory/'result.json',result)
+        report=dict(key=ident['key'],dataset='ood',seat=seat_name,attempt=1,attempt_id='fixture-'+model,policy_seed=7,policy=c['models'][model]['policy'],exec_steps=1,budget_rid=rid,budget_token=token,
+                    status='success',infra=False,final=True,accepted=True,result=str(directory/'result.json'),task_success=1,budget_exhausted=False,run_blocked=False)
+        a['results'].parent.mkdir(parents=True,exist_ok=True); a['results'].write_text(json.dumps(report)+'\n'); a['log'].close()
+        C.atomic(Path(c['gl_root'])/'queue'/label/'seed7/accepted'/('ood__'+ident['key']+'.json'),
+                 dict(key=ident['key'],dataset='ood',attempt=1,seat=seat_name,result=str(directory/'result.json'),attempt_id=report['attempt_id']))
+    ctl=C.Controller(c)
+    def query(cmd,**kw):
+        if cmd[0]=='squeue': return types.SimpleNamespace(returncode=0,stdout='',stderr='')
+        step=cmd[cmd.index('-j')+1]; model=('qwenvl','smvla','pp')[int(step.split('.')[0])-101]
+        return types.SimpleNamespace(returncode=0,stdout=step+'|raw-ood-worker-'+model+'-00-smoke|COMPLETED|0:0\n',stderr='')
+    monkeypatch.setattr(C.subprocess,'run',query)
+    return ctl,query
+
+
+def test_manual_resume_validates_all_closed_smokes_then_skips_existing(tmp_path,monkeypatch):
+    ctl,query=resume_fixture(tmp_path,monkeypatch); ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
+    ctl.resume_completed_smokes('c'*40)
+    assert ctl.smoked=={'qwenvl','smvla','pp'} and len(ctl.published)==3 and ledger.read_bytes()==before
+    assert C.read(ctl.control/'resume-completed-smokes.json')['orchestration_commit']=='c'*40
+    launches=[]
+    def run(cmd,**kw): return types.SimpleNamespace(returncode=0,stdout='RUNNING\n',stderr='')
+    monkeypatch.setattr(C.subprocess,'run',run)
+    for seat in ctl.c['seats']:
+        C.atomic(ctl.control/f"guardian-ready-{seat['job_id']}.json",dict(ctl.base,gpu_job_id=seat['job_id'],pid=2000,time=C.time.time(),step_id='2'))
+    def launch(seat,shard,smoke=False):
+        launches.append(shard); ctl.active[str(seat['job_id'])]={'model':shard.rsplit('-',1)[0]}
+    monkeypatch.setattr(ctl,'start',launch)
+    ctl.dispatch()
+    assert launches==['oracle-00','framesamp-00']
+
+
+@pytest.mark.parametrize('kind',['running','unknown_exit','wrong_job','half_line','duplicate','uncommitted','missing_field','media_identity','missing_accepted'])
+def test_resume_rejects_before_any_publication_and_never_changes_budget(tmp_path,monkeypatch,kind):
+    ctl,query=resume_fixture(tmp_path,monkeypatch); ledger=Path(ctl.c['budget_ledger'])
+    inv=ctl.control/'invocations/pp-00-smoke'; path=Path(ctl.c['gl_root'])/'seats/pp/seed7/s103-pp-00-smoke/seat-results.jsonl'
+    if kind=='running': monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:types.SimpleNamespace(returncode=0,stdout='103.1 raw-ood-worker-pp-00-smoke RUNNING\n',stderr=''))
+    elif kind=='unknown_exit': monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:types.SimpleNamespace(returncode=0,stdout='',stderr=''))
+    elif kind=='wrong_job':
+        p=C.read(inv/'progress.json'); p['slurm_job_id']='104'; C.atomic(inv/'progress.json',p)
+    elif kind=='half_line':
+        path.write_text(path.read_text()[:-1]); clock=[0]
+        monkeypatch.setattr(C.time,'monotonic',lambda:clock[0]); monkeypatch.setattr(C.time,'sleep',lambda x:clock.__setitem__(0,clock[0]+121))
+    elif kind=='duplicate': path.write_text(path.read_text()*2)
+    elif kind=='uncommitted':
+        rows=[json.loads(x) for x in ledger.read_text().splitlines()]; rows=[r for r in rows if not (r['kind']=='commit' and r['slurm_job_id']=='103')]
+        # 原fixture commit默认无job；按PP报告rid准确删除。
+        rid=json.loads(path.read_text())['budget_rid']; rows=[r for r in rows if not (r['kind']=='commit' and r['rid']==rid)]
+        ledger.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    elif kind=='missing_field':
+        r=json.loads(path.read_text()); del r['final']; path.write_text(json.dumps(r)+'\n')
+    elif kind=='media_identity':
+        result=Path(json.loads(path.read_text())['result']); meta=C.read(result.parent/'meta.json'); meta['identity']['key']='foreign'; C.atomic(result.parent/'meta.json',meta)
+    else:
+        p=ctl.gl/'queue/pp/seed7/accepted'/('ood__'+ctl.shards['pp-00']['rows'][0]['key']+'.json'); p.unlink()
+    original=ledger.read_bytes()
+    with pytest.raises((ValueError,KeyError,FileNotFoundError)): ctl.resume_completed_smokes('c'*40)
+    assert not (ctl.gl/'published').exists() and not ctl.smoked and ledger.read_bytes()==original
+
+
+def test_resume_preflight_reads_without_publishing_or_marking_smoked(tmp_path,monkeypatch):
+    ctl,query=resume_fixture(tmp_path,monkeypatch); original=Path(ctl.c['budget_ledger']).read_bytes()
+    proof=ctl.resume_completed_smokes('c'*40,preflight=True)
+    assert proof['reused']==3 and len(proof['identities'])==3
+    assert not ctl.smoked and not ctl.published and not (ctl.gl/'published').exists()
+    assert not (ctl.control/'resume-completed-smokes.json').exists() and Path(ctl.c['budget_ledger']).read_bytes()==original
+
+
+def test_resume_waits_for_complete_report_visibility_without_new_attempt(tmp_path,monkeypatch):
+    import threading,time
+    ctl,query=resume_fixture(tmp_path,monkeypatch)
+    path=ctl.gl/'seats/pp/seed7/s103-pp-00-smoke/seat-results.jsonl'; complete=path.read_bytes()
+    path.write_bytes(complete[:len(complete)//2]); original=Path(ctl.c['budget_ledger']).read_bytes()
+    producer=threading.Thread(target=lambda:(time.sleep(.05),path.write_bytes(complete)))
+    producer.start()
+    try: ctl.resume_completed_smokes('c'*40)
+    finally: producer.join()
+    assert ctl.smoked=={'qwenvl','smvla','pp'} and Path(ctl.c['budget_ledger']).read_bytes()==original
