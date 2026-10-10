@@ -165,6 +165,7 @@
 <tr><td>合计</td><td>138660</td><td>277320</td><td>12600／12600</td><td>12606</td></tr>
 </table>
 <p>运行副本从最终提交及锁定 gitlink 独立构建，绕开主检出的 LFS 过滤器噪声与旧 GL 副本的未跟踪文件，不覆盖原副本。MemER 显式单局墙钟 7200 秒、无进展守卫 7500 秒，避免旧默认 1800 秒把计划内的 46～56 分钟局提前截断。其余模型保持原有时限。起跑前核对副本源码与锁定提交一致并留档。</p>
+<p><strong>起跑后的必要修正</strong>：首批四局录制器通过、原始帧已保存，但 GL 没有可用的软件 AV1 <code>ffprobe</code>。补充发布方校验通过的静态 7.0.2 媒体工具，只在命令载体中设置已有支持的 <code>ROBOMME_FFPROBE</code> 并核对资产锁；评估源码仍固定 <code>a02a4dad039b326530068977f22a04f4a4a287eb</code>，原四份 <code>result.json</code> 不回写，视频从原始帧后处理补齐。smoke 的六个身份本来就是 A 的子集，验过后复用到 seed7 队列；不再次执行它们，避免同一阶段账本的 <code>route|key|attempt</code> 幂等 token 重复计量。原预算的 426 首试是保留上限，复用后 A 实际唯一首试为 420，正式身份仍不变。</p>
 <table>
 <tr><th>阶段</th><th>首试（乘式）</th><th>基础设施重试上限（≈10%）</th><th>轨迹尝试硬上限</th><th>reset 硬上限（每尝试 build + reset 计 2）</th></tr>
 <tr><td>S0 smoke</td><td>6 模型 × 1 局 = 6</td><td>0</td><td>6（并入 A 账本）</td><td>12</td></tr>

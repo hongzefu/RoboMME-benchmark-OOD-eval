@@ -1,0 +1,216 @@
+{
+  "purpose": "smoke-only",
+  "tasks": 1,
+  "tiers": 1,
+  "episodes_per_model": 1,
+  "models": [
+    {
+      "model": "pp",
+      "task_success": 1,
+      "steps": 276,
+      "episode_wall_s": 49.19,
+      "result_wall_s": 61.77441191673279,
+      "video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "recovered": true,
+      "media": {
+        "width": 512,
+        "height": 528,
+        "frames": 343,
+        "fps": "30",
+        "codec": "av1",
+        "pix_fmt": "yuv420p"
+      },
+      "raw_streams": {
+        "front": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 248
+        },
+        "wrist": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 286
+        }
+      },
+      "result_sha256": "e5f21d3e54b86011a33ef39350e434753c6c49d70232935fb039c64faf7152ad"
+    },
+    {
+      "model": "smvla",
+      "task_success": 1,
+      "steps": 269,
+      "episode_wall_s": 43.866,
+      "result_wall_s": 50.116467237472534,
+      "video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "recovered": true,
+      "media": {
+        "width": 512,
+        "height": 528,
+        "frames": 336,
+        "fps": "30",
+        "codec": "av1",
+        "pix_fmt": "yuv420p"
+      },
+      "raw_streams": {
+        "front": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 248
+        },
+        "wrist": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 279
+        }
+      },
+      "result_sha256": "a13d2bd0342572e31b21bb5d026c7feb7e89abe16f9c452ddf986a26e7547e8d"
+    },
+    {
+      "model": "perceptual-framesamp-modul",
+      "task_success": 0,
+      "steps": 106,
+      "episode_wall_s": 35.604,
+      "result_wall_s": 76.42179584503174,
+      "video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/perceptual-framesamp-modul/ood/seed7/videos/VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "recovered": false,
+      "media": {
+        "width": 512,
+        "height": 480,
+        "frames": 173,
+        "fps": "30",
+        "codec": "av1",
+        "pix_fmt": "yuv420p"
+      },
+      "raw_streams": {
+        "front": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 81
+        },
+        "wrist": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 116
+        }
+      },
+      "result_sha256": "a0067fe083d37a2bba42adbc2c372493ec29707db305c21047fb95ae57dcf793"
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "task_success": 0,
+      "steps": 205,
+      "episode_wall_s": 34.593,
+      "result_wall_s": 106.06172966957092,
+      "video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-oracle/ood/seed7/videos/VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "recovered": false,
+      "media": {
+        "width": 512,
+        "height": 528,
+        "frames": 272,
+        "fps": "30",
+        "codec": "av1",
+        "pix_fmt": "yuv420p"
+      },
+      "raw_streams": {
+        "front": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 178
+        },
+        "wrist": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 215
+        }
+      },
+      "result_sha256": "de0106e3a49cf050812c9d29b7d3bbcef5d6b07c819666bac3c3229ef17d8b71"
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "task_success": 1,
+      "steps": 440,
+      "episode_wall_s": 377.088,
+      "result_wall_s": 384.5857403278351,
+      "video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "recovered": true,
+      "media": {
+        "width": 512,
+        "height": 528,
+        "frames": 507,
+        "fps": "30",
+        "codec": "av1",
+        "pix_fmt": "yuv420p"
+      },
+      "raw_streams": {
+        "front": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 412
+        },
+        "wrist": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 450
+        }
+      },
+      "result_sha256": "0c9aa37b0a63fe76703e40c251144d00fcf545483f9adbae80cc7531616eddde"
+    },
+    {
+      "model": "groundsg-ground-sg-memer",
+      "task_success": 0,
+      "steps": 257,
+      "episode_wall_s": 450.924,
+      "result_wall_s": 457.5685842037201,
+      "video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "recovered": true,
+      "media": {
+        "width": 512,
+        "height": 528,
+        "frames": 324,
+        "fps": "30",
+        "codec": "av1",
+        "pix_fmt": "yuv420p"
+      },
+      "raw_streams": {
+        "front": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 229
+        },
+        "wrist": {
+          "codec": "av1",
+          "pix_fmt": "yuv444p",
+          "width": 256,
+          "height": 256,
+          "frames": 267
+        }
+      },
+      "result_sha256": "60af0b540e8384da15686ae108a4c616c82c0778ad74856e757d4c7ca89a3718"
+    }
+  ],
+  "attempts": 6,
+  "resets": 12,
+  "retries": 0,
+  "verdict": "SMOKE=PASS models=6 results=6 videos=6"
+}

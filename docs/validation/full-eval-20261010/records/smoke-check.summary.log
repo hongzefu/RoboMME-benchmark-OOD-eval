@@ -1,0 +1,10 @@
+SMOKE_MODEL=PASS model=pp task_success=1 steps=276 frames=343 recovered=1
+SMOKE_MODEL=PASS model=smvla task_success=1 steps=269 frames=336 recovered=1
+SMOKE_MODEL=PASS model=perceptual-framesamp-modul task_success=0 steps=106 frames=173 recovered=0
+SMOKE_MODEL=PASS model=groundsg-ground-sg-oracle task_success=0 steps=205 frames=272 recovered=0
+SMOKE_MODEL=PASS model=groundsg-ground-sg-qwenvl task_success=1 steps=440 frames=507 recovered=1
+SMOKE_MODEL=PASS model=groundsg-ground-sg-memer task_success=0 steps=257 frames=324 recovered=1
+TRACE_ARRAYS=PASS episodes=6 attempted_steps_missing=0 observed_state_missing=0 tampered=0 dtype_mixed=0 unreadable=0 summary_mismatch=0 extra_action_keys=0
+规模：六模型 × 1任务（VideoUnmask）× 1档（xhard1）× 1局 = 6次轨迹、12次reset
+SMOKE=PASS models=6 results=6 videos=6
+EXIT_CODE=0

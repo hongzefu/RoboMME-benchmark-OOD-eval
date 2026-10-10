@@ -1,0 +1,85 @@
+{
+ "attempted_steps_missing": 0,
+ "observed_state_missing": 0,
+ "tampered": 0,
+ "dtype_mixed": 0,
+ "unreadable": 0,
+ "summary_mismatch": 0,
+ "extra_action_keys": 0,
+ "ok": true,
+ "episodes": 6,
+ "details": [
+  {
+   "attempted_steps_missing": 0,
+   "observed_state_missing": 0,
+   "tampered": 0,
+   "dtype_mixed": 0,
+   "unreadable": 0,
+   "summary_mismatch": 0,
+   "extra_action_keys": 0,
+   "trace": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl",
+   "problems": [],
+   "episodes": 1
+  },
+  {
+   "attempted_steps_missing": 0,
+   "observed_state_missing": 0,
+   "tampered": 0,
+   "dtype_mixed": 0,
+   "unreadable": 0,
+   "summary_mismatch": 0,
+   "extra_action_keys": 0,
+   "trace": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl",
+   "problems": [],
+   "episodes": 1
+  },
+  {
+   "attempted_steps_missing": 0,
+   "observed_state_missing": 0,
+   "tampered": 0,
+   "dtype_mixed": 0,
+   "unreadable": 0,
+   "summary_mismatch": 0,
+   "extra_action_keys": 0,
+   "trace": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl",
+   "problems": [],
+   "episodes": 1
+  },
+  {
+   "attempted_steps_missing": 0,
+   "observed_state_missing": 0,
+   "tampered": 0,
+   "dtype_mixed": 0,
+   "unreadable": 0,
+   "summary_mismatch": 0,
+   "extra_action_keys": 0,
+   "trace": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl",
+   "problems": [],
+   "episodes": 1
+  },
+  {
+   "attempted_steps_missing": 0,
+   "observed_state_missing": 0,
+   "tampered": 0,
+   "dtype_mixed": 0,
+   "unreadable": 0,
+   "summary_mismatch": 0,
+   "extra_action_keys": 0,
+   "trace": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl",
+   "problems": [],
+   "episodes": 1
+  },
+  {
+   "attempted_steps_missing": 0,
+   "observed_state_missing": 0,
+   "tampered": 0,
+   "dtype_mixed": 0,
+   "unreadable": 0,
+   "summary_mismatch": 0,
+   "extra_action_keys": 0,
+   "trace": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl",
+   "problems": [],
+   "episodes": 1
+  }
+ ]
+}

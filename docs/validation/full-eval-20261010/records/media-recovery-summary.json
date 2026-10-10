@@ -1,0 +1,861 @@
+[
+  {
+    "model": "pp",
+    "result_sha256": "e5f21d3e54b86011a33ef39350e434753c6c49d70232935fb039c64faf7152ad",
+    "task_success": 1,
+    "original_files": {
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-wrist.jsonl": {
+        "bytes": 40925,
+        "sha256": "83f6ab189d7452ec062cfe6b11a7c98a71973b1bb8a66aaf24ea0dec300ebbd9"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/events.jsonl": {
+        "bytes": 165748,
+        "sha256": "49c881159b42a798a4d8ef760f7a5de2148ea28c7f9cfb6a17fb91bbe27a1a68"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays.npz": {
+        "bytes": 508810,
+        "sha256": "c88b562d5627fc30ab942f666fac61b4314cc62db9175e18b59150e07916d589"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays-index.jsonl": {
+        "bytes": 254797,
+        "sha256": "dd91da31a46eb32a4d68755c747e893584fb7ee0aa4fcaea289e576ac456be62"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl": {
+        "bytes": 395212,
+        "sha256": "baf574727a9a9081a2eea9ba90b26449ee7f79ea77eec6b4729932c225b4cad4"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json": {
+        "bytes": 14154,
+        "sha256": "e5f21d3e54b86011a33ef39350e434753c6c49d70232935fb039c64faf7152ad"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-front.jsonl": {
+        "bytes": 40849,
+        "sha256": "b76bafaf801b6112bd8cb915704635bb7db1d00f50ea53740984f9ec77b86a5f"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/wrist.mkv": {
+        "bytes": 787641,
+        "sha256": "9a4af2ed739d40709cb3eda4a63679f7d7208d7e664ee08dc684d9f98911048b"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/front.mkv": {
+        "bytes": 149364,
+        "sha256": "9df61d932f476e809452435c39e4d018e74cb68ce22b7dd4eadd3f10cee01d04"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/meta.json": {
+        "bytes": 1336,
+        "sha256": "339a95f36290392241a2f657548ca0d04617db835ef5401cb2d4b60bcde678f1"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/language.jsonl": {
+        "bytes": 784341,
+        "sha256": "11f8cecca60bee47c3b48d1b9cd2e4b42e471fbae49a19ddbf8a6b13751b42c2"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/summary.json": {
+        "bytes": 675,
+        "sha256": "0c6129e41b3392b875dbcdfac1e6f4127fd54d8d40de425ca4a68ed79ad377a4"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/results.jsonl": {
+        "bytes": 14154,
+        "sha256": "e5f21d3e54b86011a33ef39350e434753c6c49d70232935fb039c64faf7152ad"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/queue/pp/seed7/accepted/ood__VideoUnmask_xhard1_16600000.json": {
+        "bytes": 397,
+        "sha256": "70cbdb4f86f5c69da3b53da9f7d018322f277ebb18f8960caef4e7f5be9336c2"
+      }
+    },
+    "original_unchanged": true,
+    "render": {
+      "schema": "official-rerender/2",
+      "identity": {
+        "attempt": 1,
+        "builder_episode": 0,
+        "dataset": "ood",
+        "episode_idx": 0,
+        "key": "VideoUnmask_xhard1_16600000",
+        "policy_seed": 7,
+        "seed": 16600000,
+        "sid": "VideoUnmask|xhard1|16600000",
+        "side": "new",
+        "source_episode": null,
+        "task": "VideoUnmask",
+        "tier": "xhard1"
+      },
+      "episode_id": "0",
+      "episode_tag": "VideoUnmask_ep0_xhard1",
+      "route": "pp/new",
+      "task_goal": "watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube",
+      "terminal_reason": "success",
+      "trace_terminal_reason": "success",
+      "cap_hit": false,
+      "policy_seed": 7,
+      "status": "success",
+      "no_frame": false,
+      "source_frames": 343,
+      "frames": 343,
+      "demo_frames": 66,
+      "exec_steps": 276,
+      "steps_attempted": 276,
+      "steps_observed": 276,
+      "missing_steps": [],
+      "frames_recorded": 343,
+      "recorded_exec_steps": 276,
+      "omitted_timeout_frames": 0,
+      "full_name": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "safe_name": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "out_rel": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "source_trace": {
+        "sha256": "baf574727a9a9081a2eea9ba90b26449ee7f79ea77eec6b4729932c225b4cad4",
+        "size": 395212
+      },
+      "source_arrays": {
+        "sha256": "c88b562d5627fc30ab942f666fac61b4314cc62db9175e18b59150e07916d589",
+        "size": 508810
+      },
+      "tool": {
+        "sha256": "8cd2681d8d6180dfae48503cb84d34b895477235fd1099476769f716ccefecf2",
+        "size": 53521
+      },
+      "official": {
+        "sha256": "472b0163c1b3c5b42ec8890b364e3a42f2122ac7a03ab832b01576e27a3d35ed",
+        "size": 5859
+      },
+      "official_eval": {
+        "sha256": "ae6b2d4f451476113c95e5356e75271b8a1db3f3c65b5b0f5a082b200acee349",
+        "size": 11915
+      },
+      "trace_reader": {
+        "sha256": "c3ecc62b67e336afe5f3f8a06e314aef40e99cffa6722543a566566dfc95da1d",
+        "size": 33738
+      },
+      "ffmpeg": {
+        "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+        "size": 79826272
+      },
+      "web_encode_args": [
+        "-c:v",
+        "libaom-av1",
+        "-cpu-used",
+        "4",
+        "-crf",
+        "24",
+        "-b:v",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "-row-mt",
+        "1",
+        "-threads",
+        "2",
+        "-r",
+        "30",
+        "-movflags",
+        "+faststart"
+      ],
+      "runtime": {
+        "numpy": "1.26.4",
+        "opencv": "4.11.0"
+      },
+      "source_kind": "raw-new",
+      "source_media": {
+        "streams": {
+          "front.mkv": {
+            "sha256": "9df61d932f476e809452435c39e4d018e74cb68ce22b7dd4eadd3f10cee01d04",
+            "size": 149364
+          },
+          "wrist.mkv": {
+            "sha256": "9a4af2ed739d40709cb3eda4a63679f7d7208d7e664ee08dc684d9f98911048b",
+            "size": 787641
+          }
+        },
+        "index": {
+          "frames-front.jsonl": {
+            "sha256": "b76bafaf801b6112bd8cb915704635bb7db1d00f50ea53740984f9ec77b86a5f",
+            "size": 40849
+          },
+          "frames-wrist.jsonl": {
+            "sha256": "83f6ab189d7452ec062cfe6b11a7c98a71973b1bb8a66aaf24ea0dec300ebbd9",
+            "size": 40925
+          },
+          "meta.json": {
+            "sha256": "339a95f36290392241a2f657548ca0d04617db835ef5401cb2d4b60bcde678f1",
+            "size": 1336
+          }
+        }
+      },
+      "raw_codec": "av1-yuv444p",
+      "source_mp4": null,
+      "width": 512,
+      "height": 528,
+      "fps": "30",
+      "codec": "av1",
+      "pix_fmt": "yuv420p",
+      "dir": "VideoUnmask_ep0_xhard1",
+      "render_status": "rendered",
+      "out": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "estimated_memory_mib": 768,
+      "output_fingerprint": {
+        "sha256": "cff48ee7f77e49530fbc12b1daf51e67435ca9c00398369554cd5c5614331d2a",
+        "size": 789803
+      },
+      "input_array_precision": "verified-original",
+      "frame_hash_check": {
+        "mode": "skipped-lossy-av1",
+        "frames": {
+          "front": 343,
+          "wrist": 343
+        }
+      }
+    },
+    "video_sha256": "cff48ee7f77e49530fbc12b1daf51e67435ca9c00398369554cd5c5614331d2a",
+    "video_bytes": 789803,
+    "reset": 0,
+    "trajectory": 0,
+    "source_commit": "a02a4dad039b326530068977f22a04f4a4a287eb"
+  },
+  {
+    "model": "smvla",
+    "result_sha256": "a13d2bd0342572e31b21bb5d026c7feb7e89abe16f9c452ddf986a26e7547e8d",
+    "task_success": 1,
+    "original_files": {
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-wrist.jsonl": {
+        "bytes": 40078,
+        "sha256": "d4cdbfd853516266265e24cde68813f36761bb4cafbdfdf90b0c05f82bd4c976"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/events.jsonl": {
+        "bytes": 181548,
+        "sha256": "d6aa46576f74d9d577f4f07696ed0b6cc8c36db01868f4539b245e3c11e5b36d"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays.npz": {
+        "bytes": 460738,
+        "sha256": "bded9a15910a5188ec4486795154227a23088297beacc2e8ca877099e75501b9"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays-index.jsonl": {
+        "bytes": 216025,
+        "sha256": "daae7fe1b921a6c37c28ac92c77718e80cec694b6e690130698ea9b5cd580c7a"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl": {
+        "bytes": 232954,
+        "sha256": "7dbcbafe45415c2f217dce78a645f54f9648337433187585d46848efc6481693"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json": {
+        "bytes": 13779,
+        "sha256": "a13d2bd0342572e31b21bb5d026c7feb7e89abe16f9c452ddf986a26e7547e8d"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-front.jsonl": {
+        "bytes": 40016,
+        "sha256": "4dc515618ce2741c26b4ae47721ab40730432f4e4a7a572685892b61373b5dc0"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/wrist.mkv": {
+        "bytes": 786599,
+        "sha256": "f6d70855917f022edd99551263b19e8f302899bce2776961049cfaee4246543f"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/front.mkv": {
+        "bytes": 145973,
+        "sha256": "42953e9b7751d6879e68f88001050201ea5d431f709e94e127cb776bdb1ac28e"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/meta.json": {
+        "bytes": 1329,
+        "sha256": "3db6f743ff781071902e2bd5d361b778444886d66ff32767214a6cfcacbac19a"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/language.jsonl": {
+        "bytes": 46750,
+        "sha256": "8fea52da3c11dc19b0d94b9116634f1dc66c4ff89833adb77ea282153e02c829"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/summary.json": {
+        "bytes": 674,
+        "sha256": "c92ccf6fa709876825b61d9fe27a514203c308681eabf423b1d3cba61bdc23a4"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/results.jsonl": {
+        "bytes": 13779,
+        "sha256": "a13d2bd0342572e31b21bb5d026c7feb7e89abe16f9c452ddf986a26e7547e8d"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/queue/smvla/seed7/accepted/ood__VideoUnmask_xhard1_16600000.json": {
+        "bytes": 403,
+        "sha256": "8985fa24180fb64bc7dc849838d3b4211243f6fd8324eb7e7f020974c1ab5982"
+      }
+    },
+    "original_unchanged": true,
+    "render": {
+      "schema": "official-rerender/2",
+      "identity": {
+        "attempt": 1,
+        "builder_episode": 0,
+        "dataset": "ood",
+        "key": "VideoUnmask_xhard1_16600000",
+        "policy_seed": 7,
+        "seed": 16600000,
+        "source_episode": null,
+        "task": "VideoUnmask",
+        "tier": "xhard1"
+      },
+      "episode_id": "0",
+      "episode_tag": "VideoUnmask_ep0_xhard1",
+      "route": "smvla/new",
+      "task_goal": "watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube",
+      "terminal_reason": "success",
+      "trace_terminal_reason": "success",
+      "cap_hit": false,
+      "policy_seed": 7,
+      "status": "success",
+      "no_frame": false,
+      "source_frames": 336,
+      "frames": 336,
+      "demo_frames": 66,
+      "exec_steps": 269,
+      "steps_attempted": 269,
+      "steps_observed": 269,
+      "missing_steps": [],
+      "frames_recorded": 336,
+      "recorded_exec_steps": 269,
+      "omitted_timeout_frames": 0,
+      "full_name": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "safe_name": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "out_rel": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "source_trace": {
+        "sha256": "7dbcbafe45415c2f217dce78a645f54f9648337433187585d46848efc6481693",
+        "size": 232954
+      },
+      "source_arrays": {
+        "sha256": "bded9a15910a5188ec4486795154227a23088297beacc2e8ca877099e75501b9",
+        "size": 460738
+      },
+      "tool": {
+        "sha256": "8cd2681d8d6180dfae48503cb84d34b895477235fd1099476769f716ccefecf2",
+        "size": 53521
+      },
+      "official": {
+        "sha256": "472b0163c1b3c5b42ec8890b364e3a42f2122ac7a03ab832b01576e27a3d35ed",
+        "size": 5859
+      },
+      "official_eval": {
+        "sha256": "ae6b2d4f451476113c95e5356e75271b8a1db3f3c65b5b0f5a082b200acee349",
+        "size": 11915
+      },
+      "trace_reader": {
+        "sha256": "c3ecc62b67e336afe5f3f8a06e314aef40e99cffa6722543a566566dfc95da1d",
+        "size": 33738
+      },
+      "ffmpeg": {
+        "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+        "size": 79826272
+      },
+      "web_encode_args": [
+        "-c:v",
+        "libaom-av1",
+        "-cpu-used",
+        "4",
+        "-crf",
+        "24",
+        "-b:v",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "-row-mt",
+        "1",
+        "-threads",
+        "2",
+        "-r",
+        "30",
+        "-movflags",
+        "+faststart"
+      ],
+      "runtime": {
+        "numpy": "1.26.4",
+        "opencv": "4.11.0"
+      },
+      "source_kind": "raw-new",
+      "source_media": {
+        "streams": {
+          "front.mkv": {
+            "sha256": "42953e9b7751d6879e68f88001050201ea5d431f709e94e127cb776bdb1ac28e",
+            "size": 145973
+          },
+          "wrist.mkv": {
+            "sha256": "f6d70855917f022edd99551263b19e8f302899bce2776961049cfaee4246543f",
+            "size": 786599
+          }
+        },
+        "index": {
+          "frames-front.jsonl": {
+            "sha256": "4dc515618ce2741c26b4ae47721ab40730432f4e4a7a572685892b61373b5dc0",
+            "size": 40016
+          },
+          "frames-wrist.jsonl": {
+            "sha256": "d4cdbfd853516266265e24cde68813f36761bb4cafbdfdf90b0c05f82bd4c976",
+            "size": 40078
+          },
+          "meta.json": {
+            "sha256": "3db6f743ff781071902e2bd5d361b778444886d66ff32767214a6cfcacbac19a",
+            "size": 1329
+          }
+        }
+      },
+      "raw_codec": "av1-yuv444p",
+      "source_mp4": null,
+      "width": 512,
+      "height": 528,
+      "fps": "30",
+      "codec": "av1",
+      "pix_fmt": "yuv420p",
+      "dir": "VideoUnmask_ep0_xhard1",
+      "render_status": "rendered",
+      "out": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "estimated_memory_mib": 754,
+      "output_fingerprint": {
+        "sha256": "d99b2fe0b2b580b87500324d02a02ea6a2b7e0fc120b8ca2a7f115ac6de73d14",
+        "size": 774822
+      },
+      "input_array_precision": "verified-original",
+      "frame_hash_check": {
+        "mode": "skipped-lossy-av1",
+        "frames": {
+          "front": 336,
+          "wrist": 336
+        }
+      }
+    },
+    "video_sha256": "d99b2fe0b2b580b87500324d02a02ea6a2b7e0fc120b8ca2a7f115ac6de73d14",
+    "video_bytes": 774822,
+    "reset": 0,
+    "trajectory": 0,
+    "source_commit": "a02a4dad039b326530068977f22a04f4a4a287eb"
+  },
+  {
+    "model": "groundsg-ground-sg-qwenvl",
+    "result_sha256": "0c9aa37b0a63fe76703e40c251144d00fcf545483f9adbae80cc7531616eddde",
+    "task_success": 1,
+    "original_files": {
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-wrist.jsonl": {
+        "bytes": 60769,
+        "sha256": "084ef3865e7ce6bdf96e010b1b5dfcad32fb2db6dd5dac8bfe91463d26209053"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/events.jsonl": {
+        "bytes": 367083,
+        "sha256": "cfc2d5ca60ffa49b85a60f2434d34ddc53ca95eebf041df273ac7f8efc3628c8"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays.npz": {
+        "bytes": 674410,
+        "sha256": "4e4e17be196b874d65a67aaa7145e808c7a791498cd43a245e62bdf88e7aad1c"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/ep0a1_QwenVL_log.jsonl": {
+        "bytes": 30169,
+        "sha256": "20925b6d0ad25ec47f43fadaa603df5ada00242547c1ccfa171b9d9552fd1c70"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays-index.jsonl": {
+        "bytes": 323557,
+        "sha256": "ed670a3fcd28eb9305a045c472dafd38cb71c265ed6f6a670d8aa271c8fad5c4"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl": {
+        "bytes": 379668,
+        "sha256": "ad48f7dc6468244440e392b6526c714ec9b7c6f2a719dabcbc99a3ec9678b164"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json": {
+        "bytes": 18503,
+        "sha256": "0c9aa37b0a63fe76703e40c251144d00fcf545483f9adbae80cc7531616eddde"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-front.jsonl": {
+        "bytes": 60693,
+        "sha256": "8bd5ade349f0c7e8d8bb2125bb8ffb8275d4aa182efe16d20e559783ad8c39ee"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/wrist.mkv": {
+        "bytes": 1031794,
+        "sha256": "4307c2624aa78fce904bba47e9398df5f9cccb95610e15a211092307d73e79c9"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/front.mkv": {
+        "bytes": 218925,
+        "sha256": "759da7b263c681c5093b637110e9bae64e9bcb681d1d1358020ff1adab04961b"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/meta.json": {
+        "bytes": 1364,
+        "sha256": "c51561b52ba07ad6fb3156d503505edeeb8f0da260219b9892826c7d52e910c8"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/language.jsonl": {
+        "bytes": 210462,
+        "sha256": "750c693b7e70a49cf9167761c97af861d4ad2f41541e198582c0fc40b0ff51ed"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/summary.json": {
+        "bytes": 676,
+        "sha256": "6bbf91cdccbe24c95cdc493ae797eaf8c952ecf088c8e41bfe33ec5c2d29eed1"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/official/provenance.json": {
+        "bytes": 1654,
+        "sha256": "32358e8e2c98041539094fb772da2b434967422c5a2bde87de0d02546727a6de"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/official/VideoUnmask_ep0a1_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4": {
+        "bytes": 1365958,
+        "sha256": "6b2f8351f642103bbfb2bcd51c84a65e393dad96edf10f04249dae01f8464fd4"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/results.jsonl": {
+        "bytes": 18503,
+        "sha256": "0c9aa37b0a63fe76703e40c251144d00fcf545483f9adbae80cc7531616eddde"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/queue/groundsg-ground-sg-qwenvl/seed7/accepted/ood__VideoUnmask_xhard1_16600000.json": {
+        "bytes": 421,
+        "sha256": "ee53f9dfa0ec48776f32ca017fbf4f60d062fe745774d57235d3e46417e2b822"
+      }
+    },
+    "original_unchanged": true,
+    "render": {
+      "schema": "official-rerender/2",
+      "identity": {
+        "attempt": 1,
+        "builder_episode": 0,
+        "dataset": "ood",
+        "key": "VideoUnmask_xhard1_16600000",
+        "policy_seed": 7,
+        "seed": 16600000,
+        "source_episode": null,
+        "task": "VideoUnmask",
+        "tier": "xhard1"
+      },
+      "episode_id": "0",
+      "episode_tag": "VideoUnmask_ep0_xhard1",
+      "route": "groundsg/ground-sg-qwenvl/new",
+      "task_goal": "watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube",
+      "terminal_reason": "success",
+      "trace_terminal_reason": "success",
+      "cap_hit": false,
+      "policy_seed": 7,
+      "status": "success",
+      "no_frame": false,
+      "source_frames": 507,
+      "frames": 507,
+      "demo_frames": 66,
+      "exec_steps": 440,
+      "steps_attempted": 440,
+      "steps_observed": 440,
+      "missing_steps": [],
+      "frames_recorded": 507,
+      "recorded_exec_steps": 440,
+      "omitted_timeout_frames": 0,
+      "full_name": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "safe_name": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "out_rel": "VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "source_trace": {
+        "sha256": "ad48f7dc6468244440e392b6526c714ec9b7c6f2a719dabcbc99a3ec9678b164",
+        "size": 379668
+      },
+      "source_arrays": {
+        "sha256": "4e4e17be196b874d65a67aaa7145e808c7a791498cd43a245e62bdf88e7aad1c",
+        "size": 674410
+      },
+      "tool": {
+        "sha256": "8cd2681d8d6180dfae48503cb84d34b895477235fd1099476769f716ccefecf2",
+        "size": 53521
+      },
+      "official": {
+        "sha256": "472b0163c1b3c5b42ec8890b364e3a42f2122ac7a03ab832b01576e27a3d35ed",
+        "size": 5859
+      },
+      "official_eval": {
+        "sha256": "ae6b2d4f451476113c95e5356e75271b8a1db3f3c65b5b0f5a082b200acee349",
+        "size": 11915
+      },
+      "trace_reader": {
+        "sha256": "c3ecc62b67e336afe5f3f8a06e314aef40e99cffa6722543a566566dfc95da1d",
+        "size": 33738
+      },
+      "ffmpeg": {
+        "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+        "size": 79826272
+      },
+      "web_encode_args": [
+        "-c:v",
+        "libaom-av1",
+        "-cpu-used",
+        "4",
+        "-crf",
+        "24",
+        "-b:v",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "-row-mt",
+        "1",
+        "-threads",
+        "2",
+        "-r",
+        "30",
+        "-movflags",
+        "+faststart"
+      ],
+      "runtime": {
+        "numpy": "1.26.4",
+        "opencv": "4.11.0"
+      },
+      "source_kind": "raw-new",
+      "source_media": {
+        "streams": {
+          "front.mkv": {
+            "sha256": "759da7b263c681c5093b637110e9bae64e9bcb681d1d1358020ff1adab04961b",
+            "size": 218925
+          },
+          "wrist.mkv": {
+            "sha256": "4307c2624aa78fce904bba47e9398df5f9cccb95610e15a211092307d73e79c9",
+            "size": 1031794
+          }
+        },
+        "index": {
+          "frames-front.jsonl": {
+            "sha256": "8bd5ade349f0c7e8d8bb2125bb8ffb8275d4aa182efe16d20e559783ad8c39ee",
+            "size": 60693
+          },
+          "frames-wrist.jsonl": {
+            "sha256": "084ef3865e7ce6bdf96e010b1b5dfcad32fb2db6dd5dac8bfe91463d26209053",
+            "size": 60769
+          },
+          "meta.json": {
+            "sha256": "c51561b52ba07ad6fb3156d503505edeeb8f0da260219b9892826c7d52e910c8",
+            "size": 1364
+          }
+        }
+      },
+      "raw_codec": "av1-yuv444p",
+      "source_mp4": null,
+      "width": 512,
+      "height": 528,
+      "fps": "30",
+      "codec": "av1",
+      "pix_fmt": "yuv420p",
+      "dir": "VideoUnmask_ep0_xhard1",
+      "render_status": "rendered",
+      "out": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_success_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "estimated_memory_mib": 1105,
+      "output_fingerprint": {
+        "sha256": "448c14bae9872abca77d9f50ea1ba03fa8beec72f69ee02cc1e8842c71b1d703",
+        "size": 1064342
+      },
+      "input_array_precision": "verified-original",
+      "frame_hash_check": {
+        "mode": "skipped-lossy-av1",
+        "frames": {
+          "front": 507,
+          "wrist": 507
+        }
+      }
+    },
+    "video_sha256": "448c14bae9872abca77d9f50ea1ba03fa8beec72f69ee02cc1e8842c71b1d703",
+    "video_bytes": 1064342,
+    "reset": 0,
+    "trajectory": 0,
+    "source_commit": "a02a4dad039b326530068977f22a04f4a4a287eb"
+  },
+  {
+    "model": "groundsg-ground-sg-memer",
+    "result_sha256": "60af0b540e8384da15686ae108a4c616c82c0778ad74856e757d4c7ca89a3718",
+    "task_success": 0,
+    "original_files": {
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-wrist.jsonl": {
+        "bytes": 38626,
+        "sha256": "c7016e21079497be084994bc6e9a9a9e2e8c9ecd1f4b7c3da2e5fce1710f4be2"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/events.jsonl": {
+        "bytes": 225702,
+        "sha256": "08c98d888dcad4fa8f419c95822b34e4a0482e2260a3d1475d9357749608276b"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays.npz": {
+        "bytes": 396616,
+        "sha256": "91b97d2572af5d86185f32d04b4bd75c571083834523b39e37d039f86983a042"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/arrays-index.jsonl": {
+        "bytes": 188869,
+        "sha256": "8c99ec004c852934a768b782a25c2bade450d4f7d0e051a6b3ec873cb48de5d0"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/trace.jsonl": {
+        "bytes": 231006,
+        "sha256": "6fdbcb77dda72f0482a179545a3ea5c8adfce104023415bd99210f0d896eb237"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json": {
+        "bytes": 14599,
+        "sha256": "60af0b540e8384da15686ae108a4c616c82c0778ad74856e757d4c7ca89a3718"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/frames-front.jsonl": {
+        "bytes": 38550,
+        "sha256": "517a522e15ef034907a059a5f9440d8ee978c56623d749da1a6673e66c454fac"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/wrist.mkv": {
+        "bytes": 665012,
+        "sha256": "bbc9173b42dfad4503275ddb00cbebeb3c485d856d92e83e6775f0043d4d5f8b"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/front.mkv": {
+        "bytes": 125615,
+        "sha256": "e09827f9edd2dfe675f351b047897a4592a9c63b776282e29c6722c48bd08b0d"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/meta.json": {
+        "bytes": 1361,
+        "sha256": "e5ef7f19d0c28dbcc6c0a097d5521f80129f26a0624614fdf8aee406bc76cc4c"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/ep0a1_MemER_log.jsonl": {
+        "bytes": 59947,
+        "sha256": "02198225524f66d730b906a11f76b91649036f4a2f50d2ccb890735f8941cc4b"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/language.jsonl": {
+        "bytes": 176122,
+        "sha256": "5700b63eafbc027d1645d062aa25da8caa271570555581a523563d947b5523a3"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/summary.json": {
+        "bytes": 671,
+        "sha256": "7685c382859d0d96ebf494abd4b973eebfb32abca05e936d6aaf648723c96603"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/official/provenance.json": {
+        "bytes": 1740,
+        "sha256": "5f4a60465547e4183563cb0f001d63074700a416e6f5fff8dab89f6eeaab5f1f"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/official/VideoUnmask_ep0a1_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4": {
+        "bytes": 874067,
+        "sha256": "56190ef919f6ff66ae3ce72ec53b96b4449e035e9ef32efb4ab108d86edcd38a"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/results.jsonl": {
+        "bytes": 14599,
+        "sha256": "60af0b540e8384da15686ae108a4c616c82c0778ad74856e757d4c7ca89a3718"
+      },
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/queue/groundsg-ground-sg-memer/seed7/accepted/ood__VideoUnmask_xhard1_16600000.json": {
+        "bytes": 418,
+        "sha256": "77bc7a62fc63b964cb762728a7473ff31b1ab9cb1388b416e0be57255106485c"
+      }
+    },
+    "original_unchanged": true,
+    "render": {
+      "schema": "official-rerender/2",
+      "identity": {
+        "attempt": 1,
+        "builder_episode": 0,
+        "dataset": "ood",
+        "key": "VideoUnmask_xhard1_16600000",
+        "policy_seed": 7,
+        "seed": 16600000,
+        "source_episode": null,
+        "task": "VideoUnmask",
+        "tier": "xhard1"
+      },
+      "episode_id": "0",
+      "episode_tag": "VideoUnmask_ep0_xhard1",
+      "route": "groundsg/ground-sg-memer/new",
+      "task_goal": "watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube",
+      "terminal_reason": "fail",
+      "trace_terminal_reason": "fail",
+      "cap_hit": false,
+      "policy_seed": 7,
+      "status": "fail",
+      "no_frame": false,
+      "source_frames": 324,
+      "frames": 324,
+      "demo_frames": 66,
+      "exec_steps": 257,
+      "steps_attempted": 257,
+      "steps_observed": 257,
+      "missing_steps": [],
+      "frames_recorded": 324,
+      "recorded_exec_steps": 257,
+      "omitted_timeout_frames": 0,
+      "full_name": "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "safe_name": "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "out_rel": "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "source_trace": {
+        "sha256": "6fdbcb77dda72f0482a179545a3ea5c8adfce104023415bd99210f0d896eb237",
+        "size": 231006
+      },
+      "source_arrays": {
+        "sha256": "91b97d2572af5d86185f32d04b4bd75c571083834523b39e37d039f86983a042",
+        "size": 396616
+      },
+      "tool": {
+        "sha256": "8cd2681d8d6180dfae48503cb84d34b895477235fd1099476769f716ccefecf2",
+        "size": 53521
+      },
+      "official": {
+        "sha256": "472b0163c1b3c5b42ec8890b364e3a42f2122ac7a03ab832b01576e27a3d35ed",
+        "size": 5859
+      },
+      "official_eval": {
+        "sha256": "ae6b2d4f451476113c95e5356e75271b8a1db3f3c65b5b0f5a082b200acee349",
+        "size": 11915
+      },
+      "trace_reader": {
+        "sha256": "c3ecc62b67e336afe5f3f8a06e314aef40e99cffa6722543a566566dfc95da1d",
+        "size": 33738
+      },
+      "ffmpeg": {
+        "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+        "size": 79826272
+      },
+      "web_encode_args": [
+        "-c:v",
+        "libaom-av1",
+        "-cpu-used",
+        "4",
+        "-crf",
+        "24",
+        "-b:v",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "-row-mt",
+        "1",
+        "-threads",
+        "2",
+        "-r",
+        "30",
+        "-movflags",
+        "+faststart"
+      ],
+      "runtime": {
+        "numpy": "1.26.4",
+        "opencv": "4.11.0"
+      },
+      "source_kind": "raw-new",
+      "source_media": {
+        "streams": {
+          "front.mkv": {
+            "sha256": "e09827f9edd2dfe675f351b047897a4592a9c63b776282e29c6722c48bd08b0d",
+            "size": 125615
+          },
+          "wrist.mkv": {
+            "sha256": "bbc9173b42dfad4503275ddb00cbebeb3c485d856d92e83e6775f0043d4d5f8b",
+            "size": 665012
+          }
+        },
+        "index": {
+          "frames-front.jsonl": {
+            "sha256": "517a522e15ef034907a059a5f9440d8ee978c56623d749da1a6673e66c454fac",
+            "size": 38550
+          },
+          "frames-wrist.jsonl": {
+            "sha256": "c7016e21079497be084994bc6e9a9a9e2e8c9ecd1f4b7c3da2e5fce1710f4be2",
+            "size": 38626
+          },
+          "meta.json": {
+            "sha256": "e5ef7f19d0c28dbcc6c0a097d5521f80129f26a0624614fdf8aee406bc76cc4c",
+            "size": 1361
+          }
+        }
+      },
+      "raw_codec": "av1-yuv444p",
+      "source_mp4": null,
+      "width": 512,
+      "height": 528,
+      "fps": "30",
+      "codec": "av1",
+      "pix_fmt": "yuv420p",
+      "dir": "VideoUnmask_ep0_xhard1",
+      "render_status": "rendered",
+      "out": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/recovered-video/VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "estimated_memory_mib": 729,
+      "output_fingerprint": {
+        "sha256": "53050bc4b805dba9a303b0dec7707849586bc112be021888f820a9575519c422",
+        "size": 696421
+      },
+      "input_array_precision": "verified-original",
+      "frame_hash_check": {
+        "mode": "skipped-lossy-av1",
+        "frames": {
+          "front": 324,
+          "wrist": 324
+        }
+      }
+    },
+    "video_sha256": "53050bc4b805dba9a303b0dec7707849586bc112be021888f820a9575519c422",
+    "video_bytes": 696421,
+    "reset": 0,
+    "trajectory": 0,
+    "source_commit": "a02a4dad039b326530068977f22a04f4a4a287eb"
+  }
+]

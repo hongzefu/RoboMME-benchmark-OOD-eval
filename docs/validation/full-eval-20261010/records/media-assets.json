@@ -1,0 +1,26 @@
+{
+  "schema": "full-eval-media-tools/1",
+  "version": "7.0.2",
+  "revision": "e3a61e91030696348b56361bdf80ea358aef4a19",
+  "origin": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+  "producer_checksum_url": "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz.md5",
+  "producer_md5": "7fa72b652e19bf84c9461e332ea1cdf3",
+  "archive_bytes": 41888096,
+  "archive_sha256": "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
+  "assets": [
+    {
+      "path": "ffmpeg-7.0.2-amd64-static/ffmpeg",
+      "bytes": 79826272,
+      "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+      "cheap_blake2b": "4adedbd1f88c5a495c46261ba1fb8a315e54d1b65662e81af68fd239867637a50d042e550e8359ac6101fa49b5764ce04d9c2c9eb6ebdb79a1f82d75761787b3"
+    },
+    {
+      "path": "ffmpeg-7.0.2-amd64-static/ffprobe",
+      "bytes": 79665792,
+      "sha256": "4f231a1960d83e403d08f7971e271707bec278a9ae18e21b8b5b03186668450d",
+      "cheap_blake2b": "e6542e09cf334d1dd298c7dcafac1d748b7fe6477484c74621fb007cdef19248f0db7733a3925ea0d02bed00ecc84c95b98fefb0c816af8fe58bab55841a0b82"
+    }
+  ],
+  "limit": "cheap检测长度和首尾，不能检测等长中间修改；输入身份不保证数值逐位一致",
+  "manifest_sha256": "c4801fc13264422f9c512ef5be8cbf21c4ab32ca9c19f67aff1f38a2c365081d"
+}

@@ -124,3 +124,26 @@ srun --jobid=63431430 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode
 四条命令各为 1 任务（VideoUnmask）× 1 档（xhard1）× 1 局，不重试。FrameSamp、Oracle 在后两条对应作业完成并核验媒体后启动；合计仍是六模型 × 同一任务档位 × 1 局 = 6 次冒烟轨迹，预占 12 次 reset。当前阶段为服务加载／起跑核验，不能据启动回执称 smoke 已通过。MemER 已见 `RUN_INPUTS=PASS`、`CLIENT_READY ... git=a02a4dad039b dirty=False`、`VARIANT_PAIRING=PASS`、`TOKENIZER_SHA=PASS`、`MME_VLA_PREFLIGHT=PASS`；首局与服务就绪另核对。
 
 主会话保持活动，运行代理流式观察各自日志，主会话负责接续、账本和最终核验。当前未建立后续自动唤醒，不因 tmux 存活宣称无人值守已验证。
+
+## 媒体修正与第二批 smoke
+
+首批四模型均完成，原结果统一缺 ffprobe；未重跑模型。GL 系统模块的 AV1 计数探针失败后，补充固定 7.0.2 静态工具到 NFS 产物根 `media-tools/`，来源校验与完整指纹见 result.md 及 records/media-assets.json。新增命令载体 `run-model-r1.sh`（原载体保留），只增加 `ROBOMME_FFPROBE=<NFS产物根>/media-tools/ffmpeg-7.0.2-amd64-static/ffprobe` 和长度／首尾资产锁；清单必须匹配固定 canonical SHA256 `c4801fc13264422f9c512ef5be8cbf21c4ab32ca9c19f67aff1f38a2c365081d`。不改正在使用的 a02a4da 执行源码。
+
+| 类型 | JobID | tmux | 起跑时间 EDT | 命令载体与参数 |
+|---|---|---|---|---|
+| FrameSamp smoke | 63431432 | fe-smoke-framesamp-63431432 | 00:52:43 | `run-model-r1.sh A perceptual-framesamp-modul 63431432 fe-smoke-framesamp-01 smoke 2` |
+| Oracle smoke | 63431433 | fe-smoke-oracle-63431433 | 00:52:50 | `run-model-r1.sh A oracle 63431433 fe-smoke-oracle-01 smoke 3` |
+| 原四局媒体补全 | 63431431 | fe-smoke-media-63431431 | 00:54:26 | 下面的固定 CPU 命令 |
+
+所有外层命令均沿用 `set -o pipefail`、`tee logs/<tmux>.log`、`EXIT_CODE`；三会话已自然结束，不执行强杀。媒体恢复只读取已结束的四局，完整命令：
+
+```bash
+env PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 NUMEXPR_NUM_THREADS=2 \
+ srun --jobid=63431431 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared \
+ /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python \
+ /nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/recover-smoke-media.py
+```
+
+恢复载体对四模型依次调用固定库的 `render_episode`，参数为 `official_root=CODE, ffmpeg=<media-tools>/ffmpeg-7.0.2-amd64-static/ffmpeg, source='raw', overwrite=False, max_memory_mib=6144, output=<raw>/recovered-video/<safe_filename>, sidecar=<raw>/recovered-video/render.json, episode_id=0, terminal=<原status>`；每局执行前后核对原 raw 全部文件、results.jsonl 与 accepted 标记的 SHA256／字节数相同，独立写 recovery.json，原 result.json 不回写。完整输出归档于 records/media-recovery-summary.json。
+
+汇总验收在 GL 63431431 上用同一主解释器运行 `check-smoke.py`，完整解码六模型的原始两路与官方视频、核 identity/cap/accepted/result、核恢复证明，再执行固定 `dev-scripts/checks/trace_arrays_check.py <NFS产物根>/smoke/rollouts --json <NFS产物根>/smoke/trace-arrays-report.json`；退出 0，SMOKE 与 TRACE_ARRAYS 通过，账本 open=0。六个 smoke 身份与 A 相同，逐字节拷贝126文件至seed7输出，复用其accepted，不重复执行或新建账本。
