@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1010 分阶段全量评估计划</title>
+<style>
+  :root { --fg:#1b1b1b; --muted:#5a5a5a; --line:#d8d8d8; --bg:#ffffff; --box:#f6f7f9; --acc:#1f5fbf; --warn:#b4541a; --ok:#2a7a3b; --gate:#8a2be2; }
+  body { font-family: -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; color:var(--fg); background:var(--bg); margin:0; padding:24px 16px; line-height:1.6; }
+  main { max-width: 1080px; margin:0 auto; }
+  h1 { font-size:1.6rem; border-bottom:3px solid var(--acc); padding-bottom:6px; margin-top:2.2em; }
+  h2 { font-size:1.25rem; margin-top:1.8em; border-left:5px solid var(--acc); padding-left:10px; }
+  h3 { font-size:1.05rem; margin-top:1.3em; }
+  table { border-collapse:collapse; width:100%; margin:10px 0 16px; font-size:0.92rem; }
+  th, td { border:1px solid var(--line); padding:5px 8px; vertical-align:top; text-align:left; }
+  th { background:var(--box); }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size:0.86rem; }
+  pre { background:var(--box); padding:10px 12px; overflow-x:auto; border:1px solid var(--line); }
+  .intro { background:var(--box); border:1px solid var(--line); padding:12px 16px; }
+  .quote { border-left:4px solid var(--warn); padding:4px 12px; color:var(--muted); margin:8px 0; }
+  .warn { color:var(--warn); font-weight:600; }
+  .ok { color:var(--ok); font-weight:600; }
+  figure { margin:16px 0; }
+  figcaption { color:var(--muted); font-size:0.9rem; }
+  svg text { font-family: inherit; }
+</style>
+</head>
+<body>
+<main>
+
+<div class="intro">
+<p><strong>计划：六个 GL 变体、14 任务、三个模型种子的分阶段全量评估（2026-10-10，America/New_York）</strong></p>
+<p>权威性：本文件是本轮评估的唯一计划；只规划、不实施，每个阶段的启动都须用户单独放行（第一部分 §四 的门控）。代码锚点：主检出 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code> 分支 <code>dev</code>，HEAD <code>79045b34119a42330dd64939e94e97603051f0cd</code>（1.62）；GL 执行副本 <code>/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval</code> 当前停在 <code>7e9e6e52</code>（1.60），起跑前由本机 rsync 到起跑 commit。commit 编号从 <code>1.63</code> 接续。外部依赖锚点：benchmark 子模块与四个模型 gitlink 不动（第 24 条）；GL 侧模型 venv、ckpt、adapter 全部沿用 1.62 轮 <code>docs/validation/infer-timing-20261009/launch.md</code> 记录的 NFS 路径，不新建环境。</p>
+<p><strong>用户原话（2026-10-10）</strong>：「给出方案进行完整测试。所有的模型都要测出了Astra。然后全部在greatlakes上进行。然后movecube和insertpeg不要测试。三个seed都要测但是先测已经测过的seed。也就是seed7。然后优先对于每个模型测五个episode就是每一个Task都测五个Eisode然后让我先看一下产物。并且报告这个时间。然后再测试所有的se7。然后再测试其他的seed。就是这样分步来。给出这个流程图然后画HTML。」「先落实计划落实在根目录。」「LgreatLs就用现在的四个J0B如果不够的话。要重新申请」「到时间了再申请。」</p>
+</div>
+
+<h1>第一部分（给人看）</h1>
+
+<h2>一、一句话方案与已定口径</h2>
+<p>把六个 GL 变体（FrameSamp+Modulation、SimpleMemVLA、PonderPounce、GroundSG+Oracle、GroundSG+QwenVL、GroundSG+MemER；Astra 不跑）在 14 个任务（去掉 MoveCube、InsertPeg）× 两个数据集（hard-verify 1300 步、ood 1800 步）× 三个模型种子上跑完，分四个阶段：<strong>A</strong> 种子 7、每任务每数据集 5 局的预览 → 用户看产物与耗时报告 → <strong>B</strong> 种子 7 补齐全量 → <strong>C</strong> 种子 0 全量 → <strong>D</strong> 种子 42 全量。全部在 greatlakes 现有四个占位 job 内用 <code>dev-scripts/gl/run_eval_gl.sh</code> 的常驻席位 + 共享动态队列执行，到期再申请接替 job。</p>
+
+<table>
+<tr><th>#</th><th>已定口径</th><th>依据</th></tr>
+<tr><td>1</td><td>模型 = 六个 GL 变体，Astra 不跑（用户「所有的模型都要测出了Astra」读作「除了 Astra」）。</td><td>§二</td></tr>
+<tr><td>2</td><td>任务 = 官方 16 任务去掉 MoveCube、InsertPeg，共 14 个；这两个任务在 ood 只有 xhard4 格，去掉后 ood 剩 41 格 × 共 700 局／模型／种子。</td><td>§三</td></tr>
+<tr><td>3</td><td>数据集 = hard-verify（xhard0，每任务 12 局，1300 步）+ ood（每任务 50 局，1800 步 strict），两者都测。</td><td>§三</td></tr>
+<tr><td>4</td><td>种子顺序 = 7 → 0 → 42（7 是 1006-03 轮已测种子；0 与 42 是仓库 `POLICY_SEEDS` 守卫的另外两个种子）。</td><td>§四</td></tr>
+<tr><td>5</td><td>阶段 A 每任务每数据集取 5 局：hard-verify 取 builder 局号 0～4（官方原号 3、7、11、15、19）；ood 取「各档首局轮转」5 局（ood 的 builder 局号 0～4 全是 xhard1，直接取 0:5 会漏掉其他档，实测见 §三）。</td><td>§三</td></tr>
+<tr><td>6</td><td>只用现有四个占位 job <code>63431430/31/32/33</code>（均 2026-10-12 13:18～13:23 EDT 到期）；<strong>到期前不提前申请</strong>，到期时按 <code>greatlakes.md</code> 标准块重新申请 4 个 48 h 占位 job 接替（用户「到时间了再申请」）。</td><td>§五</td></tr>
+<tr><td>7</td><td>阶段 A 结束后暂停：交付产物目录、成功率表与逐模型耗时表，用户看过并放行后才启动 B；B→C→D 之间也各停一次、交报告、等放行。</td><td>§四</td></tr>
+<tr><td>8</td><td>正常任务失败不重试；基础设施故障每身份最多重试 1 次（`--infra-retries 1`），全部计入预算；PonderPounce S2 上下文超限沿 1006-03 裁决按基础设施重试。</td><td>§六</td></tr>
+<tr><td>9</td><td>不写新模型代码、不改评估包；新增只有 <code>dev-scripts/gl/</code> 下两个小工具（阶段身份筛选、阶段耗时与成绩报表）及其测试。</td><td>第二部分 §二</td></tr>
+</table>
+
+<h2>二、模型与运行形态</h2>
+<p>六个变体的服务端环境、ckpt、adapter、端口段与 1.62 轮完全相同（原命令见 <code>docs/validation/infer-timing-20261009/launch.md</code>「GL 六变体」）；每个席位一个常驻 Policy，领同一策略同一种子的动态队列，队列文件在 NFS 产物根下 <code>queue/&lt;标签&gt;/seed&lt;n&gt;/</code>，多个席位可同时领同一队列，这是把慢模型摊到空闲席位上的机制。</p>
+<table>
+<tr><th>变体</th><th><code>--policies</code> / variant</th><th>客户端解释器</th><th>服务端解释器与权重（NFS）</th><th>上轮 A40 每局估时（ood 1800 步）</th></tr>
+<tr><td>FrameSamp+Modulation</td><td><code>perceptual-framesamp-modul</code></td><td>主 <code>.venv</code></td><td><code>robomme_benchmark-sgeval/third_party/mme-vla/.venv</code>；ckpt <code>sgeval-20261006-02/ckpt/mme/perceptual-framesamp-modul/79999</code></td><td>约 40 s（43 局／29 min）</td></tr>
+<tr><td>SimpleMemVLA</td><td><code>smvla</code></td><td>主 <code>.venv</code></td><td><code>robomme_benchmark-sgeval2-b34/artifacts/v8-two/venvs/smvla-env</code>；ckpt <code>SimpleMemVLA/checkpoints/simplememvla_robomme</code></td><td>约 135 s（43 局／1.6 h）</td></tr>
+<tr><td>PonderPounce</td><td><code>pp</code></td><td><code>envs/client-env/.venv</code></td><td><code>robomme_benchmark-sgeval/third_party/PonderPounce/.venv</code>；ckpt <code>sg-eval/ckpt/pp/ponderpounce-9b-robomme</code></td><td>约 125 s（4 片 21～22 局／44 min）</td></tr>
+<tr><td>GroundSG+Oracle</td><td><code>groundsg</code> + <code>ground-sg-oracle</code></td><td><code>envs/client-env/.venv</code></td><td>mme-vla venv；ckpt <code>sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999</code></td><td>约 60 s（估；1.62 轮单局含加载 165 s）</td></tr>
+<tr><td>GroundSG+QwenVL</td><td><code>groundsg</code> + <code>ground-sg-qwenvl</code></td><td><code>envs/client-env/.venv</code></td><td>同上 + adapter <code>sg-eval/ckpt/qwenvl-groundsg/checkpoint-1200</code>，<code>xla_mem_fraction=0.65</code></td><td>约 335 s（43 局／3.5～4.5 h）</td></tr>
+<tr><td>GroundSG+MemER</td><td><code>groundsg</code> + <code>ground-sg-memer</code></td><td><code>envs/client-env/.venv</code></td><td>同上 + adapter <code>sg-eval/ckpt/memer/grounded_subgoal/checkpoint-1300</code>，<code>xla_mem_fraction=0.65</code></td><td>约 15～20 min（超时局 46～56 min，78 局 4 席 6.5 h）</td></tr>
+</table>
+<p>⚠ 估时全部来自 1006-03 轮 ood 1800 步的分片用时，是上界量级；hard-verify 1300 步会更短。阶段 A 的真实耗时报告就是用来校准后三个阶段估时的，不把这里的估计写成承诺。</p>
+
+<h2>三、局数（P5 乘式）</h2>
+<table>
+<tr><th>阶段</th><th>种子</th><th>每模型局数</th><th>六模型合计</th></tr>
+<tr><td>A 预览</td><td>7</td><td>hard-verify 14 任务 × 1 档 × 5 局 = 70；ood 14 任务 × 5 局（各档首局轮转）= 70；合计 140</td><td>6 × 140 = <strong>840</strong></td></tr>
+<tr><td>B 种子 7 补齐</td><td>7</td><td>hard-verify 14 × 1 × 7 = 98；ood 14 × 45 = 630；合计 728</td><td>6 × 728 = <strong>4368</strong></td></tr>
+<tr><td>C 种子 0 全量</td><td>0</td><td>hard-verify 14 × 1 × 12 = 168；ood 41 格共 700（7 任务 × 2 档 × 25 + 2 任务 × 4 档（13/13/12/12）+ 3 任务 × 3 档（17/17/16）+ 2 任务 × 5 档 × 10）；合计 868</td><td>6 × 868 = <strong>5208</strong></td></tr>
+<tr><td>D 种子 42 全量</td><td>42</td><td>同 C，868</td><td><strong>5208</strong></td></tr>
+<tr><td colspan="2">合计首试</td><td>每模型 3 种子 × 868 = 2604</td><td><strong>15624</strong></td></tr>
+</table>
+<p>ood 的 builder 局号按档位分段（本机只读导出实测：VideoUnmask、BinFill、SwingXtimes 的局号 0～7 全是 xhard1）。阶段 A 的 ood 5 局按「每档第一局 → 每档第二局 …」轮转取到 5 为止：两档任务取 xhard1 ×3 + xhard2 ×2；三档任务 xhard1 ×2 + xhard2 ×2 + xhard3 ×1；四档任务每档 1 局 + xhard1 再 1 局；五档任务每档 1 局。这样预览能覆盖每个任务的全部档位。</p>
+
+<h2>四、流程与门控</h2>
+<figure>
+<svg viewBox="0 0 1040 560" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="四阶段流程图">
+  <defs><marker id="ar" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1b1b1b"/></marker></defs>
+  <!-- 前置 -->
+  <rect x="20" y="20" width="1000" height="78" rx="8" fill="#f6f7f9" stroke="#d8d8d8"/>
+  <text x="34" y="44" font-size="15" font-weight="700">S0 前置（本机 + GL 登录节点，约 1 h）</text>
+  <text x="34" y="66" font-size="13">① 合入两个小工具并 commit → rsync 到 GL 副本（EXEC_COPY=PASS）② 导出三种子身份清单（EVAL_IDENTITY_EXPORT=PASS）③ 四个阶段各建预算账本</text>
+  <text x="34" y="86" font-size="13">④ 每变体 1 局 smoke（6 × 1 = 6 局，计入 A 预算）→ SMOKE=PASS 后才起正式席位</text>
+  <line x1="520" y1="98" x2="520" y2="128" stroke="#1b1b1b" stroke-width="2" marker-end="url(#ar)"/>
+  <!-- A -->
+  <rect x="20" y="130" width="640" height="96" rx="8" fill="#eaf1fb" stroke="#1f5fbf" stroke-width="2"/>
+  <text x="34" y="154" font-size="15" font-weight="700" fill="#1f5fbf">阶段 A：种子 7 预览 · 6 模型 × 14 任务 × (hv 5 + ood 5) = 840 局</text>
+  <text x="34" y="176" font-size="13">4 席并行：席 1 MemER、席 2 QwenVL、席 3 SMVLA→FrameSamp、席 4 PP→Oracle；</text>
+  <text x="34" y="196" font-size="13">短模型跑完的席位加入 MemER／QwenVL 队列。估 18～24 h 墙钟（MemER 主导）。</text>
+  <text x="34" y="216" font-size="13">产物：rollouts/&lt;模型&gt;/&lt;数据集&gt;/seed7/ 下官方视频 + AV1 原始帧 + 动作与逐步记录。</text>
+  <!-- 门 A -->
+  <polygon points="760,130 900,178 760,226 620,178" fill="#f3eafd" stroke="#8a2be2" stroke-width="2" transform="translate(130,0)"/>
+  <text x="890" y="172" font-size="13" text-anchor="middle" font-weight="700" fill="#8a2be2">门 A：用户看产物</text>
+  <text x="890" y="192" font-size="12" text-anchor="middle">+ 耗时报告 → 放行？</text>
+  <line x1="660" y1="178" x2="748" y2="178" stroke="#1b1b1b" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="890" y="250" font-size="12" text-anchor="middle" fill="#b4541a">不放行／要改 → 改计划、重新呈现</text>
+  <line x1="890" y1="226" x2="890" y2="236" stroke="#b4541a" stroke-width="2"/>
+  <!-- A -> B -->
+  <line x1="340" y1="226" x2="340" y2="268" stroke="#1b1b1b" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="352" y="254" font-size="12" fill="#2a7a3b">放行 + 按 A 实测校准估时</text>
+  <!-- B -->
+  <rect x="20" y="270" width="640" height="76" rx="8" fill="#eaf1fb" stroke="#1f5fbf" stroke-width="2"/>
+  <text x="34" y="294" font-size="15" font-weight="700" fill="#1f5fbf">阶段 B：种子 7 补齐 · 6 × 728 = 4368 局（续同一产物根，已 accepted 的 140 局自动跳过）</text>
+  <text x="34" y="316" font-size="13">同 4 席动态分配；估 4～5 天墙钟（A 实测后更新）。</text>
+  <text x="34" y="336" font-size="13">结束：成绩表（局级 + 任务宏平均）、耗时表、七项验收判定行 → 报告，等放行。</text>
+  <line x1="340" y1="346" x2="340" y2="388" stroke="#1b1b1b" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="352" y="372" font-size="12" fill="#8a2be2">门 B：报告 + 放行</text>
+  <!-- C -->
+  <rect x="20" y="390" width="640" height="60" rx="8" fill="#eaf1fb" stroke="#1f5fbf" stroke-width="2"/>
+  <text x="34" y="414" font-size="15" font-weight="700" fill="#1f5fbf">阶段 C：种子 0 全量 · 6 × 868 = 5208 局</text>
+  <text x="34" y="436" font-size="13">新产物根 seed0；估 5～6 天墙钟。结束同样出报告，等放行。</text>
+  <line x1="340" y1="450" x2="340" y2="492" stroke="#1b1b1b" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="352" y="476" font-size="12" fill="#8a2be2">门 C：报告 + 放行</text>
+  <!-- D -->
+  <rect x="20" y="494" width="640" height="56" rx="8" fill="#eaf1fb" stroke="#1f5fbf" stroke-width="2"/>
+  <text x="34" y="518" font-size="15" font-weight="700" fill="#1f5fbf">阶段 D：种子 42 全量 · 6 × 868 = 5208 局</text>
+  <text x="34" y="540" font-size="13">结束：三种子汇总（均值 ± 极差）、总耗时、留档 docs/validation/full-eval-20261010/。</text>
+  <!-- 右侧：占位 job 生命线 -->
+  <rect x="700" y="290" width="320" height="260" rx="8" fill="#fff7ef" stroke="#b4541a"/>
+  <text x="714" y="314" font-size="14" font-weight="700" fill="#b4541a">贯穿：占位 job 接替（只在到期时）</text>
+  <text x="714" y="338" font-size="12">现有 63431430/31/32/33（4 × A40）</text>
+  <text x="714" y="356" font-size="12">到期 2026-10-12 13:18～13:23 EDT</text>
+  <text x="714" y="384" font-size="12">到期当时：席位收尾（领取文件心跳停止）→</text>
+  <text x="714" y="402" font-size="12">提交 4 个 48 h 占位 job（标准块）→</text>
+  <text x="714" y="420" font-size="12">排到后在新 job 内重起同一命令，队列续跑。</text>
+  <text x="714" y="448" font-size="12">中断的在跑局算 1 次尝试（已计入预算）。</text>
+  <text x="714" y="476" font-size="12">不提前申请，不超过 4 个占位 job；</text>
+  <text x="714" y="494" font-size="12">chaijy2 当前 GPU 20/20 满额，接替可能排队。</text>
+  <text x="714" y="522" font-size="12">每次接替写进 launch.md 的 JobID 清单。</text>
+</svg>
+<figcaption>图 1：四个阶段串行，阶段之间各有一道用户放行门；右侧是贯穿全程、只在到期时触发的占位 job 接替。</figcaption>
+</figure>
+
+<h3>耗时预估（A40，4 席）</h3>
+<table>
+<tr><th>变体</th><th>A（140 局）GPU·h</th><th>单种子全量（868 局）GPU·h</th><th>三种子 GPU·h</th></tr>
+<tr><td>FrameSamp+Modulation</td><td>1.6</td><td>9.6</td><td>29</td></tr>
+<tr><td>GroundSG+Oracle</td><td>2.3</td><td>14.5</td><td>44</td></tr>
+<tr><td>SimpleMemVLA</td><td>5.3</td><td>32.5</td><td>98</td></tr>
+<tr><td>PonderPounce</td><td>4.9</td><td>30.1</td><td>90</td></tr>
+<tr><td>GroundSG+QwenVL</td><td>13</td><td>81</td><td>243</td></tr>
+<tr><td>GroundSG+MemER</td><td>35～47</td><td>217～289</td><td>650～870</td></tr>
+<tr><td><strong>合计</strong></td><td><strong>62～74 → 4 席约 18～24 h</strong></td><td><strong>385～457 → 4 席约 4～5 天</strong></td><td><strong>1150～1370 → 4 席约 12～15 天</strong></td></tr>
+</table>
+<p class="warn">MemER 一家占总量约 60%：三种子全量在 4 席上要两周量级，中途至少跨 3 轮占位 job 到期接替。阶段 A 的耗时报告会给出 MemER 与 QwenVL 在 hard-verify 1300 步下的真实均值，届时重算 B～D 的墙钟；若用户届时想缩规模（例如 MemER 只跑部分档），改计划再放行，本计划不预设。</p>
+
+<h2>五、GL 资源与接替</h2>
+<ul>
+<li>四个占位 job 各 1 × A40、4 CPU、64 G，节点 gl1525／gl1512／gl1512／gl1513；工作负载经 <code>srun --jobid=&lt;job&gt; --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared bash dev-scripts/gl/run_eval_gl.sh …</code> 塞入，在 <code>gl-login3</code> 的 detached tmux 里起（会话前缀 <code>fe-</code>）。</li>
+<li>接替只在到期时做：席位进程随 job 结束被杀，领取文件心跳停止、半局不被接受；新 job 内以<strong>相同命令、相同 <code>--out</code> 与 <code>--seat</code></strong> 重起，`seat.py` 的 `recover_dangling` 结算悬空尝试后继续领局。每次接替按 `greatlakes.md` 标准块提交，JobID 记入 `launch.md`。</li>
+<li>chaijy2 账户此刻 GPU 20/20 占满（hongzefu 4、cokite 12、rickzhao 4），接替 job 可能 `PENDING (AssocGrpGRES)`，排队期间席位空转是预期内的，不换 account、不加数量。</li>
+</ul>
+
+<h2>六、预算（P3 一次性汇总，请一口气裁决）</h2>
+<table>
+<tr><th>阶段</th><th>首试（乘式）</th><th>基础设施重试上限（≈10%）</th><th>轨迹尝试硬上限</th><th>reset 硬上限（每尝试 build + reset 计 2）</th></tr>
+<tr><td>S0 smoke</td><td>6 模型 × 1 局 = 6</td><td>0</td><td>6（并入 A 账本）</td><td>12</td></tr>
+<tr><td>A</td><td>6 × 14 × (5 + 5) = 840</td><td>84</td><td>930（含 smoke 6）</td><td>1860</td></tr>
+<tr><td>B</td><td>6 × 728 = 4368</td><td>437</td><td>4805</td><td>9610</td></tr>
+<tr><td>C</td><td>6 × 868 = 5208</td><td>521</td><td>5729</td><td>11458</td></tr>
+<tr><td>D</td><td>6 × 868 = 5208</td><td>521</td><td>5729</td><td>11458</td></tr>
+<tr><td><strong>全程</strong></td><td><strong>15630</strong></td><td><strong>1563</strong></td><td><strong>17193</strong></td><td><strong>34386</strong></td></tr>
+</table>
+<p>每阶段一份独立共享账本（`budget_ledger.py`），`--trajectory-cap`／`--reset-cap`／`--shared-infra-cap`／`--planned-first-tries` 按上表填；超额硬拒（退出 5），不新建账本绕额度。占位 job 到期打断的在跑局占用一次尝试，已含在 10% 重试额度内。Astra 零局、零美元。</p>
+
+<h2>七、验收判定行</h2>
+<table>
+<tr><th>查什么</th><th>怎么查</th><th>过了说明什么</th><th>判定行</th></tr>
+<tr><td>执行副本与起跑 commit 一致</td><td>GL 副本 `git rev-parse HEAD` 与本机起跑 commit 比对、`git status` 为空</td><td>所跑代码可从 git 还原</td><td><code>EXEC_COPY=PASS head=&lt;sha&gt; dirty=0</code></td></tr>
+<tr><td>身份清单</td><td>`export_eval_identities.py` 全量 + `select_stage_identities.py` 筛选</td><td>14 任务、两数据集、局数与 §三乘式相等</td><td><code>EVAL_IDENTITY_EXPORT=PASS …</code>；<code>STAGE_IDENTITIES=PASS stage=A seed=7 hard_verify=70 ood=70 tasks=14 tiers_covered=41</code></td></tr>
+<tr><td>smoke</td><td>每变体 1 局结束，`result.json` 存在、`recorder_verify=PASS`、官方视频可 ffprobe</td><td>六条链路在当前副本上能跑通</td><td><code>SMOKE=PASS models=6 results=6 videos=6</code></td></tr>
+<tr><td>阶段覆盖</td><td>队列 `accepted/` 数与清单行数比对</td><td>没有身份漏跑</td><td><code>EVAL_COVERAGE=PASS stage=&lt;X&gt; expected=&lt;n&gt; missing=0</code></td></tr>
+<tr><td>结果契约与上限</td><td>`eval_report.py`（`effective_cap` 为准）</td><td>每局步数不超上限、字段齐全</td><td><code>EVAL_REPORT=PASS cap_mismatch=0</code></td></tr>
+<tr><td>媒体三件</td><td>逐局官方视频 + AV1 两路 + arrays/trace</td><td>每局三样产物齐全</td><td><code>OFFICIAL_MEDIA=PASS total=&lt;n&gt; fail=0</code>；<code>TRACE_ARRAYS=PASS</code></td></tr>
+<tr><td>预算守恒</td><td>`budget_ledger.py report`</td><td>尝试数不超上限、无悬空预约</td><td><code>BUDGET_ENFORCEMENT=PASS trajectories=&lt;a&gt;/&lt;cap&gt; resets=&lt;b&gt;/&lt;cap&gt; open=0</code></td></tr>
+<tr><td>耗时报告</td><td>`stage_report.py` 读 `results.jsonl` 的 `t_start/t_end` + sacct step 起止</td><td>逐模型逐数据集的每局均值／P95 与席位整程</td><td><code>STAGE_TIMING=PASS stage=&lt;X&gt; models=6 episodes=&lt;n&gt; wall_h=&lt;x&gt;</code></td></tr>
+</table>
+
+<h2>八、步骤表</h2>
+<table>
+<tr><th>阶段</th><th>内容</th><th>判据</th></tr>
+<tr><td>S0-1</td><td>写入型子代理交付两个工具 + 测试，合并、commit 1.63、push</td><td>核心短测 PASS；<code>PRE/POST_MERGE_REVIEW=PASS</code></td></tr>
+<tr><td>S0-2</td><td>rsync 本机 → GL 副本；导出身份；建四份账本；写 `docs/validation/full-eval-20261010/launch.md` 第一段</td><td><code>EXEC_COPY=PASS</code>、<code>EVAL_IDENTITY_EXPORT=PASS</code>、<code>STAGE_IDENTITIES=PASS</code> ×4</td></tr>
+<tr><td>S0-3</td><td>六变体 smoke（4 席分两批）</td><td><code>SMOKE=PASS models=6</code></td></tr>
+<tr><td>A</td><td>起 4 席；短模型跑完后把席位加到 MemER／QwenVL 队列；Monitor 盯每份日志</td><td><code>EVAL_COVERAGE=PASS stage=A expected=840 missing=0</code> + 七项判定行 + <code>STAGE_TIMING=PASS stage=A</code></td></tr>
+<tr><td>门 A</td><td>交付：产物根路径、成功率表、耗时表、校准后的 B～D 估时；<strong>等用户放行</strong></td><td>用户明确放行</td></tr>
+<tr><td>B／C／D</td><td>同 A 的运行与验收；到期接替占位 job</td><td>各阶段 <code>EVAL_COVERAGE=PASS</code> + 判定行 + 报告；各门放行</td></tr>
+<tr><td>收尾</td><td>`result.md`、三种子汇总、records 归档；按清单逐个 kill 自己的 tmux；占位 job 按清单 `scancel`</td><td><code>git status</code> clean、push 完成</td></tr>
+</table>
+
+<h2>九、子代理分工与合并（简述）</h2>
+<p>代码改动只有一块：一个写入型子代理（opus，worktree 隔离）交付 <code>dev-scripts/gl/select_stage_identities.py</code>、<code>dev-scripts/gl/stage_report.py</code> 与对应 <code>tests/</code>，主会话按「计划执行模式」做合并前审查（sonnet 审 diff）、`--no-ff` 合入、合并后跑核心短测。运行启动交给运行型子代理（opus、不隔离）：每个席位一个，只负责在 GL 登录节点起 tmux + srun、核对 `RUN_INPUTS`／`GL_CKPT`／首局 `result.json` 落地后交回会话名与日志路径；监听、账本、接替、清理全归主会话。
+
+<h1>第二部分（技术细节，供 agent 追踪）</h1>
+
+<h2>〇、前置声明与红线</h2>
+<ol>
+<li><strong>R1</strong> 不改 <code>src/robomme_ood_eval/</code>、不改五个 gitlink、不碰 <code>third_party/robomme_benchmark/src/robomme/</code>（第 21 条）；本轮新增文件只在 <code>dev-scripts/gl/</code> 与 <code>tests/</code>。</li>
+<li><strong>R2</strong> 每个阶段起跑前 GL 副本 HEAD 必须等于本机起跑 commit 且 clean；阶段进行中不 rsync 代码到 GL 副本（席位进程会热读 `src/`）。</li>
+<li><strong>R3</strong> 预算：四份账本各自独立，caps 按第一部分 §六；任何阶段不得为「补满」追加局；中断局不退还。</li>
+<li><strong>R4</strong> 占位 job：只用 4 个；只在 `squeue` 显示到期（或已消失）后才提交接替；不 `scancel -u`；清理只按 `launch.md` 的 JobID 与 tmux 清单逐个做。</li>
+<li><strong>R5</strong> 门控：A→B、B→C、C→D 都要用户明确放行；放行只覆盖下一阶段。</li>
+<li><strong>R6</strong> 产物在 NFS 产物根 <code>$N/artifacts/full-eval-20261010/</code>；每阶段结束把 `rollouts/`、`logs/`、`queue/` rsync 回本机 <code>artifacts/full-eval-20261010/</code>（第 14 条：NFS 不留大文件的最终落点是本机）。</li>
+<li><strong>R7</strong> 一份日志一个 Monitor；过滤词表按项目 `CLAUDE.md` 补充（`EXIT_CODE=`、`Traceback`、`RUN_BLOCKED`、`INFRA_TIMEOUT`、`SERVER_LEFT`、`BUDGET_`、`GL_POLICY_DONE`、`GL_SEAT_DONE`、`RUN_INCOMPLETE`）。</li>
+</ol>
+
+<h2>一、路径与变量</h2>
+<pre>
+N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu
+GLREPO=$N/RoboMME-benchmark-OOD-eval                 # GL 执行副本（本机 rsync 写，GL 侧不做 git）
+ROOT=$N/artifacts/full-eval-20261010                  # NFS 产物根（R6）
+  $ROOT/identities/all-seed{7,0,42}.jsonl             # 全量身份（14 任务）；身份不含 policy_seed，三文件内容相同、按阶段分文件只为账本隔离
+  $ROOT/identities/stage-{A,B,C,D}.jsonl              # 阶段清单（select_stage_identities.py 输出）
+  $ROOT/budget/stage-{A,B,C,D}.jsonl                  # 四份共享账本
+  $ROOT/seed7/  $ROOT/seed0/  $ROOT/seed42/           # --out；B 续 seed7（同 --out、同 --seat 名）
+  $ROOT/logs/fe-&lt;阶段&gt;-&lt;模型&gt;-&lt;job&gt;.log
+HOLD=(63431430 63431431 63431432 63431433)            # 到期后由接替 JobID 覆盖，记入 launch.md
+</pre>
+
+<h2>二、逐文件改动清单（只新增）</h2>
+<table>
+<tr><th>文件</th><th>锚点</th><th>改什么</th></tr>
+<tr><td><code>dev-scripts/gl/select_stage_identities.py</code>（新）</td><td><code>main</code>、<code>select_rows(rows, stage, per_task)</code></td><td>输入全量身份 JSONL；`--exclude-tasks MoveCube,InsertPeg`；`--stage A --per-task 5`：hard-verify 每任务取 builder 局号升序前 5；ood 每任务按「档位规范序轮转、每档内按 builder 局号升序」取 5；`--stage B --minus &lt;A 清单&gt;`：全量减 A；`--stage C|D`：全量。末行 <code>STAGE_IDENTITIES=PASS stage= seed= hard_verify= ood= tasks= tiers_covered= out=</code>；行格式与输入相同（`seat.py` 直接读）。只用标准库。</td></tr>
+<tr><td><code>dev-scripts/gl/stage_report.py</code>（新）</td><td><code>main</code>、<code>load_results(out_root)</code>、<code>timing_table</code>、<code>success_table</code></td><td>读 `rollouts/&lt;模型&gt;/&lt;数据集&gt;/seed&lt;n&gt;/results.jsonl` 与各局 `result.json`：按模型 × 数据集给局数、成功数、局级成功率、任务宏平均、每局 wall（`t_end-t_start`）均值／P95、总 GPU 秒；可选 `--sacct &lt;sacct 输出&gt;` 合并席位 step 整程；覆盖核对对阶段清单（`--identities`）给 `EVAL_COVERAGE` 行；输出 Markdown 表 + JSON；末行 <code>STAGE_TIMING=PASS stage= models= episodes= wall_h=</code>。</td></tr>
+<tr><td><code>tests/test_select_stage_identities.py</code>、<code>tests/test_stage_report.py</code>（新）</td><td>—</td><td>合成身份行（含 2／3／4／5 档任务）验证轮转取法与计数、排除任务；合成 results 验证成功率与 wall 统计、覆盖缺失报 FAIL。纯 CPU，&lt;5 s。</td></tr>
+</table>
+
+<h2>三、子代理分配表</h2>
+<table>
+<tr><th>编号</th><th>类型／模型</th><th>目标</th><th>可写文件集合</th><th>禁触</th><th>验收命令与判定行</th><th>资源</th></tr>
+<tr><td>S0-1</td><td>写入型 opus，worktree</td><td>两个工具 + 两个测试</td><td>上表四个新文件</td><td>其余一切；尤其 `src/`、`scripts/evaluate.py`、gitlink</td><td>worktree 内 <code>UV_PROJECT_ENVIRONMENT=&lt;主 .venv&gt; PYTHONPATH=&lt;worktree&gt;/src:&lt;主检出&gt;/third_party/robomme_benchmark/src uv run --no-sync python -m pytest tests/test_select_stage_identities.py tests/test_stage_report.py -q</code> → `passed`；commit 前缀 `sub/S0-1: `</td><td>CPU</td></tr>
+<tr><td>S0-1R</td><td>审查 sonnet，只读</td><td>合并前审查 `REVIEW_BASE..REVIEW_TIP`</td><td>无</td><td>—</td><td><code>PRE_MERGE_REVIEW=PASS|FAIL …</code></td><td>—</td></tr>
+<tr><td>RUN-A1…A4</td><td>运行型 opus，不隔离</td><td>在 gl-login3 为席 1～4 各起一个 tmux + srun（命令见 §四），核对 `RUN_INPUTS=PASS`、`GL_CKPT`、服务端 `SERVER_READY`、首局 `result.json` 落地（MemER 最长等 60 min），交回会话名、日志、JobID、PID</td><td>无（不改文件）</td><td>不 scancel、不 kill tmux、不改命令、不加局</td><td>起跑判据：日志出现首个 `result.json` 写入行或 `accepted/` 首文件</td><td>各 1 × A40（既有 job）</td></tr>
+<tr><td>RUN-B/C/D</td><td>同上</td><td>每阶段起跑与到期接替后的重起</td><td>无</td><td>同上</td><td>同上</td><td>同上</td></tr>
+<tr><td>主会话自做</td><td>—</td><td>rsync、身份导出与筛选、账本创建、smoke、Monitor、席位重分配、占位 job 申请与 scancel、合并、留档、commit/push</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</table>
+
+<h2>四、runbook</h2>
+<h3>S0-2 同步、身份、账本</h3>
+<pre>
+# 本机：起跑 commit 为 1.63（S0-1 合并后），工作区 clean
+rsync -a --delete --info=progress2 --exclude artifacts --exclude .venv --exclude 'envs/*/.venv' \
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/ $GLREPO/
+ssh greatlakes "cd $GLREPO && git rev-parse HEAD && git status --short | wc -l"   # EXEC_COPY=PASS head=&lt;1.63 sha&gt; dirty=0
+TASKS=BinFill,StopCube,PickXtimes,SwingXtimes,ButtonUnmask,VideoUnmask,VideoUnmaskSwap,ButtonUnmaskSwap,PickHighlight,VideoRepick,VideoPlaceButton,VideoPlaceOrder,PatternLock,RouteStick
+uv run --no-sync python dev-scripts/gl/export_eval_identities.py --dataset hard-verify,ood --tasks $TASKS --out $ROOT/identities/all.jsonl
+#   期望 EVAL_IDENTITY_EXPORT=PASS episodes=868 hard_verify=168 ood=700 tasks=14
+uv run --no-sync python dev-scripts/gl/select_stage_identities.py --identities $ROOT/identities/all.jsonl --stage A --per-task 5 --out $ROOT/identities/stage-A.jsonl
+uv run --no-sync python dev-scripts/gl/select_stage_identities.py --identities $ROOT/identities/all.jsonl --stage B --minus $ROOT/identities/stage-A.jsonl --out $ROOT/identities/stage-B.jsonl
+cp $ROOT/identities/all.jsonl $ROOT/identities/stage-C.jsonl ; cp $ROOT/identities/all.jsonl $ROOT/identities/stage-D.jsonl
+# 账本（caps 见第一部分 §六）：budget_ledger.py 没有 init 子命令，config 行由第一个席位按 --trajectory-cap 等参数写入，
+# 后续席位的同组参数必须逐字相同（不符即 RUN_BLOCKED reason=budget_config）。每阶段一个新文件：
+#   A: 930/1860/84/0/846   B: 4805/9610/437/0/4368   C、D: 5729/11458/521/0/5208（trajectory/reset/shared-infra/expired/planned-first-tries）
+mkdir -p $ROOT/budget   # 文件由席位创建
+</pre>
+<h3>席位命令模板（gl-login3，detached tmux；MODEL 行按第一部分 §二 表替换）</h3>
+<pre>
+tmux new-session -d -s fe-A-memer-63431430 "set -o pipefail; cd $GLREPO && \
+ env BENCH_PY=$GLREPO/envs/client-env/.venv/bin/python SGEVAL_THIRD_PARTY=$GLREPO/third_party \
+ PYTHONPATH=$GLREPO/src:$GLREPO/third_party/robomme_benchmark/src PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+ HF_HOME=$N/hf-cache OPENPI_DATA_HOME=$N/sg-eval/openpi-data UV_CACHE_DIR=/home/hongzefu/.cache/uv XDG_CACHE_HOME=$ROOT/cache \
+ srun --jobid=63431430 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode=shared \
+ bash dev-scripts/gl/run_eval_gl.sh --policies groundsg --groundsg-variant ground-sg-memer --policy-seed 7 \
+   --identities $ROOT/identities/stage-A.jsonl --budget-ledger $ROOT/budget/stage-A.jsonl --run fe-A-seed7 \
+   --out $ROOT/seed7 --seat fe-memer-01 --gpus 0 \
+   --trajectory-cap 930 --reset-cap 1860 --shared-infra-cap 84 --expired-cap 0 --planned-first-tries 846 \
+   --infra-retries 1 --client-restarts 0 --noprog-s 2700 \
+   --ckpt $N/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --port-base 19750 --work-dir $ROOT/seed7/work/memer \
+   --cfg mme_vla_py=$N/robomme_benchmark-sgeval/third_party/mme-vla/.venv/bin/python --cfg xla_mem_fraction=0.65 \
+   --cfg openpi_data_home=$N/sg-eval/openpi-data --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 \
+   --cfg jax_cache_root=$ROOT/jax-cache --cfg server_dir=$ROOT/seed7/servers/memer \
+   --memer-adapter $N/sg-eval/ckpt/memer/grounded_subgoal/checkpoint-1300 \
+ 2&gt;&amp;1 | tee $ROOT/logs/fe-A-memer-63431430.log; echo \"EXIT_CODE=\$?\" &gt;&gt; $ROOT/logs/fe-A-memer-63431430.log"
+</pre>
+<p>其余五个变体只换 `--policies`／variant／`--ckpt`／`--port-base`（19700 smvla、19710 framesamp、19720 oracle、19730 pp、19740 qwen）／`--cfg *_py=`／adapter；SimpleMemVLA 与 FrameSamp 的 `BENCH_PY` 用主 `.venv`。同一策略第二个席位只改 `--seat fe-memer-02` 与 `--port-base`（+5），`--out` 不变即共用队列。阶段 B 用 `stage-B.jsonl` + `stage-B` 账本、`--run fe-B-seed7`，`--out` 仍是 `$ROOT/seed7`。</p>
+<h3>席位分配与再分配（A）</h3>
+<table>
+<tr><th>席</th><th>job</th><th>先跑</th><th>跑完后</th></tr>
+<tr><td>1</td><td>63431430</td><td>MemER</td><td>—</td></tr>
+<tr><td>2</td><td>63431431</td><td>QwenVL</td><td>加入 MemER 队列（`fe-memer-02`）</td></tr>
+<tr><td>3</td><td>63431432</td><td>SimpleMemVLA → FrameSamp</td><td>加入 QwenVL 队列（`fe-qwen-02`），QwenVL 完再入 MemER</td></tr>
+<tr><td>4</td><td>63431433</td><td>PonderPounce → Oracle</td><td>同席 3</td></tr>
+</table>
+<p>B～D 同样按「长模型先占席、短模型串在同一席、空席并入长模型队列」原则，由主会话按 A 的实测均值排。</p>
+<h3>Monitor</h3>
+<pre>
+ssh greatlakes "tail -n +1 -F $ROOT/logs/fe-A-memer-63431430.log" | stdbuf -oL tr '\r' '\n' \
+ | grep --line-buffered -E "EXIT_CODE=|Traceback|RUN_BLOCKED|INFRA_TIMEOUT|SERVER_LEFT|BUDGET_|GL_POLICY_DONE|GL_SEAT_DONE|RUN_INCOMPLETE"
+</pre>
+<h3>到期接替</h3>
+<pre>
+# 到期当时（squeue 不再显示该 JobID）才提交，最多 4 个：
+sbatch --account=chaijy2 --partition=spgpu --nodes=1 --ntasks-per-node=1 --gres=gpu:1 --cpus-per-task=4 --mem=64G \
+  --time=48:00:00 --job-name=fe-hold-NN --wrap='sleep infinity'
+# 排到后：同一 tmux 名加后缀 -r1，同一命令只换 --jobid；seat.py 的 recover_dangling 结算被打断的局
+</pre>
+<h3>阶段收尾</h3>
+<pre>
+uv run --no-sync python dev-scripts/gl/stage_report.py --out-root $ROOT/seed7 --identities $ROOT/identities/stage-A.jsonl --stage A --md docs/validation/full-eval-20261010/records/stage-A-report.md
+uv run --no-sync python dev-scripts/gl/budget_ledger.py report --ledger $ROOT/budget/stage-A.jsonl
+rsync -a --info=progress2 $ROOT/seed7/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/seed7/
+</pre>
+
+<h2>五、对拍闸门总表</h2>
+<p>本轮无对拍；闸门即第一部分 §七 的八条判定行，每阶段各出一遍，PASS 后才进入门控报告。</p>
+
+<h2>六、风险登记</h2>
+<table>
+<tr><th>风险</th><th>影响</th><th>处置</th></tr>
+<tr><td>MemER 单局 15～50 min，三种子 650～870 GPU·h</td><td>全程两周量级、跨多次接替</td><td>A 实测后重算；缩规模由用户决定</td></tr>
+<tr><td>接替 job 排队（chaijy2 GPU 20/20）</td><td>席位空转数小时～数天</td><td>如实报告等待；不换 account</td></tr>
+<tr><td>PonderPounce S2 上下文 16384 超限</td><td>个别局基础设施重试 1 次</td><td>沿 1006-03 裁决；报告单列</td></tr>
+<tr><td>QwenVL／MemER 缺 flash-attn（1.62 轮踩过）</td><td>加载失败</td><td>沿用 1.62 的 r1 兼容环境路径；smoke 阶段即暴露</td></tr>
+<tr><td>job 到期打断半局</td><td>每次接替每席 ≤1 次尝试损耗</td><td>已计入 10% 重试额度</td></tr>
+<tr><td>NFS 产物增长（15624 局 × 三件）</td><td>NFS 占用数十 GB</td><td>每阶段结束 rsync 回本机后删 NFS 原始帧（保留 results 与日志），删前 `ls -ld` 并核对 sha 清单</td></tr>
+</table>
+
+<h2>七、盲区诚实清单</h2>
+<ul>
+<li>Oracle 每局估时没有同口径分片数据，60 s 是估计。</li>
+<li>hard-verify 1300 步下六模型的每局耗时没有 A40 实测，A 阶段才有。</li>
+<li>GPU 推理非逐位可复现：同种子重跑终态可能不同（1006-03 对拍已证明），三种子均值不等于「确定性成绩」。</li>
+<li>`seat.py` 多席位领同一队列在 1006-03 的 MemER 4 片是用分片清单实现的，本轮改用同队列多席位；smoke 阶段用两席同队列各领 1 局验证一次（计入 smoke 预算的 6 局内：MemER smoke 用两席）。</li>
+</ul>
+
+<h2>八、留档与 commit 纪律</h2>
+<ul>
+<li>档案目录 <code>docs/validation/full-eval-20261010/</code>：`launch.md`（起跑时写：commit、命令、JobID 与 tmux 清单、预算、用户原话）、`result.md`（每阶段追加一节、收尾写三种子汇总）、`records/`（各阶段报表 JSON／MD、账本终态、清洗后日志、判定行原文；不放视频、不放 .sh/.yaml）。</li>
+<li>commit：1.63（S0-1 工具合并）、1.64（起跑留档 launch.md，评估不打 Beta）、之后每阶段结束各一次（报告 + result.md 追加）；每次 commit 后立即 push。</li>
+<li>本计划文件按第 2 条命名放根目录；后续修订不改日期前缀。</li>
+</ul>
+
+</main>
+</body>
+</html>
