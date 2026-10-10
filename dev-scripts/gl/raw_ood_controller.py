@@ -267,7 +267,7 @@ class Controller:
         self.event('published',identity_key=key,task_success=row['task_success'])
         if not a['smoke'] and not a['acked'] and row['exec_steps']>=1 and a.get('step_id') and a['progress'].exists():
             p=read(a['progress'])
-            self.write_ack(a,key,p['pid'],row['exec_steps'],str(result))
+            self.write_ack(a,key,p['pid'],row['exec_steps'],str(row['result']))
 
     def resume_completed_smokes(self,orchestration_commit,*,preflight=False):
         """手动复用原三个已结算首局；先完整验证全部输入，再发布，绝不启动worker。"""
@@ -542,17 +542,17 @@ class Controller:
     def run(self,*,resume_completed_smokes=False,orchestration_commit=None):
         self.control.mkdir(parents=True,exist_ok=True)
         manifest=dict(self.base,shards=self.shards)
-        if resume_completed_smokes:
-            if read(self.control/'shards.json')!=manifest: raise ValueError('原分片manifest冲突')
-            self.resume_completed_smokes(orchestration_commit)
-        else: atomic(self.control/'shards.json',manifest)
         stop_beat=threading.Event()
         def heartbeat():
             while not stop_beat.is_set():
                 atomic(self.control/'controller-heartbeat.json',dict(self.base,t=time.time(),pid=os.getpid(),active=len(self.active)))
                 stop_beat.wait(5)
-        beat=threading.Thread(target=heartbeat,daemon=True); beat.start()
+        beat=threading.Thread(target=heartbeat,name='raw-ood-controller-heartbeat',daemon=True); beat.start()
         try:
+            if resume_completed_smokes:
+                if read(self.control/'shards.json')!=manifest: raise ValueError('原分片manifest冲突')
+                self.resume_completed_smokes(orchestration_commit)
+            else: atomic(self.control/'shards.json',manifest)
             while True:
                 if (self.control/'STOP').exists() or (self.gl/'STOP').exists(): raise RuntimeError('全局STOP')
                 self.scan()

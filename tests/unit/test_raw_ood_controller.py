@@ -418,3 +418,35 @@ def test_resume_waits_for_complete_report_visibility_without_new_attempt(tmp_pat
     try: ctl.resume_completed_smokes('c'*40)
     finally: producer.join()
     assert ctl.smoked=={'qwenvl','smvla','pp'} and Path(ctl.c['budget_ledger']).read_bytes()==original
+
+
+def test_unacked_full_terminal_publication_writes_real_first_step_ack(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); a['smoke']=False
+    ctl.publish(a,row)
+    ack=C.read(ctl.control/'first_dispatch.json')
+    assert ack['proof']==row['result'] and ack['first_step']==276 and ack['client_pid']==1000
+    assert ack['step_id']=='103.1' and a['acked'] and len(ctl.published)==1
+
+
+def test_resume_wait_is_inside_live_heartbeat_and_thread_stops_on_failure(tmp_path,monkeypatch):
+    import threading,time
+    ctl=C.Controller(config(tmp_path)); ctl.control.mkdir()
+    C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
+    entered=threading.Event(); release=threading.Event(); errors=[]
+    def resume(*a,**kw):
+        entered.set(); release.wait(timeout=3); raise ValueError('fixture resume stop')
+    monkeypatch.setattr(ctl,'resume_completed_smokes',resume)
+    def run():
+        try: ctl.run(resume_completed_smokes=True,orchestration_commit='c'*40)
+        except ValueError as e: errors.append(str(e))
+    worker=threading.Thread(target=run); worker.start()
+    try:
+        assert entered.wait(timeout=2)
+        deadline=time.monotonic()+2
+        while not (ctl.control/'controller-heartbeat.json').exists() and time.monotonic()<deadline: time.sleep(.01)
+        beat=C.read(ctl.control/'controller-heartbeat.json')
+        assert beat['pid']>0 and time.time()-beat['t']<2
+        assert any(t.name=='raw-ood-controller-heartbeat' and t.is_alive() for t in threading.enumerate())
+    finally: release.set(); worker.join(timeout=3)
+    assert errors==['fixture resume stop'] and not worker.is_alive()
+    assert not any(t.name=='raw-ood-controller-heartbeat' and t.is_alive() for t in threading.enumerate())
