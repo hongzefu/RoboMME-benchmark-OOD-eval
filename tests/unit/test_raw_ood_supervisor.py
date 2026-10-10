@@ -194,6 +194,33 @@ def test_explicit_guard_ready_binds_new_context_without_cancel(tmp_path,kind):
     assert not cancelled.exists() and not (control/'STOP').exists()
 
 
+@pytest.mark.parametrize('kind',['healthy_old_receipt','current_intent','wrong_intent'])
+def test_guard_exit_uses_current_payload_state_not_old_receipt(tmp_path,kind):
+    control,base,env,cancelled=guard_fixture(tmp_path)
+    receipt=control/'guardian-intent-accepted-101.json'
+    stale=dict(base,config_sha256='c'*64,exec_commit='d'*40)
+    S.atomic(receipt,stale); before=receipt.read_bytes()
+    if kind!='healthy_old_receipt':
+        S.atomic(control/'intentional-supervisor-stop.json',base if kind=='current_intent' else stale)
+    p=subprocess.Popen(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+60))],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    try:
+        if kind=='healthy_old_receipt':
+            marker=control/'guardian-ready-101.json'; deadline=time.monotonic()+3
+            while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+            assert marker.exists()
+            time.sleep(.2)
+            assert p.poll() is None and receipt.read_bytes()==before
+            # 正常完成标记仅用于结束本夹具，不触及其它作业。
+            S.atomic(control/'gpu_work_complete.json',base); p.terminate()
+        out=p.communicate(timeout=5)[0]
+        assert p.returncode==(8 if kind=='wrong_intent' else 0),out
+        if kind=='current_intent': assert S.read(receipt)==base and 'payload_rc=10' in out
+        elif kind=='wrong_intent': assert receipt.read_bytes()==before and S.read(control/'guard-failure-101.json')['phase']=='intentional_supervisor_stop'
+        assert not cancelled.exists() and not (control/'STOP').exists()
+    finally:
+        if p.poll() is None: p.kill(); p.wait(timeout=5)
+
+
 def test_old_five_second_startup_can_stop_fresh_heartbeat_new_isolated_startup_passes(tmp_path):
     legacy_source=subprocess.run(['git','show','4f3cc20b9513294674e17ecb5f9f31b7d3dd23c1:dev-scripts/gl/raw_ood_hold_guard.sh'],
                                  cwd=HERE,capture_output=True,text=True,check=True).stdout

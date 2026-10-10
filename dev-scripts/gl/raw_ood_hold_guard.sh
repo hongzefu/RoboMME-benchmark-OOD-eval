@@ -95,7 +95,7 @@ try:
   print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
   accepted=p/('guardian-intent-accepted-'+sys.argv[4]+'.json')
   tmp=accepted.with_name(accepted.name+'.'+str(os.getpid())+'.tmp'); tmp.write_text(json.dumps(stop)); os.replace(tmp,accepted)
-  raise SystemExit(0)
+  raise SystemExit(10)
  phase='heartbeat_read'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
  h=p/'cpu-heartbeat.json'
  if h.exists():
@@ -130,6 +130,8 @@ PY
     else
       payload_rc=$?
       echo "GUARD_CHECK_END gpu=$SELF payload_rc=$payload_rc time=$(date +%s)"
+      # 仅本次payload完成身份校验后的专用状态可结束守卫；旧回执只是证据。
+      if (( payload_rc == 10 )); then exit 0; fi
       # 先保存原始失败；仅退出此guard，不停止任何GPU工作负载。
       failure="$ROOT/control/guard-failure-$SELF.json"
       if [[ ! -f "$failure" ]]; then
@@ -139,7 +141,6 @@ PY
       fi
       exit 8
     fi
-    if [[ -f "$ROOT/control/guardian-intent-accepted-$SELF.json" ]]; then exit 0; fi
   else
     FAILURE_PHASE=prepare_deadline
     (( $(date +%s) < DEADLINE )) || exit 9
