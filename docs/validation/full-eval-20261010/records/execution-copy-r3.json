@@ -1,0 +1,31 @@
+{
+  "head": "0c6f8a3a552876020611d4d654a41adb3accba65",
+  "checks": [
+    {
+      "path": ".",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/Astra-on-RoboMME",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/PonderPounce",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/SimpleMemVLA",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/mme-vla",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/robomme_benchmark",
+      "dirty": ""
+    }
+  ],
+  "config_sha256": "f5ebbfe3fb1c1f567333aeefda21a72e8bf18d9719d9cbeb9948ac64d025db3a",
+  "verdict": "EXEC_COPY=PASS head=0c6f8a3a552876020611d4d654a41adb3accba65 dirty=0 modules=5"
+}

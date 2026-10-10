@@ -154,7 +154,9 @@ SimpleMemVLA 原 A 会话因连续环境构建失败精确停止，占位 634314
 
 连续调度器从全新 r3 冻结副本启动，旧 a02 与 r2 执行副本保持。参数由本轮产物 `controller-config.json` 明确给出：原四 JobID／slot、三个仍在运行的 A 会话和上述 r2 单身份会话，六模型优先顺序 `smvla,pp,oracle,perceptual-framesamp-modul,memer,qwen`，A/B 种子 7、C 种子 0、D 种子 42，原身份清单、原阶段账本与十倍硬上限。载体 `run-model-r3.sh` 仅改变执行副本路径，沿 r2 所有模型解释器、ckpt、adapter、端口分段、20 次上限与环境创建失败护栏。每个 SMVLA 身份独立加载／关闭，其他模型按阶段常驻。
 
-主会话准备的启动命令为 `PYTHONUNBUFFERED=1 <NFS主uv解释器> <r3>/dev-scripts/gl/continue_full_eval.py --config <NFS产物根>/controller-config.json`，在登录端独立 tmux `fe-full-eval-controller-20261010` 中按 pipefail／tee／EXIT_CODE 三件套执行，日志 `<NFS产物根>/logs/fe-full-eval-controller-20261010.log`；状态与事件在 `<NFS产物根>/controller/`。此刻尚未实际接手，起跑回执与 r3 完整提交另记。程序只接手清单会话，新增 worker 命名 `fe-controller-<阶段>-<模型>-<slot>-<序号>`；报告会话 `fe-controller-report-<阶段>`，全部逐项登记。到期接替只在原作业明确 TIMEOUT 后提交 `chaijy2/spgpu/gpu:1/cpu4/64G/48h`，四席上限不变；提交不明停止核查、不重复提交。
+主会话的启动命令为 `PYTHONUNBUFFERED=1 <NFS主uv解释器> <r3>/dev-scripts/gl/continue_full_eval.py --config <NFS产物根>/controller-config.json`，2026-10-10 03:18:11 EDT 在登录端独立 tmux `fe-full-eval-controller-20261010` 中按 pipefail／tee／EXIT_CODE 三件套启动，日志 `<NFS产物根>/logs/fe-full-eval-controller-20261010.log`；状态与事件在 `<NFS产物根>/controller/`。r3 冻结提交 `0c6f8a3a552876020611d4d654a41adb3accba65`，主会话核对根与五子模块均干净；NFS 上控制器 39 项夹具通过、0.62 秒、资源全零。配置 canonical 指纹 `12d997b55e7a92c2f9f04ef5c1e837b8b31f32fe2e076f5e225ae8f29bc0b721`。
+
+实际接手保持 MemER／QwenVL／PP 三会话运行，r2 单身份正常退出后自动启动 `fe-controller-A-smvla-2-1`，只领取下一个未完成 A 身份 `BinFill_xhard2_18400200`；`RUN_INPUTS=PASS`、`CLIENT_READY ... git=0c6f8a3a5528 dirty=False`、`RUN_PLAN ... max_attempts=20` 均有回执。之后已跨多个任务自动接续。零尝试空转会话仅跳过已接受身份，没有重复模拟；不能把会话数当局数。程序只接手清单会话，新增 worker 命名 `fe-controller-<阶段>-<模型>-<slot>-<序号>`；报告会话 `fe-controller-report-<阶段>`，完整实际清单由 `controller/events.jsonl` 逐项记录。到期接替只在原作业明确 TIMEOUT 后提交 `chaijy2/spgpu/gpu:1/cpu4/64G/48h`，四席上限不变；提交不明停止核查、不重复提交。
 
 ## 正式阶段 A 起跑
 
