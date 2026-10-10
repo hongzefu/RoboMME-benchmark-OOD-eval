@@ -18,7 +18,7 @@ def write_episode(root, model, ident, *, success=0, wall=10, attempt=1):
     path = root / 'rollouts' / model / 'ood' / 'seed7' / ident['task'] / str(ident['episode']) / 'result.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     row = {k: v for k, v in ident.items() if k != 'builder_episode'}
-    row.update(model=model, policy_label=model, policy_seed=7, attempt=attempt,
+    row.update(model='groundsg' if model.startswith('groundsg-') else model, policy_label=model, policy_seed=7, attempt=attempt,
                status='success' if success else 'fail', task_success=success,
                infra=False, run_blocked=False, budget_exhausted=False, t_start=100, t_end=100 + wall)
     path.write_text(json.dumps(row))
@@ -89,3 +89,45 @@ def test_sacct_steps(tmp_path):
     path.write_text('JobIDRaw|Start\n123.0|Unknown\n')
     with pytest.raises(ValueError):
         report.read_sacct(path)
+
+
+@pytest.mark.parametrize('models', [(), ('smvla',)])
+def test_incomplete_models_never_stage_pass(tmp_path, models):
+    ident = identity(0)
+    write_episode(tmp_path, 'smvla', ident)
+    result = report.build_report(tmp_path, [ident], 'A', models=models)
+    assert not result['ok']
+    assert result['verdicts'][-1].startswith('STAGE_TIMING=FAIL')
+
+
+@pytest.mark.parametrize('document', ['result', 'marker', 'index'])
+@pytest.mark.parametrize('bad', [None, [], 5])
+def test_non_object_fail_closed(tmp_path, document, bad):
+    ident = identity(0)
+    path, index, marker = write_episode(tmp_path, 'smvla', ident)
+    {'result': path, 'marker': marker, 'index': index}[document].write_text(json.dumps(bad) + '\n')
+    result = report.build_report(tmp_path, [ident], 'A', models=('smvla',))
+    assert not result['ok'] and result['errors']
+
+
+def test_model_tampering_and_error_exception(tmp_path):
+    ident = identity(0)
+    paths = []
+    for model in report.MODELS:
+        paths.append(write_episode(tmp_path, model, ident))
+    path, index, marker = paths[0]
+    row = json.loads(path.read_text())
+    row['model'] = 'astra'
+    path.write_text(json.dumps(row))
+    index.write_text(json.dumps(row) + '\n')
+    assert not report.build_report(tmp_path, [ident], 'A')['ok']
+    row.update(model=report.MODELS[0], status='error', task_success=0, error='初始化失败，无帧')
+    accepted = json.loads(marker.read_text())
+    accepted['status'] = 'error'
+    marker.write_text(json.dumps(accepted))
+    path.write_text(json.dumps(row))
+    index.write_text(json.dumps(row) + '\n')
+    result = report.build_report(tmp_path, [ident], 'A')
+    assert result['ok'] and result['coverage'][0]['no_frame_error'] == 1
+    (path.parent / 'trace.jsonl').write_text(json.dumps({'frames_recorded': 1}) + '\n')
+    assert not report.build_report(tmp_path, [ident], 'A')['ok']
