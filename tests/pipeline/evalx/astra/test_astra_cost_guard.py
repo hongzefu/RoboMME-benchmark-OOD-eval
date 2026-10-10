@@ -129,7 +129,7 @@ def test_prices_must_be_given(tmp_path):
 
 @pytest.mark.parametrize("value", [1, 2, 3])
 def test_explicit_episode_limit_accepts_only_authorized_integers(value):
-    """显式上限允许一至三局，费用硬上限仍为五美元。"""
+    """Explicit limits allow one to three episodes; the hard cost cap remains five USD."""
     guard = load_guard()
     assert guard.check_max_episodes(value) == value
     assert guard.ASTRA_MAX_EPISODES == 2 and guard.HARD_MAX_EPISODES == 3
@@ -138,7 +138,7 @@ def test_explicit_episode_limit_accepts_only_authorized_integers(value):
 
 @pytest.mark.parametrize("value", [0, -1, 4, True, False, 1.0, 2.5, "3", None])
 def test_episode_limit_rejects_invalid_type_or_range(value):
-    """禁止隐式转换布尔、浮点数、字符串或非正数。"""
+    """Reject booleans, floats, strings and non-positive values without coercion."""
     with pytest.raises(ValueError, match="ASTRA_COST_BLOCKED.*max-episodes"):
         load_guard().check_max_episodes(value)
 
@@ -146,7 +146,7 @@ def test_episode_limit_rejects_invalid_type_or_range(value):
 @pytest.mark.parametrize("value", [0, -1, 4, True, False, 1.0, 2.5, "3"])
 @pytest.mark.parametrize("entry", ["guard_round", "write_state"])
 def test_invalid_explicit_episode_limit_has_no_disk_side_effect(tmp_path, value, entry):
-    """非法配置必须在创建锁、状态、费用文件或停止标志之前被拒绝。"""
+    """Reject invalid configuration before creating locks, state, cost files or stop markers."""
     guard = load_guard()
     root = tmp_path / "absent"
     state_path = root / "guard.state.json"
@@ -162,7 +162,7 @@ def test_invalid_explicit_episode_limit_has_no_disk_side_effect(tmp_path, value,
 
 @pytest.mark.parametrize("limit", [None, 3])
 def test_heartbeat_and_final_state_keep_requested_episode_limit(tmp_path, limit):
-    """实际写盘再读回：省略参数为两局，显式三局贯穿心跳与最终退出状态。"""
+    """Read back persisted states: default two or explicit three applies to heartbeat and final exit."""
     guard = load_guard()
     state_path = tmp_path / "guard.state.json"
     ledger = guard.new_ledger()
@@ -179,7 +179,7 @@ def test_heartbeat_and_final_state_keep_requested_episode_limit(tmp_path, limit)
 
 
 def test_omitted_episode_limit_reads_dynamic_default(tmp_path, monkeypatch):
-    """保留既有夹具对默认常量的注入，不在函数定义时冻结默认数值。"""
+    """Preserve fixture overrides of the default constant instead of freezing it at function definition."""
     guard = load_guard()
     ledger = guard.new_ledger()
     state_path = tmp_path / "guard.state.json"
@@ -191,7 +191,7 @@ def test_omitted_episode_limit_reads_dynamic_default(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("value", ["0", "-1", "4", "true", "2.5"])
 def test_main_invalid_episode_limit_does_not_create_files(tmp_path, value):
-    """命令行非法参数在读取价格或写盘之前失败。"""
+    """Invalid CLI arguments fail before reading prices or writing files."""
     guard = load_guard()
     root = tmp_path / "absent"
     argv = ["--root", str(root), "--prices", str(root / "prices.json"), "--ledger", str(root / "ledger.json"),
@@ -207,7 +207,7 @@ def test_main_invalid_episode_limit_does_not_create_files(tmp_path, value):
 
 @pytest.mark.parametrize("limit", [None, 3])
 def test_main_once_serializes_default_or_explicit_episode_limit(tmp_path, limit):
-    """单轮主入口真实执行，状态保留默认两局或显式三局。"""
+    """The real single-round entry preserves the default two or explicit three in its state."""
     guard = load_guard()
     price_path = tmp_path / "prices.json"
     price_path.write_text(json.dumps(PRICES))
@@ -222,7 +222,7 @@ def test_main_once_serializes_default_or_explicit_episode_limit(tmp_path, limit)
 
 
 def test_main_shutdown_final_state_preserves_explicit_three(tmp_path, monkeypatch):
-    """模拟首轮后收到停止信号，实际退出写盘仍保存显式三局。"""
+    """A simulated stop after the first round persists the explicit three on normal exit."""
     guard = load_guard()
     price_path = tmp_path / "prices.json"
     price_path.write_text(json.dumps(PRICES))
@@ -247,7 +247,7 @@ def test_main_shutdown_final_state_preserves_explicit_three(tmp_path, monkeypatc
 
 
 def test_guard_process_restart_keeps_same_cumulative_ledger(tmp_path):
-    """两个独立守卫进程复用同一账本，局身份、预约和累计费用均不清零。"""
+    """Two independent guard processes reuse one ledger without clearing episodes, reservations or costs."""
     guard = load_guard()
     price_path = tmp_path / "prices.json"
     price_path.write_text(json.dumps(PRICES))
