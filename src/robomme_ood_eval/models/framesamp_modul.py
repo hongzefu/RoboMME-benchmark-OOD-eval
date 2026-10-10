@@ -51,6 +51,15 @@ INFRA_MARKERS = ("RecorderError", "svulkan2", "EXCLUSIVE", "Vulkan", "vk::", "ou
                  "CUDA_ERROR", "ConnectionClosed", "ConnectionRefused", "InvalidStatus", "Connection reset")
 
 
+class ProtocolError(RuntimeError):
+    """A synchronous server reply did not acknowledge the requested operation."""
+
+    def __init__(self, flag: str, response: Any):
+        details = (f"keys={sorted(response.keys())}" if isinstance(response, dict)
+                   else f"reply_type={type(response).__name__}; expected dict")
+        super().__init__(f"Server reply requires {flag}=True; {details}")
+
+
 def sha(arr: Any) -> str:
     """sha256 of array bytes (C-contiguous); bytes/str are taken directly."""
     if isinstance(arr, (bytes, bytearray, memoryview)):
@@ -170,8 +179,8 @@ def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progre
     ``reset_fn`` is called after ``client.reset()`` (same order as the old official "connect to the server and reset
     the policy, then reset the environment") and returns ``pre_traj``."""
     resp = client.reset()
-    while not resp.get("reset_finished", False):
-        time.sleep(0.1)
+    if not isinstance(resp, dict) or resp.get("reset_finished") is not True:
+        raise ProtocolError("reset_finished", resp)
 
     epstate = EpisodeState()
     pre_traj = reset_fn()
@@ -192,8 +201,8 @@ def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progre
                 epstate.state_buffer,
                 epstate.exec_start_idx,
             ))
-            while not resp.get("add_buffer_finished", False):
-                time.sleep(0.1)
+            if not isinstance(resp, dict) or resp.get("add_buffer_finished") is not True:
+                raise ProtocolError("add_buffer_finished", resp)
             element = {
                 "observation/image": img,
                 "observation/wrist_image": wrist_img,
@@ -248,6 +257,7 @@ def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tup
     progress = _Progress()
     runner = EnvRunnerShim(step_fn)
     error = None
+    error_exc = None
     client = None
     try:
         client = client_factory()
@@ -256,6 +266,7 @@ def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tup
     except Exception as e:  # noqa: BLE001 episode-level catch-all, same as the old official code
         print(f"Error evaluating episode: {e}")
         success_flag, error = "error", f"{type(e).__name__}: {e}"
+        error_exc = e
     finally:
         if client is not None:
             try:
@@ -265,7 +276,8 @@ def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tup
     status = success_flag if success_flag in NORMAL else "error"
     if status == "error" and error is None:
         error = f"success_flag={success_flag}"
-    infra = classify_infra(error, runner) if status == "error" else None
+    infra = ("server_protocol" if isinstance(error_exc, ProtocolError) else classify_infra(error, runner)) \
+        if status == "error" else None
     env_exc = runner.last_exception
     return {"status": status, "task_success": status == "success", "steps": progress.last_steps, "error": error,
             "decisions": progress.decisions, "infra": infra is not None, "infra_reason": infra,
@@ -797,11 +809,11 @@ def warmup_server(host: str, port: int, *, frames: int = WARMUP_FRAMES, hw: tupl
         imgs = [np.full((h, w, 3), (37 * i) % 256, np.uint8) for i in range(n)]
         states = [np.zeros(8, np.float32) for _ in range(n)]
         resp = client.reset()
-        while not resp.get("reset_finished", False):
-            time.sleep(0.1)
+        if not isinstance(resp, dict) or resp.get("reset_finished") is not True:
+            raise ProtocolError("reset_finished", resp)
         resp = client.add_buffer(pack_buffer(imgs, states, n - 1))
-        while not resp.get("add_buffer_finished", False):
-            time.sleep(0.1)
+        if not isinstance(resp, dict) or resp.get("add_buffer_finished") is not True:
+            raise ProtocolError("add_buffer_finished", resp)
         element = {"observation/image": imgs[-1], "observation/wrist_image": imgs[-1],
                    "observation/state": states[-1], "prompt": prompt}
         if subgoal is not None:  # same as the official get_action_chunk: both subgoal keys get the same value
