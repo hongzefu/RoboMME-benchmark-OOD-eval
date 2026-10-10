@@ -1,0 +1,157 @@
+JobId=63664373 JobName=ood-five-raw-seed7-20261010-02-cpu
+   UserId=hongzefu(114466650) GroupId=hongzefu(114466650) MCS_label=N/A
+   Priority=636 Nice=0 Account=chaijy2 QOS=normal WCKey=*
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:04:19 TimeLimit=5-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-10T17:52:29 EligibleTime=2026-10-10T17:52:29
+   AccrueTime=2026-10-10T17:52:30
+   StartTime=2026-10-10T17:52:59 EndTime=2026-10-15T17:52:59 Deadline=N/A
+   PreemptEligibleTime=2026-10-10T17:52:59 PreemptTime=None
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-10T17:52:59 Scheduler=Backfill
+   Partition=standard AllocNode:Sid=gl-login3:413998
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=gl3010
+   BatchHost=gl3010
+   NumNodes=1 NumCPUs=1 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=4G,node=1,billing=2504
+   AllocTRES=cpu=1,mem=4G,node=1,billing=2504
+   Socks/Node=* NtasksPerN:B:S:C=1:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=4G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   Reservation=spgpu_foe_nodes
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=(null)
+   SubmitLine=sbatch --parsable --job-name=ood-five-raw-seed7-20261010-02-cpu --account=chaijy2 --partition=standard --nodes=1 --ntasks-per-node=1 --cpus-per-task=1 --mem=4G --time=120:00:00 --no-requeue --mail-user=hongzefu@umich.edu --mail-type=BEGIN,FAIL,END,TIME_LIMIT --output=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/cpu-%j.out --wrap=BENCH_PY=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python bash /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/bootstrap/raw_ood_cpu_bootstrap.sh /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02 ood-five-raw-seed7-20261010-02 $SLURM_JOB_ID 1791755700
+   WorkDir=/home/hongzefu
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/cpu-63664373.out
+   TresPerTask=cpu=1
+   MailUser=hongzefu@umich.edu MailType=BEGIN,END,FAIL,TIME_LIMIT
+
+JobId=63664391 JobName=ood-five-raw-seed7-20261010-02-s1
+   UserId=hongzefu(114466650) GroupId=hongzefu(114466650) MCS_label=N/A
+   Priority=636 Nice=0 Account=chaijy2 QOS=normal WCKey=*
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:04:19 TimeLimit=5-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-10T17:52:58 EligibleTime=2026-10-10T17:52:58
+   AccrueTime=2026-10-10T17:52:59
+   StartTime=2026-10-10T17:52:59 EndTime=2026-10-15T17:52:59 Deadline=N/A
+   PreemptEligibleTime=2026-10-10T17:52:59 PreemptTime=None
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-10T17:52:59 Scheduler=Backfill
+   Partition=spgpu AllocNode:Sid=gl-login3:415023
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=gl1505
+   BatchHost=gl1505
+   NumNodes=1 NumCPUs=1 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   AllocTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   Socks/Node=* NtasksPerN:B:S:C=1:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=24G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   Reservation=spgpu_foe_nodes
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=(null)
+   SubmitLine=sbatch --parsable --job-name=ood-five-raw-seed7-20261010-02-s1 --account=chaijy2 --partition=spgpu --nodes=1 --ntasks-per-node=1 --gres=gpu:1 --gpu_cmode=shared --cpus-per-task=1 --mem=24G --time=120:00:00 --no-requeue --output=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-%j.out --wrap=sleep infinity
+   WorkDir=/home/hongzefu
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-63664391.out
+   TresPerNode=gres/gpu:1
+   TresPerTask=cpu=1
+
+JobId=63664392 JobName=ood-five-raw-seed7-20261010-02-s2
+   UserId=hongzefu(114466650) GroupId=hongzefu(114466650) MCS_label=N/A
+   Priority=636 Nice=0 Account=chaijy2 QOS=normal WCKey=*
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:04:19 TimeLimit=5-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-10T17:52:59 EligibleTime=2026-10-10T17:52:59
+   AccrueTime=2026-10-10T17:52:59
+   StartTime=2026-10-10T17:52:59 EndTime=2026-10-15T17:52:59 Deadline=N/A
+   PreemptEligibleTime=2026-10-10T17:52:59 PreemptTime=None
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-10T17:52:59 Scheduler=Backfill
+   Partition=spgpu AllocNode:Sid=gl-login3:415030
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=gl1505
+   BatchHost=gl1505
+   NumNodes=1 NumCPUs=1 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   AllocTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   Socks/Node=* NtasksPerN:B:S:C=1:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=24G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   Reservation=spgpu_foe_nodes
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=(null)
+   SubmitLine=sbatch --parsable --job-name=ood-five-raw-seed7-20261010-02-s2 --account=chaijy2 --partition=spgpu --nodes=1 --ntasks-per-node=1 --gres=gpu:1 --gpu_cmode=shared --cpus-per-task=1 --mem=24G --time=120:00:00 --no-requeue --output=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-%j.out --wrap=sleep infinity
+   WorkDir=/home/hongzefu
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-63664392.out
+   TresPerNode=gres/gpu:1
+   TresPerTask=cpu=1
+
+JobId=63664393 JobName=ood-five-raw-seed7-20261010-02-s3
+   UserId=hongzefu(114466650) GroupId=hongzefu(114466650) MCS_label=N/A
+   Priority=636 Nice=0 Account=chaijy2 QOS=normal WCKey=*
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:04:19 TimeLimit=5-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-10T17:52:59 EligibleTime=2026-10-10T17:52:59
+   AccrueTime=2026-10-10T17:52:59
+   StartTime=2026-10-10T17:52:59 EndTime=2026-10-15T17:52:59 Deadline=N/A
+   PreemptEligibleTime=2026-10-10T17:52:59 PreemptTime=None
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-10T17:52:59 Scheduler=Backfill
+   Partition=spgpu AllocNode:Sid=gl-login3:415043
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=gl1505
+   BatchHost=gl1505
+   NumNodes=1 NumCPUs=1 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   AllocTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   Socks/Node=* NtasksPerN:B:S:C=1:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=24G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   Reservation=spgpu_foe_nodes
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=(null)
+   SubmitLine=sbatch --parsable --job-name=ood-five-raw-seed7-20261010-02-s3 --account=chaijy2 --partition=spgpu --nodes=1 --ntasks-per-node=1 --gres=gpu:1 --gpu_cmode=shared --cpus-per-task=1 --mem=24G --time=120:00:00 --no-requeue --output=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-%j.out --wrap=sleep infinity
+   WorkDir=/home/hongzefu
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-63664393.out
+   TresPerNode=gres/gpu:1
+   TresPerTask=cpu=1
+
+JobId=63664404 JobName=ood-five-raw-seed7-20261010-02-s4
+   UserId=hongzefu(114466650) GroupId=hongzefu(114466650) MCS_label=N/A
+   Priority=636 Nice=0 Account=chaijy2 QOS=normal WCKey=*
+   JobState=PENDING Reason=Priority Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:00:00 TimeLimit=5-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-10T17:53:00 EligibleTime=2026-10-10T17:53:00
+   AccrueTime=2026-10-10T17:53:01
+   StartTime=Unknown EndTime=Unknown Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-10T17:57:18 Scheduler=Main
+   Partition=spgpu AllocNode:Sid=gl-login3:415053
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=
+   NumNodes=1-1 NumCPUs=1 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=24G,node=1,billing=18078,gres/gpu=1
+   AllocTRES=(null)
+   Socks/Node=* NtasksPerN:B:S:C=1:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=24G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=(null)
+   SubmitLine=sbatch --parsable --job-name=ood-five-raw-seed7-20261010-02-s4 --account=chaijy2 --partition=spgpu --nodes=1 --ntasks-per-node=1 --gres=gpu:1 --gpu_cmode=shared --cpus-per-task=1 --mem=24G --time=120:00:00 --no-requeue --output=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-%j.out --wrap=sleep infinity
+   WorkDir=/home/hongzefu
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/hold-63664404.out
+   TresPerNode=gres/gpu:1
+   TresPerTask=cpu=1
+

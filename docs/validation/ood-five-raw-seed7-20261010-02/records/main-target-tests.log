@@ -1,0 +1,39 @@
+........................................................................ [ 61%]
+..............................................                           [100%]
+=============================== warnings summary ===============================
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+    import pynvml  # type: ignore[import]
+
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/sapien/__init__.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+tests/pipeline/eval/test_seat_runner_e2e.py: 16 warnings
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/mani_skill/utils/registration.py:225: DeprecationWarning: The 'warn' method is deprecated, use 'warning' instead
+    logger.warn(f"Override registered env {uid}")
+
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard1/specs.jsonl: hard_fingerprint does not match current source (warning only, not rejected)
+    warnings.warn(f"{path}: {key} does not match current source (warning only, not rejected)")
+
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard2/specs.jsonl: hard_fingerprint does not match current source (warning only, not rejected)
+    warnings.warn(f"{path}: {key} does not match current source (warning only, not rejected)")
+
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard3/specs.jsonl: hard_fingerprint does not match current source (warning only, not rejected)
+    warnings.warn(f"{path}: {key} does not match current source (warning only, not rejected)")
+
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard4/specs.jsonl: hard_fingerprint does not match current source (warning only, not rejected)
+    warnings.warn(f"{path}: {key} does not match current source (warning only, not rejected)")
+
+tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard5/specs.jsonl: hard_fingerprint does not match current source (warning only, not rejected)
+    warnings.warn(f"{path}: {key} does not match current source (warning only, not rejected)")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0
+118 passed, 2 deselected, 23 warnings in 35.12s
+EXIT_CODE=0

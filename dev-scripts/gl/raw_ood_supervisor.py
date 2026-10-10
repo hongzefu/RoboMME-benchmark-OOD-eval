@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from email.message import EmailMessage
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,66 @@ import threading
 import time
 
 from raw_ood_controller import atomic, load_config, query_gpu, read, sha, validate_config
+MAIL_TO='hongzefu@umich.edu'
+MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
+
+
+def notification_config(c: dict) -> dict:
+    cfg=c.get('notification',{'enabled':False})
+    if not isinstance(cfg,dict) or not isinstance(cfg.get('enabled',False),bool): raise ValueError('notification配置错误')
+    if not cfg.get('enabled',False): return dict(enabled=False)
+    if cfg['to']!=MAIL_TO or cfg['command'] not in MAIL_COMMANDS or cfg['timeout']!=30: raise ValueError('通知收件人/命令/30秒上限不符')
+    return cfg
+
+
+def notify(c: dict, event: str, body: dict) -> dict:
+    """只提交一次，不重试；submitted只说明本机MTA接纳，不代表邮箱收到。"""
+    if event not in ('probe','failure','completed'): raise ValueError('未知通知事件')
+    control=Path(c['root'])/'control'; target=control/f'notification-{event}.json'
+    base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+    if target.exists():
+        old=read(target)
+        if any(str(old[k])!=str(v) for k,v in base.items()) or old['event']!=event: raise ValueError('已有通知回执身份冲突')
+        return old
+    cfg=notification_config(c)
+    subject=f"RoboMME {c['run']} {event} CPU {c['controller_job_id']} {c['config_sha256'][:12]}"
+    record=dict(base,event=event,to=MAIL_TO,subject=subject,time=time.time(),state='disabled',rc=None,stderr='',stdout='',
+                delivery_verified=False,notification_established=False)
+    if cfg['enabled']:
+        message=EmailMessage(); message['To']=MAIL_TO; message['Subject']=subject
+        message.set_content(json.dumps(body,ensure_ascii=False,sort_keys=True,indent=2))
+        command=cfg['command']; args=[command,'-i','-t'] if Path(command).name=='sendmail' else [command,'-s',subject,MAIL_TO]
+        payload=message.as_bytes() if Path(command).name=='sendmail' else message.get_content().encode()
+        record.update(state='submitting',command=args,timeout=cfg['timeout'])
+        # 提交前持久化，崩溃后不会重复发信，也不会把未知提交结果当成功。
+        atomic(target,record)
+        try:
+            p=subprocess.run(args,input=payload,capture_output=True,timeout=cfg['timeout'])
+            record.update(state='submitted' if p.returncode==0 else 'failed',rc=p.returncode,
+                          stdout=p.stdout.decode(errors='replace') if isinstance(p.stdout,bytes) else p.stdout,
+                          stderr=p.stderr.decode(errors='replace') if isinstance(p.stderr,bytes) else p.stderr)
+        except (OSError,subprocess.TimeoutExpired) as e:
+            record.update(state='failed',error_kind=type(e).__name__,stderr=str(e))
+    atomic(target,record)
+    print(f"NOTIFICATION state={record['state']} event={event} rc={record['rc']} delivery_verified=0",flush=True)
+    return record
+
+
+def require_probe(c: dict) -> None:
+    if not notification_config(c)['enabled']: return
+    report=read(Path(c['root'])/'control'/'notification-probe.json')
+    for key in ('run','run_name','exec_commit','config_sha256','controller_job_id'):
+        if str(report[key])!=str(c[key]): raise ValueError('通知预检身份不符')
+    if report['event']!='probe' or report['state']!='submitted' or report['rc']!=0 or report['to']!=MAIL_TO or not report['subject']:
+        raise ValueError('邮件预检未提交成功')
+    if not 0<float(report['time'])<=time.time()+30: raise ValueError('邮件预检时间错误')
+
+
+def notification_probe(config_path: Path) -> int:
+    c=load_config(config_path); validate_config(c)
+    if str(os.environ.get('SLURM_JOB_ID',''))!=str(c['controller_job_id']): raise ValueError('邮件预检必须在登记CPU作业')
+    report=notify(c,'probe',dict(purpose='邮件投递链路预检',run=c['run'],controller_job_id=c['controller_job_id']))
+    return 0 if report['state']=='submitted' else 1
 
 
 def start_guardians(c: dict, guardians: list[dict] | None=None) -> list[dict]:
@@ -93,12 +154,15 @@ def fail(config: dict, error: BaseException, *, process=None) -> int:
                  cpu_hold=True,notification_established=False)
     atomic(control/'supervisor-failure.json',outcome)
     atomic(control/'intentional-supervisor-stop.json',dict(outcome,reason='exception_stop_only_supervisor'))
+    try: outcome['notification']=notify(config,'failure',outcome)
+    except BaseException as e: outcome['notification']=dict(state='failed',error_kind=type(e).__name__,stderr=str(e),delivery_verified=False)
+    atomic(control/'supervisor-failure.json',outcome)
     print('RAW_SUPERVISOR=FAIL cpu_hold=1 gpu_cancel=0 controller_kill=0 notification_established=0 error='+str(error),flush=True)
     return 1
 
 
 def run(config_path: Path) -> int:
-    c=load_config(config_path); validate_config(c)
+    c=load_config(config_path)
     control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     if str(os.environ.get('SLURM_JOB_ID',''))!=str(c['controller_job_id']): raise ValueError('监督器不在登记CPU作业')
@@ -110,6 +174,8 @@ def run(config_path: Path) -> int:
         raise RuntimeError('CPU监督收到终止信号')
     signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term); signal.signal(signal.SIGUSR1,term)
     try:
+        validate_config(c)
+        require_probe(c)
         ready=read(control/'launch.ready'); jobs=read(control/'jobs.json')
         for k,v in base.items():
             if k=='run_name' and k not in ready: continue
@@ -174,6 +240,8 @@ def run(config_path: Path) -> int:
                           supervisor_exit_code=0,cpu_hold=True,notification_established=False,time=now))
                     atomic(control/'intentional-supervisor-stop.json',dict(base,reason='supervisor_completed',supervisor_exit_code=0,
                           cpu_hold=True,gpu_action='already_completed_release',controller_action='none',notification_established=False,time=now))
+                    report=read(control/'final-report.json'); report['notification']=notify(c,'completed',report)
+                    atomic(control/'final-report.json',report)
                     print('RAW_DELIVERY=PASS episodes=4000 videos=8000 hash_mismatch=0 decode_fail=0 missing=0 nfs_large_left=0',flush=True)
                     print('RUN_CLEANUP=PASS gpu_jobs=4 active_gpu=0 supervisor_exit_code=0 cpu_hold=1 notification_established=0',flush=True)
                     print('RAW_SUPERVISOR=PASS expected=4000 moved=4000 infra=0',flush=True); return 0
@@ -244,7 +312,9 @@ def main():
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='command',required=True)
     p=sub.add_parser('run'); p.add_argument('--config',type=Path,required=True)
     p=sub.add_parser('self-test'); p.add_argument('--root',type=Path,required=True)
+    p=sub.add_parser('notification-probe'); p.add_argument('--config',type=Path,required=True)
     args=ap.parse_args()
+    if args.command=='notification-probe': return notification_probe(args.config)
     return run(args.config) if args.command=='run' else self_test(args.root)
 
 if __name__=='__main__': raise SystemExit(main())
