@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from select_stage_identities import read_rows
 
 ROOT = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010')
+REPORT_CODE = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-code-r3/dev-scripts/gl/stage_report.py')
 MODELS = {'perceptual-framesamp-modul': 'perceptual-framesamp-modul', 'smvla': 'smvla',
           'pp': 'pp', 'oracle': 'groundsg-ground-sg-oracle',
           'qwen': 'groundsg-ground-sg-qwenvl', 'memer': 'groundsg-ground-sg-memer'}
@@ -34,8 +35,10 @@ class Controller:
     def __init__(self, config, command=run):
         self.c, self.command = config, command
         self.root = Path(config['controller_root'])
-        if self.root != ROOT / 'controller' or Path(config['carrier']) != ROOT / 'run-model-r2.sh':
+        if self.root != ROOT / 'controller' or Path(config['carrier']) != ROOT / 'run-model-r3.sh':
             raise ValueError('控制器或载体不属于本轮固定路径')
+        if Path(config['report_code']) != REPORT_CODE:
+            raise ValueError('报告入口不属于冻结的 r3 副本')
         if config['models'] != MODELS or set(config['priority']) != set(MODELS) or len(config['priority']) != 6:
             raise ValueError('模型必须为已批准六项且优先队列无重复')
         if set(config['stages']) != set('ABCD'):
@@ -122,13 +125,35 @@ class Controller:
         if not starts or starts[-1]['attempt_no'] != attempt:
             raise ValueError('环境故障不是该身份最后一次尝试')
         start = starts[-1]
+        ident = next((r for r in read_rows(spec['identities']) if r['key'] == key), None)
+        if ident is None:
+            raise ValueError('环境故障身份不属于阶段白名单')
+        stored = Path(start['result_path'])
+        if 'rollouts' not in stored.parts:
+            raise ValueError('环境故障结果路径缺少 rollouts')
+        result_path = Path(spec['out']) / Path(*stored.parts[stored.parts.index('rollouts'):])
+        if not result_path.resolve().is_relative_to(Path(spec['out']).resolve()):
+            raise ValueError('环境故障结果路径越界')
+        result = read(result_path)
+        for field in ('dataset', 'task', 'episode', 'tier', 'seed', 'candidate',
+                      'source_episode', 'spec_sha256', 'key'):
+            if result[field] != ident[field] or type(result[field]) is not type(ident[field]):
+                raise ValueError('环境故障结果身份不符：' + field)
+        if (type(result['attempt']) is not int or result['attempt'] != attempt
+                or result['policy_seed'] != spec['seed'] or result['policy_label'] != label
+                or result['model'] != 'smvla' or result['infra'] is not True
+                or result['infra_reason'] != 'env_build' or result['budget_exhausted'] is not False
+                or result['status'] not in ('fail', 'error') or type(result['task_success']) is not int
+                or result['task_success'] != 0):
+            raise ValueError('环境故障原结果或尝试不符')
         ends = [r for r in records if r.get('kind') == 'attempt_end' and r.get('attempt_id') == start['attempt_id']]
         if not ends or not (ends[-1]['infra'] is True and ends[-1]['infra_reason'] == 'env_build'
-                            and ends[-1]['status'] == 'error' and ends[-1]['budget_exhausted'] is False):
+                            and ends[-1]['status'] == 'error' and ends[-1]['attempt_no'] == attempt
+                            and ends[-1]['key'] == key and ends[-1]['budget_exhausted'] is False):
             raise ValueError('环境故障本地账本未结算')
         budget = [json.loads(x) for x in Path(spec['budget']).read_text().splitlines() if x.strip()]
         commits = [r for r in budget if r.get('kind') == 'commit' and r.get('rid') == start['budget_rid']]
-        if not commits or not (commits[-1]['infra'] is True and commits[-1]['status'] == 'error'):
+        if not commits or not (commits[-1]['infra'] is True and commits[-1]['status'] == result['status']):
             raise ValueError('环境故障共享预算未结算')
 
     def save(self):
@@ -332,11 +357,9 @@ class Controller:
                         raise ValueError('SMVLA 环境失败缺少独立身份')
                     self.env_build_settled(seat, log)
                     seat['resume_key'] = seat['onlykey']
-                    key = seat['onlykey']
-                    count = seat.setdefault('recoveries', {}).get(key, 0) + 1
-                    seat['recoveries'][key] = count
-                    if count >= 20:
-                        raise ValueError('SMVLA 恢复达到上限')
+                    scope = f"{seat['model']}|{self.c['stages'][seat['stage']]['seed']}|{seat['onlykey']}"
+                    # 仅诊断计数；是否可恢复由真实 attempt_no < 20 决定，不新增预算。
+                    seat.setdefault('recoveries', {})[scope] = seat.get('recoveries', {}).get(scope, 0) + 1
                 elif code != 0:
                     raise ValueError(f'席位失败退出码 {code}，交主会话恢复')
                 seat.pop('session')

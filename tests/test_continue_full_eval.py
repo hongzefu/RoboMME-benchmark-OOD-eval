@@ -1,6 +1,8 @@
 """接续控制器以伪命令验证序列化及失败封闭，不启动仿真。"""
 import importlib.util
 import json
+import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +15,7 @@ spec.loader.exec_module(module)
 
 def fixture(tmp_path, command=None):
     module.ROOT = tmp_path
+    module.REPORT_CODE = tmp_path / 'runtime-code-r3/dev-scripts/gl/stage_report.py'
     identities = tmp_path / 'identities/stage-A.jsonl'
     identities.parent.mkdir()
     identity = {'key': 'Task_xhard1_1', 'dataset': 'ood', 'task': 'Task',
@@ -28,8 +31,51 @@ def fixture(tmp_path, command=None):
                        'budget': str(tmp_path / f'budget/stage-{s}.jsonl'), 'caps': module.CAPS[s]}
                     for s in 'ABCD'},
          'seats': [{'job': str(i), 'slot': i} for i in range(4)]}
-    c['carrier'] = str(tmp_path / 'run-model-r2.sh')
+    c['carrier'] = str(tmp_path / 'run-model-r3.sh')
+    c['report_code'] = str(module.REPORT_CODE)
     return module.Controller(c, command or (lambda *a, **k: SimpleNamespace(stdout='RUNNING', returncode=0)))
+
+
+def production_env_settlement(controller, *, stage='A', attempt=2, seat_name='a'):
+    """使用生产 _end、AttemptLedger 与 BudgetLedger 生成真实落盘契约，不创建环境。"""
+    alias = 'controller_test_production_seat'
+    if alias not in sys.modules:
+        seat_spec = importlib.util.spec_from_file_location(alias, Path(__file__).parents[1] / 'dev-scripts/gl/seat.py')
+        seat_module = importlib.util.module_from_spec(seat_spec)
+        sys.modules[alias] = seat_module
+        seat_spec.loader.exec_module(seat_module)
+    seat_module = sys.modules[alias]
+    stage_spec = controller.c['stages'][stage]
+    identity = json.loads(Path(stage_spec['identities']).read_text())
+    seed = stage_spec['seed']
+    raw = Path(stage_spec['out']) / 'rollouts/smvla/raw/result.json'
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    result = {**identity, 'attempt': attempt, 'policy_seed': seed, 'policy_label': 'smvla',
+              'model': 'smvla', 'status': 'fail', 'task_success': 0, 'infra': True,
+              'infra_reason': 'env_build', 'budget_exhausted': False, 'run_blocked': False}
+    raw.write_text(json.dumps(result))
+    caps = module.CAPS[stage]
+    shared = seat_module.load_sibling('budget_ledger').BudgetLedger(stage_spec['budget'],
+        trajectory_cap=caps[0], reset_cap=caps[1], shared_infra_cap=caps[2],
+        expired_cap=caps[3], planned_first_tries=caps[4])
+    route = f'smvla/seed{seed}/new'
+    token = f'{route}|{identity["key"]}|a{attempt}'
+    rid = shared.reserve(resets=2, route=route, key=identity['key'], token=token,
+                         dataset='ood', attempt_no=attempt)
+    ledger_path = Path(stage_spec['out']) / f'seats/smvla/seed{seed}/{seat_name}/smvla.ledger.jsonl'
+    ledger = seat_module.AttemptLedger(ledger_path, seat=seat_name, policy='smvla', shared=shared, route=route)
+    aid = f'aid-{stage}-{attempt}'
+    ledger.attempt_start(key=identity['key'], attempt_id=aid, attempt_no=attempt,
+                         retry=True, result_path=str(raw), budget_rid=rid)
+    runner = seat_module.SeatRunner.__new__(seat_module.SeatRunner)
+    runner.ledger, runner._lock = ledger, threading.Lock()
+    runner.args, runner.seat = SimpleNamespace(policy='smvla'), seat_name
+    runner.results_path = raw.parent / 'results.jsonl'
+    runner.queue = SimpleNamespace(end_claim=lambda *a, **k: None)
+    claim = seat_module.Claim(identity, attempt, raw.parent / 'claim.json', token, rid, True)
+    runner._end(claim, aid, {**result, 'result': str(raw)}, void=False)
+    # _end 真正追加并序列化共享 commit 与本地 error；以下控制器再读文件。
+    return raw, ledger_path, Path(stage_spec['budget'])
 
 
 def accept(controller, stage='A', status='fail', model='smvla'):
@@ -163,21 +209,14 @@ def test_environment_guard_finite_recovery(tmp_path):
     log.write_text('RUN_BLOCKED reason=env_build policy=smvla seat=a key=Task_xhard1_1 attempt=2 settled=1\nEXIT_CODE=3\n')
     seat = c.state['seats'][0]
     seat.update(session='fe-controller-A-smvla-0-1', model='smvla', log=str(log), stage='A',
-                seat_name='a', onlykey='Task_xhard1_1', recoveries={'Task_xhard1_1': 18})
-    ledger = tmp_path / 'seed7/seats/smvla/seed7/a/smvla.ledger.jsonl'
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text('\n'.join(json.dumps(r) for r in [
-        {'kind': 'attempt_start', 'key': 'Task_xhard1_1', 'attempt_no': 2, 'attempt_id': 'aid', 'budget_rid': 'rid'},
-        {'kind': 'attempt_end', 'attempt_id': 'aid', 'infra': True, 'infra_reason': 'env_build',
-         'status': 'error', 'budget_exhausted': False}]))
-    budget = tmp_path / 'budget/stage-A.jsonl'
-    budget.parent.mkdir()
-    budget.write_text(json.dumps({'kind': 'commit', 'rid': 'rid', 'infra': True, 'status': 'error'}))
+                seat_name='a', onlykey='Task_xhard1_1', recoveries={'smvla|7|Task_xhard1_1': 18})
+    production_env_settlement(c)
     c.tick()
-    assert seat['recoveries']['Task_xhard1_1'] == 19
+    assert seat['recoveries']['smvla|7|Task_xhard1_1'] == 19
     assert seat['onlykey'] == 'Task_xhard1_1'
     seat['seat_name'] = 'a'
-    Path(seat['log']).write_text(log.read_text())
+    production_env_settlement(c, attempt=20)
+    Path(seat['log']).write_text(log.read_text().replace('attempt=2 ', 'attempt=20 '))
     with pytest.raises(ValueError, match='上限'):
         c.tick()
 
@@ -287,15 +326,9 @@ def test_environment_guard_missing_shared_commit_rejected(tmp_path):
     c = fixture(tmp_path)
     seat = c.state['seats'][0]
     seat.update(stage='A', model='smvla', onlykey='Task_xhard1_1', seat_name='a')
-    ledger = tmp_path / 'seed7/seats/smvla/seed7/a/smvla.ledger.jsonl'
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text('\n'.join(json.dumps(r) for r in [
-        {'kind': 'attempt_start', 'key': 'Task_xhard1_1', 'attempt_no': 2, 'attempt_id': 'aid', 'budget_rid': 'rid'},
-        {'kind': 'attempt_end', 'attempt_id': 'aid', 'infra': True, 'infra_reason': 'env_build',
-         'status': 'error', 'budget_exhausted': False}]))
-    budget = tmp_path / 'budget/stage-A.jsonl'
-    budget.parent.mkdir()
-    budget.write_text('')
+    _, _, budget = production_env_settlement(c)
+    rows = [json.loads(line) for line in budget.read_text().splitlines()]
+    budget.write_text('\n'.join(json.dumps(r) for r in rows if r['kind'] != 'commit'))
     with pytest.raises(ValueError, match='共享预算'):
         c.env_build_settled(seat, 'RUN_BLOCKED reason=env_build policy=smvla seat=a key=Task_xhard1_1 attempt=2 settled=1')
 
@@ -386,3 +419,61 @@ def test_other_squeue_failure_stops_without_submission(tmp_path):
     c = fixture(tmp_path, command)
     with pytest.raises(ValueError, match='查询失败'):
         c.replace_expired(c.state['seats'][0])
+
+
+def test_production_env_status_fail_shared_and_error_local_roundtrip(tmp_path):
+    c = fixture(tmp_path)
+    raw, ledger, budget = production_env_settlement(c)
+    result = module.read(raw)
+    local = [json.loads(x) for x in ledger.read_text().splitlines()]
+    shared = [json.loads(x) for x in budget.read_text().splitlines()]
+    assert result['status'] == 'fail'
+    assert local[-1]['kind'] == 'attempt_end' and local[-1]['status'] == 'error'
+    assert shared[-1]['kind'] == 'commit' and shared[-1]['status'] == 'fail'
+    seat = c.state['seats'][0]
+    seat.update(stage='A', model='smvla', onlykey='Task_xhard1_1', seat_name='a')
+    c.env_build_settled(seat, 'RUN_BLOCKED reason=env_build policy=smvla seat=a key=Task_xhard1_1 attempt=2 settled=1')
+
+
+@pytest.mark.parametrize('field,value', [('status', 'error'), ('infra_reason', 'other'),
+                                        ('attempt', 3), ('policy_seed', 0)])
+def test_production_env_original_result_mismatch_rejected(tmp_path, field, value):
+    c = fixture(tmp_path)
+    raw, _, _ = production_env_settlement(c)
+    result = module.read(raw)
+    result[field] = value
+    raw.write_text(json.dumps(result))
+    seat = c.state['seats'][0]
+    seat.update(stage='A', model='smvla', onlykey='Task_xhard1_1', seat_name='a')
+    with pytest.raises(ValueError):
+        c.env_build_settled(seat, 'RUN_BLOCKED reason=env_build policy=smvla seat=a key=Task_xhard1_1 attempt=2 settled=1')
+
+
+def test_same_key_new_policy_seed_does_not_inherit_retry_limit(tmp_path):
+    c = fixture(tmp_path, lambda argv, **k: SimpleNamespace(stdout='RUNNING', returncode=1 if 'has-session' in argv else 0))
+    c.state['stage'] = 'C'
+    production_env_settlement(c, stage='C')
+    log = c.root / 'seed0-env.log'
+    log.write_text('RUN_BLOCKED reason=env_build policy=smvla seat=a key=Task_xhard1_1 attempt=2 settled=1\nEXIT_CODE=3\n')
+    seat = c.state['seats'][0]
+    seat.update(stage='C', model='smvla', onlykey='Task_xhard1_1', seat_name='a',
+                session='fe-controller-C-smvla-0-1', log=str(log),
+                recoveries={'smvla|7|Task_xhard1_1': 20})
+    c.tick()
+    assert seat['recoveries']['smvla|7|Task_xhard1_1'] == 20
+    assert seat['recoveries']['smvla|0|Task_xhard1_1'] == 1
+    assert seat['onlykey'] == 'Task_xhard1_1'
+
+
+def test_r2_carrier_is_rejected(tmp_path):
+    c = fixture(tmp_path)
+    c.c['carrier'] = str(tmp_path / 'run-model-r2.sh')
+    with pytest.raises(ValueError, match='固定路径'):
+        module.Controller(c.c)
+
+
+def test_report_entry_must_be_r3(tmp_path):
+    c = fixture(tmp_path)
+    c.c['report_code'] = '/runtime-code-r2/dev-scripts/gl/stage_report.py'
+    with pytest.raises(ValueError, match='报告入口'):
+        module.Controller(c.c)
