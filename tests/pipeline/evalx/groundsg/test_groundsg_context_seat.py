@@ -24,10 +24,10 @@ def clean_env(monkeypatch):
 
 
 class _HybridBuilder:
-    """真实 robomme_hard builder（hard-verify）只做身份解析；环境换成假环境（按解析出的 source_episode）。"""
+    """真实 robomme_ood builder（hard-verify）只做身份解析；环境换成假环境（按解析出的 source_episode）。"""
 
     def __init__(self, task, dataset, max_steps, world):
-        from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+        from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
         self.task, self.world = task, world
         self.real = BenchmarkEnvBuilder(env_id=task, dataset=dataset, action_space="joint_angle", max_steps=max_steps)

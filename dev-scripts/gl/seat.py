@@ -905,7 +905,7 @@ def git_info() -> dict:
 def package_info() -> dict:
     """评估包与子模块包的实际来源（editable 指向核对）。"""
     out = {"python": sys.version.split()[0], "executable": sys.executable}
-    for name in ("robomme_ood_eval", "robomme_hard", "robomme"):
+    for name in ("robomme_ood_eval", "robomme_ood", "robomme"):
         spec = importlib.util.find_spec(name)
         out[f"{name}_file"] = None if spec is None else spec.origin
     return out
@@ -1804,7 +1804,7 @@ def cmd_run(args) -> int:
     print(f"CLIENT_READY policy={args.policy} variant={policy_variant_of(args)} seat={runner.seat} "
           f"policy_seed={args.policy_seed} route={runner.route} identities={len(rows)} host={socket.gethostname()} "
           f"gpu={proc.get('gpu_name')} robomme_ood_eval={proc.get('robomme_ood_eval_file')} "
-          f"robomme_hard={proc.get('robomme_hard_file')} git={str(proc.get('git_commit'))[:12]} "
+          f"robomme_ood={proc.get('robomme_ood_file')} git={str(proc.get('git_commit'))[:12]} "
           f"dirty={proc.get('git_dirty')}", flush=True)
     write_json_atomic(runner.seat_dir / f"process-{os.getpid()}.json", proc)
     try:

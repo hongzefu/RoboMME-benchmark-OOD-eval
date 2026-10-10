@@ -12,7 +12,7 @@
 1. ``kwargs`` 里按需加入 ``sampling_config`` 与 ``episode_spec``；两者都为 ``None`` 时
    参数表与官方完全相同，因此 B 路仍可继续用官方 ``_worker``。
 2. 返回体多一个 ``inputs`` 字段，记录本局实际传入了哪两个显式输入的散列，供 G4 核验。
-3. 环境包由环境变量 ``ROBOMME_ENV_PACKAGE``（``robomme`` 缺省／``robomme_hard``）决定，所有 ``robomme…``
+3. 环境包由环境变量 ``ROBOMME_ENV_PACKAGE``（``robomme`` 缺省／``robomme_ood``）决定，所有 ``robomme…``
    导入都经 ``importlib`` 按包名取；返回体多 ``env_package``、``env_module``（``REGISTERED_ENVS[task].cls.__module__``）
    与 ``wrapper_modules``，供 ``ENV_PACKAGE_BINDING`` 核验各侧实际加载的包（0927 计划 §3.3）。
 """
@@ -42,7 +42,7 @@ def run_one(payload: tuple) -> dict[str, Any]:
     # V4：payload 可带第 4 项 disable_recovery（runner --no-recovery）；三元组时行为与改动前逐字相同
     job, sampling_config, episode_spec = payload[:3]
     disable_recovery = bool(payload[3]) if len(payload) > 3 else False
-    # xhard0（v7 方案第二部分 §1.5）：第 5 项 builder_route="hard-verify" 时 gym.make 实参取自 robomme_hard 构建器
+    # xhard0（v7 方案第二部分 §1.5）：第 5 项 builder_route="hard-verify" 时 gym.make 实参取自 robomme_ood 构建器
     # dataset="hard-verify" 的条目（按数据集名取局：该数据集只有 xhard0，局 0～11 对应官方原 episode 3,7,…,47）
     builder_route = payload[4] if len(payload) > 4 else None
     import generate_dataset as official  # 官方固定源码，父进程已把其目录放进 sys.path
@@ -64,7 +64,7 @@ def run_one(payload: tuple) -> dict[str, Any]:
         sys.path.insert(0, str(source_root))
         import gymnasium as gym
         import torch
-        if env_package not in ("robomme", "robomme_hard"):
+        if env_package not in ("robomme", "robomme_ood", "robomme_hard"):
             raise ValueError(f"ROBOMME_ENV_PACKAGE 非法：{env_package}")
         importlib.import_module(f"{env_package}.robomme_env")  # 注册环境
         wrappers = importlib.import_module(f"{env_package}.env_record_wrapper")
@@ -104,9 +104,9 @@ def run_one(payload: tuple) -> dict[str, Any]:
             # 用于建场景的值来自冻结规格；旧的 episode_spec 注入通道保持不变（红线 R9）。
             kwargs["native_episode_spec"] = episode_spec
         if builder_route is not None:
-            if builder_route != "hard-verify" or env_package != "robomme_hard":
-                raise ValueError(f"builder_route={builder_route!r} 只允许 hard-verify 且环境包为 robomme_hard")
-            builder_mod = importlib.import_module("robomme_hard.env_record_wrapper.hard_builder")
+            if builder_route != "hard-verify" or env_package != "robomme_ood":
+                raise ValueError(f"builder_route={builder_route!r} 只允许 hard-verify 且环境包为 robomme_ood")
+            builder_mod = importlib.import_module("robomme_ood.env_record_wrapper.hard_builder")
             builder = builder_mod.BenchmarkEnvBuilder(job.task, dataset=builder_route)
             identities = [builder.resolve_identity(ep) for ep in range(builder.get_episode_num())]
             hits = [ep for ep, ident in enumerate(identities)

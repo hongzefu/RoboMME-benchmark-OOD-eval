@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""评估身份清单导出：经子模块 ``robomme_hard`` 的 ``BenchmarkEnvBuilder(task, dataset)`` 逐局列出执行身份行（JSONL）。
+"""评估身份清单导出：经子模块 ``robomme_ood`` 的 ``BenchmarkEnvBuilder(task, dataset)`` 逐局列出执行身份行（JSONL）。
 
 拆仓（1008 拆分方案第二部分 §二 ``dev-scripts/gl/`` 行、runbook S5）后 benchmark 只认两个评估数据集：
 
@@ -63,13 +63,13 @@ _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def hard_specs():
-    from robomme_hard.env_record_wrapper import hard_specs as hs
+    from robomme_ood.env_record_wrapper import hard_specs as hs
 
     return hs
 
 
 def make_builder(task: str, dataset: str):
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     return BenchmarkEnvBuilder(task, dataset=dataset)
 

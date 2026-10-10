@@ -1,7 +1,7 @@
 """L0: benchmark submodule lock and "the eval repo does not copy benchmark code" (C18-SUBMODULE-LOCK).
 
 Before the repo split, ``test_upstream_bytes.py`` and ``test_copies_vs_upstream.py`` guarded the benchmark repo's
-``src/robomme`` (byte-identical to official ``1fadc0ec``) and the whitelisted copy in ``src/robomme_hard``; after the
+``src/robomme`` (byte-identical to official ``1fadc0ec``) and the whitelisted copy in ``src/robomme_ood``; after the
 split both live only in the benchmark repo and are guarded by that repo's own tests of the same name and its
 ``BENCH_UPSTREAM`` verdict line. The eval repo only needs to pin two things:
 
@@ -9,8 +9,8 @@ split both live only in the benchmark repo and are guarded by that repo's own te
    and the gitlink in the HEAD tree equals the lock value ``BENCH_LOCK`` recorded in this file (commit 1.16, "bump the
    benchmark submodule to the locked release v1.0-ood (a5efb99)"). Upgrading the submodule must update it here too;
    it must never drift silently. When the submodule is checked out, its HEAD must also equal the gitlink.
-2. The eval repo holds no copy of ``src/robomme`` or ``src/robomme_hard`` (neither tracked by git nor on disk);
-   ``robomme`` / ``robomme_hard`` may only resolve from the submodule's ``src/`` (located via ``find_spec`` only,
+2. The eval repo holds no copy of ``src/robomme`` or ``src/robomme_ood`` (neither tracked by git nor on disk);
+   ``robomme`` / ``robomme_ood`` may only resolve from the submodule's ``src/`` (located via ``find_spec`` only,
    without executing package code).
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from tests._support.loaders import REPO
 SUBMODULE = "third_party/robomme_benchmark"
 BENCH_URL = "https://github.com/hongzefu/RoboMME-benchmark-OOD.git"
 #: Locked commit of the benchmark submodule (written in commit 1.7; change together with the gitlink when upgrading)
-BENCH_LOCK = "a5efb992e769b7011281a1d31739b76d8868602a"
+BENCH_LOCK = "51e05feb05c61b9a5a25cef3ba189ad625f2cd83"
 
 
 def _git(*args: str, cwd: Path = REPO) -> str:
@@ -66,13 +66,13 @@ def test_checked_out_submodule_matches_gitlink():
 
 
 def test_no_benchmark_package_copies_in_eval_repo():
-    for pkg in ("src/robomme", "src/robomme_hard"):
+    for pkg in ("src/robomme", "src/robomme_ood"):
         assert _git("ls-files", "--", pkg).strip() == "", f"eval repo tracks {pkg}"
         assert not (REPO / pkg).exists(), f"eval repo has {pkg} on disk"
 
 
 def test_benchmark_packages_resolve_to_submodule_src():
-    for name in ("robomme", "robomme_hard"):
+    for name in ("robomme", "robomme_ood"):
         spec = importlib.util.find_spec(name)
         assert spec is not None and spec.origin, name
         origin = Path(spec.origin).resolve().as_posix()

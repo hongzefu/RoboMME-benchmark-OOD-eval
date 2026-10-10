@@ -3,7 +3,7 @@
 仓库自造名一律换成官方名：FrameSamp+Modulation 的策略标签 ``perceptual-framesamp-modul``（标识符 ``framesamp_modul``）、
 GroundSG 的 ``groundsg``、数据集接口 ``hard-verify``（原第二阶段接口）与 ``ood``（原第三阶段接口）。本测试扫描评估仓
 ``scripts/``、``src/robomme_ood_eval/``、``dev-scripts/``、``tests/`` 下 git 跟踪的活代码，旧名出现即失败（benchmark 包
-``robomme_hard`` 的官方名检查随 benchmark 仓走，本仓不扫子模块）。
+``robomme_ood`` 的官方名检查随 benchmark 仓走，本仓不扫子模块）。
 
 旧名的写法由本文件独立列出（不读被测代码），见 ``PATTERNS``；豁免（白名单）只有：
 
@@ -156,7 +156,7 @@ def test_scan_catches_legacy_spellings(line):
     "_ENV_MME_VLA_PY=1; preflight_mme_vla x",
     "class MMEVLAWebsocketClientPolicy: ...",
     "MME-VLA 家族",
-    "robomme_hard robomme RoboMME RoboMME-hard",
+    "robomme_ood robomme RoboMME RoboMME-hard",
     "class FakeMMEVLAWebsocketClient(MMEVLAWebsocketClientPolicy): ...",
     "XHARD0_IN_TEST_HARD = os.environ.get('ROBOMME_HARD_XHARD0_IN_TEST_HARD')",
     "policy = 'perceptual-framesamp-modul'; mod = 'framesamp_modul_client'; v = 'groundsg'",

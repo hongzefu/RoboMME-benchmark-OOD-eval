@@ -24,7 +24,8 @@
     "negative": "钩子异常不外抛但 observer_hook_errors 递增；对账 FAIL、检查器崩溃、缺报告、封口超时时成绩不变而 OBSERVER_COMPLETE=FAIL；原版提交不符或工作树脏 RUN_BLOCKED；--ledger 放在子命令后被真实 CLI 拒绝；额度不足 RUN_BLOCKED reason=budget；输出根落在历史目录被拒",
     "boundaries": "未在真实原版代码与真实 GPU 上运行（批次 3a 本机 smoke 核）；原侧 terminated/truncated 记 NOT_OBSERVED；SimpleMemVLA 块内非末步 status 记 NOT_OBSERVED",
     "nodeids": [
-      "tests/pipeline/evalx/orig_observer/test_orig_observer.py"
+      "tests/pipeline/evalx/orig_observer/test_orig_observer.py",
+    "tests/pipeline/evalx/orig_observer/test_orig_observer.py::test_preflight_rejects_both_ood_namespaces"
     ],
     "resource": "cpu；部分启动器用例标 slow",
     "mutants": [],

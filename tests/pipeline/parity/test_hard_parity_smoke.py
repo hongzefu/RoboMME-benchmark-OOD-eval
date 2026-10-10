@@ -71,7 +71,8 @@ class World:
         self.gen_calls: list = []
         self.mover_calls: list = []
 
-    def resolve(self, python, src, dataset, task, episodes):
+    def resolve(self, python, src, dataset, task, episodes, package="robomme_ood"):
+        assert package == ("robomme_hard" if "old" in str(src) else "robomme_ood")
         self.resolve_calls.append((str(python), str(src), dataset, task, list(episodes)))
         if dataset == "hard-verify":
             return [r for r in _hv_rows() if r["builder_episode"] in episodes]
@@ -85,7 +86,8 @@ class World:
         for r in rows:
             kind = self.outcome.get((side, r["seed"]), "ok")
             rel = f"episodes/{r['tier']}/{TASK}_episode_{r['seed']}/hdf5_files/x.h5"
-            module = "robomme.robomme_env." + TASK if official else "robomme_hard.robomme_env." + TASK
+            package = "robomme_hard" if side == "H_old" else "robomme_ood"
+            module = "robomme.robomme_env." + TASK if official else package + ".robomme_env." + TASK
             if kind == "badmod":
                 module = "robomme.robomme_env." + TASK
             line = {"task": TASK, "tier": "hard" if official else r["tier"], "seed": r["seed"],
@@ -114,6 +116,7 @@ class World:
         ids = [json.loads(t) for t in Path(command[command.index("--identities") + 1]).read_text().splitlines()]
         rows = [r for r in _ood_rows() if r["seed"] in {i["seed"] for i in ids}]
         src = command[command.index("--expect-src") + 1]
+        assert command[command.index("--pkg") + 1] == ("robomme_hard" if side == "H_old" else "robomme_ood")
         lines = self._write_side(Path(out), side, rows, official=False, src=src)
         return types.SimpleNamespace(returncode=0), lines, types.SimpleNamespace(errors=[])
 
@@ -250,7 +253,7 @@ def test_builder解析进程的robomme_hard不在指定源码树即拒(hp, tmp_p
     with pytest.raises(hp.ParityError, match="不在"):
         hp.resolve_builder_identities(sys.executable, src, "ood", TASK, [0, 1])
     cmd, kw = calls[0]
-    assert kw["env"]["PYTHONPATH"] == str(src) and cmd[-3:] == ["ood", TASK, "[0, 1]"]
+    assert kw["env"]["PYTHONPATH"] == str(src) and cmd[-4:] == ["ood", TASK, "[0, 1]", "robomme_ood"]
     payload["robomme_hard_file"] = str(src / "robomme_hard" / "__init__.py")
     payload["rows"] = [{"task": TASK, "tier": "xhard1", "seed": 1, "builder_episode": 0}]
     assert hp.resolve_builder_identities(sys.executable, src, "ood", TASK, [0]) == payload["rows"]

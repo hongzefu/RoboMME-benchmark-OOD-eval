@@ -16,8 +16,8 @@ from typing import Any
 
 import _common  # noqa: F401  路径设置
 
-from robomme_hard.env_record_wrapper import hard_specs  # noqa: E402
-from robomme_hard.env_record_wrapper.hard_specs import SpecsError  # noqa: E402
+hard_specs = _common.hard_specs_light()
+SpecsError = hard_specs.SpecsError
 
 
 def _movecube_way(spec: dict[str, Any]) -> int | None:

@@ -55,7 +55,8 @@
       "tests/pipeline/gen/test_run_batch.py::test_binding_counts_unattributed_mismatches",
       "tests/pipeline/gen/test_run_batch.py::test_existing_episode_dir_moved_aside_not_deleted",
       "tests/pipeline/gen/test_run_batch.py::test_resume_keeps_done_dirs_and_passes_flag",
-      "tests/pipeline/gen/test_run_batch.py::test_batch_must_be_single_tier_matching_header"
+      "tests/pipeline/gen/test_run_batch.py::test_batch_must_be_single_tier_matching_header",
+      "tests/pipeline/gen/test_run_batch.py::test_runner_specs_are_bound_to_selected_namespace"
     ],
     "resource": "cpu",
     "mutants": [

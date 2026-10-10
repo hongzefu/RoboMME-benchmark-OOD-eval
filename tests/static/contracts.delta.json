@@ -19,9 +19,9 @@
   "source": [
    ".gitmodules"
   ],
-  "symbol": "third_party/robomme_benchmark gitlink；src/robomme、src/robomme_hard 不在评估仓",
+  "symbol": "third_party/robomme_benchmark gitlink；src/robomme、src/robomme_ood 不在评估仓",
   "oracle": "锁定值 BENCH_LOCK 手写（1.7 提交）；.gitmodules 的 path／url 手写",
-  "positive": ".gitmodules 登记 benchmark 子模块；HEAD 树 gitlink 为 160000 提交且等于 BENCH_LOCK；检出时子模块 HEAD 等于 gitlink；robomme／robomme_hard 经 find_spec 落在子模块 src/",
+  "positive": ".gitmodules 登记 benchmark 子模块；HEAD 树 gitlink 为 160000 提交且等于 BENCH_LOCK；检出时子模块 HEAD 等于 gitlink；robomme／robomme_ood 经 find_spec 落在子模块 src/",
   "negative": "gitlink 漂移、评估仓跟踪或磁盘上出现 src/robomme（_hard）副本、包从本仓 src/ 解析，均失败",
   "boundaries": "worktree 里子模块未检出：只核 gitlink，检出一致性一条 skip",
   "nodeids": [

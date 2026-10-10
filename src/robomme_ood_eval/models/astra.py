@@ -202,17 +202,17 @@ def source_digests(champ: Path) -> dict[str, str]:
 
 
 def assert_env_sources() -> dict[str, str]:
-    """The environment source must be ``third_party/robomme_benchmark/src``: neither ``robomme`` nor ``robomme_hard``
+    """The environment source must be ``third_party/robomme_benchmark/src``: neither ``robomme`` nor ``robomme_ood``
     may come from the official copy nested in Astra or anywhere else."""
     import robomme  # noqa: PLC0415
-    import robomme_hard  # noqa: PLC0415
+    import robomme_ood  # noqa: PLC0415
     want = str(benchmark_src().resolve()) + os.sep
-    files = {"robomme_hard": str(Path(robomme_hard.__file__).resolve()),
+    files = {"robomme_ood": str(Path(robomme_ood.__file__).resolve()),
              "robomme": str(Path(robomme.__file__).resolve())}
     for name, path in files.items():
         if not path.startswith(want):
             raise RuntimeError(f"{name} does not come from third_party/robomme_benchmark/src ({want}): {path}")
-    print(f"ASTRA_ENV_SOURCE robomme_hard={files['robomme_hard']} robomme={files['robomme']}", flush=True)
+    print(f"ASTRA_ENV_SOURCE robomme_ood={files['robomme_ood']} robomme={files['robomme']}", flush=True)
     return files
 
 

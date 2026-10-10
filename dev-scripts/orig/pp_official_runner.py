@@ -122,8 +122,9 @@ def assert_official_only() -> str:
     want = (BENCH_SRC / "robomme").resolve()
     if want not in path.parents:
         raise AssertionError(f"robomme 不在 benchmark 子模块 src/robomme 下：{path}")
-    if "robomme_hard" in sys.modules:
-        raise AssertionError("原侧进程导入了 robomme_hard")
+    if any(m == p or m.startswith(p + ".") for m in sys.modules
+           for p in ("robomme_hard", "robomme_ood")):
+        raise AssertionError("原侧进程导入了 OOD 包")
     return str(path)
 
 
@@ -440,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"OFFICIAL_IMPORTS=FAIL reason={e}", flush=True)
         return EXIT_BAD_INPUT
     if args.check_imports:
-        print(f"OFFICIAL_IMPORTS=PASS robomme={robomme_path} robomme_hard_imported=0", flush=True)
+        print(f"OFFICIAL_IMPORTS=PASS robomme={robomme_path} robomme_hard_imported=0 robomme_ood_imported=0", flush=True)
         return 0
     if args.shard is None or args.out is None or args.port is None:
         print("用法错误：需要 --shard、--out、--port", flush=True)

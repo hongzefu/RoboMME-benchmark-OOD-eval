@@ -37,7 +37,7 @@ def _install_read_patch(root: pathlib.Path, key: str) -> None:
         import hashlib
         import json
 
-        manifest = (root / "src/robomme_hard/UPSTREAM.json").resolve()
+        manifest = (root / "src/robomme_ood/UPSTREAM.json").resolve()
 
         def _man() -> bytes:
             m = json.loads(rb(manifest))
@@ -58,7 +58,7 @@ def _install_read_patch(root: pathlib.Path, key: str) -> None:
         target = {
             "M01": binfill,
             "M02": (root / "scripts/evaluation.py").resolve(),
-            "M03": (root / "src/robomme_hard/env_record_wrapper/RecordWrapper.py").resolve(),
+            "M03": (root / "src/robomme_ood/env_record_wrapper/RecordWrapper.py").resolve(),
         }[key]
 
         def change(data: bytes) -> bytes:
@@ -90,7 +90,7 @@ def _install_read_patch(root: pathlib.Path, key: str) -> None:
 
 
 def _contract(key: str) -> None:
-    from robomme_hard.env_record_wrapper import hard_builder, hard_specs as hs
+    from robomme_ood.env_record_wrapper import hard_builder, hard_specs as hs
 
     if key == "M07":
         hs.V9_CELLS[("PickXtimes", "xhard1")] += 1  # EXPECTED_CELLS／CELL_TABLES["v9"] 是同一对象
@@ -112,7 +112,7 @@ def _contract(key: str) -> None:
 
 
 def _rec_mods():
-    return [importlib.import_module(f"{p}.env_record_wrapper.RecordWrapper") for p in ("robomme", "robomme_hard")]
+    return [importlib.import_module(f"{p}.env_record_wrapper.RecordWrapper") for p in ("robomme", "robomme_ood")]
 
 
 def _wrap_close(fn) -> None:
@@ -222,7 +222,7 @@ def _recording(key: str) -> None:
 
             cls._video_flush_episode_files = fl
     elif key == "T5-K7":
-        for p in ("robomme", "robomme_hard"):
+        for p in ("robomme", "robomme_ood"):
             cls = importlib.import_module(f"{p}.env_record_wrapper.DemonstrationWrapper").DemonstrationWrapper
             orig = cls._augment_obs_and_info
 
@@ -233,7 +233,7 @@ def _recording(key: str) -> None:
 
             cls._augment_obs_and_info = aug
     elif key == "T5-K8":
-        for p in ("robomme", "robomme_hard"):
+        for p in ("robomme", "robomme_ood"):
             cls = importlib.import_module(f"{p}.env_record_wrapper.DemonstrationWrapper").DemonstrationWrapper
             cls._filter_no_record_from_step_batch = lambda self, b: b
     else:
@@ -359,9 +359,9 @@ _WRAPPERS = {
                [("lambda: planner.close_gripper()", "lambda: planner.open_gripper()")]),
     "T10-W8": (_DW, "DemonstrationWrapper", "_step_batch",
                [_SUPER_STEP, ("if self.current_task_demonstration == False:", "if True:")]),
-    "T10-W9": ("robomme_hard.env_record_wrapper.DemonstrationWrapper", "DemonstrationWrapper", "reset",
+    "T10-W9": ("robomme_ood.env_record_wrapper.DemonstrationWrapper", "DemonstrationWrapper", "reset",
                [_SUPER_RESET, _SWAP_CONCAT]),
-    "T10-W10": ("robomme_hard.env_record_wrapper.OraclePlannerDemonstrationWrapper", "OraclePlannerDemonstrationWrapper",
+    "T10-W10": ("robomme_ood.env_record_wrapper.OraclePlannerDemonstrationWrapper", "OraclePlannerDemonstrationWrapper",
                 "_wrap_planner_with_screw_then_rrt_retry", [_ANY_EXC]),
 }
 
@@ -393,17 +393,17 @@ def _precheck(root: pathlib.Path, block: str, key: str) -> str | None:
             p = root / "scripts/evaluation.py"
             return None if p.is_file() else f"{p} 不存在"
         if key == "M03":
-            p = root / "src/robomme_hard/env_record_wrapper/RecordWrapper.py"
+            p = root / "src/robomme_ood/env_record_wrapper/RecordWrapper.py"
             return _count_reason(str(p), p.read_bytes(), b"fail_safe_limit = 5000") if p.is_file() else f"{p} 不存在"
         if key == "M04S":
             import json
 
-            m = json.loads((root / "src/robomme_hard/UPSTREAM.json").read_bytes())
+            m = json.loads((root / "src/robomme_ood/UPSTREAM.json").read_bytes())
             if "manifest_sha256" not in m or "src/robomme/robomme_env/BinFill.py" not in m.get("robomme_files", {}):
                 return "UPSTREAM.json 缺 manifest_sha256 或 BinFill.py 条目"
         return None
     if block == "contract":
-        from robomme_hard.env_record_wrapper import hard_builder, hard_specs as hs
+        from robomme_ood.env_record_wrapper import hard_builder, hard_specs as hs
 
         if key == "M07":
             return None if ("PickXtimes", "xhard1") in hs.V9_CELLS else "V9_CELLS 缺 (PickXtimes, xhard1)"
@@ -427,7 +427,7 @@ def _precheck(root: pathlib.Path, block: str, key: str) -> str | None:
         if key in ("T5-K7", "T5-K8"):
             attr = "_augment_obs_and_info" if key == "T5-K7" else "_filter_no_record_from_step_batch"
             return _first(*(_missing(importlib.import_module(f"{p}.env_record_wrapper.DemonstrationWrapper")
-                                     .DemonstrationWrapper, attr) for p in ("robomme", "robomme_hard")))
+                                     .DemonstrationWrapper, attr) for p in ("robomme", "robomme_ood")))
         attr = {"M14b": "close", "M14c": "close", "T5-K2": "_video_should_record",
                 "T5-K3": "_video_prepare_step_frames", "T5-K5": "step", "T5-K6": "_video_flush_episode_files"}[key]
         reason = _first(*(_missing(m.RobommeRecordWrapper, attr) for m in _rec_mods()))

@@ -92,7 +92,7 @@ def sign(tier: str, plan: dict[str, tuple[int, int]], *, fail=None, ways=None, s
         "draw_stats": {"attempted": sum(attempted.values()), "freeze_per_env": {
             t: {"attempted": attempted[t], "candidates": plan[t][1], "initial_selected": chosen[t],
                 "candidates_requested": plan[t][1]} for t in tasks}},
-        "provenance": {"env_package": "robomme_hard", "note": "t7"},
+        "provenance": {"env_package": "robomme_ood", "note": "t7"},
         "delivery_per_cell": {t: len(chosen[t]) for t in tasks},
     }
     header["identity_sha256"] = H.identity_sha256(header, rows)
@@ -239,9 +239,9 @@ class FakeRunner:
     def _execute(self, job: dict, outcome) -> dict:
         kind = outcome[0] if isinstance(outcome, tuple) else outcome
         base = {"task": job["task"], "episode": int(job["episode"]), "seed": int(job["seed"]),
-                "difficulty": job["difficulty"], "env_package": "robomme_hard",
-                "env_module": f"robomme_hard.robomme_env.{job['task']}",
-                "wrapper_modules": {"RobommeRecordWrapper": "robomme_hard.env_record_wrapper.RecordWrapper"}}
+                "difficulty": job["difficulty"], "env_package": "robomme_ood",
+                "env_module": f"robomme_ood.robomme_env.{job['task']}",
+                "wrapper_modules": {"RobommeRecordWrapper": "robomme_ood.env_record_wrapper.RecordWrapper"}}
         wdir = Path(job["worker_dir"])
         if kind == "fail":
             return {**base, "ok": False, "error_type": "TaskFailed", "error": "替身：任务未完成"}
@@ -261,4 +261,4 @@ class FakeRunner:
 
 def continue_kwargs(tmp: Path) -> dict[str, Any]:
     """run_continue／run_continue_v8 的公共参数（真实 run_batch，runner 由 FakeRunner 冒充）。"""
-    return {"src_root": Path(tmp), "workers": 1, "gpu": "0", "pkg": "robomme_hard", "code_baseline": "t7-baseline"}
+    return {"src_root": Path(tmp), "workers": 1, "gpu": "0", "pkg": "robomme_ood", "code_baseline": "t7-baseline"}

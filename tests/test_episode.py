@@ -293,3 +293,32 @@ def test_first_episode_wall_extension():
     assert E.wall_limit(p, False) == 900
     p.model = "perceptual-framesamp-modul"
     assert E.wall_limit(p, False) == 1200
+
+
+@pytest.mark.parametrize("dataset,cap", [("hard-verify", 1300), ("ood", 1800)])
+def test_builder_for_real_namespace_identity_without_reset(monkeypatch, dataset, cap):
+    import inspect
+    from tests._support.loaders import REPO
+    from robomme_ood.env_record_wrapper import hard_specs
+
+    monkeypatch.setattr(E, "BUILDER_FACTORY", None)
+    E.clear_builders()
+    try:
+        builder = E.builder_for("MoveCube", dataset)
+        assert type(builder).__module__ == "robomme_ood.env_record_wrapper.hard_builder"
+        source = Path(inspect.getfile(type(builder))).resolve()
+        assert source.is_relative_to((REPO / "third_party/robomme_benchmark/src/robomme_ood").resolve())
+        assert builder.max_steps_without_demonstration == cap + 2
+        identity = builder.resolve_identity(0)
+        if dataset == "ood":
+            _, rows = hard_specs.load_specs(hard_specs.PACKAGED_SPECS_ROOT / identity["tier"] / "specs.jsonl")
+            row = next(r for r in rows if r["task"] == "MoveCube" and r["seed"] == identity["seed"])
+            assert row["spec_sha256"] == identity["spec_sha256"]
+        else:
+            metadata = json.loads((REPO / "third_party/robomme_benchmark/src/robomme/env_metadata/test/record_dataset_MoveCube_metadata.json").read_text())
+            assert identity["source_episode"] in hard_specs.XHARD0_EPISODES
+            record = next(r for r in metadata["records"] if r["episode"] == identity["source_episode"])
+            assert record["difficulty"] == "hard" and record["seed"] == identity["seed"]
+        print(f"BUILDER_SOURCE=PASS dataset={dataset} native_reset=0 mismatches=0")
+    finally:
+        E.clear_builders()

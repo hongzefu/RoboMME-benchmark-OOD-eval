@@ -366,7 +366,7 @@
     "domain": "C15",
     "source": [
       "dev-scripts/parity/hard_parity.py",
-      "third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard5/specs.jsonl"
+      "third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard5/specs.jsonl"
     ],
     "symbol": "hard_parity.cmd_compare（CLI main）/_v8_denominator/classify_terminal：v9（含 --identities 子集）、native、xhard0",
     "oracle": "冻结交付集按「selected 且 rollout.status == ok」从拷贝的 xhard5 规格独立读出；各方计数手算",
@@ -545,7 +545,7 @@
     "symbol": "hard_parity.cmd_smoke/parse_episode_range/smoke_generations/resolve_builder_identities/smoke_compare（PARITY_GEN_SMOKE）",
     "oracle": "替身 builder 解析与替身生成（cmd_generate／run_with_mover）按手写剧本写微型 h5；比对与容差读取走真实代码",
     "positive": "1 任务 × {hard-verify, ood} × 2 局 × 2 侧 = 8 次生成、两侧同字节 → PARITY_GEN_SMOKE=PASS identities=4 sides=2 compared=4 both_fail=0 tol_over=0；H_old 用旧仓解释器、PYTHONPATH 与 --expect-src 指向 --h-old-src",
-    "negative": "两侧同失败单列 both_fail 且 FAIL；只一侧有 h5、超容差、环境包绑定不对 → FAIL；新旧树 ood 身份不同、生成次数超 8、侧名不对、未知任务、旧树无 robomme_hard、输出目录非空 → 生成前拒；builder 解析进程的 robomme_hard 不在指定树 → 拒",
+    "negative": "两侧同失败单列 both_fail 且 FAIL；只一侧有 h5、超容差、环境包绑定不对 → FAIL；新旧树 ood 身份不同、生成次数超 8、侧名不对、未知任务、旧树无 robomme_ood、输出目录非空 → 生成前拒；builder 解析进程的 robomme_ood 不在指定树 → 拒",
     "boundaries": "局号区间半开；生成次数硬上限恰为 8",
     "nodeids": [
       "tests/pipeline/parity/test_hard_parity_smoke.py"

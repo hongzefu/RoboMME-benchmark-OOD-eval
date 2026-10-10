@@ -238,7 +238,7 @@ def test_trace_path_resolution(tmp_path):
 def test_module_import_does_not_require_vla_eval():
     """拆仓后 pp 客户端是评估包模块 ``robomme_ood_eval.models.pp``：导入不需要 vla_eval，也不拉进仿真包。"""
     code = ("import sys; sys.modules['vla_eval'] = None; sys.path.insert(0, %r); import robomme_ood_eval.models.pp; "
-            "assert 'robomme_hard' not in sys.modules; print('PP_IMPORT_OK')" % str(REPO / "src"))
+            "assert 'robomme_ood' not in sys.modules; print('PP_IMPORT_OK')" % str(REPO / "src"))
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
     assert out.returncode == 0 and "PP_IMPORT_OK" in out.stdout, out.stderr
 
@@ -403,7 +403,7 @@ def test_orig_runner_imports_only_official_robomme():
                           "--check-imports"], capture_output=True, text=True, timeout=300, env=env)
     assert out.returncode == 0, out.stdout + out.stderr
     line = [x for x in out.stdout.splitlines() if x.startswith("OFFICIAL_IMPORTS=")][-1]
-    assert line.startswith("OFFICIAL_IMPORTS=PASS") and line.endswith("robomme_hard_imported=0")
+    assert line.startswith("OFFICIAL_IMPORTS=PASS") and line.endswith("robomme_ood_imported=0")
     # 拆仓后 robomme 只在 benchmark 子模块里（评估仓没有 src/robomme 副本）
     assert f"robomme={REPO / 'third_party' / 'robomme_benchmark' / 'src' / 'robomme'}" in line
     print(f"PP_ORIG_IMPORTS=PASS {line}")

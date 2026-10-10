@@ -124,9 +124,9 @@ def test_generate_native_records_every_identity(hp, tmp_path, monkeypatch, capsy
 
 
 def test_generate_h_side_xhard0_and_missing_episode_fails(hp, tmp_path, monkeypatch, capsys):
-    """H 侧：--force-mirror、ROBOMME_ENV_PACKAGE=robomme_hard、xhard0 按数据集名走 hard-verify 路由；漏一局 → GENERATE=FAIL。"""
+    """H 侧：--force-mirror、ROBOMME_ENV_PACKAGE=robomme_ood、xhard0 按数据集名走 hard-verify 路由；漏一局 → GENERATE=FAIL。"""
     rows = [dict(r, tier="hard") for r in ROWS]
-    fake = FakeSub(runner=_runner_writes(skip={7001}, module="robomme_hard.robomme_env.PickXtimes"))
+    fake = FakeSub(runner=_runner_writes(skip={7001}, module="robomme_ood.robomme_env.PickXtimes"))
     monkeypatch.setattr(hp, "subprocess", fake)
     manifest = _native_manifest(tmp_path / "m.json", rows)
     out = tmp_path / "H-xhard0"
@@ -134,7 +134,7 @@ def test_generate_h_side_xhard0_and_missing_episode_fails(hp, tmp_path, monkeypa
     f = fields(next(t for t in capsys.readouterr().out.splitlines() if t.startswith("GENERATE=")))
     assert f["GENERATE"] == "FAIL" and (f["rows"], f["recorded"]) == ("3", "2")
     cmd, kw = next((c, k) for c, k in fake.calls if str(hp.RUNNER) in c)
-    assert kw["env"]["ROBOMME_ENV_PACKAGE"] == "robomme_hard"
+    assert kw["env"]["ROBOMME_ENV_PACKAGE"] == "robomme_ood"
     for flag in ("--force-mirror", "--identity-source", "--xhard0-manifest", "--builder-route"):
         assert flag in cmd
     assert cmd[cmd.index("--builder-route") + 1] == "hard-verify"
@@ -208,7 +208,7 @@ def _replay_writes(cmd, kw):
         F.write_h5(wdir / "hdf5_files" / "x.h5", seed=r["seed"] % 97, frames=2)
         with partial.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"task": r["task"], "episode": r["seed"], "seed": r["seed"], "difficulty": r["tier"],
-                                 "ok": True, "env_module": "robomme_hard.robomme_env.MoveCube"}) + "\n")
+                                 "ok": True, "env_module": "robomme_ood.robomme_env.MoveCube"}) + "\n")
     return _cp()
 
 
@@ -381,12 +381,12 @@ def test_anchor_register_check_and_tamper(hp, tmp_path, monkeypatch, capsys):
     commit = _tag_commit()
     monkeypatch.setattr(hp, "ANCHORS", tmp_path / "anchors.json")
     h5 = tmp_path / "h5"
-    _side(h5 / "P-native", "P", ROWS, worker="train_split_worker.run_one", module="robomme_hard.robomme_env.PickXtimes")
+    _side(h5 / "P-native", "P", ROWS, worker="train_split_worker.run_one", module="robomme_ood.robomme_env.PickXtimes")
     assert _register(hp, h5, commit) == 0
     f = fields(capsys.readouterr().out.strip().splitlines()[-1])
     assert (f["PARITY_ANCHOR"], f["cached"], f["sha_bad"], f["commit"]) == ("PASS", "3", "0", commit[:12])
     seg = json.loads((tmp_path / "anchors.json").read_text())["anchors"][TAG]["segments"]["native"]
-    assert seg["rows"] == 3 and seg["worker"] == ["train_split_worker.run_one"] and seg["env_module_prefix"] == ["robomme_hard"]
+    assert seg["rows"] == 3 and seg["worker"] == ["train_split_worker.run_one"] and seg["env_module_prefix"] == ["robomme_ood"]
     # 锚点不移动：重复登记拒绝
     with pytest.raises(hp.ParityError, match="已登记"):
         _register(hp, h5, commit)
@@ -420,8 +420,8 @@ def test_compare_with_p_anchor_and_binding(hp, tmp_path, monkeypatch, capsys):
     commit = _tag_commit()
     monkeypatch.setattr(hp, "ANCHORS", tmp_path / "anchors.json")
     h5 = tmp_path / "h5"
-    _side(h5 / "P-native", "P", ROWS, worker="train_split_worker.run_one", module="robomme_hard.robomme_env.PickXtimes")
-    _side(h5 / "H-native", "H", ROWS, module="robomme_hard.robomme_env.PickXtimes")
+    _side(h5 / "P-native", "P", ROWS, worker="train_split_worker.run_one", module="robomme_ood.robomme_env.PickXtimes")
+    _side(h5 / "H-native", "H", ROWS, module="robomme_ood.robomme_env.PickXtimes")
     _side(h5 / "O-native", "O", ROWS, worker="official._worker")
     assert _register(hp, h5, commit) == 0
     manifest = _native_manifest(tmp_path / "m.json", ROWS)
@@ -450,8 +450,8 @@ def test_compare_with_p_anchor_and_binding(hp, tmp_path, monkeypatch, capsys):
     # binding：三侧包归属
     assert hp.main(["binding", "--h5-root", str(h5), "--p-anchor", TAG]) == 0
     assert capsys.readouterr().out.strip() == \
-        "ENV_PACKAGE_BINDING=PASS sides=3 O=robomme P=robomme_hard H=robomme_hard mismatch=0"
-    # 负例：H 侧一局的环境模块不属于 robomme_hard
+        "ENV_PACKAGE_BINDING=PASS sides=3 O=robomme P=robomme_ood H=robomme_ood mismatch=0"
+    # 负例：H 侧一局的环境模块不属于 robomme_ood
     lines = [json.loads(t) for t in (h5 / "H-native" / "identities.jsonl").read_text().splitlines()]
     lines[0]["env_module"] = "robomme.robomme_env.PickXtimes"
     F.write_jsonl(h5 / "H-native" / "identities.jsonl", lines)
@@ -462,12 +462,12 @@ def test_compare_with_p_anchor_and_binding(hp, tmp_path, monkeypatch, capsys):
 def test_binding_rules_per_side(hp):
     o_ok = {"worker": "official._worker", "robomme_module": "/o/src/robomme/__init__.py"}
     assert hp._binding_ok("O", o_ok) and not hp._binding_ok("O", dict(o_ok, worker="train_split_worker.run_one"))
-    assert not hp._binding_ok("O", dict(o_ok, robomme_module="/o/src/robomme_hard/robomme/__init__.py"))
-    assert hp._binding_ok("H2", {"env_module": "robomme_hard.x"}) and not hp._binding_ok("H2", {"env_module": None})
+    assert not hp._binding_ok("O", dict(o_ok, robomme_module="/o/src/robomme_ood/robomme/__init__.py"))
+    assert hp._binding_ok("H2", {"env_module": "robomme_ood.x"}) and not hp._binding_ok("H2", {"env_module": None})
     assert not hp._binding_ok("H", None)
-    anchor = {"segments": {"native": {"worker": ["w"], "env_module_prefix": ["robomme_hard"]}}}
-    assert hp._binding_ok("P", {"worker": "w", "env_module": "robomme_hard.a"}, anchor, "native")
-    assert not hp._binding_ok("P", {"worker": "v", "env_module": "robomme_hard.a"}, anchor, "native")
+    anchor = {"segments": {"native": {"worker": ["w"], "env_module_prefix": ["robomme_ood"]}}}
+    assert hp._binding_ok("P", {"worker": "w", "env_module": "robomme_ood.a"}, anchor, "native")
+    assert not hp._binding_ok("P", {"worker": "v", "env_module": "robomme_ood.a"}, anchor, "native")
     assert not hp._binding_ok("P", {"worker": "w", "env_module": "robomme.a"}, anchor, "native")
 
 
@@ -486,7 +486,7 @@ def _pair_world(tmp: Path, *, right_offset_from: int | None = None, pair="O:H"):
             rel = f"episodes/{r['task']}_episode_{r['episode']}/hdf5_files/x.h5"
             F.write_h5(root / rel, seed=r["seed"] % 97, frames=4, joint_offset_from=off, offset=0.5)
             extra = ({"worker": "official._worker", "robomme_module": "/o/src/robomme/__init__.py"} if side in ("O", "P")
-                     else {"env_module": "robomme_hard.robomme_env.PickXtimes"})
+                     else {"env_module": "robomme_ood.robomme_env.PickXtimes"})
             lines.append(F.id_line(r["task"], r["tier"], r["seed"], sha=F.sha256(root / rel), path=rel, **extra))
         F.write_run(root, lines, workers=4, gpu="NVIDIA A40")
     manifest = _native_manifest(tmp / "m.json", rows)
@@ -546,7 +546,7 @@ def _delivery_world(tmp: Path, *, bad_sha: bool = False, drop_path: bool = False
     for r in V9_ROWS:
         h5 = F.write_h5(base / "h5" / f"{r['seed']}.h5", seed=r["seed"] % 97, frames=2)
         row = {"task": r["task"], "tier": r["tier"], "episode": r["episode"], "seed": r["seed"], "candidate": r["episode"],
-               "path": f"h5/{r['seed']}.h5", "h5_sha256": F.sha256(h5), "frames": 2, "env_module": "robomme_hard.x"}
+               "path": f"h5/{r['seed']}.h5", "h5_sha256": F.sha256(h5), "frames": 2, "env_module": "robomme_ood.x"}
         rows.append(row)
     if bad_sha:
         rows[0]["h5_sha256"] = "1" * 64
@@ -669,7 +669,7 @@ def test_root_cell_table_reads_headers(hp, tmp_path):
 
 def test_hard_specs_light_loads_file_without_package(hp, monkeypatch):
     """包已导入时复用包内模块；未导入时按文件单独加载一份（不经包 __init__，不连带导入仿真），且只加载一次。"""
-    name = "robomme_hard.env_record_wrapper.hard_specs"
+    name = "robomme_ood.env_record_wrapper.hard_specs"
     pkg = sys.modules.get(name)
     if pkg is not None:
         assert hp.hard_specs_light() is pkg

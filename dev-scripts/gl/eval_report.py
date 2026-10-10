@@ -118,13 +118,13 @@ MEDIA_FILES = ("front.mkv", "wrist.mkv")
 
 def hard_specs_path() -> Path:
     """子模块里 ``hard_specs.py`` 的位置：优先评估仓 ``third_party/robomme_benchmark/src/``；子模块未检出（如 git
-    worktree）时按已安装 ``robomme_hard`` 包的位置找（``find_spec`` 只定位、不执行包的 ``__init__``）。"""
-    p = Path(__file__).resolve().parents[2] / "third_party" / "robomme_benchmark" / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+    worktree）时按已安装 ``robomme_ood`` 包的位置找（``find_spec`` 只定位、不执行包的 ``__init__``）。"""
+    p = Path(__file__).resolve().parents[2] / "third_party" / "robomme_benchmark" / "src" / "robomme_ood" / "env_record_wrapper" / "hard_specs.py"
     if p.is_file():
         return p
     import importlib.util
 
-    spec = importlib.util.find_spec("robomme_hard")
+    spec = importlib.util.find_spec("robomme_ood")
     if spec is not None and spec.submodule_search_locations:
         cand = Path(list(spec.submodule_search_locations)[0]) / "env_record_wrapper" / "hard_specs.py"
         if cand.is_file():
@@ -1235,8 +1235,8 @@ def build_reuse(rep: dict, manifest_path: Path, reuse_dir: Path, reuse_manifest:
     """读 reused.json（唯一复用依据）→ 对齐 V8 manifest → 取 V8 账本 accepted 终态 → 800 局总表。只读 V8。
 
     800 局总表另与交付格表 ``hard_specs.V9_CELLS`` 逐格比分母（每个模型各比一次）：缺格、多格或某格局数不等都记
-    count_mismatch。``hs`` 缺省时按文件路径加载子模块 ``third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py``（只依赖标准库，
-    不 import robomme_hard 包、不触发 sapien）。"""
+    count_mismatch。``hs`` 缺省时按文件路径加载子模块 ``third_party/robomme_benchmark/src/robomme_ood/env_record_wrapper/hard_specs.py``（只依赖标准库，
+    不 import robomme_ood 包、不触发 sapien）。"""
     mismatch: list[str] = []
     if hs is None:
         import importlib.util

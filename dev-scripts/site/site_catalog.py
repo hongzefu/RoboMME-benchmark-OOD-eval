@@ -56,7 +56,7 @@ reuse_sha_mismatch=<n> reuse_identity_mismatch=<n> reuse_missing=<n> new_sha_mis
       --eval-new artifacts/v9-evaluation/<run_name> --out artifacts/newtask-v9/site
 
 本模块只用标准库（``DIMS``／``TABLE1``／路径解析供 ``subgoal_lengths.py`` 与浏览器检查器复用）；
-``hard_specs`` 按文件路径加载（它只依赖标准库），不导入 ``robomme_hard`` 包。
+``hard_specs`` 按文件路径加载（它只依赖标准库），不导入 ``robomme_ood`` 包。
 """
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]  # dev-scripts/site/<本文件> → 仓根
 ART8 = REPO_ROOT / "artifacts/newtask-v8"
-#: benchmark 子模块的源码根（``robomme``／``robomme_hard`` 两个包）
+#: benchmark 子模块的源码根（``robomme``／``robomme_ood`` 两个包）
 BENCHMARK_SRC = REPO_ROOT / "third_party/robomme_benchmark/src"
 #: 旧名别名表（原评估目录的 ``official_defs.py``，现为评估包内模块）
 OFFICIAL_DEFS_PATH = REPO_ROOT / "src/robomme_ood_eval/models/_official_defs.py"
@@ -300,26 +300,26 @@ def pick_gen_video(h5: Path, row: dict, gen_videos: Path | None, delivery_path: 
     raise ValueError(f"找不到生成视频：{row['task']}/{row['tier']}/seed {seed}（查过 {[str(d) for d in dirs]}）")
 
 
-def robomme_hard_root() -> Path:
-    """``robomme_hard`` 包目录：优先本仓子模块 ``third_party/robomme_benchmark/src``；子模块未检出（如干净 worktree）时
-    按 ``robomme_hard`` 包的查找位置定位（``find_spec`` 只查位置、不执行包的 ``__init__``，不触发 torch／sapien）。"""
-    path = BENCHMARK_SRC / "robomme_hard"
+def robomme_ood_root() -> Path:
+    """``robomme_ood`` 包目录：优先本仓子模块 ``third_party/robomme_benchmark/src``；子模块未检出（如干净 worktree）时
+    按 ``robomme_ood`` 包的查找位置定位（``find_spec`` 只查位置、不执行包的 ``__init__``，不触发 torch／sapien）。"""
+    path = BENCHMARK_SRC / "robomme_ood"
     if (path / "__init__.py").is_file():
         return path
-    found = importlib.util.find_spec("robomme_hard")
+    found = importlib.util.find_spec("robomme_ood")
     for loc in (found.submodule_search_locations or []) if found else []:
         if (Path(loc) / "__init__.py").is_file():
             return Path(loc)
-    raise FileNotFoundError(f"找不到 robomme_hard 包：{path} 不存在，sys.path 上也定位不到")
+    raise FileNotFoundError(f"找不到 robomme_ood 包：{path} 不存在，sys.path 上也定位不到")
 
 
 def hard_specs_path() -> Path:
-    """``hard_specs.py`` 的位置（``robomme_hard/env_record_wrapper/hard_specs.py``）。"""
-    return robomme_hard_root() / "env_record_wrapper/hard_specs.py"
+    """``hard_specs.py`` 的位置（``robomme_ood/env_record_wrapper/hard_specs.py``）。"""
+    return robomme_ood_root() / "env_record_wrapper/hard_specs.py"
 
 
 def load_hard_specs():
-    """按文件路径加载 ``hard_specs``（只依赖标准库），不触发 ``robomme_hard`` 包导入（torch／sapien）。"""
+    """按文件路径加载 ``hard_specs``（只依赖标准库），不触发 ``robomme_ood`` 包导入（torch／sapien）。"""
     name = "_v8_site_hard_specs"
     if name in sys.modules:
         return sys.modules[name]

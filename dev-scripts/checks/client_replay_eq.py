@@ -25,7 +25,7 @@
   ``make_policy_context`` 保留，本工具调的就是它们）；``src`` 与 benchmark 子模块的 ``src`` 置于 ``sys.path`` 最前，
   子进程先核对 ``robomme_ood_eval.__file__`` 落在该检出的 ``src`` 下（子模块未检出时用 ``--bench-src``）；
 * 旧仓（``scripts``）：模块从该检出的旧评估目录按路径加载（官方名接口或改名前接口，后者的模块名、配置键、数据集名
-  取自别名表 ``LEGACY_*``），子进程核对 ``robomme_hard.__file__`` 落在该检出的 ``src`` 下。
+  取自别名表 ``LEGACY_*``），子进程核对 ``robomme_ood.__file__`` 落在该检出的 ``src`` 下。
 
 同一路线在两侧各用本侧的名字驱动，比较的是行为而不是名字。
 
@@ -513,7 +513,7 @@ class PPConn:
 def _bench_src(root: Path, explicit: str | None) -> Path:
     """benchmark 子模块的 ``src``：检出里已检出的优先，否则 ``--bench-src``。"""
     own = Path(root) / "third_party" / "robomme_benchmark" / "src"
-    if (own / "robomme_hard").is_dir():
+    if (own / "robomme_ood").is_dir():
         return own
     return Path(explicit).resolve() if explicit else own
 
@@ -543,10 +543,10 @@ def worker(args) -> int:
             if not str(Path(robomme_ood_eval.__file__).resolve()).startswith(str(root / "src")):
                 out["import_error"] = f"robomme_ood_eval 来自 {robomme_ood_eval.__file__}，不在 {root}/src"
         else:
-            import robomme_hard
-            out["robomme_hard"] = robomme_hard.__file__
-            if not str(Path(robomme_hard.__file__).resolve()).startswith(str(root / "src")):
-                out["import_error"] = f"robomme_hard 来自 {robomme_hard.__file__}，不在 {root}/src"
+            import robomme_ood
+            out["robomme_ood"] = robomme_ood.__file__
+            if not str(Path(robomme_ood.__file__).resolve()).startswith(str(root / "src")):
+                out["import_error"] = f"robomme_ood 来自 {robomme_ood.__file__}，不在 {root}/src"
     except ImportError as e:
         out["import_error"] = f"{type(e).__name__}: {e}"
     with tempfile.TemporaryDirectory(prefix="replay-") as td:

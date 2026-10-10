@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """专家演示视频：从 V9 生成 h5 离线出 ood 每局两版视频（1008 拆分方案 §四「专家演示」、第二部分 §二 media 行、S4）。
 
-只读 h5、不跑仿真、不碰录制器。ood 的局号与身份取子模块 ``robomme_hard`` 的 ``BenchmarkEnvBuilder(task, "ood")``
+只读 h5、不跑仿真、不碰录制器。ood 的局号与身份取子模块 ``robomme_ood`` 的 ``BenchmarkEnvBuilder(task, "ood")``
 （``resolve_identity`` 给 tier／seed），按 (task, tier, seed) 在交付清单 ``--delivery``（V9 的
 ``delivery.local.json``，每行带 ``h5`` 绝对路径与相对 ``path``）里找该局的 h5。每局输出到 ``--out``（缺省
 ``<repo>/artifacts/expert_demos/ood/``）两个文件::
@@ -303,7 +303,7 @@ def read_delivery(path: Path) -> dict[tuple[str, str, int], dict]:
 
 
 def make_builder(task: str):
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     return BenchmarkEnvBuilder(task, dataset=DATASET)
 
@@ -351,7 +351,7 @@ def main(argv: list[str] | None = None, *, builder_factory=make_builder) -> int:
     args = build_parser().parse_args(argv)
     if args.workers < 1:
         raise SystemExit("--workers 至少 1")
-    from robomme_hard.env_record_wrapper import hard_specs as hs
+    from robomme_ood.env_record_wrapper import hard_specs as hs
 
     tasks = [t.strip() for t in args.tasks.split(",")] if args.tasks else list(hs.ALL_TASKS)
     bad = [t for t in tasks if t not in hs.ALL_TASKS]

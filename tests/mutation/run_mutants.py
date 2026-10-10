@@ -245,8 +245,8 @@ def make_copy(dest: Path) -> Path:
         elif src.exists():
             shutil.copy2(src, dest / name)
     env = dict(os.environ, UV_PROJECT_ENVIRONMENT=_venv(), PYTHONPATH=f"{dest}/src:{dest}", PYTHONDONTWRITEBYTECODE="1")
-    out = subprocess.run(["uv", "run", "--no-sync", "python", "-c", "import robomme_ood_eval, robomme_hard, robomme; "
-                          "print(robomme_ood_eval.__file__); print(robomme_hard.__file__); print(robomme.__file__)"],
+    out = subprocess.run(["uv", "run", "--no-sync", "python", "-c", "import robomme_ood_eval, robomme_ood, robomme; "
+                          "print(robomme_ood_eval.__file__); print(robomme_ood.__file__); print(robomme.__file__)"],
                          cwd=dest, env=env, capture_output=True, text=True, check=True).stdout.split()
     # 评估包必须来自副本；benchmark 两个包来自子模块（不在副本、也不在本仓 src/ 下）
     if not (out and out[0].startswith(f"{dest}/src/robomme_ood_eval/")

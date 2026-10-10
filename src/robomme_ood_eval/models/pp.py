@@ -3,7 +3,7 @@
 
 ``run_episode(session, identity, conn_info, recorder) -> dict`` is called by the seat runner's ``run_one`` (loaded
 via ``load_sibling("pp_client")`` for ``--policy pp``). The environment side is this repo's ``EnvSession``
-(``robomme_hard``); the model side is a PonderPounce server speaking the vla-eval 0.7.0 protocol
+(``robomme_ood``); the model side is a PonderPounce server speaking the vla-eval 0.7.0 protocol
 (``python -m ponderpounce.eval.robomme_server``).
 
 Reproduced item by item from the vla-eval 0.7.0 source (``runners/sync_runner.py::SyncEpisodeRunner.run_episode``,

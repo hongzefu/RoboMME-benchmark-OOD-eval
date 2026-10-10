@@ -1,6 +1,6 @@
 """GroundSG 原侧驱动 ``official_hard_runner.py``（1003 评估计划 1.3、1.7，子任务 S3；判定行 OFFICIAL_HARD_SOURCE）。
 
-导入断言在子进程里跑（本测试进程已导入 robomme_hard，不能代表原侧进程）；分片循环、原始帧格式、服务不可达在进程内
+导入断言在子进程里跑（本测试进程已导入 robomme_ood，不能代表原侧进程）；分片循环、原始帧格式、服务不可达在进程内
 用官方 ``EnvRunner`` 原文 + 官方 builder 替身跑，不建真实仿真。
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ def test_official_hard_source_imports_only_official_robomme():
     assert p.returncode == 0, p.stdout[-3000:] + p.stderr[-3000:]
     line = _line(p.stdout, "OFFICIAL_IMPORTS=")
     kv = dict(x.split("=", 1) for x in line.split())
-    assert kv["OFFICIAL_IMPORTS"] == "PASS" and kv["robomme_hard_imported"] == "0"
+    assert kv["OFFICIAL_IMPORTS"] == "PASS" and kv["robomme_ood_imported"] == "0"
     assert kv["official_modules_imported"] == "0" and kv["variants"] == "3"
     # 拆仓后 robomme 只在 benchmark 子模块里（评估仓没有 src/robomme 副本）；原侧驱动只往 sys.path 加官方目录与子模块 src
     bench_src = REPO / "third_party" / "robomme_benchmark" / "src"
@@ -54,7 +54,7 @@ def test_official_hard_source_imports_only_official_robomme():
     assert len(defs) == 3 and all(f"eval.py={want['eval.py']}" in d for d in defs)
     assert "predictors=OracleSubgoalPredictor " in defs[0] and "predictors=QwenVLSubgoalPredictor " in defs[1]
     assert "predictors=MemERSubgoalPredictor " in defs[2]
-    print(f"OFFICIAL_HARD_SOURCE=PASS robomme_hard_imported={kv['robomme_hard_imported']}")
+    print(f"OFFICIAL_HARD_SOURCE=PASS robomme_ood_imported={kv['robomme_ood_imported']}")
 
 
 def test_cli_rejects_bad_input_with_exit_3(tmp_path):

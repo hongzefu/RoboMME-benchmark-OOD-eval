@@ -970,7 +970,9 @@
    "boundaries": "共享库内部开关缺省 0，只有新侧入口 run_eval_gl.sh 显式开启；不覆盖真实 GPU 渲染",
    "nodeids": [
     "tests/pipeline/eval/test_official_media_check.py",
-    "tests/pipeline/eval/test_seat_scripts.py"
+    "tests/pipeline/eval/test_seat_scripts.py",
+    "tests/pipeline/eval/test_seat_scripts.py::test_sync_main_rejects_invalid_candidate_and_failed_gate",
+    "tests/pipeline/eval/test_seat_scripts.py::test_sync_main_noop_requires_all_gates"
    ],
    "resource": "cpu；ffmpeg 收尾链用例标 slow",
    "mutants": [],
@@ -1438,7 +1440,7 @@
    ],
    "symbol": "official_hard_runner：--check-imports / main 参数与分片核对 / run_identity 原始帧与结果行 / run_shard 服务不可达中止",
    "oracle": "导入断言在子进程里跑（只加官方 examples/robomme 与仓库 src）；原始帧字节数与首帧内容按假环境手算",
-   "positive": "OFFICIAL_IMPORTS=PASS：robomme 来自仓库 src/robomme/、robomme_hard 未导入、官方模块未被整模块导入，两个变体的官方定义可摘取；判定行 OFFICIAL_HARD_SOURCE=PASS robomme_hard_imported=0；每局目录 <out>/<key>.a<attempt>/ 只含 trace.jsonl 与 frames/（QwenVL 另有归档日志），frames.json 为 pix_fmt=rgb24、order=reset_all_then_per_step_last、demo_frames／init_frames／exec_steps／missing_steps 与各流宽高帧数；官方 builder 构造参数 dataset=test、joint_angle、max_steps 透传、每任务只建一次",
+   "positive": "OFFICIAL_IMPORTS=PASS：robomme 来自仓库 src/robomme/、robomme_ood 未导入、官方模块未被整模块导入，两个变体的官方定义可摘取；判定行 OFFICIAL_HARD_SOURCE=PASS robomme_ood_imported=0；每局目录 <out>/<key>.a<attempt>/ 只含 trace.jsonl 与 frames/（QwenVL 另有归档日志），frames.json 为 pix_fmt=rgb24、order=reset_all_then_per_step_last、demo_frames／init_frames／exec_steps／missing_steps 与各流宽高帧数；官方 builder 构造参数 dataset=test、joint_angle、max_steps 透传、每任务只建一次",
    "negative": "缺 --variant、QwenVL 缺 adapter、Oracle 带 adapter、分片行 tier 非 xhard0、每局目录已存在：退出码 3 并打印 GROUNDSG_ORIG_BLOCKED；服务不可达：该局 error（infra、groundsg_unreachable）并停止分片",
    "boundaries": "环境抛异常的那步不出帧、步号记入 missing_steps，帧数 = 3 + exec_steps - len(missing_steps)",
    "nodeids": [
@@ -1547,7 +1549,8 @@
    "negative": "钩子异常不外抛但 observer_hook_errors 递增；对账 FAIL、检查器崩溃、缺报告、封口超时时成绩不变而 OBSERVER_COMPLETE=FAIL；原版提交不符或工作树脏 RUN_BLOCKED；--ledger 放在子命令后被真实 CLI 拒绝；额度不足 RUN_BLOCKED reason=budget；输出根落在历史目录被拒",
    "boundaries": "未在真实原版代码与真实 GPU 上运行（批次 3a 本机 smoke 核）；原侧 terminated/truncated 记 NOT_OBSERVED；SimpleMemVLA 块内非末步 status 记 NOT_OBSERVED",
    "nodeids": [
-    "tests/pipeline/evalx/orig_observer/test_orig_observer.py"
+    "tests/pipeline/evalx/orig_observer/test_orig_observer.py",
+    "tests/pipeline/evalx/orig_observer/test_orig_observer.py::test_preflight_rejects_both_ood_namespaces"
    ],
    "resource": "cpu；部分启动器用例标 slow",
    "mutants": [],
@@ -1663,7 +1666,7 @@
    ],
    "symbol": "assert_official_only / load_shard / RawFrameWriter / EpisodeCapture / EnvProxy / run_shard 结果行",
    "oracle": "子进程 --check-imports 的判定行；假环境逐帧字节手算；分片行键按 eval_manifest hard0 模式",
-   "positive": "OFFICIAL_IMPORTS=PASS 且 robomme 来自仓库 src/robomme、robomme_hard_imported=0；原始帧 count = demo_frames + 1 + exec_steps、文件字节数 = count×H×W×3、首帧与第 4 帧字节等于假环境；结果行含 side=orig、dataset=hard-verify、status、exec_steps、demo_frames、max_steps、sid",
+   "positive": "OFFICIAL_IMPORTS=PASS 且 robomme 来自仓库 src/robomme、robomme_ood_imported=0；原始帧 count = demo_frames + 1 + exec_steps、文件字节数 = count×H×W×3、首帧与第 4 帧字节等于假环境；结果行含 side=orig、dataset=hard-verify、status、exec_steps、demo_frames、max_steps、sid",
    "negative": "分片含非 xhard0 行或 key 重复即 ValueError",
    "boundaries": "只覆写 RoboMMEBenchmark.reset 并以委托代理包住环境 step，不改 src/robomme 任何方法；新侧轨迹位置 trace_path > <trace_dir（每局目录）>/trace.jsonl > <录像器目录>/trace.jsonl，trace_dir 下不再套 key.a<attempt>",
    "nodeids": [
@@ -2128,7 +2131,8 @@
     "tests/pipeline/gen/test_run_batch.py::test_binding_counts_unattributed_mismatches",
     "tests/pipeline/gen/test_run_batch.py::test_existing_episode_dir_moved_aside_not_deleted",
     "tests/pipeline/gen/test_run_batch.py::test_resume_keeps_done_dirs_and_passes_flag",
-    "tests/pipeline/gen/test_run_batch.py::test_batch_must_be_single_tier_matching_header"
+    "tests/pipeline/gen/test_run_batch.py::test_batch_must_be_single_tier_matching_header",
+    "tests/pipeline/gen/test_run_batch.py::test_runner_specs_are_bound_to_selected_namespace"
    ],
    "resource": "cpu",
    "mutants": [
@@ -2734,7 +2738,7 @@
    "domain": "C15",
    "source": [
     "dev-scripts/parity/hard_parity.py",
-    "third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard5/specs.jsonl"
+    "third_party/robomme_benchmark/src/robomme_ood/env_metadata/ood/xhard5/specs.jsonl"
    ],
    "symbol": "hard_parity.cmd_compare（CLI main）/_v8_denominator/classify_terminal：v9（含 --identities 子集）、native、xhard0",
    "oracle": "冻结交付集按「selected 且 rollout.status == ok」从拷贝的 xhard5 规格独立读出；各方计数手算",
@@ -2931,7 +2935,7 @@
    "symbol": "hard_parity.cmd_smoke/parse_episode_range/smoke_generations/resolve_builder_identities/smoke_compare（PARITY_GEN_SMOKE）",
    "oracle": "替身 builder 解析与替身生成（cmd_generate／run_with_mover）按手写剧本写微型 h5；比对与容差读取走真实代码",
    "positive": "1 任务 × {hard-verify, ood} × 2 局 × 2 侧 = 8 次生成、两侧同字节 → PARITY_GEN_SMOKE=PASS identities=4 sides=2 compared=4 both_fail=0 tol_over=0；H_old 用旧仓解释器、PYTHONPATH 与 --expect-src 指向 --h-old-src",
-   "negative": "两侧同失败单列 both_fail 且 FAIL；只一侧有 h5、超容差、环境包绑定不对 → FAIL；新旧树 ood 身份不同、生成次数超 8、侧名不对、未知任务、旧树无 robomme_hard、输出目录非空 → 生成前拒；builder 解析进程的 robomme_hard 不在指定树 → 拒",
+   "negative": "两侧同失败单列 both_fail 且 FAIL；只一侧有 h5、超容差、环境包绑定不对 → FAIL；新旧树 ood 身份不同、生成次数超 8、侧名不对、未知任务、旧树无 robomme_ood、输出目录非空 → 生成前拒；builder 解析进程的 robomme_ood 不在指定树 → 拒",
    "boundaries": "局号区间半开；生成次数硬上限恰为 8",
    "nodeids": [
     "tests/pipeline/parity/test_hard_parity_smoke.py"
@@ -3199,9 +3203,9 @@
    "source": [
     ".gitmodules"
    ],
-   "symbol": "third_party/robomme_benchmark gitlink；src/robomme、src/robomme_hard 不在评估仓",
+   "symbol": "third_party/robomme_benchmark gitlink；src/robomme、src/robomme_ood 不在评估仓",
    "oracle": "锁定值 BENCH_LOCK 手写（1.7 提交）；.gitmodules 的 path／url 手写",
-   "positive": ".gitmodules 登记 benchmark 子模块；HEAD 树 gitlink 为 160000 提交且等于 BENCH_LOCK；检出时子模块 HEAD 等于 gitlink；robomme／robomme_hard 经 find_spec 落在子模块 src/",
+   "positive": ".gitmodules 登记 benchmark 子模块；HEAD 树 gitlink 为 160000 提交且等于 BENCH_LOCK；检出时子模块 HEAD 等于 gitlink；robomme／robomme_ood 经 find_spec 落在子模块 src/",
    "negative": "gitlink 漂移、评估仓跟踪或磁盘上出现 src/robomme（_hard）副本、包从本仓 src/ 解析，均失败",
    "boundaries": "worktree 里子模块未检出：只核 gitlink，检出一致性一条 skip",
    "nodeids": [
@@ -3355,7 +3359,8 @@
     "tests/test_episode.py::test_reset_refusal_propagates_without_result",
     "tests/test_episode.py::test_budget_exhausted_records_then_raises",
     "tests/test_episode.py::test_watchdog_wall_timeout_writes_and_exits",
-    "tests/test_episode.py::test_first_episode_wall_extension"
+    "tests/test_episode.py::test_first_episode_wall_extension",
+    "tests/test_episode.py::test_builder_for_real_namespace_identity_without_reset"
    ],
    "resource": "cpu",
    "mutants": [],
@@ -4109,10 +4114,10 @@
   "C18-UPSTREAM-MANIFEST-SIGN": "UPSTREAM.json 自签：随 benchmark 仓",
   "C18-ENTRY-SCRIPTS-UPSTREAM": "三个上游入口逐字节：随 benchmark 仓",
   "C18-VENDOR": "vendored 依赖守卫：随 benchmark 仓",
-  "C01-SHIMS": "robomme_hard 对 robomme 的 shim：随 benchmark 仓",
-  "C01-ABS-IMPORT": "robomme_hard 绝对导入守卫：随 benchmark 仓",
+  "C01-SHIMS": "robomme_ood 对 robomme 的 shim：随 benchmark 仓",
+  "C01-ABS-IMPORT": "robomme_ood 绝对导入守卫：随 benchmark 仓",
   "C01-BORROWED-DEPS": "借用依赖闭包：随 benchmark 仓",
-  "C18-COPIES-WHITELIST": "robomme_hard 白名单副本差异：随 benchmark 仓（test_copies_vs_upstream）",
+  "C18-COPIES-WHITELIST": "robomme_ood 白名单副本差异：随 benchmark 仓（test_copies_vs_upstream）",
   "C18-EVAL-HARD-DIFF": "evaluation_ood.py 与 evaluation.py 的差异形态：随 benchmark 仓",
   "C18-EVAL-HARD-MAX-STEPS": "evaluation_ood.py 步数口径（conditional）：随 benchmark 仓",
   "C18-EPISODE-LIMITS": "run_example.EPISODE_LIMITS 与官方元数据：随 benchmark 仓"

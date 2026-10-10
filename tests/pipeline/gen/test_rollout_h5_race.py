@@ -80,7 +80,7 @@ def _racing_h5_facts(module, victim: str, deleted: list[str]):
 
 def _run(module, batch, out: Path):
     header, rows = batch
-    return module.run_batch(rows, header, out, 0, src_root=Path("/src-root"), workers=1, gpu="0", pkg="robomme_hard")
+    return module.run_batch(rows, header, out, 0, src_root=Path("/src-root"), workers=1, gpu="0", pkg="robomme_ood")
 
 
 def test_run_batch_survives_h5_removed_between_list_and_open(monkeypatch, batch, tmp_path):
@@ -117,7 +117,7 @@ def _unguarded_copy(tmp_path: Path):
     path.write_text(patched, encoding="utf-8")
     spec = importlib.util.spec_from_file_location("_t7_rollout_unguarded", path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # _common／robomme_hard 已在进程里，按模块缓存解析
+    spec.loader.exec_module(module)  # _common／robomme_ood 已在进程里，按模块缓存解析
     return module
 
 

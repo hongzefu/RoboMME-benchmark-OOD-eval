@@ -32,7 +32,8 @@
    "tests/test_episode.py::test_reset_refusal_propagates_without_result",
    "tests/test_episode.py::test_budget_exhausted_records_then_raises",
    "tests/test_episode.py::test_watchdog_wall_timeout_writes_and_exits",
-   "tests/test_episode.py::test_first_episode_wall_extension"
+   "tests/test_episode.py::test_first_episode_wall_extension",
+   "tests/test_episode.py::test_builder_for_real_namespace_identity_without_reset"
   ],
   "resource": "cpu",
   "mutants": [],

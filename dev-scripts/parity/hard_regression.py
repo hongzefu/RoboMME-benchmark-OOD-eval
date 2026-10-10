@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""robomme_hard 回归工具（评估仓 dev-scripts/parity；benchmark 包取自子模块 third_party/robomme_benchmark）。
+"""robomme_ood 回归工具（评估仓 dev-scripts/parity；benchmark 包取自子模块 third_party/robomme_benchmark）。
 
 现行口径 V9（1002-newtask-v9-movecube-region-800-plan.md 第二部分 §2.3）；xhard0 reset 层对拍源自 v7 的 0928 方案
 第二部分 §1.5。按数据集名取局：``hard-verify`` 只有 xhard0（每任务 12 局，局 0～11 对应官方原 episode 3,7,…,47），
@@ -11,7 +11,7 @@
   另打印逐格长度直方图）→ ``V8_TIER_VALUES``；规格根缺省读子模块包内。
 * ``eval-smoke``（GPU，1 任务 × 1 数据集 × 1 局）：评估链可用；xhard0 局须为导出模式；每任务局数按数据集推出
   （hard-verify 12、ood 按交付格表）→ ``HARD_EVAL_SMOKE``。
-* ``xhard0-reset-parity``（GPU）：官方 robomme（``dataset="test"``）与 robomme_hard（``dataset="hard-verify"``）
+* ``xhard0-reset-parity``（GPU）：官方 robomme（``dataset="test"``）与 robomme_ood（``dataset="hard-verify"``）
   两进程各 reset 所选局（``--tasks``、``--episodes a:b``），确定性层逐位比 → ``XHARD0_RESET_PARITY``（分母按所选
   身份计）；演示层只报告 ``XHARD0_DEMO_DIFF=INFO``。
 * ``env-digest``（GPU，v7.5eval）：xhard0 身份逐层摘要 + 原始数组 + 测速 → ``ENV_DIGEST_DONE``、``ENV_SPEED=INFO``。
@@ -43,7 +43,7 @@ XHARD0_MANIFEST = _common.CONFIGS / "xhard0" / "xhard0_manifest.json"
 
 
 def _hard_specs():
-    from robomme_hard.env_record_wrapper import hard_specs
+    from robomme_ood.env_record_wrapper import hard_specs
 
     return hard_specs
 
@@ -53,11 +53,11 @@ def _hard_specs():
 
 def record_path_patterns(task: str, root: Path | None = None, method: str = "record") -> set[str]:
     """该任务环境文件与共用 utils 里 ``*.record(<路径>, …)`` 的路径正则（按任务分开，不同任务同名路径可能一记一注）；
-    f-string 的占位符只匹配一个路径段（``[^.]+``）。``root`` 缺省为子模块的 ``robomme_hard/robomme_env``。"""
+    f-string 的占位符只匹配一个路径段（``[^.]+``）。``root`` 缺省为子模块的 ``robomme_ood/robomme_env``。"""
     import re
 
     if root is None:
-        root = _common.bench_root() / "src" / "robomme_hard" / "robomme_env"
+        root = _common.bench_root() / "src" / "robomme_ood" / "robomme_env"
 
     patterns: set[str] = set()
     for path in [root / f"{task}.py", *sorted((root / "utils").glob("*.py"))]:
@@ -92,7 +92,7 @@ def _flatten(node: Any, prefix: str = "") -> dict[str, Any]:
 
 
 def _leaf_diff(a: Any, b: Any) -> float:
-    from robomme_hard.env_record_wrapper.hard_specs import _max_abs_diff
+    from robomme_ood.env_record_wrapper.hard_specs import _max_abs_diff
 
     return _max_abs_diff(a, b)
 
@@ -125,7 +125,7 @@ def _hp():
 
 
 def _hs_light():
-    """不经 robomme_hard 包 __init__（会连带导入仿真）的 hard_specs；纯 CPU 守卫与规格读取用它。"""
+    """不经 robomme_ood 包 __init__（会连带导入仿真）的 hard_specs；纯 CPU 守卫与规格读取用它。"""
     return _hp().hard_specs_light()
 
 
@@ -203,7 +203,7 @@ def cmd_eval_smoke(args) -> int:
     xhard0 局须为导出模式（原生 hard 分支）、回注局须为 replay 且 injected_mismatch==0。"""
     import numpy as np
 
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder, spec_binding
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder, spec_binding
 
     hs = _hard_specs()
     builder = BenchmarkEnvBuilder(env_id=args.task, dataset=args.dataset, action_space="joint_angle", max_steps=1300)
@@ -259,12 +259,12 @@ def _make(env_id, **kw):
     return _orig(env_id, **kw)
 gym.make = _make
 if side == "official":
-    assert "robomme_hard" not in sys.modules
+    assert "robomme_ood" not in sys.modules
     from robomme.env_record_wrapper import BenchmarkEnvBuilder
-    assert "robomme_hard" not in sys.modules
+    assert "robomme_ood" not in sys.modules
     builder = BenchmarkEnvBuilder(task, dataset="test")
 else:
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
     builder = BenchmarkEnvBuilder(task, dataset="hard-verify")
 def digest(x):
     if hasattr(x, "detach"):
@@ -299,7 +299,7 @@ for ep in eps:
                 "post_state": digest(env.unwrapped.get_state_dict())})
     env.close()
 if side == "official":
-    assert "robomme_hard" not in sys.modules, "官方侧进程不得导入 robomme_hard"
+    assert "robomme_ood" not in sys.modules, "官方侧进程不得导入 robomme_ood"
 print("PROBE_JSON " + json.dumps(out))
 '''
 
@@ -332,7 +332,7 @@ def parse_episodes(text: str | None, total: int) -> list[int]:
 
 def cmd_xhard0_reset_parity(args) -> int:
     """XHARD0_RESET_PARITY（D-16）：同卡两进程——官方侧只导入 ``--src-root``（缺省 benchmark 子模块）的 robomme
-    （``dataset="test"``，官方原 episode 号；进程内断言未导入 robomme_hard），robomme_hard 侧 ``dataset="hard-verify"``
+    （``dataset="test"``，官方原 episode 号；进程内断言未导入 robomme_ood），robomme_ood 侧 ``dataset="hard-verify"``
     取 ``--episodes``（builder 局号半开区间，缺省 0～11；局 0、1 对应官方原 episode 3、7）。
 
     先跑 hard 侧，官方侧的原 episode 号以 builder 解析出的 ``source_episode`` 为准，并与 ``--manifest`` 第 i 行逐局
@@ -370,7 +370,7 @@ def cmd_xhard0_reset_parity(args) -> int:
                 "choices": o["choices"] == h["choices"],
             }
             bad = [k for k, v in fields.items() if not v]
-            # 演示前状态确有实体改名（键集合不同）、且每类 actor 的状态值集合相等 ⇒ 只是命名不同（如 robomme_hard BUS
+            # 演示前状态确有实体改名（键集合不同）、且每类 actor 的状态值集合相等 ⇒ 只是命名不同（如 robomme_ood BUS
             # 的 F3 左右按钮改名），场景逐位相同：单列 name_only，不计 det_diff（v7 方案 D-16 的实现细节，写进留档）。
             # 键集合相同而取值不同（如两个同形 actor 互换位姿）是真差异，与 env-digest-compare 的判法一致；
             # 唯一例外是 XHARD0_DECLARED_RENAMES 里逐名声明的对调，须按映射改名后逐键相等
@@ -402,8 +402,8 @@ def _name_agnostic(state: Any) -> Any:
     return state
 
 
-#: 已声明的实体改名：任务 → 分区 → {官方侧名: robomme_hard 侧名}。ButtonUnmaskSwap 的 F3 把左右按钮名对调
-#: （官方 buttons[0]（y=-0.1）名 button_left，robomme_hard 名 button_right），两侧键集合相同、取值互换，
+#: 已声明的实体改名：任务 → 分区 → {官方侧名: robomme_ood 侧名}。ButtonUnmaskSwap 的 F3 把左右按钮名对调
+#: （官方 buttons[0]（y=-0.1）名 button_left，robomme_ood 名 button_right），两侧键集合相同、取值互换，
 #: 只能靠逐名声明认定为改名；未声明的同键互换一律计真差异
 XHARD0_DECLARED_RENAMES: dict[str, dict[str, dict[str, str]]] = {
     "ButtonUnmaskSwap": {"articulations": {"button_left": "button_right", "button_right": "button_left"}},
@@ -683,7 +683,7 @@ ENV_TIMING_NOTES = {
     "proc.import_torch_s": "import torch",
     "proc.import_sapien_s": "import sapien",
     "proc.import_mani_skill_s": "import mani_skill + mani_skill.envs",
-    "proc.import_robomme_hard_s": "import robomme_hard.env_record_wrapper（连带注册 16 个任务类）",
+    "proc.import_robomme_ood_s": "import robomme_ood.env_record_wrapper（连带注册 16 个任务类）",
     "proc.spawn_to_worker_s": "父进程 Popen 前 time.time() → 子进程进入 worker 函数（解释器启动 + 本文件导入）",
     "proc.first_vulkan_s": "进程内第一次 BaseEnv._setup_scene（含首个 sapien.render.RenderSystem 即首次 Vulkan 设备创建；"
                            "另含 physx 场景构造，无法单独拆出）",
@@ -919,7 +919,7 @@ def _env_digest_one(ident: dict[str, Any], builder, hub: _EnvTimerHub, fixed_ste
     import gymnasium as gym
     import numpy as np
 
-    from robomme_hard.robomme_env.utils.vqa_options import get_vqa_options
+    from robomme_ood.robomme_env.utils.vqa_options import get_vqa_options
 
     task = ident["task"]
     arrays: dict[str, Any] = {}
@@ -1129,12 +1129,12 @@ def cmd_env_digest_worker(args) -> int:
     proc["spawn_to_worker_s"] = round(entered - float(spawn), 6) if spawn else UNCOLLECTED
     for label, mods in (("numpy", ("numpy",)), ("torch", ("torch",)), ("sapien", ("sapien",)),
                         ("mani_skill", ("mani_skill", "mani_skill.envs")),
-                        ("robomme_hard", ("robomme_hard.env_record_wrapper",))):
+                        ("robomme_ood", ("robomme_ood.env_record_wrapper",))):
         started = time.perf_counter()
         for mod in mods:
             __import__(mod)
         proc[f"import_{label}_s"] = round(time.perf_counter() - started, 6)
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     hs = _hard_specs()
     hub = _env_install_timers(hs.ALL_TASKS)
@@ -1229,7 +1229,7 @@ def _env_speed_line(cell: str, rows: list[dict[str, Any]]) -> str:
         "import_torch_s_p50": _env_p50([p.get("import_torch_s") for p in firsts]),
         "import_sapien_s_p50": _env_p50([p.get("import_sapien_s") for p in firsts]),
         "import_mani_skill_s_p50": _env_p50([p.get("import_mani_skill_s") for p in firsts]),
-        "import_robomme_hard_s_p50": _env_p50([p.get("import_robomme_hard_s") for p in firsts]),
+        "import_robomme_ood_s_p50": _env_p50([p.get("import_robomme_ood_s") for p in firsts]),
         "first_vulkan_s_p50": _env_p50([p.get("first_vulkan_s") for p in firsts]),
         "make_env_s_p50": _env_p50([x.get("make_env_s") for x in t]),
         "gym_make_s_p50": _env_p50([x.get("gym_make_s") for x in t]),
@@ -1523,7 +1523,7 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--episode", type=int, default=0)
     ev.add_argument("--max-policy-steps", type=int, default=50)
     ev.set_defaults(func=cmd_eval_smoke)
-    x0 = sub.add_parser("xhard0-reset-parity", help="官方 robomme 与 robomme_hard（hard-verify）两进程 reset 确定性层逐位比"
+    x0 = sub.add_parser("xhard0-reset-parity", help="官方 robomme 与 robomme_ood（hard-verify）两进程 reset 确定性层逐位比"
                                                     "（GPU；XHARD0_RESET_PARITY）",
                         description=cmd_xhard0_reset_parity.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     x0.add_argument("--src-root", default=None,

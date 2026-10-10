@@ -178,9 +178,10 @@ def setup_paths() -> list[str]:
 
 
 def assert_no_robomme_hard() -> None:
-    bad = sorted(m for m in sys.modules if m == "robomme_hard" or m.startswith("robomme_hard."))
+    bad = sorted(m for m in sys.modules if any(m == p or m.startswith(p + ".")
+                                             for p in ("robomme_hard", "robomme_ood")))
     if bad:
-        raise AssertionError(f"原侧进程导入了 robomme_hard：{bad[:5]}")
+        raise AssertionError(f"原侧进程导入了 OOD 包：{bad[:5]}")
 
 
 def import_official_env() -> dict:
@@ -580,7 +581,7 @@ def cmd_check_imports(args) -> int:
                                 "subgoal_prediction") if m in sys.modules)
     if leaked:
         raise AssertionError(f"官方模块被整模块导入：{leaked}")
-    print(f"OFFICIAL_IMPORTS=PASS robomme={info['robomme_file']} robomme_hard_imported=0 "
+    print(f"OFFICIAL_IMPORTS=PASS robomme={info['robomme_file']} robomme_hard_imported=0 robomme_ood_imported=0 "
           f"official_modules_imported=0 variants={len(variants)} sys_path_added={','.join(added)}", flush=True)
     return 0
 

@@ -289,7 +289,7 @@ def test_env_sources_point_to_benchmark_submodule():
         files = mod.assert_env_sources()
         src = str(mod.benchmark_src().resolve())
     assert src == str((third_party_dir() / "robomme_benchmark" / "src").resolve())
-    assert files["robomme_hard"].startswith(src) and files["robomme"].startswith(src)
+    assert files["robomme_ood"].startswith(src) and files["robomme"].startswith(src)
 
 
 # ── 费用硬上限（零外联夹具在 astra_fakes） ───────────────────────────────────────────────

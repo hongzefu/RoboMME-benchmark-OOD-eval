@@ -306,7 +306,14 @@ def install(argv: list[str]) -> None:
     }).install()
 
 
+def assert_official_namespace() -> None:
+    bad = [m for m in sys.modules if any(m == p or m.startswith(p + ".")
+                                        for p in ("robomme_hard", "robomme_ood"))]
+    assert not bad, f"原侧不得导入 OOD 包：{bad}"
+
+
 def main() -> None:
+    assert_official_namespace()
     argv = sys.argv[1:]
     if argv[:1] == ["--orig-preflight"]:
         install([])
@@ -319,7 +326,7 @@ def main() -> None:
         assert getattr(env_runner.EnvRunner, "_orig_observer_hooked", False), "EnvRunner 未挂钩"
         assert getattr(wsc.ClientConnection, "_orig_observer_hooked", False), "ClientConnection 未挂钩"
         assert getattr(wcp.MMEVLAWebsocketClientPolicy, "_orig_observer_hooked", False), "策略客户端未挂钩"
-        assert "robomme_hard" not in sys.modules, "原侧不得导入 robomme_hard"
+        assert_official_namespace()
         print(f"OBSERVER_PREFLIGHT=PASS route={ROUTE} robomme={robomme.__file__} trace_writer={OE.tw.__file__} "
               f"groundsg_client={OE.groundsg.__file__}", flush=True)
         return

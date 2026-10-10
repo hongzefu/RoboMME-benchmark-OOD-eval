@@ -27,7 +27,7 @@
     python dev-scripts/checks/cap_probe.py --official --max-steps 1300 --task VideoUnmask --episode 3 --loop mme-vla
 
 ``--official`` 用官方 ``robomme`` builder 与 ``dataset="test"``（``--episode`` 为官方局号）；否则用
-``robomme_hard`` builder（``--episode`` 为 builder 局号）。
+``robomme_ood`` builder（``--episode`` 为 builder 局号）。
 """
 from __future__ import annotations
 
@@ -142,8 +142,8 @@ def make_builder(args):
 
         return BenchmarkEnvBuilder(env_id=args.task, dataset="test", action_space="joint_angle", gui_render=False,
                                    max_steps=args.max_steps)
-    import robomme_hard.robomme_env  # noqa: F401 注册 16 个环境
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    import robomme_ood.robomme_env  # noqa: F401 注册 16 个环境
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     return BenchmarkEnvBuilder(env_id=args.task, dataset=args.dataset, action_space="joint_angle", gui_render=False,
                                max_steps=args.max_steps)

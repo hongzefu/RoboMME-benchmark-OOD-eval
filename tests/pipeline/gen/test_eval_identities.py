@@ -69,7 +69,7 @@ def test_split_accept_two_rows(tmp_path, capsys):
         assert set(r) == set(E.ROW_KEYS) and r["episode"] == r["builder_episode"]
         assert r["key"] == f"{r['task']}_{r['tier']}_{r['seed']}"
     # 与执行侧 builder 的解析一致（同一 hard_specs）
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     for r in rows:
         got = BenchmarkEnvBuilder("VideoUnmask", dataset=r["dataset"]).resolve_identity(0)

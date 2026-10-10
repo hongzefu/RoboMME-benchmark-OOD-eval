@@ -175,7 +175,7 @@ def seat() -> None:
 
 def runner() -> None:
     if "--check-imports" in ARGS:
-        print("OFFICIAL_IMPORTS=PASS robomme=fake robomme_hard_imported=0", flush=True)
+        print("OFFICIAL_IMPORTS=PASS robomme=fake robomme_ood_imported=0", flush=True)
         sys.exit(0)
     out = Path(arg("--out"))
     out.mkdir(parents=True, exist_ok=True)

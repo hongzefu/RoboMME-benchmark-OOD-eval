@@ -2,7 +2,7 @@
 
 - 服务：真实 ``site_app.create_server``（即 ``site_server.create_server`` + 真实 ``site.html``），绑 ``127.0.0.1``、
   端口 0，跑在守护线程里，用 ``http.client`` 发原始请求（可带任意 Range 与未规范化路径）。
-- 规格：从 benchmark 子模块 ``robomme_hard/env_metadata/ood/<tier>/specs.jsonl`` 读真实行，只保留要测的任务，用生产的
+- 规格：从 benchmark 子模块 ``robomme_ood/env_metadata/ood/<tier>/specs.jsonl`` 读真实行，只保留要测的任务，用生产的
   ``identity_sha256``／``delivery_sha256``／``digest`` 重签头部——行内容（seed、规格、选中与 rollout）原样保留，
   站点目录的配置抽值因此对的是真实交付数据。
 """
@@ -24,7 +24,7 @@ APP = load_script("injection-dev/site/site_app.py")
 SERVER = APP.site_server
 CAT = load_script("injection-dev/site/site_catalog.py")
 H = CAT.load_hard_specs()
-PACKAGED = CAT.robomme_hard_root() / "env_metadata/ood"
+PACKAGED = CAT.robomme_ood_root() / "env_metadata/ood"
 HTML = Path(APP.HTML_PATH)
 
 MP4 = bytes(range(256)) * 8  # 2048 字节，逐字节可辨

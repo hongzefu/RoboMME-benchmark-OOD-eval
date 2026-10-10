@@ -7,7 +7,7 @@ session, so per the assignment table this module lives in ``tests/pipeline/eval/
 Design rules:
 - Production modules are always loaded by path via ``tests._support.loaders.load_script`` (same as the production
   entry); no stubs are injected into sys.modules.
-- Identity resolution uses the real ``robomme_hard`` ``BenchmarkEnvBuilder`` (packaged specs); only
+- Identity resolution uses the real ``robomme_ood`` ``BenchmarkEnvBuilder`` (packaged specs); only
   ``make_env_for_episode`` is replaced with a CPU fake environment, so identity checks (``check_identity``) use real
   resolution results. No simulation scene is built.
 - The fake policy server's actions are generated deterministically from a digest of "all frame fingerprints received
@@ -67,13 +67,13 @@ def smvla_server():
 
 
 def hard_specs():
-    from robomme_hard.env_record_wrapper import hard_specs as hs
+    from robomme_ood.env_record_wrapper import hard_specs as hs
 
     return hs
 
 
 def real_builder(task: str, max_steps: int | None = None, dataset: str = "ood"):
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     kw = {} if max_steps is None else {"max_steps": int(max_steps)}
     return BenchmarkEnvBuilder(env_id=task, dataset=dataset, action_space="joint_angle", **kw)

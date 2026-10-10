@@ -61,7 +61,7 @@
     ],
     "symbol": "official_hard_runner：--check-imports / main 参数与分片核对 / run_identity 原始帧与结果行 / run_shard 服务不可达中止",
     "oracle": "导入断言在子进程里跑（只加官方 examples/robomme 与仓库 src）；原始帧字节数与首帧内容按假环境手算",
-    "positive": "OFFICIAL_IMPORTS=PASS：robomme 来自仓库 src/robomme/、robomme_hard 未导入、官方模块未被整模块导入，两个变体的官方定义可摘取；判定行 OFFICIAL_HARD_SOURCE=PASS robomme_hard_imported=0；每局目录 <out>/<key>.a<attempt>/ 只含 trace.jsonl 与 frames/（QwenVL 另有归档日志），frames.json 为 pix_fmt=rgb24、order=reset_all_then_per_step_last、demo_frames／init_frames／exec_steps／missing_steps 与各流宽高帧数；官方 builder 构造参数 dataset=test、joint_angle、max_steps 透传、每任务只建一次",
+    "positive": "OFFICIAL_IMPORTS=PASS：robomme 来自仓库 src/robomme/、robomme_ood 未导入、官方模块未被整模块导入，两个变体的官方定义可摘取；判定行 OFFICIAL_HARD_SOURCE=PASS robomme_ood_imported=0；每局目录 <out>/<key>.a<attempt>/ 只含 trace.jsonl 与 frames/（QwenVL 另有归档日志），frames.json 为 pix_fmt=rgb24、order=reset_all_then_per_step_last、demo_frames／init_frames／exec_steps／missing_steps 与各流宽高帧数；官方 builder 构造参数 dataset=test、joint_angle、max_steps 透传、每任务只建一次",
     "negative": "缺 --variant、QwenVL 缺 adapter、Oracle 带 adapter、分片行 tier 非 xhard0、每局目录已存在：退出码 3 并打印 GROUNDSG_ORIG_BLOCKED；服务不可达：该局 error（infra、groundsg_unreachable）并停止分片",
     "boundaries": "环境抛异常的那步不出帧、步号记入 missing_steps，帧数 = 3 + exec_steps - len(missing_steps)",
     "nodeids": [

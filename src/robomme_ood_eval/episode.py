@@ -97,7 +97,7 @@ def builder_for(task: str, dataset: str):
         if BUILDER_FACTORY is not None:
             _BUILDERS[ck] = BUILDER_FACTORY(task, dataset, ms)
         else:
-            from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+            from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
             _BUILDERS[ck] = BenchmarkEnvBuilder(env_id=task, dataset=dataset, action_space="joint_angle",
                                                 max_steps=ms)

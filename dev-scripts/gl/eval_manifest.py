@@ -36,7 +36,7 @@ shard-NN.json 与 reused.json，不留半成品）：
   V8 manifest 行的 ``key`` 原值）。
 
 末行 ``V9_EVAL_SHARDS=PASS shards=10 total=80 cells=2 reused=720 reused_sha256=<前 12 位> missing=0 extra=0 duplicate=0 xhard0=0``。
-只用标准库，``hard_specs`` 按文件路径加载（不 import robomme_hard 包，不触发 sapien）。
+只用标准库，``hard_specs`` 按文件路径加载（不 import robomme_ood 包，不触发 sapien）。
 
 ``--mode``（1003-oracle-subgoal-groundsg-eval-plan.md 第二部分 1.2）：
 
@@ -44,7 +44,7 @@ shard-NN.json 与 reused.json，不留半成品）：
 - ``v9-full``：``--identities`` + ``--delivery``，只做第 1～4 步、不剔除已评身份，全部执行行（800 局）切片；末行
   ``EVAL_SHARDS=PASS mode=v9-full total=800 cells=43 missing=0 extra=0 duplicate=0 xhard0=0``。
 - ``hard0``：不读交付清单，直接由 ``BenchmarkEnvBuilder(task, dataset="hard-verify")`` 枚举 16 任务、每任务前
-  ``--per-task N``（默认 12）局（此模式会 import robomme_hard）；行键同 ``SHARD_ROW_KEYS``、``spec_sha256=None``、
+  ``--per-task N``（默认 12）局（此模式会 import robomme_ood）；行键同 ``SHARD_ROW_KEYS``、``spec_sha256=None``、
   ``candidate=None``、``key=<task>_xhard0_<seed>``；末行 ``EVAL_SHARDS=PASS mode=hard0 total=<16×N> xhard0=<16×N> ...``。
   ``--pair-shards``：原侧与新侧共用同一份 ``shard-NN.json``（同一身份两侧同分片、分片内同序）。
 
@@ -64,13 +64,13 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[2]
 def hard_specs_path() -> Path:
     """子模块里 ``hard_specs.py`` 的位置：优先评估仓 ``third_party/robomme_benchmark/src/``；子模块未检出（如 git
-    worktree）时按已安装 ``robomme_hard`` 包的位置找（``find_spec`` 只定位、不执行包的 ``__init__``）。"""
-    p = REPO / "third_party" / "robomme_benchmark" / "src" / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+    worktree）时按已安装 ``robomme_ood`` 包的位置找（``find_spec`` 只定位、不执行包的 ``__init__``）。"""
+    p = REPO / "third_party" / "robomme_benchmark" / "src" / "robomme_ood" / "env_record_wrapper" / "hard_specs.py"
     if p.is_file():
         return p
     import importlib.util
 
-    spec = importlib.util.find_spec("robomme_hard")
+    spec = importlib.util.find_spec("robomme_ood")
     if spec is not None and spec.submodule_search_locations:
         cand = Path(list(spec.submodule_search_locations)[0]) / "env_record_wrapper" / "hard_specs.py"
         if cand.is_file():
@@ -444,7 +444,7 @@ def split_shards(rows: list[dict], shards: int) -> list[list[dict]]:
 
 def v9_builder(task: str):
     """ood 的真实 builder（ood 不含 xhard0，局号 0～49）。"""
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     return BenchmarkEnvBuilder(task, dataset="ood")
 
@@ -499,7 +499,7 @@ def build_v9_full(identities: Path, delivery_path: Path, shards: int,
 
 def hard0_builder(task: str):
     """hard-verify 的真实 builder（只读官方 test 元数据的 hard 子集，不建仿真场景）。"""
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     return BenchmarkEnvBuilder(task, dataset="hard-verify")
 

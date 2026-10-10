@@ -75,7 +75,7 @@
     ],
     "symbol": "assert_official_only / load_shard / RawFrameWriter / EpisodeCapture / EnvProxy / run_shard 结果行",
     "oracle": "子进程 --check-imports 的判定行；假环境逐帧字节手算；分片行键按 eval_manifest hard0 模式",
-    "positive": "OFFICIAL_IMPORTS=PASS 且 robomme 来自仓库 src/robomme、robomme_hard_imported=0；原始帧 count = demo_frames + 1 + exec_steps、文件字节数 = count×H×W×3、首帧与第 4 帧字节等于假环境；结果行含 side=orig、dataset=hard-verify、status、exec_steps、demo_frames、max_steps、sid",
+    "positive": "OFFICIAL_IMPORTS=PASS 且 robomme 来自仓库 src/robomme、robomme_ood_imported=0；原始帧 count = demo_frames + 1 + exec_steps、文件字节数 = count×H×W×3、首帧与第 4 帧字节等于假环境；结果行含 side=orig、dataset=hard-verify、status、exec_steps、demo_frames、max_steps、sid",
     "negative": "分片含非 xhard0 行或 key 重复即 ValueError",
     "boundaries": "只覆写 RoboMMEBenchmark.reset 并以委托代理包住环境 step，不改 src/robomme 任何方法；新侧轨迹位置 trace_path > <trace_dir（每局目录）>/trace.jsonl > <录像器目录>/trace.jsonl，trace_dir 下不再套 key.a<attempt>",
     "nodeids": [

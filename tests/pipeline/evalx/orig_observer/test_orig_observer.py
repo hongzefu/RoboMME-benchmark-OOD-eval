@@ -36,6 +36,27 @@ KEY = f"{TASK}_xhard0_{SEED}"
 SEEDS = {(TASK, SRC): SEED}
 
 
+@pytest.mark.parametrize("observer", ["framesamp_modul_client_wrap", "smvla_wrap", "run_orig_framesamp_modul"])
+@pytest.mark.parametrize("package", ["robomme_hard", "robomme_ood"])
+def test_preflight_rejects_both_ood_namespaces(observer, package):
+    import ast
+    if observer == "run_orig_framesamp_modul":
+        text = (OBS / (observer + ".sh")).read_text()
+        guard = next(line for line in text.splitlines() if line.startswith("assert not any(m == p"))
+    else:
+        tree = ast.parse((OBS / (observer + ".py")).read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "assert_official_namespace")
+        guard = ast.unparse(fn) + "\nassert_official_namespace()"
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        assert "assert_official_namespace()" in ast.unparse(main)
+    # Run the exact production guard in an isolated module namespace.
+    for imported in (package, package + ".env_record_wrapper"):
+        with pytest.raises(AssertionError):
+            exec(guard, {"sys": types.SimpleNamespace(modules={imported: object()})})
+    exec(guard, {"sys": types.SimpleNamespace(modules={"robomme": object()})})
+    print(f"ORIG_IMPORT_GUARD=PASS observer={observer} package={package} missed=0")
+
+
 def _wrap(name: str):
     return load_script(f"eval-official/orig_observer/{name}.py", fresh=True)
 

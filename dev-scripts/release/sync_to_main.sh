@@ -34,6 +34,24 @@ if LC_ALL=C grep -qP '[^\x00-\x7F]' <<<"$MSG"; then
 fi
 
 cd "$REPO"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-/home/hongzefu/.cache/uv}" PYTHONUNBUFFERED=1
+ls -ld artifacts
+[[ -d artifacts && ! -L artifacts ]] || fail "日志根必须是实体 artifacts" log_root
+mkdir -p artifacts/checks
+TEST_OUT="$(mktemp -d "$REPO/artifacts/checks/public-sync.XXXXXX")"
+run_gate() {
+  local name="$1" gate_rc tee_rc final_rc
+  shift
+  set +e
+  timeout --signal=TERM --kill-after=5s 275s "$@" 2>&1 | tee "$TEST_OUT/$name.log"
+  gate_rc=${PIPESTATUS[0]} tee_rc=${PIPESTATUS[1]}
+  set -e
+  final_rc=$gate_rc
+  if [[ "$final_rc" -eq 0 && "$tee_rc" -ne 0 ]]; then final_rc=$tee_rc; fi
+  printf 'GATE_EXIT name=%s exit=%s tee_exit=%s\nEXIT_CODE=%s\n' "$name" "$gate_rc" "$tee_rc" "$final_rc" \
+    | tee -a "$TEST_OUT/$name.log" || return 1
+  [[ "$final_rc" -eq 0 ]]
+}
 # ① 前置
 BR="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$BR" == "dev" ]] || fail "当前分支是 $BR，不是 dev" not_on_dev
@@ -46,17 +64,41 @@ DEV_SHA="$(git rev-parse HEAD)"
 MAIN_SHA="$(git rev-parse origin/main)"
 
 # ② 闸门
-"$PY" "$REL/check_public_lang.py" --show 20 | tail -n 21 || fail "PUBLIC_LANG 未通过" lang
-"$PY" "$REL/check_public_paths.py" --show 20 | tail -n 21 || fail "PUBLIC_PATHS 未通过" paths
-"$PY" "$REL/check_manifest.py" --collect | tail -n 21 || fail "PUBLIC_MANIFEST 未通过" manifest
+run_gate public-lang "$PY" "$REL/check_public_lang.py" --show 20 || fail "PUBLIC_LANG 未通过" lang
+run_gate public-paths "$PY" "$REL/check_public_paths.py" --show 20 || fail "PUBLIC_PATHS 未通过" paths
+run_gate public-collect "$PY" "$REL/check_manifest.py" --ref "$DEV_SHA" --collect || fail "PUBLIC_MANIFEST 未通过" manifest
+[[ "$(git rev-parse HEAD)" == "$DEV_SHA" ]] || fail "dev 在检查期间改变" dev_changed
+run_gate public-submodules "$PY" "$REL/check_manifest.py" --submodules || fail "子模块不可公开取得" submodules
+[[ "$(git rev-parse HEAD)" == "$DEV_SHA" ]] || fail "dev 在检查期间改变" dev_changed
 
 # ③ 清单内测试短测
 mapfile -t TESTS < <(grep -E '^tests/.*/?test_[^/]*\.py$|^tests/test_[^/]*\.py$' "$MANIFEST")
-"$PY" -m pytest -m 'not slow' -q -p no:cacheprovider "${TESTS[@]}" | tail -n 3 || fail "清单内测试未全过" tests
+[[ ${#TESTS[@]} -gt 0 ]] || fail "公开测试集合为空" no_tests
+run_gate public-tests "$PY" -m pytest -m 'not slow' -q -s -p no:cacheprovider "${TESTS[@]}" \
+  --junitxml="$TEST_OUT/public-tests.xml" || fail "清单内测试未全过" tests
+run_gate public-completeness "$PY" -c '
+import re, sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+suites = list(root.iter("testsuite"))
+assert suites and sum(int(s.get("tests", 0)) for s in suites) > 0
+assert all(int(s.get(k, 0)) == 0 for s in suites for k in ("failures", "errors", "skipped"))
+log = open(sys.argv[2]).read()
+rows = [s for s in log.splitlines() if s.startswith("TEST_RESOURCE=PASS")]
+assert rows and all(re.search(r"\b" + k + r"=0\b", rows[-1]) for k in ("native_reset", "gpu_init", "weights", "network", "violations", "not_verified")), rows
+assert not re.search(r"\d+ xfailed|\d+ xpassed", log)
+print("PUBLIC_TEST_COMPLETENESS=PASS")
+' "$TEST_OUT/public-tests.xml" "$TEST_OUT/public-tests.log" || fail "公开测试执行完整性失败" test_completeness
+[[ "$(git rev-parse HEAD)" == "$DEV_SHA" && -z "$(git status --porcelain --ignore-submodules=dirty -- . ':!docs/subagent-stats')" ]] \
+  || fail "dev 在检查期间改变" dev_changed
 
 # ④ 取 main 临时检出
 WT="$(mktemp -d "${TMPDIR:-/tmp}/main-sync.XXXXXX")"
-cleanup() { git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1 || true; rm -rf "$WT"; }
+cleanup() {
+  git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1 || true
+  rm -rf "$WT"
+  if [[ -n ${LIST:-} ]]; then rm -f "$LIST"; fi
+  if [[ -n ${DEL:-} ]]; then rm -f "$DEL" "$DEL.all"; fi
+}
 trap cleanup EXIT
 rmdir "$WT"
 git worktree add -q --detach "$WT" origin/main
@@ -79,6 +121,12 @@ while read -r mode sha _stage path; do
 done < <(git ls-tree -r "$DEV_SHA" | awk '$1=="160000"{print $1, $3, 0, $4}')
 FILES="$(wc -l < "$LIST")"
 CHANGED="$(git -C "$WT" diff --cached --name-only | wc -l)"
+run_gate public-tree "$PY" "$REL/check_manifest.py" --manifest "$MANIFEST" --ref "$DEV_SHA" --tree "$WT" \
+  || fail "候选暂存区全集不符合公开清单" candidate_tree
+mapfile -t PUBLIC_PATHS < "$LIST"
+run_gate public-bytes git -C "$WT" diff --cached --quiet "$DEV_SHA" -- "${PUBLIC_PATHS[@]}" \
+  || fail "候选公开文件字节或模式不符" candidate_bytes
+echo "PUBLIC_BYTES=PASS"
 rm -f "$LIST" "$DEL" "$DEL.all"
 
 # ⑥ 无差异
@@ -98,4 +146,7 @@ git -C "$WT" push -q origin HEAD:main || fail "推送 main 被拒（非快进或
 NEW_MAIN="$(git -C "$WT" rev-parse HEAD)"
 git fetch -q origin
 # ⑧ 清理由 trap 完成
+[[ "$(git rev-parse origin/main)" == "$NEW_MAIN" ]] || fail "公开 main 在发布核对时改变" main_changed
+run_gate published-tree "$PY" "$REL/check_manifest.py" --manifest "$MANIFEST" --ref "$DEV_SHA" --tree "$WT" \
+  || fail "已发布树不符合来源清单" published_tree
 echo "SYNC_MAIN=PASS dev=$DEV_SHA main=$NEW_MAIN files=$FILES changed=$CHANGED"

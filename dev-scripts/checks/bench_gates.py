@@ -26,6 +26,63 @@ ADDED_FILES = {"scripts/evaluation_ood.py", "scripts/README_ood.md", "AGENTS.md"
 MODIFIED_OK = {"pyproject.toml", "readme.md", ".gitignore", "uv.lock"}
 H1_CHANGED = {"README.md", "UPSTREAM.json", "__init__.py", "env_record_wrapper/hard_builder.py", "env_record_wrapper/hard_specs.py"}
 GEN_SYMBOLS = ("from_v4_specs", "v4_episodes", "HARD_TRAIN_TASKS", "XHARD0_IN_TEST_HARD", "SPECS_ROOT_ENV", "_override_cells", "_root_specs")
+V11 = "51e05feb05c61b9a5a25cef3ba189ad625f2cd83"
+V12_PATHS = {
+    "src/robomme_ood/robomme_env/utils/subgoal_evaluate_func.py",
+    "src/robomme_ood/robomme_env/MoveCube.py",
+    "tests/robomme_ood/unit/hard/tasks/test_stopcube.py",
+    "tests/robomme_ood/unit/hard/tasks/test_movecube.py",
+    "tests/robomme_ood/unit/hard/contracts.delta.json",
+    "tests/robomme_ood/contract/benchmark_contracts.json",
+}
+
+
+def gate_version(b: Path, profile: str, base: str, candidate: str) -> int:
+    """只读确定对象或暂存区；新版不调用旧版动态检查。"""
+    if base != V11:
+        raise ValueError(f"新版基线必须固定为 {V11}")
+    def tree(ref):
+        rows = git(b, "ls-files", "-s") if ref == "index" else git(b, "ls-tree", "-r", ref)
+        result = {}
+        for row in rows.splitlines():
+            meta, path = row.split("\t", 1)
+            fields = meta.split()
+            if ref == "index" and fields[2] != "0":
+                raise ValueError(f"暂存区有冲突：{path}")
+            result[path] = (fields[0], fields[1] if ref == "index" else fields[2])
+        return result
+    before, after, upstream = tree(base), tree(candidate), tree(OFFICIAL)
+    changed = {p for p in before.keys() | after.keys() if before.get(p) != after.get(p)}
+    official = {p for p in upstream if p.startswith("src/robomme/")}
+    official_bad = {p for p in official if after.get(p) != upstream[p]}
+    official_bad |= {p for p in after if p.startswith("src/robomme/") and p not in official}
+    print(f"BENCH_UPSTREAM={'PASS' if official and not official_bad else 'FAIL'} files={len(official)} diffs={len(official_bad)}")
+    def blob(path):
+        return subprocess.run(["git", "-C", str(b), "cat-file", "blob", after[path][1]],
+                              check=True, capture_output=True).stdout
+    sha_path = "tests/robomme_ood/contract/packaged_specs.sha256"
+    specs = {}
+    for row in blob(sha_path).decode().splitlines():
+        if row.strip():
+            sha, path = row.split()
+            specs[path.lstrip("*")] = sha
+    bad_specs = sum(hashlib.sha256(blob("src/robomme_ood/env_metadata/ood/" + p)).hexdigest() != h
+                    for p, h in specs.items())
+    specs_ok = len(specs) == 5 and not bad_specs
+    print(f"BENCH_SPECS_SHA={'PASS' if specs_ok else 'FAIL'} files={len(specs)} mismatches={bad_specs}")
+    production = {p for p in V12_PATHS if p.startswith("src/")}
+    scope_ok = (not changed if profile == "v1.1" else
+                production <= changed <= V12_PATHS and before.keys() == after.keys()
+                and all(before[p][0] == after[p][0] for p in changed))
+    frozen = {p for p in before if p.startswith("src/robomme_ood/env_metadata/")}
+    frozen |= {sha_path, "src/robomme_ood/UPSTREAM.json"}
+    frozen_ok = bool(frozen) and all(before[p] == after.get(p) for p in frozen)
+    for p in sorted(changed):
+        print(f"CHANGED {p}")
+    name = "BENCH_V12_SCOPE" if profile == "v1.2" else "BENCH_V11_SCOPE"
+    ok = scope_ok and frozen_ok and specs_ok and bool(official) and not official_bad
+    print(f"{name}={'PASS' if ok else 'FAIL'} tracked={len(after)} changed={len(changed)} frozen={len(frozen)}")
+    return 0 if ok else 1
 
 
 def git(repo: Path, *a: str, check: bool = True) -> str:
@@ -250,11 +307,21 @@ print(f"BENCH_SMOKE={'PASS' if n==2 and resets==2 else 'FAIL'} identities={n} re
 def main() -> int:
     ap = argparse.ArgumentParser(description="benchmark 仓 S1 仓级闸门")
     ap.add_argument("--bench", type=Path, required=True)
+    ap.add_argument("--profile", choices=("v1.0", "v1.1", "v1.2"), required=True)
+    ap.add_argument("--base", default=V11)
+    ap.add_argument("--candidate", default="HEAD")
+    ap.add_argument("--static-only", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="另跑 BENCH_SMOKE（2 次 reset，占 1 张卡）")
     ap.add_argument("--gpu", default="0")
     ap.add_argument("--skip-slow", action="store_true", help="不跑 BENCH_PACKAGE／BENCH_REGISTRY")
     a = ap.parse_args()
     b = a.bench.resolve()
+    if a.profile != "v1.0":
+        if not a.static_only or a.smoke:
+            ap.error("新版必须指定 --static-only，禁止 smoke")
+        return gate_version(b, a.profile, a.base, a.candidate)
+    if a.static_only:
+        ap.error("v1.0 使用原门禁；新版静态检查请显式选择 v1.1 或 v1.2")
     print(f"bench={b} head={git(b, 'rev-parse', 'HEAD').strip()}")
     lines = [gate_delta(b), gate_upstream(b), gate_unchanged(b), gate_specs_sha(b), gate_manifest(b), gate_datasets(b),
              gate_entry_diff(b), gate_no_gen(b), gate_scripts(b)]

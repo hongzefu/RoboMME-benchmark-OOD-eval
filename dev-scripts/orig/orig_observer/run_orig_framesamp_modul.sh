@@ -126,7 +126,7 @@ CLIENT_ENV=(env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u all
 ( cd examples/robomme && "${CLIENT_ENV[@]}" "$CLIENT_PY" -c "
 import sys, robomme, env_runner
 assert robomme.__file__.startswith(sys.argv[1]), robomme.__file__
-assert 'robomme_hard' not in sys.modules
+assert not any(m == p or m.startswith(p + '.') for m in sys.modules for p in ('robomme_hard', 'robomme_ood'))
 print('ORIG_ROBOMME', robomme.__file__)" "$OFFICIAL_SRC" ) || { echo "RUN_BLOCKED reason=robomme_not_orig 客户端未解析到原版 robomme 或导入了 robomme_hard"; echo "EXIT_CODE=1"; exit 1; }
 # 包装器自检：钩子装得上、原版 robomme 仍优先（写进 REC_ROOT/preflight，不占逐局目录）
 ( cd examples/robomme && "${CLIENT_ENV[@]}" REC_ROOT="$REC_ROOT/preflight" "$CLIENT_PY" "$OBS_DIR/framesamp_modul_client_wrap.py" --orig-preflight ) \

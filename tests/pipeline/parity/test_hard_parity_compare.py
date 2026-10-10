@@ -18,7 +18,7 @@ import pytest
 import parity_fixtures as F
 
 TIER = "xhard5"
-SRC_SPECS = F.bench_root() / "src" / "robomme_hard" / "env_metadata" / "ood" / TIER / "specs.jsonl"
+SRC_SPECS = F.bench_root() / "src" / "robomme_ood" / "env_metadata" / "ood" / TIER / "specs.jsonl"
 OUTSIDE = ("StopCube", TIER, 99_999_999)
 
 
@@ -40,7 +40,7 @@ def side_line(side: str, r: dict, path: str, sha: str) -> dict:
     line = {"side": side, "tier": r["tier"], "task": r["task"], "episode": r["episode"], "seed": r["seed"],
             "success": True, "path": path, "sha256": sha, "recovery_mode": None}
     if side in ("H", "H2"):
-        line["env_module"] = f"robomme_hard.robomme_env.{r['task']}"
+        line["env_module"] = f"robomme_ood.robomme_env.{r['task']}"
     else:
         line.update(worker="official._worker", robomme_module="/official/src/robomme/__init__.py")
     return line

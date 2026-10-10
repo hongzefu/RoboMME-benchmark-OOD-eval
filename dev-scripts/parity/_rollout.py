@@ -2,7 +2,7 @@
 
 由原 ``scripts/parity/v4_rollout.py`` 下沉：真正起环境、录 h5、跑规划的仍是 ``train_split_runner.py``
 （``--identity-source formula --no-recovery``）→ ``train_split_worker.run_one``（``gym.make(..., sampling_config=,
-native_episode_spec=)``），环境包由 ``ROBOMME_ENV_PACKAGE`` 决定（默认 robomme_hard）。
+native_episode_spec=)``），环境包由 ``ROBOMME_ENV_PACKAGE`` 决定（默认 robomme_ood）。
 
 两种模式：
 
@@ -52,7 +52,7 @@ from typing import Any
 
 import _common  # noqa: F401  路径设置
 
-from robomme_hard.env_record_wrapper import hard_specs  # noqa: E402
+hard_specs = _common.hard_specs_light()
 
 RUNNER = _common.HERE / "train_split_runner.py"
 INFRA_TYPES = {"BrokenProcessPool", "TerminatedWorkerError", "TimeoutError", "RunnerCrash"}

@@ -753,7 +753,9 @@
     "boundaries": "共享库内部开关缺省 0，只有新侧入口 run_eval_gl.sh 显式开启；不覆盖真实 GPU 渲染",
     "nodeids": [
       "tests/pipeline/eval/test_official_media_check.py",
-      "tests/pipeline/eval/test_seat_scripts.py"
+      "tests/pipeline/eval/test_seat_scripts.py",
+    "tests/pipeline/eval/test_seat_scripts.py::test_sync_main_rejects_invalid_candidate_and_failed_gate",
+    "tests/pipeline/eval/test_seat_scripts.py::test_sync_main_noop_requires_all_gates"
     ],
     "resource": "cpu；ffmpeg 收尾链用例标 slow",
     "mutants": [],

@@ -44,7 +44,7 @@ def hard_regression():
 
 
 def bench_root() -> Path:
-    """benchmark 子模块源码树根（子模块未检出时退回当前解释器能找到的 robomme_hard 所在树，只查找不导入）。"""
+    """benchmark 子模块源码树根（子模块未检出时退回当前解释器能找到的 robomme_ood 所在树，只查找不导入）。"""
     return hard_parity()._common.bench_root()
 
 

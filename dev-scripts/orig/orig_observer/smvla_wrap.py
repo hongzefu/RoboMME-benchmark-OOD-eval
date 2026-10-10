@@ -249,7 +249,14 @@ def install(argv: list[str]) -> dict:
     return seeds
 
 
+def assert_official_namespace() -> None:
+    bad = [m for m in sys.modules if any(m == p or m.startswith(p + ".")
+                                        for p in ("robomme_hard", "robomme_ood"))]
+    assert not bad, f"原侧不得导入 OOD 包：{bad}"
+
+
 def main() -> None:
+    assert_official_namespace()
     argv = sys.argv[1:]
     # 与 ``python -m`` 一致：sys.path[0] 为当前目录
     sys.path[0] = os.getcwd()
@@ -260,7 +267,7 @@ def main() -> None:
 
         assert getattr(ip.InProcSimPool, "_orig_observer_hooked", False), "InProcSimPool 未挂钩"
         assert getattr(bp.BatchedEvalPolicy, "_orig_observer_hooked", False), "BatchedEvalPolicy 未挂钩"
-        assert "robomme_hard" not in sys.modules, "原侧不得导入 robomme_hard"
+        assert_official_namespace()
         print(f"OBSERVER_PREFLIGHT=PASS route={ROUTE} robomme_sim={ip.__file__} trace_writer={tw.__file__} "
               f"groundsg_client={OE.groundsg.__file__}", flush=True)
         return

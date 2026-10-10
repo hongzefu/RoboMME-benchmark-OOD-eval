@@ -29,8 +29,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 #: vendor 的官方编排四文件（与本文件同目录的 official/，字节不动）
 DEFAULT_OFFICIAL_ROOT = HERE / "official"
-#: hard_specs 按文件加载（只取 ALL_TASKS；本进程不得导入 robomme／robomme_hard 包，见模块说明）
-HARD_SPECS_REL = Path("src") / "robomme_hard" / "env_record_wrapper" / "hard_specs.py"
+#: hard_specs 按文件加载（只取 ALL_TASKS；本进程不得导入 robomme／robomme_ood 包，见模块说明）
+HARD_SPECS_REL = Path("src") / "robomme_ood" / "env_record_wrapper" / "hard_specs.py"
 
 
 def _check_vendor(official_root: Path) -> str:
@@ -47,15 +47,24 @@ def _check_vendor(official_root: Path) -> str:
     return str(payload["tree"])
 
 
-def _all_tasks(src_root: Path) -> tuple[str, ...]:
-    """16 任务规范序：按文件加载 ``<src_root>/src/robomme_hard/env_record_wrapper/hard_specs.py`` 取 ``ALL_TASKS``
-    （不经包 ``__init__``，不导入仿真，也不让本进程导入 robomme_hard 包）。"""
-    import importlib.util  # noqa: PLC0415
-
-    spec = importlib.util.spec_from_file_location("_runner_hard_specs", src_root / HARD_SPECS_REL)
+def _specs_module(src_root: Path):
+    import importlib.util
+    package = os.environ.get("ROBOMME_ENV_PACKAGE", "robomme_ood")
+    if package == "robomme":
+        package = "robomme_ood"
+    if package not in ("robomme_ood", "robomme_hard"):
+        raise ValueError(f"规格包非法：{package}")
+    path = src_root / "src" / package / "env_record_wrapper/hard_specs.py"
+    spec = importlib.util.spec_from_file_location("_runner_hard_specs", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return tuple(module.ALL_TASKS)
+    return module
+
+
+def _all_tasks(src_root: Path) -> tuple[str, ...]:
+    """16 任务规范序：按文件加载 ``<src_root>/src/robomme_ood/env_record_wrapper/hard_specs.py`` 取 ``ALL_TASKS``
+    （不经包 ``__init__``，不导入仿真，也不让本进程导入 robomme_ood 包）。"""
+    return tuple(_specs_module(src_root).ALL_TASKS)
 
 
 def _metadata_records_sha256(metadata_root: Path, src_root: Path) -> str:
@@ -144,13 +153,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--identity-source", choices=("train_metadata", "formula", "test_metadata"), default="train_metadata",
         help="身份复核来源：train_metadata＝官方 metadata 逐字比（原值五路，默认）；"
-             "formula＝新值档身份按 robomme_hard.env_record_wrapper.hard_specs 的 seed 公式硬校验；"
+             "formula＝新值档身份按 robomme_ood.env_record_wrapper.hard_specs 的 seed 公式硬校验；"
              "test_metadata＝xhard0：按 <src-root>/src/robomme/env_metadata/test 的 hard 子集逐条比，并与 --xhard0-manifest 双向核对",
     )
     parser.add_argument("--xhard0-manifest", default=None, help="identity_source=test_metadata 时的 xhard0 清单（16×1×12）")
     parser.add_argument(
         "--builder-route", choices=("hard-verify",), default=None,
-        help="xhard0 H 侧：镜像 worker 的 gym.make 实参取自 robomme_hard 构建器 dataset=\"hard-verify\" 的条目"
+        help="xhard0 H 侧：镜像 worker 的 gym.make 实参取自 robomme_ood 构建器 dataset=\"hard-verify\" 的条目"
              "（按数据集名取局，局 0～11 即 xhard0；v7 §1.5）",
     )
     parser.add_argument(
@@ -177,11 +186,11 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"官方生成脚本不存在：{script_dir / 'generate_dataset.py'}")
     official_tree = _check_vendor(official_root)
     env_package = os.environ.get("ROBOMME_ENV_PACKAGE", "robomme")
-    if env_package not in ("robomme", "robomme_hard"):
+    if env_package not in ("robomme", "robomme_ood", "robomme_hard"):
         raise SystemExit(f"ROBOMME_ENV_PACKAGE 非法：{env_package}")
-    if args.builder_route is not None and env_package != "robomme_hard":
-        # R9：官方侧（ROBOMME_ENV_PACKAGE=robomme）进程不得导入 robomme_hard
-        raise SystemExit("--builder-route 只用于 H 侧（ROBOMME_ENV_PACKAGE=robomme_hard）；官方侧不得导入 robomme_hard（R9）")
+    if args.builder_route is not None and env_package != "robomme_ood":
+        # R9：官方侧（ROBOMME_ENV_PACKAGE=robomme）进程不得导入 robomme_ood
+        raise SystemExit("--builder-route 只用于 H 侧（ROBOMME_ENV_PACKAGE=robomme_ood）；官方侧不得导入 robomme_ood（R9）")
     if args.builder_route is not None:
         args.force_mirror = True
 
@@ -237,13 +246,11 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"官方 test hard 子集与 xhard0 清单不符：缺 {len(manifest_ids - metadata_ids)} 多 {len(metadata_ids - manifest_ids)}")
     else:
         # V4：xhard 身份不在官方 metadata 里；改按 V4 seed 公式复核，仍是硬校验。
-        # xhard 分支才延迟导入 robomme_hard 的 seed 规则；O／P 侧（train_metadata）进程不触发（红线 R5）
-        sys.path.insert(0, str(src_root / "src"))
-        from robomme_hard.env_record_wrapper.hard_specs import (  # noqa: PLC0415
-            DIFFICULTY as V4_DIFFICULTY,
-            _known_seed_rule as v4_known_seed_rule,
-            seed_for as v4_seed_for,
-        )
+        # xhard 分支才延迟导入 robomme_ood 的 seed 规则；O／P 侧（train_metadata）进程不触发（红线 R5）
+        specs = _specs_module(src_root)
+        V4_DIFFICULTY = specs.DIFFICULTY
+        v4_known_seed_rule = specs._known_seed_rule
+        v4_seed_for = specs.seed_for
     partial_path = Path(args.results_json).with_name("results.partial.jsonl")
     done: dict[tuple[str, int], dict] = {}
     if args.resume and partial_path.exists():

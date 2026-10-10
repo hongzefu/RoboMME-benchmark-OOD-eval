@@ -179,7 +179,7 @@ def recording_builder_cls(env_plan=None):
 
     ``env_plan``: callable ``(builder, episode) -> FakeEnv``, or raise to simulate an infrastructure failure.
     """
-    from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+    from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
     class RecordingBuilder(BenchmarkEnvBuilder):
         constructed: list = []

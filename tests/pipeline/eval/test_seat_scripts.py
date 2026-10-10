@@ -40,6 +40,100 @@ DS = F.REPO / "dev-scripts"
 ENGINE = Path(__file__).resolve().parent / "seat_fake_engine.py"
 SCRIPTS = ("run_eval_gl.sh", "run_official_hard.sh", "pair_seat.sh", "orig_seat_lib.sh", "seat.py")
 
+
+def _sync_fixture(tmp_path, mode):
+    root = tmp_path / "sync-fixture"
+    rel = root / "dev-scripts/release"
+    rel.mkdir(parents=True)
+    (root / "artifacts").mkdir()
+    script = rel / "sync_to_main.sh"
+    script.write_bytes((DS / "release/sync_to_main.sh").read_bytes())
+    (rel / "public-manifest.txt").write_text("readme.md\ntests/test_one.py\n")
+    (root / "readme.md").write_text("fixture")
+    (root / "tests").mkdir()
+    (root / "tests/test_one.py").write_text("fixture")
+    events = root / "events"
+    bin_dir = root / "fake-bin"
+    bin_dir.mkdir()
+
+    def executable(path, body):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#!/usr/bin/env bash\nset -eu\n" + body)
+        path.chmod(0o755)
+
+    executable(bin_dir / "git", r'''
+echo "git $*" >> "$EVENTS"
+if [[ ${1:-} == -C ]]; then shift 2; fi
+case "$1" in
+ rev-parse)
+  case "$2" in --abbrev-ref) echo dev;; origin/main) echo mainsha;; *) echo devsha;; esac;;
+ status|fetch|update-index|rm|add) exit 0;;
+ worktree) if [[ $2 == add ]]; then mkdir -p "$5"; fi;;
+ log) echo 'Dev-Source: previous';;
+ archive) tar -c -C "$FIXTURE_ROOT" readme.md tests/test_one.py;;
+ ls-files|ls-tree) exit 0;;
+ diff)
+  if [[ $* == *--name-only* ]]; then echo readme.md
+  elif [[ $* == *--stat* ]]; then echo fixture
+  elif [[ $* == *devsha* && $MODE == bytes ]]; then exit 1
+  else exit 0; fi;;
+ commit|push) echo FORBIDDEN >> "$EVENTS"; exit 99;;
+ *) exit 98;;
+esac
+''')
+    executable(root / ".venv/bin/python", r'''
+echo "python $*" >> "$EVENTS"
+case "$1" in
+ *check_public_lang.py) echo PUBLIC_LANG=PASS;;
+ *check_public_paths.py) echo PUBLIC_PATHS=PASS;;
+ *check_manifest.py)
+  if [[ $* == *--submodules* ]]; then
+   [[ $MODE != submodules ]] || exit 1
+   echo 'SUBMODULE_PUBLIC=PASS repos=5 public=5 reachable=5'
+  elif [[ $* == *--tree* ]]; then
+   [[ $MODE != tree ]] || exit 1
+   echo 'PUBLIC_MANIFEST=PASS missing=0 extra=0'
+  else
+   [[ $MODE != collect ]] || exit 1
+   echo 'PUBLIC_MANIFEST=PASS missing=0 extra=0 collected=1'
+  fi;;
+ -m)
+  [[ $MODE != tests ]] || exit 1
+  echo 'TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0';;
+ -c) [[ $MODE != completeness ]] || exit 1; echo PUBLIC_TEST_COMPLETENESS=PASS;;
+ *) exit 97;;
+esac
+''')
+    executable(bin_dir / "timeout", r'''
+shift 3
+if [[ $MODE == timeout ]]; then exit 124; fi
+exec "$@"
+''')
+    if mode == "tee":
+        executable(bin_dir / "tee", 'exit 23\n')
+    env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
+               FIXTURE_ROOT=str(root), EVENTS=str(events), MODE=mode)
+    result = subprocess.run(["bash", str(script), "--dry-run"], cwd=root, env=env,
+                            capture_output=True, text=True, timeout=15)
+    return result, events.read_text()
+
+
+@pytest.mark.parametrize("mode", ["tree", "bytes", "submodules", "collect", "tests", "completeness", "timeout", "tee"])
+def test_sync_main_rejects_invalid_candidate_and_failed_gate(tmp_path, mode):
+    result, events = _sync_fixture(tmp_path, mode)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert "SYNC_MAIN=NOOP" not in result.stdout and "SYNC_MAIN=DRYRUN" not in result.stdout
+    assert "FORBIDDEN" not in events
+
+
+def test_sync_main_noop_requires_all_gates(tmp_path):
+    result, events = _sync_fixture(tmp_path, "ok")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "SYNC_MAIN=NOOP" in result.stdout and "PUBLIC_BYTES=PASS" in result.stdout
+    for gate in ("check_public_lang.py", "check_public_paths.py", "--collect", "--submodules", "--tree", "--junitxml", "devsha -- readme.md"):
+        assert gate in events, (gate, events)
+    assert "FORBIDDEN" not in events
+
 if shutil.which("setsid") is None or shutil.which("rsync") is None or shutil.which("ffmpeg") is None:  # pragma: no cover
     pytest.skip("未验证：缺 setsid、rsync 或 ffmpeg", allow_module_level=True)
 
@@ -48,9 +142,9 @@ def _bench_src() -> str:
     import importlib.util
 
     own = F.REPO / "third_party" / "robomme_benchmark" / "src"
-    if (own / "robomme_hard").is_dir():
+    if (own / "robomme_ood").is_dir():
         return str(own)
-    spec = importlib.util.find_spec("robomme_hard")
+    spec = importlib.util.find_spec("robomme_ood")
     return str(Path(next(iter(spec.submodule_search_locations))).parent)
 
 
@@ -520,7 +614,7 @@ def test_orig_seat_lib_refuses_direct_execution(tmp_path):
 @pytest.fixture
 def gl_repo(rig):
     """执行副本最小形态：真实脚本、假解释器、空的 PonderPounce 子模块目录、原侧驱动与服务外壳占位文件；评估包从副本
-    ``src`` 导入（RUN_INPUTS 核对它），``robomme_hard`` 从 benchmark 子模块导入。"""
+    ``src`` 导入（RUN_INPUTS 核对它），``robomme_ood`` 从 benchmark 子模块导入。"""
     repo = rig["tmp"] / "repo"
     _media_repo(repo)
     for rel in ("dev-scripts/orig/pp_official_runner.py", "dev-scripts/orig/official_hard_runner.py",

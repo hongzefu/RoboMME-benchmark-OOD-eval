@@ -17,14 +17,14 @@ SCRIPT = REPO / "dev-scripts" / "checks" / "client_replay_eq.py"
 
 
 def _bench_src() -> str:
-    """benchmark 子模块的 src（worktree 里子模块为空时取已安装 robomme_hard 包所在的 src）。"""
+    """benchmark 子模块的 src（worktree 里子模块为空时取已安装 robomme_ood 包所在的 src）。"""
     import importlib.util
 
     own = REPO / "third_party" / "robomme_benchmark" / "src"
-    if (own / "robomme_hard").is_dir():
+    if (own / "robomme_ood").is_dir():
         return str(own)
-    spec = importlib.util.find_spec("robomme_hard")
-    return str(next(iter(spec.submodule_search_locations)).rsplit("/robomme_hard", 1)[0])
+    spec = importlib.util.find_spec("robomme_ood")
+    return str(next(iter(spec.submodule_search_locations)).rsplit("/robomme_ood", 1)[0])
 
 
 @pytest.fixture(scope="module")

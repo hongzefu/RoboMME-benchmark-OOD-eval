@@ -3,7 +3,7 @@
 
 xhard0 新旧两个入口只留下 h5、没有 mp4：
 - ``O``（旧入口，官方 ``robomme`` dataset-gen）：``artifacts/newtask-v7/parity/h5/O-xhard0-bucket``
-- ``H``（新入口，``robomme_hard``）：``artifacts/newtask-v7/parity/h5/H-xhard0``
+- ``H``（新入口，``robomme_ood``）：``artifacts/newtask-v7/parity/h5/H-xhard0``
 
 逐局按 ``timestep_<k>`` 升序读 ``obs/front_rgb`` 与 ``obs/wrist_rgb``（各 256×256×3 uint8），左右拼成 512×256，
 左上角按 ``info/is_video_demo`` 写 ``DEMO``／``EXEC``，经 ffmpeg libx264（yuv420p、faststart）以 30 fps 输出到

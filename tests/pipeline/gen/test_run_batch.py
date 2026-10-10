@@ -3,6 +3,25 @@
 回注绑定计数、h5 事实、局目录挪开留证）全部是真实代码。"""
 from __future__ import annotations
 
+
+def test_runner_specs_are_bound_to_selected_namespace(tmp_path, monkeypatch):
+    from tests._support.dev_loaders import load_script
+    runner = load_script("parity/train_split_runner.py", fresh=True)
+    for package in ("robomme_hard", "robomme_ood"):
+        path = tmp_path / "src" / package / "env_record_wrapper/hard_specs.py"
+        path.parent.mkdir(parents=True)
+        path.write_text(f"ALL_TASKS = ({package!r},)\n")
+    for package in ("robomme_hard", "robomme_ood"):
+        monkeypatch.delenv("ROBOMME_SPECS_PACKAGE", raising=False)
+        monkeypatch.setenv("ROBOMME_ENV_PACKAGE", package)
+        assert runner._all_tasks(tmp_path) == (package,)
+    monkeypatch.setenv("ROBOMME_SPECS_PACKAGE", "robomme_hard")
+    monkeypatch.setenv("ROBOMME_ENV_PACKAGE", "robomme_hard")
+    (tmp_path / "src/robomme_hard/env_record_wrapper/hard_specs.py").unlink()
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        runner._all_tasks(tmp_path)
+
 import hashlib
 import json
 from pathlib import Path
@@ -24,7 +43,7 @@ def batch(tmp_path):
 
 def _run(batch, out, **kw):
     header, rows = batch
-    return R.run_batch(rows, header, out, 0, src_root=Path("/src-root"), workers=3, gpu="1", pkg="robomme_hard", **kw)
+    return R.run_batch(rows, header, out, 0, src_root=Path("/src-root"), workers=3, gpu="1", pkg="robomme_ood", **kw)
 
 
 def test_results_json_mode(monkeypatch, batch, tmp_path):
@@ -39,7 +58,7 @@ def test_results_json_mode(monkeypatch, batch, tmp_path):
         assert argv[argv.index(flag) + 1] == str(value)
     assert "--no-recovery" in argv and "--resume" not in argv
     env = fake.envs[0]
-    assert env["ROBOMME_ENV_PACKAGE"] == "robomme_hard" and env["KEEP"] == "1" and "PYTHONPATH" not in env
+    assert env["ROBOMME_ENV_PACKAGE"] == "robomme_ood" and env["KEEP"] == "1" and "PYTHONPATH" not in env
     assert env["OMP_NUM_THREADS"] == "1" and env["PYTHONUNBUFFERED"] == "1"
     jobs = json.loads((work / "jobs.json").read_text())
     assert [(j["task"], j["episode"], j["seed"], j["difficulty"]) for j in jobs] == \
@@ -54,7 +73,7 @@ def test_results_json_mode(monkeypatch, batch, tmp_path):
     assert (ok["frames"], ok["exec_steps"], ok["bytes"]) == (5, 4, h5.stat().st_size)
     assert ok["spec_binding"] == {"mismatch": 0, "unattributed_mismatch": 0, "unused": 0, "value_points": 3,
                                   "layout_hit": 1, "layout_drift": 0, "layout_overridden": 0}
-    assert ok["env_module"] == f"robomme_hard.robomme_env.{S}" and ok["role"] == "selected"
+    assert ok["env_module"] == f"robomme_ood.robomme_env.{S}" and ok["role"] == "selected"
     bad = by[(S, 1)]
     assert (bad["ok"], bad["error_type"], bad["h5"], bad["role"]) == (False, "TaskFailed", None, "backfill")
     assert "h5_sha256" not in bad
@@ -128,5 +147,5 @@ def test_batch_must_be_single_tier_matching_header(monkeypatch, batch, tmp_path,
     mutate(rows, header)
     fake = FakeRunner().install(monkeypatch)
     with pytest.raises(R.RolloutError, match=needle):
-        R.run_batch(rows, header, tmp_path / "out", 0, src_root=tmp_path, workers=1, gpu="0", pkg="robomme_hard")
+        R.run_batch(rows, header, tmp_path / "out", 0, src_root=tmp_path, workers=1, gpu="0", pkg="robomme_ood")
     assert fake.calls == []

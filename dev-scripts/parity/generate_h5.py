@@ -23,9 +23,9 @@
   continue 与 replay、``--mode merge``（V8 四席合并）。
 - ``--resume``：沿用已有 ``--output`` 续跑；有 h5 却无 partial 记录的身份标 UNKNOWN 并停止；v8 另按账本
   ``<output>/results.jsonl`` 重放已有结果、基础设施重试计数跨重启保留。
-- 环境包由 ``--pkg``（默认 robomme_hard）经 ``ROBOMME_ENV_PACKAGE`` 传给 worker；``--src-root`` 缺省 benchmark
+- 环境包由 ``--pkg``（默认 robomme_ood）经 ``ROBOMME_ENV_PACKAGE`` 传给 worker；``--src-root`` 缺省 benchmark
   子模块根（worker 从 ``<src-root>/src`` 导入环境）。
-- ``--expect-src``：断言本进程导入的 ``robomme_hard`` 位于给定 src 目录下（对拍 smoke 的 H_old／H_new 两侧用，
+- ``--expect-src``：断言本进程导入的 ``robomme_ood`` 位于给定 src 目录下（对拍 smoke 的 H_old／H_new 两侧用，
   防止 ``PYTHONPATH`` 被 editable 安装遮住而静默跑错代码树）。
 """
 
@@ -40,9 +40,13 @@ import time
 from pathlib import Path
 
 import _common  # noqa: F401  路径设置
-import _rollout  # noqa: E402
 
-from robomme_hard.env_record_wrapper import hard_specs  # noqa: E402
+
+def __getattr__(name):
+    # 导入型调用方仍可显式取模块；命令行入口在解析来源后才加载。
+    if name == "_rollout":
+        return _common.sibling("_rollout")
+    raise AttributeError(name)
 
 
 def _launch_facts(src_root: Path) -> dict[str, str]:
@@ -88,21 +92,29 @@ def main() -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--gpu", default="0")
-    parser.add_argument("--pkg", default="robomme_hard", choices=("robomme", "robomme_hard"))
-    parser.add_argument("--src-root", default=None, help="环境源码树根（其下 src/robomme_hard）；缺省 benchmark 子模块根")
+    parser.add_argument("--pkg", default="robomme_ood", choices=("robomme", "robomme_ood", "robomme_hard"))
+    parser.add_argument("--src-root", default=None, help="环境源码树根（其下 src/robomme_ood）；缺省 benchmark 子模块根")
     parser.add_argument("--expect-src", default=None,
-                        help="断言本进程的 robomme_hard 位于该 src 目录下（不符即停，不生成）")
+                        help="断言本进程的 robomme_ood 位于该 src 目录下（不符即停，不生成）")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dev-smoke", action="store_true", help="放行非 A40（本机开发冒烟）；正式生成一律 A40（v7 D-9）")
     args = parser.parse_args()
 
     output = Path(args.output)
     src_root = Path(args.src_root).resolve() if args.src_root else _common.bench_root()
+    # 先绑定所选侧的规格树，再加载消费者，避免旧侧读到当前包缓存。
+    specs_package = "robomme_ood" if args.pkg == "robomme" else args.pkg
+    os.environ["ROBOMME_SPECS_PACKAGE"] = specs_package
+    os.environ["ROBOMME_SPECS_SRC"] = str(src_root / "src")
+    hard_specs = _common.hard_specs_light()
+    _rollout = _common.sibling("_rollout")
+    if Path(_rollout.hard_specs.__file__).resolve() != Path(hard_specs.__file__).resolve():
+        raise SystemExit("生成模块的规格来源与所选侧不符")
     if args.expect_src:
         where = Path(hard_specs.__file__).resolve()
         if not str(where).startswith(str(Path(args.expect_src).resolve()) + os.sep):
-            raise SystemExit(f"robomme_hard 解析到 {where}，不在 --expect-src {args.expect_src} 下")
-        print(f"EXPECT_SRC=PASS robomme_hard={where}", flush=True)
+            raise SystemExit(f"robomme_ood 解析到 {where}，不在 --expect-src {args.expect_src} 下")
+        print(f"EXPECT_SRC=PASS robomme_ood={where}", flush=True)
 
     # ── 不起仿真的两个子模式：切片、聚合 ──
     if args.mode == "split":
