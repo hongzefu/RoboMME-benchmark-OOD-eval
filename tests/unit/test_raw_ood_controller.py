@@ -27,7 +27,9 @@ def identities():
 def config(tmp_path):
     p=tmp_path/'ids.jsonl'; p.write_text(''.join(json.dumps(r)+'\n' for r in identities()))
     return dict(run='fixture',run_name='fixture',root=str(tmp_path),gl_root=str(tmp_path/'gl'),controller_job_id='100',
-                exec_commit='a'*40,config_sha256='b'*64,identities=str(p),models={m:dict(policy='dummy',label=m,args=[]) for m in C.MODELS},
+                exec_commit='a'*40,config_sha256='b'*64,identities=str(p),identities_sha256=C.sha(p),models={m:dict(policy=C.ROUTES[m][0],label=C.ROUTES[m][1],
+                   args=(['--groundsg-variant',C.ROUTES[m][2]] if C.ROUTES[m][2] else [])+
+                        (['--qwenvl-groundsg-adapter','/locked/adapter'] if m=='qwenvl' else [])) for m in C.MODELS},
                 seats=[dict(job_id=str(i),seat=f's{i}',port_base=22000+i,end_time=1e12) for i in range(101,105)],
                 python=sys.executable,runner=str(HERE/'run_eval_gl.sh'),budget_ledger=str(tmp_path/'budget'),cpu_end_time=1e12,
                 expected_identities=[C.identity(m,r) for m in C.MODELS for r in identities()],
@@ -66,7 +68,7 @@ def test_cancel_only_registered_gpu(tmp_path,monkeypatch):
 
 
 def test_dispatch_clears_cpu_slurm_env_and_expands_ownership(tmp_path,monkeypatch):
-    c=config(tmp_path); c['models']['qwenvl']['args']=['--work-dir','{work_dir}','--cfg','server_dir={work_dir}/server']
+    c=config(tmp_path); c['models']['qwenvl']['args']+=['--work-dir','{work_dir}','--cfg','server_dir={work_dir}/server']
     c['models']['qwenvl']['env']={'BENCH_PY':'/client/python'}
     controller=C.Controller(c); seen={}
     monkeypatch.setenv('SLURM_JOB_ID','100'); monkeypatch.setenv('SBATCH_GRES','gpu:1'); monkeypatch.setenv('CUDA_VISIBLE_DEVICES','0')
@@ -105,3 +107,60 @@ def test_normal_task_failure_is_published_with_explicit_zero(tmp_path):
     assert publication['identity_key']==key and publication['delete_files']==['front.mkv','wrist.mkv','arrays.npz']
     event=json.loads((tmp_path/'control/events.jsonl').read_text().splitlines()[-1])
     assert event['task_success'] is False
+
+
+def test_real_format_report_nullable_policy_timing(tmp_path,monkeypatch):
+    import budget_ledger
+    c=config(tmp_path); controller=C.Controller(c); Path(c['budget_ledger']).write_text('')
+    pubs={}; results={}
+    for m in C.MODELS:
+        for r in identities():
+            key=C.identity(m,r); controller.published.add(key)
+            directory=f"{m}/{r['key']}"
+            pubs[C.publication_name(key)]=dict(model=m,relative_dir=directory)
+            results[directory]=dict(task=r['task'],tier=r['tier'],task_success=False,
+                timing={'episode_wall_s':1.0,'recorder':None,'policy':None})
+    def read(path):
+        if path.name=='result.json': return results[path.parent.relative_to(Path(c['gl_root'])).as_posix()]
+        return pubs[path.name]
+    monkeypatch.setattr(C,'read',read)
+    monkeypatch.setattr(budget_ledger,'BudgetState',lambda _:types.SimpleNamespace(bad_rows=0,trajectories=4000,resets=8000,
+         retries=[],recovery_used=0,astra=0,claimed={'x':8000},orphan_claims=0))
+    controller.report()
+    report=json.loads((tmp_path/'control/results-report.json').read_text())
+    assert report['infra']==0 and report['missing']==0
+    for m in C.MODELS:
+        stat=report['models'][m]
+        assert stat['accepted']==800 and stat['failed']==800 and stat['policy_timing_missing']==800
+        assert stat['steady_decision_wall_ms_mean'] is None and stat['recorder_finalize_measured']==0
+
+
+def test_controller_heartbeat_has_single_thread_writer(tmp_path,monkeypatch):
+    import threading
+    c=config(tmp_path); controller=C.Controller(c); writers=[]; original=C.atomic
+    def atomic(path,obj):
+        if path.name=='controller-heartbeat.json': writers.append(threading.get_ident())
+        original(path,obj)
+    monkeypatch.setattr(C,'atomic',atomic)
+    monkeypatch.setattr(controller,'scan',lambda:(tmp_path/'control/STOP').write_text('fixture'))
+    monkeypatch.setattr(controller,'dispatch',lambda:None)
+    with pytest.raises(RuntimeError,match='STOP'): controller.run()
+    assert writers and len(set(writers))==1 and writers[0]!=threading.get_ident()
+
+
+@pytest.mark.parametrize('mutation',['astra','memer','budget','cfg_gpu'])
+def test_route_or_budget_override_blocked_before_process(tmp_path,mutation):
+    c=config(tmp_path)
+    if mutation=='astra': c['models']['qwenvl']['policy']='astra'
+    elif mutation=='memer': c['models']['qwenvl']['args'][1]='ground-sg-memer'
+    elif mutation=='budget': c['models']['pp']['args']+=['--trajectory-cap','9999']
+    else: c['models']['pp']['args']+=['--cfg','gpus=0']
+    with pytest.raises(ValueError): C.validate_config(c)
+
+
+def test_identity_same_size_mutation_and_manifest_mismatch_blocked(tmp_path):
+    c=config(tmp_path); p=Path(c['identities']); old=p.read_bytes()
+    p.write_bytes(old.replace(b'aaaaaaaa',b'bbbbbbbb',1)); assert p.stat().st_size==len(old)
+    with pytest.raises(ValueError,match='SHA'): C.validate_config(c)
+    c=config(tmp_path); c['expected_identities'][0]='wrong'
+    with pytest.raises(ValueError,match='manifest'): C.validate_config(c)

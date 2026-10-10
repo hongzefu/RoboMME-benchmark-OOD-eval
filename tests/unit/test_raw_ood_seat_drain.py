@@ -48,3 +48,22 @@ def test_exclusive_heartbeat_keeps_latest_phase_and_identity(tmp_path):
     assert doc['phase']=='episode' and doc['key']=='real-key' and doc['pid']>0
     runner._current=None; runner.progress('done'); runner.heartbeat_once()
     assert json.loads(runner.progress_path.read_text())['phase']=='done'
+
+
+def test_real_constructor_initializes_progress_and_concurrent_updates(tmp_path):
+    import sys, threading, json
+    spec=importlib.util.spec_from_file_location('raw_real_progress_seat',HERE/'seat.py')
+    seat=importlib.util.module_from_spec(spec); sys.modules[spec.name]=seat; spec.loader.exec_module(seat)
+    args=seat.build_parser().parse_args(['run','--policy','smvla','--policy-seed','7','--out',str(tmp_path/'stage'),
+         '--identities',str(tmp_path/'ids'),'--budget-ledger',str(tmp_path/'budget'),'--trajectory-cap','4000','--reset-cap','8000',
+         '--shared-infra-cap','0','--expired-cap','0','--planned-first-tries','4000','--progress-file',str(tmp_path/'progress.json')])
+    runner=seat.SeatRunner(args,shared=None)
+    assert runner._last_progress is None
+    runner.progress('context_load')
+    worker=threading.Thread(target=lambda:[runner.heartbeat_once() for _ in range(30)])
+    worker.start()
+    for _ in range(30): runner.progress('episode')
+    worker.join(); runner.progress('done'); runner.heartbeat_once()
+    doc=json.loads(runner.progress_path.read_text())
+    assert doc['phase']=='done' and doc['label']=='smvla' and doc['key'] is None
+    runner.close()

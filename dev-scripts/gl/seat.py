@@ -281,8 +281,6 @@ class AttemptLedger:
         self.ended: dict[str, dict] = {}
         self.accepted: dict[str, str] = {}
         self._lock = threading.Lock()
-        self._progress_lock = threading.Lock()
-        self._last_progress: dict | None = None
         for row in read_results(self.path):
             self._apply(row)
 
@@ -960,6 +958,8 @@ class SeatRunner:
         self._current: Claim | None = None
         self._current_attempt_id: str | None = None
         self._lock = threading.Lock()
+        self._progress_lock = threading.Lock()
+        self._last_progress: dict | None = None
         self._lease_cm = None
         self._hb_stop = threading.Event()
         self._hb_thread: threading.Thread | None = None

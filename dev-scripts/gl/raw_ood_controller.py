@@ -15,6 +15,9 @@ import time
 
 MODELS = ('qwenvl', 'smvla', 'pp', 'oracle', 'framesamp')
 SECONDS = dict(qwenvl=311.428, smvla=152.526, pp=138.695, oracle=130.485, framesamp=86.518)
+ROUTES = dict(qwenvl=('groundsg','groundsg-ground-sg-qwenvl','ground-sg-qwenvl'),
+              oracle=('groundsg','groundsg-ground-sg-oracle','ground-sg-oracle'),smvla=('smvla','smvla',None),
+              pp=('pp','pp',None),framesamp=('perceptual-framesamp-modul','perceptual-framesamp-modul',None))
 TASK_COUNTS = {
     **{t: (25,25) for t in ('BinFill','VideoUnmaskSwap','ButtonUnmaskSwap','VideoPlaceButton','VideoPlaceOrder','PickHighlight','VideoRepick')},
     **{t: (13,13,12,12) for t in ('VideoUnmask','ButtonUnmask')},
@@ -59,17 +62,36 @@ def publication_name(key: str) -> str:
 
 def validate_config(config: dict) -> list[dict]:
     """完整输入字段缺失即失败，不能把未知计数当零。"""
-    for k in ('run','run_name','root','gl_root','controller_job_id','exec_commit','config_sha256','identities','models','seats','python','runner','budget_ledger','cpu_end_time','expected_identities','expected_publications'):
+    for k in ('run','run_name','root','gl_root','controller_job_id','exec_commit','config_sha256','identities','identities_sha256','models','seats','python','runner','budget_ledger','cpu_end_time','expected_identities','expected_publications'):
         if k not in config: raise ValueError(f'配置缺少{k}')
     if config['run'] != config['run_name']: raise ValueError('运行名冲突')
     if set(config['models']) != set(MODELS): raise ValueError('五模型白名单不符')
     seats=config['seats']; ids=[str(s['job_id']) for s in seats]
     if len(ids)!=4 or len(set(ids))!=4 or not all(i.isdigit() for i in ids): raise ValueError('GPU登记不符')
     if str(config['controller_job_id']) in ids: raise ValueError('CPU与GPU作业重复')
-    for m in config['models'].values():
+    for name,m in config['models'].items():
+        policy,label,variant=ROUTES[name]
+        if m['policy']!=policy or m['label']!=label: raise ValueError('模型路由不符合固定白名单')
         forbidden={'--infra-retries','--client-restarts','--trajectory-cap','--reset-cap','--shared-infra-cap','--expired-cap',
-                   '--planned-first-tries','--policy-seed','--identities','--dataset','--out','--seat','--run','--progress-file','--gpus'}
+                   '--planned-first-tries','--policy-seed','--identities','--dataset','--out','--seat','--run','--progress-file','--gpus',
+                   '--stop-file','--claim-deadline','--policies','--policy','--budget-ledger','--budget','--queue','--memer-adapter','--port-base'}
         if any(str(a).split('=')[0] in forbidden for a in m['args']): raise ValueError('模型参数覆盖本轮固定预算或身份')
+        def values(flag):
+            args=m['args']; vals=[]
+            for i,a in enumerate(args):
+                if a==flag:
+                    if i+1>=len(args): raise ValueError('模型参数缺值')
+                    vals.append(args[i+1])
+                elif str(a).startswith(flag+'='): vals.append(str(a).split('=',1)[1])
+            return vals
+        if values('--groundsg-variant')!=([variant] if variant else []): raise ValueError('GroundSG变体配对错误')
+        adapters=values('--qwenvl-groundsg-adapter')
+        if name=='qwenvl' and (len(adapters)!=1 or not adapters[0]): raise ValueError('QwenVL adapter缺失或重复')
+        if name!='qwenvl' and adapters: raise ValueError('非QwenVL模型使用adapter')
+        protected={f[2:].replace('-','_') for f in forbidden}|{'groundsg_variant','qwenvl_groundsg_adapter','memer_adapter'}
+        for item in values('--cfg'):
+            if str(item).split('=',1)[0] in protected: raise ValueError('cfg覆盖固定路由或预算')
+    if sha(Path(config['identities']))!=config['identities_sha256']: raise ValueError('身份文件SHA不符')
     rows=[json.loads(line) for line in Path(config['identities']).read_text().splitlines() if line.strip()]
     expected=Counter()
     for task, counts in TASK_COUNTS.items():
@@ -267,18 +289,28 @@ class Controller:
         ledger=BudgetState([json.loads(x) for x in Path(self.c['budget_ledger']).read_text().splitlines() if x.strip()])
         if ledger.bad_rows or ledger.trajectories!=4000 or ledger.resets>8000 or ledger.retries or ledger.recovery_used or ledger.astra:
             raise ValueError('最终共享预算不符合4000首试/8000reset/零重试')
-        groups={}; model_stats={m:dict(accepted=0,success=0,failed=0,infra=0,episode_wall_s=0.,recorder_finalize_s=0.,chunks=0,decision_wall_ms=0.) for m in MODELS}
+        groups={}; model_stats={m:dict(accepted=0,success=0,failed=0,infra=0,episode_wall_s=0.,recorder_finalize_s=0.,chunks=0,decision_wall_ms=0.,
+                                      episode_wall_measured=0,recorder_finalize_measured=0,policy_timing_missing=0,decision_wall_missing=0) for m in MODELS}
         for key in self.published:
             pub=read(self.gl/'published'/publication_name(key)); r=read(self.gl/pub['relative_dir']/'result.json')
             model=pub['model']; stat=model_stats[model]; task=r['task']; tier=r['tier']
             success=int(bool(r['task_success'])); stat['accepted']+=1; stat['success']+=success; stat['failed']+=1-success
             g=groups.setdefault(f'{model}:{task}:{tier}',dict(model=model,task=task,tier=tier,accepted=0,success=0,failed=0,infra=0))
             g['accepted']+=1; g['success']+=success; g['failed']+=1-success
-            timing=r.get('timing',{}); stat['episode_wall_s']+=float(timing.get('episode_wall_s',0))
-            stat['recorder_finalize_s']+=float(timing.get('recorder',{}).get('finalize_s',0))
-            for index,chunk in enumerate(timing.get('policy',{}).get('chunks',[])):
+            timing=r.get('timing'); timing=timing if isinstance(timing,dict) else {}
+            if timing.get('episode_wall_s') is not None:
+                stat['episode_wall_s']+=float(timing['episode_wall_s']); stat['episode_wall_measured']+=1
+            recorder=timing.get('recorder'); recorder=recorder if isinstance(recorder,dict) else {}
+            if recorder.get('finalize_s') is not None:
+                stat['recorder_finalize_s']+=float(recorder['finalize_s']); stat['recorder_finalize_measured']+=1
+            policy=timing.get('policy'); policy=policy if isinstance(policy,dict) else {}
+            chunks=policy.get('chunks')
+            if not isinstance(chunks,list): stat['policy_timing_missing']+=1; chunks=[]
+            for index,chunk in enumerate(chunks):
                 if index<3: continue
-                if 'decision_wall_ms' in chunk: stat['chunks']+=1; stat['decision_wall_ms']+=float(chunk['decision_wall_ms'])
+                if isinstance(chunk,dict) and chunk.get('decision_wall_ms') is not None:
+                    stat['chunks']+=1; stat['decision_wall_ms']+=float(chunk['decision_wall_ms'])
+                else: stat['decision_wall_missing']+=1
         for model,stat in model_stats.items():
             if stat['accepted']!=800: raise ValueError('逐模型800终态不齐')
             tasks={}
@@ -308,7 +340,6 @@ class Controller:
         beat=threading.Thread(target=heartbeat,daemon=True); beat.start()
         try:
             while True:
-                atomic(self.control/'controller-heartbeat.json',dict(self.base,t=time.time(),pid=os.getpid(),active=len(self.active)))
                 if (self.control/'STOP').exists() or (self.gl/'STOP').exists(): raise RuntimeError('全局STOP')
                 self.scan()
                 if len(self.smoked)==5 and not self.formal:
