@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import time
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -122,7 +123,8 @@ def test_serialized_completion_and_structured_error(publication):
     MOVER.raw_atomic(receipt, bad)
     assert MOVER.raw_main(args) == 1
     assert json.loads((stage / "control/error.json").read_text())["component"] == "mover"
-    assert (stage / "control/STOP").exists()
+    assert not (stage / "control/STOP").exists()
+    assert not (stage / "STOP").exists()
 
 
 def test_independent_heartbeat_during_blocking_move(publication, monkeypatch):
@@ -232,3 +234,73 @@ def test_delete_recovery_needs_only_floor_space(publication, monkeypatch):
     monkeypatch.setattr(MOVER, "free_gib", lambda _: 49.9)
     with pytest.raises(ValueError, match="low_disk"):
         MOVER.raw_move(row, stage, dest)
+
+
+def test_mover_error_is_independent_and_preserves_first_cause(publication):
+    stage, dest, source, row = publication
+    name = hashlib.sha256(row["identity_key"].encode()).hexdigest() + ".json"
+    manifest = stage / "config.json"
+    MOVER.raw_atomic(manifest, {**{k: v for k, v in CONTEXT.items() if k != "config_sha256"}, "expected_publications": [name], "expected_identities": [row["identity_key"]]})
+    row["config_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    MOVER.raw_atomic(stage / "published" / name, row)
+    (source / "front.mkv").write_bytes("损坏的源".encode())
+    error_path, stop = stage / "control/mover-error.json", stage / "control/STOP"
+    args = SimpleNamespace(stage=str(stage), dest=str(dest), manifest=str(manifest), min_free_gib=0,
+                           heartbeat_file=None, error_file=str(error_path), stop_file=str(stop), once=True, interval=.01)
+    assert MOVER.raw_main(args) == 1
+    original = error_path.read_bytes()
+    report = json.loads(original)
+    assert report["component"] == "mover"
+    assert report["config_sha256"] == row["config_sha256"]
+    assert "SHA" in report["message"]
+    assert not stop.exists() and not (stage / "STOP").exists()
+    assert (source / "arrays.npz").exists()
+    assert not (dest / row["relative_dir"]).exists()
+    # 独立消费真实序列化报告，确认供监督器判断自身错误，而无调度停止指令。
+    assert report["schema"] == MOVER.RAW_SCHEMA and report["run_name"] == CONTEXT["run_name"]
+    assert "stop_gpu" not in report and "cancel_jobs" not in report
+    MOVER.raw_report_error(error_path, {**report, "message": "后续报告写入错误"})
+    assert error_path.read_bytes() == original
+
+
+def test_cli_preflight_failure_does_not_write_stop(tmp_path):
+    stage, dest = tmp_path / "stage", tmp_path / "dest"
+    stage.mkdir()
+    manifest = stage / "broken-config.json"
+    manifest.write_text("{破损配置")
+    error, stop = stage / "control/mover-error.json", stage / "control/STOP"
+    proc = subprocess.run([sys.executable, str(ROOT / "dev-scripts/gl/eval_video_mover.py"),
+                           "--layout", "raw-ood", "--stage", str(stage), "--dest", str(dest),
+                           "--manifest", str(manifest), "--error-file", str(error), "--stop-file", str(stop), "--once"], capture_output=True, text=True, timeout=5)
+    assert proc.returncode == 1
+    report = json.loads(error.read_text())
+    assert report["error"] == "JSONDecodeError" and report["component"] == "mover"
+    assert "RAW_DELIVERY=FAIL" in proc.stdout
+    assert not stop.exists() and not (stage / "STOP").exists()
+
+
+def test_manual_stop_is_preserved_as_input(publication):
+    stage, dest, source, row = publication
+    name = hashlib.sha256(row["identity_key"].encode()).hexdigest() + ".json"
+    manifest = stage / "config.json"
+    MOVER.raw_atomic(manifest, {**{k: v for k, v in CONTEXT.items() if k != "config_sha256"}, "expected_publications": [name], "expected_identities": [row["identity_key"]]})
+    stop = stage / "control/STOP"
+    MOVER.raw_atomic(stop, {"reason": "用户手动停止"})
+    stop_bytes = stop.read_bytes()
+    args = SimpleNamespace(stage=str(stage), dest=str(dest), manifest=str(manifest), min_free_gib=0,
+                           heartbeat_file=None, error_file=None, stop_file=str(stop), once=True, interval=.01)
+    assert MOVER.raw_main(args) == 1
+    assert stop.read_bytes() == stop_bytes
+    assert (source / "front.mkv").exists()
+    assert "人工 STOP" in json.loads((stage / "mover/error.json").read_text())["message"]
+
+
+def test_error_report_write_failure_keeps_original_diagnostic(tmp_path, monkeypatch, capsys):
+    def fail_write(*_):
+        raise OSError("报告盘不可写")
+    monkeypatch.setattr(MOVER, "raw_atomic", fail_write)
+    MOVER.raw_report_error(tmp_path / "mover-error.json", {"error": "ValueError", "message": "首因：源 SHA 不符"})
+    output = capsys.readouterr().out
+    assert "RAW_DELIVERY=FAIL error=ValueError message=首因：源 SHA 不符" in output
+    assert "RAW_ERROR_WRITE_FAILED" in output and "报告盘不可写" in output
+    assert not (tmp_path / "STOP").exists()
