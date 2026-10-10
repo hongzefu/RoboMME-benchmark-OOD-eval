@@ -1,0 +1,247 @@
+{
+  "controller_commit": "ce3d7b370536f7159a47e81793d7b71dc4d17f84",
+  "controller_code": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-controller-r6",
+  "controller_root_clean": true,
+  "model_and_report_code": "0c6f8a3a552876020611d4d654a41adb3accba65",
+  "config_sha256": "12d997b55e7a92c2f9f04ef5c1e837b8b31f32fe2e076f5e225ae8f29bc0b721",
+  "launch_time": "2026-10-10 10:32:48 EDT",
+  "controller_session": "fe-full-eval-controller-r6-20261010",
+  "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/logs/fe-full-eval-controller-r6-20261010.log",
+  "watchdog_retry_event": {
+    "time": 1791642772.2719364,
+    "kind": "watchdog_retry_resume",
+    "slot": 1,
+    "model": "qwen",
+    "stage": "A",
+    "session": "fe-A-qwen-63431431",
+    "evidence": {
+      "key": "VideoPlaceOrder_xhard2_19100101",
+      "attempt": 1,
+      "missing": [
+        "VideoPlaceOrder_xhard2_19100101",
+        "PatternLock_xhard1_17500000",
+        "PatternLock_xhard1_17500100",
+        "PatternLock_xhard2_19500000",
+        "PatternLock_xhard2_19500100",
+        "PatternLock_xhard3_21500000",
+        "RouteStick_xhard1_17600000",
+        "RouteStick_xhard1_17600100",
+        "RouteStick_xhard2_19600000",
+        "RouteStick_xhard2_19600100",
+        "RouteStick_xhard3_21600000"
+      ],
+      "result": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep26_xhard2/result.json",
+      "result_sha256": "cdb42271aabaab9b2d50be788f6700471ee2b34cfc9afc3044aa100c9b09461c",
+      "log_sha256": "9198741c39c501cca09885a6bd15fd9827869aa4c29118db8bb78a811c2ad40a"
+    },
+    "max_attempts": 20
+  },
+  "model_blocked_event": {
+    "time": 1791642773.4681687,
+    "kind": "model_blocked",
+    "stage": "A",
+    "model": "pp",
+    "key": "VideoPlaceOrder_xhard1_17100000",
+    "evidence": {
+      "stage": "A",
+      "model": "pp",
+      "key": "VideoPlaceOrder_xhard1_17100000",
+      "attempt": 20,
+      "seat": {
+        "slot": 3,
+        "job": "63431433",
+        "stage": "A",
+        "model": "pp",
+        "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller/fe-controller-A-pp-3-45.log",
+        "seat_name": "controller-3-45",
+        "onlykey": null,
+        "session": "fe-controller-A-pp-3-45",
+        "pending": false
+      },
+      "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller/fe-controller-A-pp-3-45.log",
+      "log_sha256": "71b7d035edc8d10dd573176b4dcb0f7fe13f7e4d4f2f767c300479a7d5fc81aa",
+      "result": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep0_xhard1/result.json",
+      "result_sha256": "c09787c4fbb89c486590d3a5e62c397ff9203002e777f34250e643c87731cacf",
+      "claims": [
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a1.json",
+          "sha256": "4a52c653c68af1f5f03fea9183451d01991f6cf0af30025c9c9eba46601f2849",
+          "attempt_id": "8a900c0e831a4cc6899d712c056cf623",
+          "budget_rid": "2240088f9c06419783009e50a15533ad"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a2.json",
+          "sha256": "dcdaa24b4fcf3a0f330a41dd071b71b5750f70808b1532d71d3d6304ae235276",
+          "attempt_id": "393fc66a9c04479eb129276751ca30a5",
+          "budget_rid": "7e93b99d12cb42b8afc69f839cee53ec"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a3.json",
+          "sha256": "f4480027c29ff0e22ee0b78fa7dd1e921a4f7a2e01da08f817c04717c3741b90",
+          "attempt_id": "68948c85ba064797b7fd3bc46b230b7c",
+          "budget_rid": "b9823bcafef24f3fa89fd9184927e97d"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a4.json",
+          "sha256": "82c5593b72013a06b54431070430e85172ba1fb18cd1e52e686ecd589b11dcb8",
+          "attempt_id": "f765c85255b74d85b8ef930fc6a6a4b0",
+          "budget_rid": "9bed1190835d48f7a8e514e6f68b8225"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a5.json",
+          "sha256": "2b7b300e881a7bdb9936a7adee9c01fe52edec28b9cafd4713edf0a07cf414f0",
+          "attempt_id": "d1ee7fa5b0ca4920bd9d15f8f5bb8458",
+          "budget_rid": "4ea4a45490774d53aa9ee653bade0842"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a6.json",
+          "sha256": "aa32abc2905ac9b0e457ea02a17cb82962dd722df3088c80ed18cee46810f8d6",
+          "attempt_id": "3f577e7d64264a6d9fe49eefea86768e",
+          "budget_rid": "e14ad811a2a04c2aaf61d81336e33f14"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a7.json",
+          "sha256": "d38d9f2a98a34040a0166c08d8f5f0d6b339850b558f63401e5a6bcc18bc122a",
+          "attempt_id": "a249767810db4c88aa56c22f4dec5e47",
+          "budget_rid": "7a39202f998b495f9334d35a16eacd9e"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a8.json",
+          "sha256": "e946fdd5f635f6a896080fbe8870546d49a3467d34f2ef18e3eb8d7d87aaa6e4",
+          "attempt_id": "fb2337a54ab14c7293cf1685eb004958",
+          "budget_rid": "093af62273c248bdaf38efd8f18f91cf"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a9.json",
+          "sha256": "ed830bfb8f42e4c4ee45255423dde959ca5512dc724a9431a4e83a776e8dc9ae",
+          "attempt_id": "aaae6c70764448398055f22d812104e3",
+          "budget_rid": "04b07e03eed449869a9930b26d1ab841"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a10.json",
+          "sha256": "63f4211f02c43b6fe7273938bfcb2c70d01aeddd1fdabeaf7ca67af6bdc3e977",
+          "attempt_id": "3e2524246c8c458db06a7339af004304",
+          "budget_rid": "e380d6f33d6b4351bd944c47dda94a5f"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a11.json",
+          "sha256": "2a37a26dc278e9927361453607aeae34c34a0313733f8d829cf8aa954f07a9ff",
+          "attempt_id": "37d77389c2fe46139cd67828b28070da",
+          "budget_rid": "6696353124814535a0e9c25507c1ab82"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a12.json",
+          "sha256": "fe581fb0b02e399000c654eb386f6fc78b8a7223e406a59db67db89d884e6472",
+          "attempt_id": "22dd81e88ca3403cb7c31c7ee399dba4",
+          "budget_rid": "bb09141f10cd439abf2f40c43744a6ad"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a13.json",
+          "sha256": "65b8362c43d2daec458a964e42337fdfa9e3fe52d60cb4c5cb5cc920178e4c5b",
+          "attempt_id": "52162aee3bca4cd78b64a1265a690d17",
+          "budget_rid": "d03f0586db53448cbcfbe027e486a5c2"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a14.json",
+          "sha256": "70f72380b17b9b740e3de4ee479511c49ef85917f600e35e6684958dc015100a",
+          "attempt_id": "e5673241cb0b42c7ad660ea4de435374",
+          "budget_rid": "81da8af463e04c5396aa271db6a2676d"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a15.json",
+          "sha256": "921e199d300d159fecc03220e40e0febac11e51480e046619187469a5c9f351d",
+          "attempt_id": "0fdd3fe2782b40e2a05fd843e1e0dd8a",
+          "budget_rid": "83a2295046ff456eafda2194e19acfcf"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a16.json",
+          "sha256": "17e6e7ca61c0d019f7c8810be9ca17e881265ad939393ba6607d69eeec441f11",
+          "attempt_id": "ebc7d8387ff64cc9a585725c2c4403f8",
+          "budget_rid": "d362b52856174cfda6af199c57188848"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a17.json",
+          "sha256": "8f5905a36bda34187cca01ffc25db27567adb9229b93e7c44514ae5549fae943",
+          "attempt_id": "7dec4a7ff5764641b4840856e2dcc7f6",
+          "budget_rid": "58dd4033e74d4767b90780f31ce75d9c"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a18.json",
+          "sha256": "18de768ce5ea494ce39866243e0f68afdfe5e4b2726d361ea486ba0627ab943f",
+          "attempt_id": "492ea7957845491ca3515df2ffdda50d",
+          "budget_rid": "e37c56187469443584bd9224a24f31e5"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a19.json",
+          "sha256": "d63652618d8597f6c13bdbd1300fdba54d5da498d09cb63a8a323cf116b02caf",
+          "attempt_id": "9767c11fa2ed48ceb17fd35e395dd06e",
+          "budget_rid": "0ec7f89e5e2b44c6bf595c0102ba5ba8"
+        },
+        {
+          "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/queue/pp/seed7/claims/ood__VideoPlaceOrder_xhard1_17100000.a20.json",
+          "sha256": "70f08ec0f97d6c459661f140d115659784a58fd2858afd82d30094cf2484152b",
+          "attempt_id": "f52afdfcac7e4c7e98a81f371eac93de",
+          "budget_rid": "f3d63dcf2912468684fd67683e35a97e"
+        }
+      ],
+      "local_ledgers": {
+        "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/seats/pp/seed7/controller-3-45/pp.ledger.jsonl": "f5fcf2ba011284d7c7297405df514d09595efde67baa1d6c3de5468c686edfd5",
+        "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/seats/pp/seed7/fe-A-pp-01/pp.ledger.jsonl": "1f363dd7a98f503d0e347faef56d09adcd868cc3c3fbecf0f48377fd926215a5"
+      },
+      "shared_ledger": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/budget/stage-A.jsonl",
+      "shared_sha256": "a7210b612dd0e9fef68d23cf458c9646c03d612c8af748a4c9158a457138f9b4"
+    }
+  },
+  "seats": [
+    {
+      "slot": 0,
+      "job": "63431430",
+      "stage": "A",
+      "model": "memer",
+      "session": "fe-A-memer-63431430",
+      "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/logs/fe-A-memer-63431430.log",
+      "seat_name": "fe-A-memer-01",
+      "onlykey": null
+    },
+    {
+      "slot": 1,
+      "job": "63431431",
+      "stage": "A",
+      "model": "smvla",
+      "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller/fe-controller-A-smvla-1-62.log",
+      "seat_name": "controller-1-62",
+      "onlykey": "VideoRepick_xhard1_16900001",
+      "session": "fe-controller-A-smvla-1-62",
+      "pending": false
+    },
+    {
+      "slot": 2,
+      "job": "63431432",
+      "stage": "A",
+      "model": "oracle",
+      "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller/fe-controller-A-oracle-2-63.log",
+      "seat_name": "controller-2-63",
+      "onlykey": null,
+      "pending": false,
+      "session": "fe-controller-A-oracle-2-63"
+    },
+    {
+      "slot": 3,
+      "job": "63431433",
+      "stage": "A",
+      "model": "perceptual-framesamp-modul",
+      "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller/fe-controller-A-perceptual-framesamp-modul-3-64.log",
+      "seat_name": "controller-3-64",
+      "onlykey": null,
+      "pending": false,
+      "session": "fe-controller-A-perceptual-framesamp-modul-3-64"
+    }
+  ],
+  "qwen_resume_pending": true,
+  "pp_missing_preserved": true,
+  "report_failed_preserved": 2,
+  "wrapper_sha256": "03d0df13217251872dcc7a6aac3b01b2a36d6c433926f86fdfdb8d451a5cdc50",
+  "verification_reset": 0,
+  "verification_trajectory": 0,
+  "verdict": "CONTROLLER_ISOLATION=PASS blocked_pp=1 active_seats=4 config_unchanged=1"
+}

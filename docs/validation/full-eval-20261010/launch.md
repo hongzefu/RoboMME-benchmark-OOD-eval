@@ -202,3 +202,20 @@ r4 于 PP 旧席位结束后自然退出 1，失败原文见结果文档，未�
 真实事件已出现 `legacy_retry_resume`，只核证 PP 的 `VideoPlaceOrder_xhard1_17100000` 原尝试 2。后继 `fe-controller-A-pp-3-45` 在原 63431433／slot 3／端口 20030 起跑：`RUN_INPUTS=PASS`、`CLIENT_READY ... git=0c6f8a3a5528 dirty=False`、`RUN_PLAN total=70 claimable=1 max_attempts=20`、`SERVER_READY ready_s=31.0`。原第二次失败的 12 个文件独占归档，`ATTEMPT_ARCHIVE=PASS ... result_sha256=34f9662f242c70968c3f8e09e10d4dd9f90514626e659df6c1c2c9933283f13e files=12`；队列 `.a3.json` 已核真实第三次领取。69 个已接受身份不重跑。
 
 SimpleMemVLA 同时由原 63431432 续入 `fe-controller-A-smvla-2-44`，身份 `VideoUnmaskSwap_xhard2_18500000`，没有再次空启动已接受的 xhard1 身份。回执见 [实际恢复](records/controller-r5-start.json)：`LEGACY_RETRY_RESUME=PASS claimable=1 attempt=3 max_attempts=20`。该判定只证明预算内接续实际起跑，PP 第三次结果与最终阶段验收仍待观察；验证读回本身零 reset、零轨迹。
+
+## 耗尽隔离与墙钟结算恢复的实际调度
+
+2026-10-10 10:32:48 EDT，clean 固定提交 `ce3d7b370536f7159a47e81793d7b71dc4d17f84` 的 `runtime-controller-r6` 起 `fe-full-eval-controller-r6-20261010`。r5 已自然退出 1，未杀其它会话或新申请作业；MemER 原 worker 保留，原配置指纹、r3 模型与报告入口、A 输出和预算均不变。启动主体同前述完整命令，将控制器目录和日志会话名替换为 r6；产物载体 SHA256 `03d0df13217251872dcc7a6aac3b01b2a36d6c433926f86fdfdb8d451a5cdc50`。
+
+真实 `watchdog_retry_resume` 已核 Qwen 原超时结算；真实 `model_blocked` 只隔离 PP 二十次耗尽的固定身份。`report_failed=2` 和 PP 的缺失记录保留，没有 a21，没有阶段 A 通过结论。其它模型按原短模型优先顺序填满四席：
+
+| slot／原 JobID | 当前模型 | 实际会话／日志基名 | 端口／状态 |
+|---|---|---|---|
+| 0／63431430 | MemER | fe-A-memer-63431430 | 原 worker 保留 |
+| 1／63431431 | SimpleMemVLA | fe-controller-A-smvla-1-62 | 19800，下一未接受身份 |
+| 2／63431432 | Oracle | fe-controller-A-oracle-2-63 | 19920，claimable=69，SERVER_READY 32.5 秒 |
+| 3／63431433 | framesamp-modul | fe-controller-A-perceptual-framesamp-modul-3-64 | 20010，claimable=69，SERVER_READY 43.0 秒 |
+
+新两模型均核 `RUN_INPUTS=PASS`、`CLIENT_READY git=0c6f8a3a5528 dirty=False`、原十四任务跨档轮转各五局的 70 身份与每身份 20 次上限，复用各自冒烟 1 局；未更换 checkpoint 或解释器。四个工作会话与新监督器均见于实际 tmux 清单。Qwen 的 11 个原缺项仍待空席调度，取得恢复资格不等于已经启动新 Qwen worker。
+
+[接手回执](records/controller-r6-start.json) 为 `CONTROLLER_ISOLATION=PASS blocked_pp=1 active_seats=4 config_unchanged=1`；验证读回零 reset／轨迹。PP 模型配置或原基础设施裁决需要用户确定，期间其它原 A 工作继续；未将 PP 归成正常失败，也未越过完整阶段闸门。
