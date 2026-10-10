@@ -10,7 +10,7 @@
 </head>
 <body><main>
 <p class="muted">2026-10-10 · v1.1 → v1.2 方案 · 本轮只写计划，尚未实施</p>
-<div class="note"><strong>先把评估仓迁移并锁定 v1.1；再在 benchmark 的现有 main 修改两个任务、发布 v1.2；最后让评估仓现有 dev 锁定 v1.2。</strong>不创建分支或 worktree，不运行实际 evaluate、新旧对跑或最后评估验收。</div>
+<div class="note"><strong>先把评估仓迁移并锁定 v1.1；再在 benchmark 的现有 main 修改两个任务、发布 v1.2；让评估仓 dev 锁定 v1.2 后，同步到公开 main。</strong>不创建开发分支或开发 worktree，不运行实际 evaluate、新旧对跑或最后评估验收。</div>
 <h1 id="human">第一部分（给人看）</h1>
 <h2>一、迁移与两个任务的改动</h2>
 <table>
@@ -22,9 +22,9 @@
 <p>数据直接沿用 v1.1：不重生成 specs、轨迹或演示；两个判据变动不重签历史数据。代码及必要纯 CPU 检查完成后即结束。</p>
 <h2>二、在现有分支上发布并锁定</h2>
 <figure>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" width="920" role="img" aria-labelledby="v12tree-title v12tree-desc" style="display:block;width:100%;max-width:920px;height:auto">
-  <title id="v12tree-title">沿现有 main 升级至 v1.2，评估仓 dev 分阶段锁定提交</title>
-  <desc id="v12tree-desc">左侧为 benchmark 同一条 main 历史：v1.0-ood 对应旧提交，当前 main 位于 v1.1-ood，未来修改两个任务后产生 NEW_SHA 并创建 v1.2-ood 标签。右侧为评估仓现有 dev 的三个阶段：当前锁定 v1.0 提交，迁移导入到 robomme_ood 后锁定 v1.1 提交，最后锁定 v1.2 的新提交。不创建分支，旧标签保持固定。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 730" width="920" role="img" aria-labelledby="v12tree-title v12tree-desc" style="display:block;width:100%;max-width:920px;height:auto">
+  <title id="v12tree-title">沿现有分支升级至 v1.2，并同步评估仓公开 main</title>
+  <desc id="v12tree-desc">左侧为 benchmark 同一条 main 历史：v1.0-ood 对应旧提交，当前 main 位于 v1.1-ood，未来修改两个任务后产生 NEW_SHA 并创建 v1.2-ood 标签。右侧为评估仓现有 dev 的三个阶段：当前锁定 v1.0 提交，迁移导入到 robomme_ood 后锁定 v1.1 提交，最后锁定 v1.2 的新提交。随后通过发布同步，将清单内文件和同一 benchmark 提交锁同步到评估仓公开 main，不直接在公开 main 修改源码。不创建新分支，旧标签保持固定。</desc>
   <defs>
     <marker id="v12tree-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0 0 L10 5 L0 10Z" fill="#52677d"/>
@@ -37,7 +37,7 @@
       .v12tree-future{stroke-dasharray:7 5}
     </style>
   </defs>
-  <rect width="920" height="560" rx="16" fill="#fff"/>
+  <rect width="920" height="730" rx="16" fill="#fff"/>
   <text class="v12tree-text v12tree-heading" x="30" y="38">benchmark：沿现有 main 演进</text>
   <text class="v12tree-text v12tree-heading" x="615" y="38">评估仓：现有 dev</text>
   <rect x="30" y="70" width="500" height="100" rx="12" fill="#f3f5f7" stroke="#c9d2db"/>
@@ -67,15 +67,22 @@
   <text class="v12tree-text" x="635" y="425">再锁定 v1.2 的新提交</text>
   <text class="v12tree-text v12tree-code" x="635" y="463">gitlink = NEW_SHA</text>
   <path class="v12tree-line v12tree-future" d="M615 440 H530"/>
-  <text class="v12tree-text" x="30" y="535">跨仓箭头指向锁定的完整 SHA；标签不是锁定值。虚线为待实施，NEW_SHA 尚未产生。</text>
+  <path class="v12tree-line v12tree-future" d="M752 490 V580"/>
+  <text class="v12tree-text" x="30" y="537">发布同步：清单内文件与同一 benchmark 提交锁一起同步</text>
+  <text class="v12tree-text" x="30" y="565">公开 main 由同步脚本更新，不直接修改源码；不创建新分支。</text>
+  <rect x="615" y="580" width="275" height="90" rx="12" fill="#f5f0fc" stroke="#c5b4db" stroke-dasharray="7 5"/>
+  <text class="v12tree-text" x="635" y="615">公开 main：同步 dev</text>
+  <text class="v12tree-text v12tree-code" x="635" y="649">gitlink = NEW_SHA</text>
+  <text class="v12tree-text" x="30" y="710">跨仓箭头指向锁定的完整 SHA；标签不是锁定值。虚线为待实施，NEW_SHA 尚未产生。</text>
 </svg>
-<figcaption>Astra 子代理绘图。benchmark 只用现有 <code>main</code>，评估仓只用现有 <code>dev</code>；旧标签固定。评估仓实际锁定箭头指向的完整提交 SHA，<code>NEW_SHA</code> 尚未产生。</figcaption>
+<figcaption>Astra 子代理绘图。benchmark 在现有 main 修改；评估仓在现有 dev 修改，再由发布脚本同步到公开 main。两个评估分支最终锁同一 v1.2 提交；旧标签固定，NEW_SHA 尚未产生。</figcaption>
 </figure>
 <table>
 <tr><th>步骤</th><th>在哪做</th><th>完成状态</th></tr>
 <tr><td>1. 接入 v1.1</td><td>eval 的 dev：迁移包名与检查路径，子模块及 <code>BENCH_LOCK</code> 一起改为 <code>51e05fe…</code>，提交并 push。</td><td>评估代码已适配 v1.1，不启动评估。</td></tr>
 <tr><td>2. 发布 v1.2</td><td>benchmark 的 main：改两个任务，必要短测后提交并 push；在新提交创建并推送 <code>v1.2-ood</code> 标签。</td><td>main 与 v1.2 标签指向新提交；v1.0／v1.1 标签不动。</td></tr>
 <tr><td>3. 锁定 v1.2</td><td>eval 的 dev：子模块及 <code>BENCH_LOCK</code> 一起更新为 v1.2 的提交 SHA，提交并 push。</td><td>恢复该 eval 提交即得到最新 v1.2 环境。</td></tr>
+<tr><td>4. 同步公开 main</td><td>eval 的 dev 完成并推送后，运行现有 <code>dev-scripts/release/sync_to_main.sh</code>；同步公开清单文件与子模块指针。</td><td>公开 main 的代码和 benchmark 锁定与该 dev 来源一致，提交带 <code>Dev-Source</code>。</td></tr>
 </table>
 <p class="muted">实现全部由主会话在两仓现有分支完成；只读定位用 Luna，图用 Astra，不派写入子代理创建新分支。必要代码检查与指针检查保留，不增加实际评估或最后验收。</p>
 <h2 id="repo-scope">三、两个仓库分别需要改哪些内容</h2>
@@ -96,14 +103,15 @@
 <tr><td>辅助工具接入</td><td><code>dev-scripts/gl/</code> 的起跑来源检查、清单、规格加载与席位来源记录；<code>checks/</code> 的包路径和版本检查；<code>parity/</code>、<code>orig/</code>、<code>media/</code>、<code>site/</code> 的当前版本路径适配。只改接入代码，不运行评估、对拍、生成或渲染工具。</td></tr>
 <tr><td>测试与现行契约</td><td>包来源、环境替身、当前路径期待和对应 contracts 一起迁移；<code>test_submodule_lock.py::BENCH_LOCK</code> 与 gitlink 同步。<code>bench_gates.py</code> 需适配 v1.1／v1.2 结构，不能继续硬套 v1.0 的白名单。旧版本证据保留，<code>AGENTS.md</code> 只同步标记块外的当前包名与发布口径。</td></tr>
 <tr><td>依赖环境</td><td>根及三个子环境仍依赖 distribution <code>robomme</code>，路径不变、不升级依赖；必要时刷新 editable 安装并检查来源。pyproject／uv.lock 原则上保留，只有实际锁校验要求时才改对应 lock。</td></tr>
-<tr><td>子模块锁定</td><td><code>third_party/robomme_benchmark</code> 和 BENCH_LOCK 先锁 v1.1，再锁已发布 v1.2 的完整提交 SHA；两次都在现有 dev 提交并 push，评估仓公开 main 不同步。</td></tr>
+<tr><td>子模块锁定</td><td><code>third_party/robomme_benchmark</code> 和 BENCH_LOCK 先锁 v1.1，再锁已发布 v1.2 的完整提交 SHA；两次都在现有 dev 提交并 push，最后将同一 v1.2 指针同步到公开 main。</td></tr>
+<tr><td>公开 main 发布</td><td>只通过现有 <code>sync_to_main.sh</code> 同步 <code>public-manifest.txt</code> 内文件与 5 个 gitlink，不直接在 main 改源码。公开代码保持英文；本计划、私有工具和运行档案不进入公开清单。</td></tr>
 </table>
 <p class="muted">上面是改动范围导读；第二部分列出具体文件与执行顺序。历史留档、冻结快照和明确的旧版对拍侧不批量改名，不改数据、权重、任务规模或运行预算。</p>
 <h1 id="technical">第二部分（技术细节，供 agent 追踪）</h1>
 <h2>〇、基线、授权与不变项</h2>
 <p>远端已核：benchmark main 与 <code>v1.1-ood^{commit}</code> 均为 <code>51e05feb05c61b9a5a25cef3ba189ad625f2cd83</code>，尚无 v1.2 标签。本次读取的 eval 代码锚点为 <code>3596622ea4ff289a2759002c80c1ffc4c4df3a9c</code>，现 gitlink 为 <code>a5efb992e769b7011281a1d31739b76d8868602a</code>。实施前复核；main 若已前进或 v1.2 已存在，不覆盖、不自行换基线。</p>
-<p>用户已确定“都是只在一个 main branch 上实现，不要创建新的 branch”，并澄清“benchmark 用 main，评估仓仍用现有 dev”。本次明确决定覆盖旧计划的 benchmark 专用分支要求；两仓均不创建新分支或 worktree。当前仅获写计划授权，完整方案认可后再实施。</p>
-<p>不改官方 <code>src/robomme/</code>、录像器、其他模型 gitlink、任务规模、预算和旧产物；不调用 scripts/evaluate.py，不做 reset／rollout／Astra 策略请求或作业操作。eval 的公开 main 不同步。既有 SimpleMemVLA 在途改动和其他运行档案绕开；有任务热读当前子模块或 venv 时先等其结束，不改在用环境、不擅停任务。</p>
+<p>用户已确定“都是只在一个 main branch 上实现，不要创建新的 branch”，澄清为“benchmark 用 main，评估仓仍用现有 dev”，并追加“评估仓 dev 改完之后还要同步到 main”。实现不创建开发分支或开发 worktree；公开同步脚本使用已有的临时 detached 检出，不创建分支，结束自动清理。当前只修订计划，完整方案认可后实施并完成公开同步。</p>
+<p>不改官方 <code>src/robomme/</code>、录像器、其他模型 gitlink、任务规模、预算和旧产物；不调用 scripts/evaluate.py，不做 reset／rollout／Astra 策略请求或作业操作。eval 公开 main 仅由同步脚本更新。既有 SimpleMemVLA 在途改动和其他运行档案绕开；有任务热读当前子模块或 venv 时先等其结束，不改在用环境、不擅停任务。</p>
 <h2>一、eval：迁移到 robomme_ood 的必要改动</h2>
 <table>
 <tr><th>文件集合</th><th>具体改动</th></tr>
@@ -163,14 +171,19 @@ git -C third_party/robomme_benchmark switch --detach "$NEW_BENCH_SHA"
 git add third_party/robomme_benchmark tests/static/test_submodule_lock.py
 git diff --cached --submodule=short -- third_party/robomme_benchmark
 # 必要检查，中文提交并立即 git push</code></pre>
+<pre><code># D. dev 完成并 push 后，同步公开 main；本轮不执行
+cd /data/hongzefu/RoboMME-benchmark-OOD-eval
+UV_CACHE_DIR=/home/hongzefu/.cache/uv bash dev-scripts/release/sync_to_main.sh \
+  --message "Migrate to robomme_ood and pin benchmark v1.2-ood"</code></pre>
 <p>锁定的是 <code>v1.2-ood^{commit}</code>，不是 annotated tag 对象自身的 SHA。旧标签不移动，新 v1.2 已存在就停止。发布后核远端 main 与 v1.2 剥离出的 commit 同为 NEW_SHA；eval 的 gitlink、BENCH_LOCK 和实际子模块 HEAD 也须相同。恢复该 eval 提交时正常 submodule update 会取得固定版本，不用 --remote。</p>
+<p><strong>公开同步前置：</strong>dev 已提交并推送，工作区满足脚本的 clean 检查，公开清单的语言、路径、清单三项检查及清单内纯 CPU 短测通过。脚本仅复制 dev 已提交的公开文件和 5 个 gitlink，main 提交使用英文摘要并带 <code>Dev-Source: &lt;dev完整SHA&gt;</code>，快进推送后输出 <code>SYNC_MAIN=PASS</code>（无差异为 NOOP）。其他会话未跟踪档案可能阻止 clean 检查，应等待所属会话处理，不代提交、stash 或删除；检查／推送失败即停，不绕过脚本。</p>
 <h2>四、必要短测与主会话分工</h2>
-<p>主会话唯一写者：benchmark 只在 main，eval 只在 dev；不新建分支、worktree 或写入子代理。Luna 只读定位，Astra 只返回图。实现前核确切根目录、分支、写集和正在使用的环境；其他会话改动一律绕开。</p>
+<p>主会话唯一写者：benchmark 在 main，eval 源码在 dev；main 发布交现有同步脚本。实现不新建开发分支、开发 worktree 或写入子代理；发布脚本的临时 detached 检出按其原流程自动清理。Luna 只读定位，Astra 只返回图。实施前核根目录、分支、写集和在用环境，其他会话改动绕开。</p>
 <p>检查使用 uv，显式 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>，NFS 用 copy。benchmark 仅选上述两个任务的纯 CPU 轻量用例；eval 至少覆盖 builder／session／Astra 来源绑定的现有替身用例。资源守卫要求 native_reset、GPU、权重与网络调用为零；每组超时 280 秒。无实际 evaluate、dummy 或最后成绩／媒体验收。</p>
 <p>锁定单测原来读 HEAD：提交前用暂存区核 gitlink 与待提交 BENCH_LOCK、子模块 HEAD 一致；保留原单测语义，提交后再核已落地 HEAD。不能因尚未提交而放宽或删除锁检查。判据检查只运行修改后实现，不起旧版回合。</p>
 <h2>五、风险、未验证与提交记录</h2>
 <p>包名迁移必须覆盖 session、GL 来源与规格路径；不能只升 gitlink。协议名 RoboMME、分发名 robomme、schema hard-specs/4 等不是旧 Python 包名，不改。旧门禁白名单与当前包名必须分版本处理，历史证据不能改成新版本。已发布标签冲突、远端前进或推送失败交回，不改历史；没有实跑就不报告成功率或运行等价。</p>
-<p>实施写集只含 namespace 接入、必要契约／测试、两任务及 gitlink；不改变策略推理、Report 统计、数据、运行预算或发布 eval main。此轮仅更新本 HTML，提交编号接续 eval 最新记录；后续三阶段独立中文提交、立即 push，v1.2 标签另行推送。过程与用户原话写 commit body，不新增运行档案或规则日志。</p>
-<p class="muted">用户已定口径：“迁移到 V1.1 OOD，然后再去改这个两个任务，然后定位为 V1.2 OOD”；“都是只在一个 main branch 上实现，不要创建新的 branch”；澄清为 benchmark/main、eval/dev。以上决定替换旧计划从 v1.0 开专用分支的路径。</p>
+<p>实施写集只含 namespace 接入、必要契约／测试、两任务及 gitlink，不改变策略推理、Report 统计、数据或运行预算；完成后同步 eval main。此轮仅更新本 HTML，提交编号接续 eval 最新记录；后续三阶段独立中文提交、立即 push，v1.2 标签另行推送，最后由脚本生成英文 main 提交。过程与用户原话写 commit body，不新增运行档案或规则日志。</p>
+<p class="muted">用户已定口径：“迁移到 V1.1 OOD，然后再去改这个两个任务，然后定位为 V1.2 OOD”；“都是只在一个 main branch 上实现，不要创建新的 branch”；澄清为 benchmark/main、eval/dev；追加“评估仓 dev 改完之后还要同步到 main”。</p>
 <footer class="muted">源仓：<a href="https://github.com/hongzefu/RoboMME-benchmark-OOD">RoboMME-benchmark-OOD</a>；当前接入锚点：<a href="../../src/robomme_ood_eval/episode.py">builder_for</a>、<a href="../../src/robomme_ood_eval/session.py">EnvSession.builder</a>、<a href="../../tests/static/test_submodule_lock.py">BENCH_LOCK</a>。本轮只交付计划，v1.2 新提交及标签尚未产生。</footer>
 </main></body></html>
