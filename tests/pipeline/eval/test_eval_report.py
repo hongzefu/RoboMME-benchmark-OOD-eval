@@ -41,6 +41,9 @@ def test_clean_report_rates_and_outcome_keys(tmp_path, capsys):
     st.accepted(b, "b1", "timeout")
     st.accepted(c, "c1", "success")
     rc, lines, rep = _report(tmp_path, capsys, [a, b, c])
+    assert rep["schema"] == "v8-eval-report/2"
+    assert rep["speed"]["rows"] == [] and rep["speed"]["missing"] == 2
+    assert rep["speed"]["excluded_timeout"] == 1
     assert rc == 0
     assert F.verdict(lines, "V8_EVAL_COVERAGE")[""] == "PASS" and F.verdict(lines, "V8_EVAL_REPORT")[""] == "PASS"
     pp = rep["per_policy"][POL]

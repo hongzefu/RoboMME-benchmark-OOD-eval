@@ -95,6 +95,7 @@ def test_report_summarize(tmp_path):
     p = tmp_path / "results.jsonl"
     p.write_text("".join(json.dumps(r) + "\n" for r in rows) + '{"half', encoding="utf-8")
     log = report.summarize(tmp_path)
+    assert log["schema"] == "robomme-ood-eval-log/2" and log["speed"] is None
     assert json.loads((tmp_path / "log.json").read_text()) == log
     assert log["tasks"]["VideoUnmask"] == {"episodes": 3, "counted": 2, "success": 1, "fail": 1, "timeout": 0,
                                            "infra": 1, "success_rate": 0.5}
