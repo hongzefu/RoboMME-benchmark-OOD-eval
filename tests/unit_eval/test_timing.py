@@ -180,6 +180,54 @@ def test_merge_weights_and_raw_percentiles():
         merge_summaries([pa, pb])
 
 
+def test_serialized_missing_conservation_never_passes():
+    """确实经过写 JSON／读 JSON，覆盖整块缺失、单键缺失与空值。"""
+    t = ChunkTimer()
+    record(t, wall=100, rtt=80)
+    p = attach(t)
+
+    def passing(summary):
+        return summary["violations"] == summary["missing_fields"] == 0 and summary["checked"] == summary["expected"]
+
+    assert passing(merge_summaries([p]))
+    for key in (None, "violations", "missing_fields", "checked", "expected"):
+        broken = copy.deepcopy(p)
+        if key is None:
+            broken.pop("conservation")
+        else:
+            broken["conservation"].pop(key)
+        restored = json.loads(json.dumps(broken))
+        merged = merge_summaries([restored])
+        assert merged["expected"] == 1 and merged["missing_fields"] >= 1
+        assert not passing(merged)
+    broken = copy.deepcopy(p)
+    broken["conservation"]["checked"] = None
+    merged = merge_summaries([json.loads(json.dumps(broken))])
+    assert merged["checked"] == 0 and not passing(merged)
+    broken = copy.deepcopy(p)
+    broken["conservation"]["expected"] = 0
+    broken["conservation"]["checked"] = 0
+    assert not passing(merge_summaries([json.loads(json.dumps(broken))]))
+
+
+def test_summary_only_astra_layers_have_missing_evidence():
+    """局级守恒通过不能替代不可还原的逐层守恒，非空层不得显示通过。"""
+    t = ChunkTimer()
+    record(t, wall=100, rtt=80, lang=10, has_planner=True, has_review=False)
+    p = attach(t)
+    p.pop("chunks")
+    restored = json.loads(json.dumps(p))
+    merged = merge_summaries([restored])
+    assert merged["violations"] == merged["missing_fields"] == 0
+    assert merged["checked"] == merged["expected"] == 1
+    layer = merged["by_planner_review"]["planner_only"]
+    assert layer["decisions"] == layer["expected"] == 1
+    assert layer["checked"] == 0 and layer["missing_fields"] == 1
+    assert layer["approx"] is True
+    assert merged["by_planner_review"]["review_only"] == {"n": 0}
+    print("MERGE_EVIDENCE=PASS missing_conservation_rejected=1 summary_only_layer_rejected=1 serialized=1")
+
+
 def test_source_field_name():
     import robomme_ood_eval.timing as module
 

@@ -208,11 +208,39 @@ def attach_policy_timing(timing, timer, *, gpu_name, model_kind):
     return timing
 
 
+def _conservation_counts(policy_timing):
+    """Preserve available counts and fail closed when evidence is incomplete."""
+    keys = ("violations", "missing_fields", "checked", "expected")
+    evidence = policy_timing.get("conservation")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    counts = {}
+    incomplete = False
+    for key in keys:
+        value = evidence.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            incomplete = True
+        else:
+            counts[key] = value
+    decisions = policy_timing["chunk_summary"].get("n_decisions", 0)
+    if "expected" not in counts:
+        counts["expected"] = decisions
+    elif counts["expected"] != decisions:
+        incomplete = True
+        counts["expected"] = max(counts["expected"], decisions)
+    # Zeros here mean no known violations/comparisons, never successful evidence:
+    # an absent or malformed count always contributes a missing-evidence count.
+    out = {key: counts.get(key, 0) for key in keys}
+    if incomplete:
+        out["missing_fields"] += max(1, decisions)
+    return out
+
+
 def merge_summaries(summaries):
     """Merge one GPU group of policy timings, using raw steady values if present.
 
     With summary-only inputs, means are weighted by the original phase count;
     percentiles are approximate and explicitly marked. Callers own exclusions.
+    Absent conservation counts contribute missing evidence, so they cannot pass.
     """
     summaries = [p for p in summaries if p.get("chunk_summary") is not None]
     gpus = {p.get("gpu_name") for p in summaries}
@@ -223,8 +251,9 @@ def merge_summaries(summaries):
               "steady_short_eps": sum(bool(p["chunk_summary"].get("steady_short")) for p in summaries),
               "approx": any("chunks" not in p for p in summaries)}
     result["n_decisions"] = result["decisions"]
+    evidence = [_conservation_counts(p) for p in summaries]
     for key in ("violations", "missing_fields", "checked", "expected"):
-        result[key] = sum(p.get("conservation", {}).get(key, 0) for p in summaries)
+        result[key] = sum(counts[key] for counts in evidence)
     for field in CHUNK_FIELDS:
         first = []
         total, weight = 0.0, 0
@@ -270,11 +299,15 @@ def merge_summaries(summaries):
                 q = {"gpu_name": p.get("gpu_name"), "chunk_summary": sub}
                 if "chunks" in p:
                     q["chunks"] = [c for c in p["chunks"] if _layer(c) == layer]
-                    kind = p.get("conservation", {}).get("kind")
+                    conservation = p.get("conservation")
+                    kind = conservation.get("kind") if isinstance(conservation, dict) else None
                     if kind in MODEL_KINDS:
                         timer = ChunkTimer()
                         timer.chunks = q["chunks"]
                         q["conservation"] = _conservation(timer, kind)
+                # Without raw chunks, episode-level conservation cannot be
+                # attributed to this stratum. Deliberately leave it unavailable:
+                # recursive aggregation marks missing evidence and approx=True.
                 inputs.append(q)
             result["by_planner_review"][layer] = merge_summaries(inputs) if inputs else {"n": 0}
     return result
