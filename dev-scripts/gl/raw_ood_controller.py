@@ -100,6 +100,42 @@ def load_config(path: Path) -> dict:
     return c
 
 
+def control_file(c: dict, path: str) -> Path:
+    """显式控制槽只允许同root/control实体路径，不跟随任何符号链。"""
+    control=Path(c['root'])/'control'; target=Path(path)
+    try: relative=target.relative_to(control)
+    except ValueError: raise ValueError('控制槽必须在同root/control下') from None
+    if not target.is_absolute() or '..' in relative.parts: raise ValueError('控制槽不可包含相对路径或上跳')
+    if Path(c['root']).is_symlink() or control.is_symlink() or target.is_symlink() or not target.is_file() or not target.resolve().is_relative_to(control.resolve()):
+        raise ValueError('控制槽路径越界/缺失/符号链')
+    node=target.parent
+    while node!=control:
+        if node.is_symlink(): raise ValueError('控制槽父目录符号链')
+        node=node.parent
+    return target
+
+
+def legacy_context(c: dict) -> dict:
+    source=c.get('legacy_source')
+    if source is None: return c
+    if set(source)!={'config','sha256','exec_commit'}: raise ValueError('旧来源描述字段不完整或含未知项')
+    path=control_file(c,source['config'])
+    if sha(path)!=source['sha256']: raise ValueError('旧配置SHA不符')
+    old=load_config(path)
+    if old.get('legacy_source') is not None: raise ValueError('禁止递归旧来源')
+    if old['exec_commit']!=source['exec_commit']: raise ValueError('旧worker源码锚不符')
+    changes={'exec_commit','config_sha256','runner','legacy_source','ready_path','models'}
+    if {k:v for k,v in old.items() if k not in changes}!={k:v for k,v in c.items() if k not in changes}:
+        raise ValueError('新旧配置运行/身份/预算/CPU/资源/通知等固定字段改变')
+    if set(old['models'])!=set(c['models']): raise ValueError('新旧模型集合冲突')
+    for model in old['models']:
+        before=dict(old['models'][model]); after=dict(c['models'][model]); env0=before.pop('env',{}); env1=after.pop('env',{})
+        allowed={'PYTHONPATH','SGEVAL_THIRD_PARTY','ROBOMME_EVAL_ROOT'}
+        if before!=after or {k:v for k,v in env0.items() if k not in allowed}!={k:v for k,v in env1.items() if k not in allowed}:
+            raise ValueError('新旧模型路由/权重/参数或非快照环境改变')
+    return old
+
+
 def identity(model: str, row: dict) -> str:
     return f"{model}:ood:{row['key']}"
 
@@ -156,6 +192,7 @@ def validate_config(config: dict) -> list[dict]:
     if len(config['expected_identities'])!=4000 or set(config['expected_identities'])!=keys: raise ValueError('搬运身份manifest不符')
     if len(config['expected_publications'])!=4000 or set(config['expected_publications'])!={publication_name(k) for k in keys}: raise ValueError('搬运发布manifest不符')
     work_budget(config)
+    legacy_context(config)
     return rows
 
 
@@ -236,7 +273,7 @@ class Controller:
         atomic(inv/'dispatch.json',dict(self.base,gpu_job_id=str(seat['job_id']),shard_id=shard,model=model,smoke=smoke,command=cmd,srun_pid=p.pid,time=time.time()))
         self.event('dispatch',gpu_job_id=str(seat['job_id']),shard_id=shard,smoke=smoke)
 
-    def prepare_publication(self, a: dict, row: dict):
+    def prepare_publication(self, a: dict, row: dict,*,worker_exec_commit=None):
         required=('key','infra','final','accepted','result','exec_steps','task_success','budget_exhausted','run_blocked')
         if any(k not in row for k in required): raise ValueError('席位报告缺少必填字段')
         if row['infra'] or row['budget_exhausted'] or row['run_blocked'] or not row['final'] or not row['accepted']:
@@ -256,7 +293,8 @@ class Controller:
             if f.is_file(): files[f.relative_to(directory).as_posix()]=dict(sha256=sha(f),size=f.stat().st_size)
         if any(f.endswith('.mp4') for f in files): raise ValueError('出现官方视频')
         doc=dict(self.base,schema='raw-ood-v1',model=a['model'],shard_id=a['shard'],identity_key=key,
-                 relative_dir=directory.relative_to(self.gl).as_posix(),files=files,delete_files=['front.mkv','wrist.mkv','arrays.npz'])
+                 relative_dir=directory.relative_to(self.gl).as_posix(),files=files,delete_files=['front.mkv','wrist.mkv','arrays.npz'],
+                 worker_exec_commit=worker_exec_commit or self.c['exec_commit'])
         return doc
 
     def publish(self, a: dict, row: dict, *, prepared=None):
@@ -274,6 +312,7 @@ class Controller:
         import re
         if not re.fullmatch('[0-9a-f]{40}',str(orchestration_commit)): raise ValueError('恢复须记录40位orchestration_commit')
         jobs={str(s['job_id']) for s in self.c['seats']}
+        old=legacy_context(self.c); oldbase={k:old[k] for k in self.base}
         q=subprocess.run(['squeue','--steps','-h','-j',','.join(sorted(jobs)),'-o','%i %j %T'],capture_output=True,text=True,timeout=5)
         if q.returncode: raise ValueError('恢复时步骤查询未知')
         for line in q.stdout.splitlines():
@@ -287,16 +326,19 @@ class Controller:
         prepared=[]; fingerprints={}
         for model in ('qwenvl','smvla','pp'):
             inv=invs/f'{model}-00-smoke'; dispatch=read(inv/'dispatch.json'); ident=self.shards[model+'-00']['rows'][0]
-            if any(str(dispatch[k])!=str(v) for k,v in self.base.items()): raise ValueError('原dispatch版本/运行身份冲突')
+            if any(str(dispatch[k])!=str(v) for k,v in oldbase.items()): raise ValueError('原dispatch版本/运行身份冲突')
             if dispatch['model']!=model or dispatch['shard_id']!=model+'-00' or dispatch['smoke'] is not True: raise ValueError('原dispatch不是指定首局')
             job=str(dispatch['gpu_job_id']); seat=next((s for s in self.c['seats'] if str(s['job_id'])==job),None)
             if seat is None: raise ValueError('原dispatch作业不在登记清单')
             command=dispatch['command']; seat_name=f"{seat['seat']}-{model}-00-smoke"
-            for flag,value in {'--jobid':job,'--seat':seat_name,'--out':str(self.gl),'--policy-seed':'7','--identities':str(inv/'identities.jsonl')}.items():
+            for flag,value in {'--jobid':job,'--seat':seat_name,'--out':str(self.gl),'--policy-seed':'7','--policies':old['models'][model]['policy'],'--identities':str(inv/'identities.jsonl')}.items():
                 values=[str(a).split('=',1)[1] for a in command if str(a).startswith(flag+'=')]
                 values += [str(command[i+1]) for i,a in enumerate(command[:-1]) if a==flag]
                 if values!=[value]: raise ValueError('原worker命令身份冲突 '+flag)
-            if self.c['runner'] not in command: raise ValueError('原runner路径冲突')
+            if old['runner'] not in command: raise ValueError('原runner路径冲突')
+            expansion=dict(root=str(self.root),gl_root=str(self.gl),seat=seat_name,shard=model+'-00',port_base=seat['port_base'],work_dir=str(inv/'work'))
+            original_args=[str(x).format_map(expansion) for x in old['models'][model]['args']]
+            if original_args and command[-len(original_args):]!=original_args: raise ValueError('原模型参数与旧配置不符')
             identities=[json.loads(x) for x in (inv/'identities.jsonl').read_text().splitlines()]
             if identities!=[ident]: raise ValueError('原smoke身份清单不一致')
             progress=read(inv/'progress.json')
@@ -350,13 +392,15 @@ class Controller:
             for key in ('dataset','task','tier','seed','key'):
                 if trace[0]['identity'][key]!=ident[key]: raise ValueError('原trace身份冲突')
             a=dict(model=model,shard=model+'-00',rows=[ident],smoke=True)
-            doc=self.prepare_publication(a,row)
+            doc=self.prepare_publication(a,row,worker_exec_commit=dispatch['exec_commit'])
             if (self.gl/'published'/publication_name(doc['identity_key'])).exists(): raise ValueError('原smoke已发布，拒绝重复恢复')
             prepared.append((a,row,doc))
-            fingerprints[model]=dict(dispatch_sha256=sha(inv/'dispatch.json'),progress_sha256=sha(inv/'progress.json'),report_sha256=sha(path),step=step)
+            fingerprints[model]=dict(dispatch_sha256=sha(inv/'dispatch.json'),progress_sha256=sha(inv/'progress.json'),report_sha256=sha(path),step=step,
+                                     worker_exec_commit=dispatch['exec_commit'])
         if sha(Path(self.c['budget_ledger']))!=ledger_sha: raise ValueError('复用验证期间共享账本发生改变')
         proof=dict(self.base,orchestration_commit=orchestration_commit,reused=3,fingerprints=fingerprints,budget_sha256=ledger_sha,
                    identities=[doc['identity_key'] for _,_,doc in prepared],verification='identity_closed_recorder_summary_full_decode_by_mover',time=time.time())
+        if self.c.get('legacy_source') is not None: proof['legacy_source']=dict(self.c['legacy_source'])
         if preflight:
             print('RESUME_PREFLIGHT=PASS models=3 identities=3 budget_sha256='+ledger_sha,flush=True)
             print(json.dumps(proof,ensure_ascii=False,sort_keys=True),flush=True)
@@ -550,7 +594,8 @@ class Controller:
         beat=threading.Thread(target=heartbeat,name='raw-ood-controller-heartbeat',daemon=True); beat.start()
         try:
             if resume_completed_smokes:
-                if read(self.control/'shards.json')!=manifest: raise ValueError('原分片manifest冲突')
+                old=legacy_context(self.c); oldmanifest=dict({k:old[k] for k in self.base},shards=self.shards)
+                if read(self.control/'shards.json')!=oldmanifest: raise ValueError('原分片manifest冲突')
                 self.resume_completed_smokes(orchestration_commit)
             else: atomic(self.control/'shards.json',manifest)
             while True:

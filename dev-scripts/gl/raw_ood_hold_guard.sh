@@ -2,6 +2,7 @@
 # 本轮GPU独立守卫：CPU消失不能被尚未发布ready掩盖。
 set -euo pipefail
 ROOT=${1:?运行根}; RUN=${2:?运行名}; CPU=${3:?CPU作业}; DEADLINE=${4:?准备截止秒}
+READY=${5:-$ROOT/control/launch.ready}
 SELF=${SLURM_JOB_ID:?}; : "${BENCH_PY:?必须提供uv管理解释器}"
 HOLD_PID=""
 FAILURE_PHASE=initialization
@@ -9,9 +10,13 @@ FAILURE_PHASE=initialization
 exec > >(tee -a "$ROOT/control/guard-$SELF.log") 2>&1
 normal_complete() {
   [[ -f "$ROOT/control/gpu_work_complete.json" ]] || return 1
-  timeout --kill-after=.2s 3s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" <<'PY'
+  timeout --kill-after=.2s 3s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$READY" <<'PY'
 import json,pathlib,sys
-p=pathlib.Path(sys.argv[1])/'control'; r=json.loads((p/'launch.ready').read_text()); d=json.loads((p/'gpu_work_complete.json').read_text())
+p=pathlib.Path(sys.argv[1])/'control'; ready=pathlib.Path(sys.argv[4])
+assert ready.is_absolute() and not ready.is_symlink() and ready.resolve().is_relative_to(p.resolve())
+assert '..' not in ready.relative_to(p).parts and not p.is_symlink() and not p.parent.is_symlink()
+assert all(not node.is_symlink() for node in ready.parents if node.is_relative_to(p))
+r=json.loads(ready.read_text()); d=json.loads((p/'gpu_work_complete.json').read_text())
 assert r['root']==sys.argv[1] and r['run']==sys.argv[2] and str(r['controller_job_id'])==sys.argv[3]
 assert d['run']==r['run'] and str(d['controller_job_id'])==sys.argv[3]
 assert d['config_sha256']==r['config_sha256'] and d['exec_commit']==r['exec_commit']
@@ -60,10 +65,10 @@ while :; do
     (( QUERY_FAIL_SINCE >= 0 )) || QUERY_FAIL_SINCE=$QUERY_START
     (( SECONDS - QUERY_FAIL_SINCE < 30 )) || exit 7
   fi
-  if [[ -f "$ROOT/control/launch.ready" ]]; then
+  if [[ -f "$READY" ]]; then
     FAILURE_PHASE=ready_heartbeat_payload
     echo "GUARD_CHECK_BEGIN gpu=$SELF time=$(date +%s) startup_deadline_s=30 read_deadline_s=5"
-    if timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$SELF" "$$" <<'PY'
+    if timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$SELF" "$$" "$READY" <<'PY'
 import sys
 print('GUARD_PHASE gpu='+sys.argv[4]+' phase=python_entered',flush=True)
 print('GUARD_PHASE gpu='+sys.argv[4]+' phase=startup_standard_library',flush=True)
@@ -75,10 +80,14 @@ try:
  print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
  import json,pathlib
  p=pathlib.Path(sys.argv[1])/'control'
+ ready=pathlib.Path(sys.argv[6])
+ assert ready.is_absolute() and not ready.is_symlink() and ready.resolve().is_relative_to(p.resolve())
+ assert '..' not in ready.relative_to(p).parts and not p.is_symlink() and not p.parent.is_symlink()
+ assert all(not node.is_symlink() for node in ready.parents if node.is_relative_to(p))
  phase='ready_read'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
- r=json.loads((p/'launch.ready').read_text())
+ r=json.loads(ready.read_text())
  phase='ready_validate'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
- assert r['run']==sys.argv[2] and str(r['controller_job_id'])==sys.argv[3]
+ assert r['root']==sys.argv[1] and r['run']==sys.argv[2] and r['run_name']==sys.argv[2] and str(r['controller_job_id'])==sys.argv[3]
  intent=p/'intentional-supervisor-stop.json'
  if intent.exists():
   phase='intentional_supervisor_stop'; stop=json.loads(intent.read_text())
@@ -91,11 +100,11 @@ try:
  h=p/'cpu-heartbeat.json'
  if h.exists():
   d=json.loads(h.read_text()); phase='heartbeat_validate'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
-  assert d['run']==r['run'] and str(d['controller_job_id'])==str(r['controller_job_id']) and d['config_sha256']==r['config_sha256']
+  assert all(str(d[k])==str(r[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
   age=time.time()-float(d['t']); print('GUARD_HEARTBEAT gpu='+sys.argv[4]+' age_s='+str(age),flush=True)
   assert -30<=age<120
  else:
-  phase='heartbeat_missing_grace'; assert time.time()-(p/'launch.ready').stat().st_mtime<120
+  phase='heartbeat_missing_grace'; assert time.time()-ready.stat().st_mtime<120
  phase='ready_publish'
  target=p/('guardian-ready-'+sys.argv[4]+'.json')
  if not target.exists():

@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 
-from raw_ood_controller import atomic, load_config, query_gpu, read, sha, validate_config
+from raw_ood_controller import atomic, control_file, legacy_context, load_config, query_gpu, read, sha, validate_config
 MAIL_TO='hongzefu@umich.edu'
 MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
 
@@ -59,14 +59,24 @@ def notify(c: dict, event: str, body: dict) -> dict:
     return record
 
 
-def require_probe(c: dict) -> None:
+def require_probe(c: dict) -> dict | None:
     if not notification_config(c)['enabled']: return
-    report=read(Path(c['root'])/'control'/'notification-probe.json')
+    old=legacy_context(c); report=read(Path(c['root'])/'control'/'notification-probe.json')
     for key in ('run','run_name','exec_commit','config_sha256','controller_job_id'):
-        if str(report[key])!=str(c[key]): raise ValueError('通知预检身份不符')
+        if str(report[key])!=str(old[key]): raise ValueError('通知预检身份不符')
     if report['event']!='probe' or report['state']!='submitted' or report['rc']!=0 or report['to']!=MAIL_TO or not report['subject']:
         raise ValueError('邮件预检未提交成功')
     if not 0<float(report['time'])<=time.time()+30: raise ValueError('邮件预检时间错误')
+    if c.get('legacy_source') is not None:
+        path=control_file(c,str(Path(c['root'])/'control'/'mail-delivery-confirmed.json')); delivery=read(path)
+        for key in ('run','run_name','exec_commit','config_sha256','controller_job_id'):
+            if str(delivery[key])!=str(old[key]): raise ValueError('旧实收证据身份冲突')
+        if delivery['received'] is not True or delivery['source']!='user_confirmation' or delivery['to']!=MAIL_TO or delivery['subject']!=report['subject']:
+            raise ValueError('旧邮件实收证据缺失或冲突')
+        # 旧回执不改写成新发送；复用来源独立记录。
+        return dict(reused=True,legacy_config_sha256=old['config_sha256'],probe_sha256=sha(Path(c['root'])/'control'/'notification-probe.json'),
+                    delivery_proof_sha256=sha(path),delivery_verified=True)
+    return dict(reused=False,delivery_verified=False)
 
 
 def notification_probe(config_path: Path) -> int:
@@ -92,7 +102,8 @@ def start_guardians(c: dict, guardians: list[dict] | None=None) -> list[dict]:
         log=(control/f'guardian-{job}.log').open('a')
         cmd=['srun',f'--jobid={job}','--gres=none','--overlap','--exact','--ntasks=1','--cpus-per-task=1',
              '--job-name=raw-ood-lifecycle-guard','bash',str(Path(__file__).with_name('raw_ood_hold_guard.sh')),
-             c['root'],c['run'],str(c['controller_job_id']),str(int(c['cpu_end_time']))]
+             c['root'],c['run'],str(c['controller_job_id']),str(int(c['cpu_end_time'])),
+             str(control_file(c,c.get('ready_path',str(control/'launch.ready'))))]
         try: p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=env)
         except BaseException: log.close(); raise
         guardians.append(dict(job_id=job,process=p,log=log,command=cmd))
@@ -175,14 +186,16 @@ def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=N
     signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term); signal.signal(signal.SIGUSR1,term)
     try:
         validate_config(c)
-        require_probe(c)
-        ready=read(control/'launch.ready'); jobs=read(control/'jobs.json')
+        probe_provenance=require_probe(c)
+        ready=read(control_file(c,c.get('ready_path',str(control/'launch.ready')))); jobs=read(control/'jobs.json')
         for k,v in base.items():
             if k=='run_name' and k not in ready: continue
             if str(ready[k])!=str(v): raise ValueError('ready版本或身份不符')
         if ready['root']!=str(Path(c['root'])) or jobs['run']!=c['run'] or str(jobs['controller_job_id'])!=str(c['controller_job_id']):
             raise ValueError('资源清单身份不符')
         if set(map(str,jobs['gpu_job_ids']))!={str(s['job_id']) for s in c['seats']}: raise ValueError('资源清单GPU不符')
+        if probe_provenance is not None and probe_provenance['reused']:
+            atomic(control/'notification-probe-reused.json',dict(base,**probe_provenance,time=time.time()))
         mover=Path(c.get('mover_heartbeat',control/'mover-heartbeat.json'))
         mover_error=Path(c.get('mover_error',control/'mover-error.json'))
         check_heartbeat(mover,base,now=time.time())
