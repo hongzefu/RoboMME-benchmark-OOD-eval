@@ -43,6 +43,8 @@ smoke 的六个身份是 A 清单的子集；完整验收后将相同字节的�
 
 ## 当前状态与下一步
 
+第一批已完成产物按 accepted 白名单搬回本机，不同步活动 `rollouts/` 整层，也不复制未完成的临时视频。84 个已接受身份共 1353 文件、796827998 字节，完整 raw、对应官方视频及恢复证明、accepted 标记逐文件 SHA256 与字节数一致；各模型 `results.jsonl` 按稳定历史前缀复制。执行入口 `UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python artifacts/full-eval-20261010/copy-completed.py`，退出 0：`COMPLETED_COPY=PASS accepted=84 files=1353 reset=0 trajectory=0`。落点 `artifacts/full-eval-20261010/seed7/`，源暂保留给阶段媒体全验；该复制不作为完整 A 通过。详细清单在 [第一批复制证据](records/completed-copy-first.json)。
+
 控制器 03:18:11 EDT 从干净 r3 提交 `0c6f8a3a552876020611d4d654a41adb3accba65` 实际接手；NFS 控制器 39 项夹具再次通过、0.62 秒、资源全零。实际原 A 的单身份 r2 正常退出后，控制器自动创建下一个 r3 单身份、确认源码与二十次上限，再连续跨任务推进。04:10 左右 A 已接受数为 PP 38／70、QwenVL 22／70、MemER 5／70、SimpleMemVLA 随下一完成达到 11／70，FrameSamp／Oracle 各 1／70 复用局；这是进度快照，完整阶段仍未完成。每模型的 70 是十四任务 × 跨档轮转各五局；六模型合计 420 个 A 身份。会话序号含零尝试跳过，不作为 native 局数。
 
 连续四席调度器经固定提交独立审查通过，并在生产结算代码生成的真实 JSON 格式夹具中核对环境创建失败恢复。完整核心短测 `timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q` 为 1615 项通过、6 项跳过、101 项慢测排除，186.44 秒、退出 0；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6`。GreatLakes 既有 63431432 上显式绑定候选 r3 评估与 benchmark 源码的真实 NFS 夹具，20 项到期半局正负例通过、11.61 秒，资源守卫全零；未运行仿真。先前首次 NFS 夹具未显式绑定评估源码，随后按正确路径重测，本结论引用第二次结果。
