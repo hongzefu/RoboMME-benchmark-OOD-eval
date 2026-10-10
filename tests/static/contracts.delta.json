@@ -2,13 +2,13 @@
  {
   "id": "C13-CHUNK-TIMING",
   "domain": "C13",
-  "source": ["src/robomme_ood_eval/timing.py", "src/robomme_ood_eval/models/smvla.py", "src/robomme_ood_eval/servers/smvla_server.py"],
+  "source": ["src/robomme_ood_eval/timing.py", "src/robomme_ood_eval/models/smvla.py", "src/robomme_ood_eval/servers/smvla_server.py", "dev-scripts/checks/infer_timing_smoke.py"],
   "symbol": "ChunkTimer／attach_policy_timing／merge_summaries／SimpleMemVLA 两端计时",
   "oracle": "假时钟、独立守恒重算、假服务睡眠常量与旧回复字段手写",
   "positive": "毫秒统计按原始阶段划分、未归属回收、幂等写入、分块墙钟包含观察、语言拆分透明且审计关闭字节一致",
   "negative": "缺必要字段不得通过守恒；非法语言类别、非法耗时、保留字段冲突及未起表关闭均拒绝；失败协议不提交块",
   "boundaries": "纯 CPU 替身验证；真实 GPU 同步开销与数值等待正式冒烟",
-  "nodeids": ["tests/unit_eval/test_timing.py", "tests/pipeline/eval/test_smvla_chunk_timing.py"],
+  "nodeids": ["tests/unit_eval/test_timing.py", "tests/pipeline/eval/test_smvla_chunk_timing.py", "tests/unit_eval/test_infer_timing_smoke.py"],
   "resource": "cpu",
   "mutants": [],
   "status": "verified"
