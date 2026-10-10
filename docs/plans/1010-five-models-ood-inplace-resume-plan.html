@@ -52,4 +52,8 @@ srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none
 <p>主会话整合私有编排修补后，143项定向测试通过36.72秒，资源守卫全零；B4与B5修正后固定审查通过。真正CPU只读预检拒绝Qwen原首局 <code>official/*.mp4</code>，未启动恢复、未发布任何新身份。已确认外层 <code>--no-render</code> 只关网站后制视频，GroundSG内部 <code>run_episode</code> 固定保留原官方视频；原官方循环无关闭临时编码的既有API。</p>
 <p>用户裁决：「只交付原始录像，允许内部临时 MP4」。据此后续只修评估外层的保存开关，不改上游evaluator/recorder、模型算法或五gitlink。原Qwen额外官方文件原字节另存，不交付、不删除；三个原首局复用，原worker快照不覆盖。后续worker须用修补后的新clean快照，来源与三个旧首局分别记录；原配置不覆盖，新增接续配置与旧来源绑定。前文“全部worker仍旧656／原配置直接续用”的方案在实产物预检前成立，此处明确替代该部分，不能以旧源码执行而声称保存开关已修复。</p>
 <p>实施前补齐稳定新版本、接续配置及其SHA、旧来源绑定、实际CLI预检与唯一CPU恢复命令。CPU启动沿已获免反复询问授权，不再请示；额外GPU轨迹、费用、reset与源码算法均不扩范围。</p>
+<h2>七、新上下文实际启动与守卫回执修复</h2>
+<p>新worker使用独立冻结提交 <code>8c3c84575e2a07727931c698b6ca17bedf495bac</code>；新增配置SHA为 <code>bbe580d4948cd6e07b4ded82f633b0786b0d1d245c9dfeaa01b7de9b09e0f7f2</code>，旧三局来源仍绑定656／5cc。原搬运已精确停止并换为新上下文会话 <code>ev-ood-five-raw-mover-resume-20261010-02</code>，本节替代前文“原搬运不重起”的旧方案；新搬运现保持，不再重复启动。</p>
+<p>第一次人工恢复因旧 <code>guardian-intent-accepted-*</code> 回执存在而使健康守卫退出0；监督器退出后CPU srun结束，Slurm连带清理控制器。未派新worker、未发布、账本不变；15个活动回执已原字节移存。源码修复不覆盖任何冻结快照：新私有编排目录 <code>orchestration-recovery-02/</code> 仅包含确定提交的五个控制文件；守卫只接受本次严格校验停止指令的返回状态10，健康0继续。新增 <code>raw_ood_supervisor_hold.sh</code> 只运行一次监督器，结束后保留CPU步骤，无自动重试、GPU取消或控制器停止。</p>
+<p>新CPU启动载体为 <code>ev-ood-five-raw-supervisor-resume-02-20261010-02</code>，同作业63664373执行wrapper、新私有监督器和原新增配置，显式记录编排提交；worker源码、权重、预算和新搬运不变。夹具10项20.89秒、原超时回归3项35.14秒退出0，资源计数零；固定657db86的 <code>GUARD_CPU_HOLD_REVIEW=PASS</code>。起跑前整合短测、提交推送并核新私有源码SHA，再真实CPU预检复用三局；后续以新CPU步骤存活、控制器心跳、五首局完整媒体搬运与首正式分片真实一步验收。用户终止CPU步骤仍可能触发Slurm清理，不承诺抵抗此情况。</p>
 </body></html>

@@ -1,0 +1,65 @@
+{
+  "reason": "旧守卫接受回执触发新健康守卫退出；CPU步骤退出清理控制器",
+  "files": {
+    "supervisor-failure.json": {
+      "sha256": "041fb092232a7c3c2aa33df5a483f60ba67684152f6dd5ecbf3f1e8dff04c1b1",
+      "bytes": 1513
+    },
+    "notification-failure.json": {
+      "sha256": "5295dbce63445bef61c784d08be4bb9cecd0474522213b0a4c3490d06496d4b3",
+      "bytes": 611
+    },
+    "intentional-supervisor-stop.json": {
+      "sha256": "db3988b66c099fb71b5f952d55cd3f6d492e6f2074bab2a34f28e10da6489cef",
+      "bytes": 929
+    },
+    "cpu-heartbeat.json": {
+      "sha256": "1d7af1bfce6c3fbc05997c4c937588e30e55ccfb8b5f16bf35fe5fdd504902d0",
+      "bytes": 331
+    },
+    "controller-heartbeat.json": {
+      "sha256": "1163a51b7c13172eefbfdb62171caa2569de5b8bc2d15deb8b7a3878a13237bc",
+      "bytes": 318
+    },
+    "guardian-launches.json": {
+      "sha256": "82c33da0924e4a098159050b21330896cc03d8959290ebf1cc68692e2f37f936",
+      "bytes": 2411
+    },
+    "guardian-error.json": {
+      "sha256": "a2e4a9e6e2886323bfba3b5312a210e0c6312a9813079a43627e8c177d2a5d11",
+      "bytes": 348
+    },
+    "supervisor-started.json": {
+      "sha256": "243e2dad0ecb0fb9fd583cd69f9fe1d2fbf01e7d076f700b0205acd0ac30a9e9",
+      "bytes": 334
+    },
+    "orchestration-started.json": {
+      "sha256": "4f609331ab99c3b38541a63dd9a08f9dad2a8664f398372024d10efd055d2571",
+      "bytes": 394
+    },
+    "guardian-ready-63664391.json": {
+      "sha256": "ca4c41352076d0c4d78bd7da2c68972b7f42b2d41ec330cda8ae32f9e67b28a9",
+      "bytes": 350
+    },
+    "guardian-intent-accepted-63664391.json": {
+      "sha256": "3ab18d2fa1e3691e223fc710e7988f9ad9308590bd0ec88aa3a05b5601d8ff68",
+      "bytes": 1153
+    },
+    "guardian-ready-63664392.json": {
+      "sha256": "83c889c718a807d0fceffca2fe310a70e15cdf0b7171c70f10c5e0611a605f54",
+      "bytes": 349
+    },
+    "guardian-intent-accepted-63664392.json": {
+      "sha256": "3ab18d2fa1e3691e223fc710e7988f9ad9308590bd0ec88aa3a05b5601d8ff68",
+      "bytes": 1153
+    },
+    "guardian-ready-63664393.json": {
+      "sha256": "0b8bcc57920de4d0611b415401d32b23636fceac357ca99bef3d38658a4d25f8",
+      "bytes": 350
+    },
+    "guardian-intent-accepted-63664393.json": {
+      "sha256": "3ab18d2fa1e3691e223fc710e7988f9ad9308590bd0ec88aa3a05b5601d8ff68",
+      "bytes": 1153
+    }
+  }
+}

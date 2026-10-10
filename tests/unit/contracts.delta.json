@@ -6,6 +6,7 @@
       "dev-scripts/gl/raw_ood_controller.py",
       "dev-scripts/gl/raw_ood_supervisor.py",
       "dev-scripts/gl/raw_ood_cpu_bootstrap.sh",
+      "dev-scripts/gl/raw_ood_supervisor_hold.sh",
       "dev-scripts/gl/raw_ood_hold_guard.sh",
       "dev-scripts/gl/eval_video_mover.py",
       "dev-scripts/gl/seat.py",
