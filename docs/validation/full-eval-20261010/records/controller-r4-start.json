@@ -1,0 +1,39 @@
+{
+  "controller_commit": "dc63643fc0945e59872e4a2c50e67de42921e9b9",
+  "controller_code": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-controller-r4",
+  "controller_root_clean": true,
+  "controller_models_uninitialized": true,
+  "model_and_report_code": "0c6f8a3a552876020611d4d654a41adb3accba65",
+  "config_sha256": "12d997b55e7a92c2f9f04ef5c1e837b8b31f32fe2e076f5e225ae8f29bc0b721",
+  "launch_time": "2026-10-10 06:42:12 EDT",
+  "stopped_session": "fe-full-eval-controller-20261010",
+  "controller_session": "fe-full-eval-controller-r4-20261010",
+  "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/logs/fe-full-eval-controller-r4-20261010.log",
+  "deletion_before": [
+    "fe-A-memer-63431430",
+    "fe-A-pp-63431433",
+    "fe-A-qwen-63431431",
+    "fe-controller-A-smvla-2-32",
+    "fe-full-eval-controller-20261010"
+  ],
+  "deletion_after": [
+    "fe-A-memer-63431430",
+    "fe-A-pp-63431433",
+    "fe-A-qwen-63431431",
+    "fe-controller-A-smvla-2-32"
+  ],
+  "workers_preserved": true,
+  "stage_at_takeover": "A",
+  "serial_at_takeover": 32,
+  "wrapper_sha256": "840446dcd5d44ab4535fcf2a83a696f966c61653c4084fe9ead8f9215afaf678",
+  "core_test": {
+    "passed": 1644,
+    "skipped": 6,
+    "deselected": 101,
+    "elapsed_s": 187.69,
+    "exit_code": 0
+  },
+  "reset": 0,
+  "trajectory": 0,
+  "verdict": "CONTROLLER_TAKEOVER=PASS workers_preserved=4 config_unchanged=1"
+}

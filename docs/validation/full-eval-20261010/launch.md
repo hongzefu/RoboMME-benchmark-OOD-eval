@@ -170,3 +170,25 @@ SimpleMemVLA 原 A 会话因连续环境构建失败精确停止，占位 634314
 | PonderPounce | 63431433 | fe-A-pp-63431433 | fe-A-pp-01／3 | 01:06:28 |
 
 日志均在 NFS 产物根 `logs/<tmux>.log`；四项 `MEDIA_ASSETS=PASS level=cheap assets=2 mismatches=0`、`RUN_INPUTS=PASS`、`CLIENT_READY ... git=a02a4dad039b dirty=False` 已核对。MemER／QwenVL／PP 已见 `SERVER_READY ready_s=26.5`，SimpleMemVLA 正在加载；首个新 accepted 与阶段终态继续流式观察，不据启动状态宣称阶段通过。阶段A为六模型 ×（七任务两档3/2局 + 两任务四档2/1/1/1局 + 三任务三档2/2/1局 + 两任务五档每档1局）=420个身份，已复用6，余414。
+
+## 旧两次上限控制器修订的实际接手
+
+2026-10-10 06:42:12 EDT，新控制器从 clean 提交 `dc63643fc0945e59872e4a2c50e67de42921e9b9` 的独立副本 `runtime-controller-r4` 接手。该副本只运行标准库控制器与同目录预算模块，不初始化模型子模块；工作负载、模型源码、报告入口和 `run-model-r3.sh` 仍使用原冻结 r3 副本，三个健康老 worker 不重启。配置指纹继续为 `12d997b55e7a92c2f9f04ef5c1e837b8b31f32fe2e076f5e225ae8f29bc0b721`，原状态的 A 阶段、四席作业与 serial 32 保留。
+
+精确停止本轮旧监督器 `fe-full-eval-controller-20261010` 前后，会话差集恰好为它一个；`fe-A-memer-63431430`、`fe-A-qwen-63431431`、`fe-A-pp-63431433`、`fe-controller-A-smvla-2-32` 均保留。旧监督器是主动停止，没有自然 `EXIT_CODE`，不当作全量成功。新会话 `fe-full-eval-controller-r4-20261010` 已核 `tmux has-session` 退出 0，日志在 NFS `logs/fe-full-eval-controller-r4-20261010.log`；[接手回执](records/controller-r4-start.json) 给出 `CONTROLLER_TAKEOVER=PASS workers_preserved=4 config_unchanged=1`。
+
+实际启动使用产物根临时载体 `controller-r4-start.sh`，先拒绝已存在日志，再执行如下完整主体；载体不进 git，不另存留档脚本，源码由上述提交还原。
+
+```bash
+set -o pipefail
+controller_log=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/logs/fe-full-eval-controller-r4-20261010.log
+PYTHONUNBUFFERED=1 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-controller-r4/dev-scripts/gl/continue_full_eval.py \
+  --config /nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller-config.json \
+  2>&1 | tee "$controller_log"
+controller_exit=$?
+printf 'EXIT_CODE=%s\n' "$controller_exit" | tee -a "$controller_log"
+exit "$controller_exit"
+```
+
+主会话流式读取新日志与原 `controller/events.jsonl`。软件测试与实际接手均已验；PP 旧席位尚未结束，真实 `legacy_retry_resume` 事件及其第三次尝试仍待观察，完整 A／B／C／D 结果未验收。
