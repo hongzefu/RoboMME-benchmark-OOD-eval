@@ -286,6 +286,15 @@ tmux new-session -d -s fe-A-memer-63431430 "set -o pipefail; cd $GLREPO && \
 <tr><td>4</td><td>63431433</td><td>PonderPounce → Oracle</td><td>同席 3</td></tr>
 </table>
 <p>B～D 同样按「长模型先占席、短模型串在同一席、空席并入长模型队列」原则，由主会话按 A 的实测均值排。</p>
+<h3>阶段内分发机制（席位常驻 + 动态队列，不预切分片）</h3>
+<ol>
+<li><strong>席位</strong>：占位 job 内一条 <code>srun</code> → <code>run_eval_gl.sh</code> → <code>seat.py run</code>；进程级加载一次 Policy（服务端常驻显存），循环「领局 → <code>run_episode</code> → 结算 → 再领」，队列无可领局才 <code>policy.close()</code> 退出。<code>--policies a,b</code> 时前一个策略队列清空并关闭后才加载下一个，显存不叠加。</li>
+<li><strong>队列</strong>：按「策略标签 × 种子」建在 <code>&lt;out&gt;/queue/&lt;标签&gt;/seed&lt;n&gt;/</code>，所有席位共用。领局 = 在 <code>locks/&lt;键&gt;.lock</code> 的 flock 下 <code>O_EXCL</code> 建 <code>claims/&lt;键&gt;.a&lt;N&gt;.json</code>，先建成者领到；<code>result.json</code> 原子写完后落 <code>accepted/&lt;键&gt;.json</code>，之后任何席位跳过。顺序按清单文件顺序（<code>--order forward</code>）；第二个席位可给 <code>--order reverse</code> 从队尾领，减少同锁争用。</li>
+<li><strong>加席位</strong>：同一条命令只改 <code>--seat</code> 与 <code>--port-base</code>（+5），<code>--out</code> 不变即加入同一队列；主会话在 Monitor 看到某席位 <code>GL_POLICY_DONE</code>／<code>GL_SEAT_DONE</code> 后，派运行型子代理在同一 job 内起新 <code>srun</code> 并入长模型队列。</li>
+<li><strong>阶段切换逐策略滚动</strong>：某策略的 A 队列清空后不等其他策略，直接给它起 B 席位（同 <code>--out</code>、换 B 清单与 B 账本，已 accepted 自动跳过）；阶段报告在该阶段六个策略全部 <code>EVAL_COVERAGE=PASS</code> 时发出，发出时下一阶段已有席位在跑。C、D 换 <code>--out</code>（seed0、seed42）与账本。</li>
+<li><strong>预算与重试</strong>：领局前向阶段账本 <code>reserve</code>（超额 <code>RUN_BLOCKED</code> 退出 5、不建领取文件）；正常失败不重试；基础设施故障每身份最多 1 次重试名额；席位死亡留下的领取文件心跳超过 2 倍单局墙钟后可被回收，回收计一次尝试。</li>
+<li><strong>到期接替</strong>：job 到期四席同时被杀；主会话在 <code>squeue</code> 不再显示该 job 后提交接替 job，排到后同命令、同 <code>--seat</code>、只换 <code>--jobid</code> 重起，<code>recover_dangling</code> 先结算悬空尝试再领局。</li>
+</ol>
 <h3>Monitor</h3>
 <pre>
 ssh greatlakes "tail -n +1 -F $ROOT/logs/fe-A-memer-63431430.log" | stdbuf -oL tr '\r' '\n' \
