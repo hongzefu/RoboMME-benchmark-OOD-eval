@@ -355,6 +355,51 @@ def resume_fixture(tmp_path,monkeypatch):
     return ctl,query
 
 
+def legacy_fixture(ctl):
+    import copy
+    old=copy.deepcopy(ctl.c); old.pop('config_sha256')
+    path=ctl.control/'old-config.json'; C.atomic(path,old)
+    old=C.load_config(path)
+    for dispatch in (ctl.control/'invocations').glob('*/dispatch.json'):
+        row=C.read(dispatch); row['config_sha256']=old['config_sha256']; C.atomic(dispatch,row)
+    current=copy.deepcopy(old); current['exec_commit']='d'*40; current['config_sha256']='e'*64
+    current['runner']='/new/runner.sh'
+    current['legacy_source']=dict(config=str(path),sha256=C.sha(path),exec_commit=old['exec_commit'])
+    return C.Controller(current),old
+
+
+def test_legacy_resume_uses_current_publication_context_and_original_worker(tmp_path,monkeypatch):
+    ctl,_=resume_fixture(tmp_path,monkeypatch); ctl,old=legacy_fixture(ctl)
+    ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
+    proof=ctl.resume_completed_smokes('f'*40,preflight=True)
+    assert len(ctl.published)==0 and ledger.read_bytes()==before
+    ctl.resume_completed_smokes('f'*40)
+    for path in (Path(ctl.c['gl_root'])/'published').glob('*.json'):
+        row=C.read(path)
+        assert row['exec_commit']=='d'*40 and row['config_sha256']=='e'*64
+        assert row['worker_exec_commit']==old['exec_commit']
+    assert len(ctl.published)==3 and ledger.read_bytes()==before
+
+
+@pytest.mark.parametrize('kind',['sha','cpu','notification','route'])
+def test_legacy_context_rejects_changed_binding(tmp_path,monkeypatch,kind):
+    ctl,_=resume_fixture(tmp_path,monkeypatch); ctl,old=legacy_fixture(ctl)
+    if kind=='sha': ctl.c['legacy_source']['sha256']='0'*64
+    elif kind=='cpu': ctl.c['controller_job_id']='999'
+    elif kind=='notification': ctl.c['notification']={'enabled':True}
+    else: ctl.c['models']['pp']['policy']='dummy'
+    with pytest.raises(ValueError): C.legacy_context(ctl.c)
+
+
+def test_control_ready_path_requires_local_entity_without_symlink(tmp_path):
+    c={'root':str(tmp_path)}; control=tmp_path/'control'; control.mkdir()
+    ready=control/'new-ready.json'; C.atomic(ready,{})
+    assert C.control_file(c,str(ready))==ready
+    linked=control/'linked.json'; linked.symlink_to(ready)
+    for path in (linked,tmp_path/'outside.json',control/'../outside.json'):
+        with pytest.raises(ValueError): C.control_file(c,str(path))
+
+
 def test_manual_resume_validates_all_closed_smokes_then_skips_existing(tmp_path,monkeypatch):
     ctl,query=resume_fixture(tmp_path,monkeypatch); ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
     ctl.resume_completed_smokes('c'*40)

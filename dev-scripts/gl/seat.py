@@ -999,6 +999,8 @@ class SeatRunner:
         if getattr(a, "gpus", None):
             cfg["gpus"] = [int(x) for x in str(a.gpus).split(",") if x.strip()]
         cfg.update(getattr(a, "extra_cfg", None) or {})
+        if a.policy == "groundsg" and getattr(a, "no_render", False):
+            cfg["groundsg_keep_official"] = False  # 两个GroundSG变体均只交付raw，透传参数不能覆盖此开关。
         return cfg
 
     def load(self):

@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-01/raw_ood_controller.py", line 597, in <module>
+    if __name__=='__main__': raise SystemExit(main())
+                                              ^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-01/raw_ood_controller.py", line 589, in main
+    controller.resume_completed_smokes(args.orchestration_commit,preflight=True); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-01/raw_ood_controller.py", line 353, in resume_completed_smokes
+    doc=self.prepare_publication(a,row)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-01/raw_ood_controller.py", line 257, in prepare_publication
+    if any(f.endswith('.mp4') for f in files): raise ValueError('出现官方视频')
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: 出现官方视频
+srun: error: gl3010: task 0: Exited with exit code 1
+EXIT_CODE=1

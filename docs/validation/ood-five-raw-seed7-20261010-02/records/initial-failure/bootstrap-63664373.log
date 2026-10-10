@@ -1,0 +1,4 @@
+NOTIFICATION state=submitted event=failure rc=0 delivery_verified=0
+RAW_SUPERVISOR=FAIL cpu_hold=1 gpu_cancel=0 controller_kill=0 notification_established=0 error=已发布错误/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/controller-error.json: {"component": "controller", "config_sha256": "5cc29c377a607186a6a21b27791b02eec480b2fd7bd2f390ff64043a07f4c9b3", "controller_job_id": "63664373", "error": "ValueError", "exec_commit": "656c591f32238703c54967d0f550220cf0cec074", "message": "worker正常退出但缺结果", "run": "ood-five-raw-seed7-20261010-02", "run_name": "ood-five-raw-seed7-20261010-02", "time": 1791671251.6585782}
+
+CPU_SUPERVISOR_OUTCOME phase=supervisor_exit supervisor_exit_code=1 cpu_hold=1 gpu_action=none notification_established=0

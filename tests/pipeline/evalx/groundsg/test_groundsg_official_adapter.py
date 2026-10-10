@@ -407,6 +407,33 @@ def _make_mp4(path: Path, n: int) -> Path:
     return path
 
 
+@pytest.mark.parametrize('variant',[F.ORACLE,F.QWENVL])
+def test_raw_only_archive_switch_keeps_native_encoding_and_core_values(tmp_path,monkeypatch,variant):
+    """只关闭归档：官方循环仍编码临时文件并清理，动作和核心终态与默认开启逐项相同。"""
+    enabled=F.NewSide(variant,40,tmp_path/'enabled',F.World(default=F.Plan(success_at=5)))
+    baseline=enabled.run(F.identity())
+    disabled=F.NewSide(variant,40,tmp_path/'disabled',F.World(default=F.Plan(success_at=5)))
+    mc=disabled.mc; native=mc.run_episode; calls=[]
+    recorder=disabled.ctx['defs']['EpisodeEvaluator'].init_episode.__globals__['RolloutRecorder']; save=recorder.save_video
+    def capture(self,filename):
+        out=save(self,filename); path=Path(self.save_dir)/filename; calls.append(path); assert path.is_file(); return out
+    monkeypatch.setattr(recorder,'save_video',capture)
+    monkeypatch.setattr(mc,'run_episode',lambda session,identity,conn,rec:native(session,identity,dict(conn,groundsg_keep_official=False),rec))
+    result=disabled.run(F.identity())
+    assert calls and all(not p.exists() for p in calls)
+    assert baseline['official_source']=='official' and baseline['official_videos']
+    assert result['official_source']=='disabled' and result['official_videos']==[] and result['official_save_error'] is None
+    for key in ('status','task_success','steps','decisions','success_flag','demo_frames','steps_attempted','steps_observed','frames_recorded','omitted_timeout_frames'):
+        assert result[key]==baseline[key]
+    assert np.array(disabled.world.envs[0].actions).tobytes()==np.array(enabled.world.envs[0].actions).tobytes()
+    raw=Path(result['trace_path']).parent
+    assert not (raw/'official').exists() and not list(raw.rglob('*.mp4'))
+    end=F.read_trace(result['trace_path'])[-1]
+    assert end['official_source']=='disabled' and end['official_videos']==[]
+    (raw/'result-fixture.json').write_text(json.dumps(result))
+    assert json.loads((raw/'result-fixture.json').read_text())['official_source']=='disabled'
+
+
 def test_keep_official_videos_accepts_exactly_one_full_video(tmp_path, capsys):
     mc = F.groundsg_client()
     src = _make_mp4(tmp_path / "vd" / "a.mp4", 12)

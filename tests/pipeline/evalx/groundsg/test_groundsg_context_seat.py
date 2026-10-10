@@ -130,3 +130,39 @@ def test_policy_context_built_once_per_seat(tmp_path, clean_env):
         assert res["trace_path"] == str(raw / "trace.jsonl") and (raw / "trace.jsonl").is_file()
         assert not (raw / "qwen-tmp").exists()
     assert [w.ep for w in world.envs] == [r["source_episode"] for r in rows]
+
+
+@pytest.mark.parametrize('variant',[F.ORACLE,F.QWENVL])
+def test_no_render_forces_groundsg_archive_off_after_extra_cfg(tmp_path,variant):
+    """两个GroundSG变体的no-render优先于extra_cfg True，关闭no-render保留显式True。"""
+    from tests.pipeline.eval import eval_fakes_dev as EF
+    seat=F.env_client()
+    args=EF.seat_args(tmp_path/'out','groundsg',groundsg_variant=variant,
+                      qwenvl_groundsg_adapter=F.ADAPTER if variant==F.QWENVL else None)
+    args.no_render=True; args.extra_cfg={'groundsg_keep_official':True}
+    runner=seat.SeatRunner(args,shared=None)
+    try:
+        assert runner.policy_cfg()['groundsg_keep_official'] is False
+        args.no_render=False
+        assert runner.policy_cfg()['groundsg_keep_official'] is True
+    finally: runner.close()
+
+
+@pytest.mark.parametrize('keep',[True,False])
+def test_groundsg_policy_play_passes_archive_boolean_and_cleans_scratch(tmp_path,monkeypatch,keep):
+    """真实Policy.play向CPU假端点传布尔值，默认开启且退出清理临时目录。"""
+    import types
+    from robomme_ood_eval.models import groundsg as gmod
+    kwargs={'groundsg_keep_official':False} if not keep else {}
+    policy=gmod.GroundSGPolicy(F.POLICY_SEED,groundsg_variant=F.ORACLE,preflight=False,work_dir=str(tmp_path/'work'),**kwargs)
+    policy.port=18120; policy.ctx={}; policy.evaluators={40:(None,object())}; received=[]
+    def endpoint(session,identity,conn,recorder):
+        received.append(conn['groundsg_keep_official'])
+        assert Path(conn['trace_dir']).is_dir()
+        return dict(status='success',task_success=True,steps=1,decisions=1,timing={},official_source='disabled' if not keep else 'official',official_videos=[])
+    monkeypatch.setattr(gmod,'run_episode',endpoint)
+    ident=F.identity(); spec=types.SimpleNamespace(max_steps=40,dataset=F.DATASET,strict_cap=False,key=ident['key'],attempt=1,
+                                                 out_dir=str(tmp_path/'raw'),identity=lambda:ident)
+    result=policy.play(object(),spec,object())
+    assert received==[keep] and result['steps']==1 and result['task_success']==1
+    assert not list((tmp_path/'work').glob('groundsg-*'))

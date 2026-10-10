@@ -1,0 +1,10 @@
+..................................                                       [100%]
+=============================== warnings summary ===============================
+tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_official_adapter_matches_official_loop
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+    import pynvml  # type: ignore[import]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0
+34 passed, 1 warning in 23.45s
+EXIT_CODE=0

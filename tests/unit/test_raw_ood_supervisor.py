@@ -66,7 +66,8 @@ def test_gpu_guard_hanging_query_is_bounded(tmp_path):
     assert not (control/'STOP').exists() and not cancelled.exists()
 
 
-def test_supervisor_guard_launch_and_exit_contract(tmp_path,monkeypatch):
+@pytest.mark.parametrize('explicit',[False,True])
+def test_supervisor_guard_launch_and_exit_contract(tmp_path,monkeypatch,explicit):
     import types
     (tmp_path/'control').mkdir(); c=dict(root=str(tmp_path),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,
          config_sha256='b'*64,python=sys.executable,cpu_end_time=1e12,seats=[{'job_id':str(i)} for i in range(101,105)])
@@ -75,9 +76,12 @@ def test_supervisor_guard_launch_and_exit_contract(tmp_path,monkeypatch):
         seen.append((cmd,kw)); return types.SimpleNamespace(pid=1000+len(seen),poll=lambda:None)
     monkeypatch.setattr(S.subprocess,'Popen',popen); monkeypatch.setenv('SLURM_JOB_ID','100'); monkeypatch.setenv('CUDA_VISIBLE_DEVICES','0')
     monkeypatch.setattr(S.subprocess,'run',lambda *a,**kw:types.SimpleNamespace(returncode=0,stdout='RUNNING\n',stderr=''))
+    if explicit: c['ready_path']=str(tmp_path/'control/resume-ready.json')
+    ready=Path(c.get('ready_path',tmp_path/'control/launch.ready')); S.atomic(ready,c)
     guardians=S.start_guardians(c)
     assert len(seen)==4
     for cmd,kw in seen:
+        assert cmd[-1]==str(ready)
         assert '--gres=none' in cmd and '--job-name=raw-ood-lifecycle-guard' in cmd
         assert 'SLURM_JOB_ID' not in kw['env'] and 'CUDA_VISIBLE_DEVICES' not in kw['env']
     S.check_guardians(guardians,c)
@@ -99,6 +103,7 @@ def test_guardians_wait_pending_without_srun_or_duplicate(tmp_path,monkeypatch):
     def popen(cmd,**kw):
         launched.append(cmd); return types.SimpleNamespace(pid=1000+len(launched),poll=lambda:None)
     monkeypatch.setattr(S.subprocess,'run',query); monkeypatch.setattr(S.subprocess,'Popen',popen)
+    S.atomic(tmp_path/'control/launch.ready',c)
     guards=S.start_guardians(c); assert len(guards)==3 and not any('--jobid=104' in x for x in launched)
     S.start_guardians(c,guards); assert len(launched)==3
     state['104']='RUNNING'; S.start_guardians(c,guards); assert len(guards)==4 and len(launched)==4
@@ -166,6 +171,27 @@ def guard_fixture(root):
         p=bindir/name; p.write_text('#!/bin/bash\n'+body+'\n'); p.chmod(0o700)
     env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0',PATH=str(bindir)+':'+os.environ['PATH'])
     return control,base,env,cancelled
+
+
+@pytest.mark.parametrize('kind',['new','symlink','outside'])
+def test_explicit_guard_ready_binds_new_context_without_cancel(tmp_path,kind):
+    control,base,env,cancelled=guard_fixture(tmp_path)
+    current=dict(base,exec_commit='d'*40,config_sha256='e'*64)
+    ready=control/'resume-ready.json'; S.atomic(ready,current)
+    S.atomic(control/'cpu-heartbeat.json',dict(current,t=time.time()))
+    if kind=='symlink':
+        linked=control/'linked.json'; linked.symlink_to(ready); ready=linked
+    elif kind=='outside': ready=tmp_path/'outside.json'; S.atomic(ready,current)
+    p=subprocess.Popen(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+60)),str(ready)],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    if kind=='new':
+        marker=control/'guardian-ready-101.json'; deadline=time.monotonic()+5
+        while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+        assert marker.exists()
+        row=S.read(marker); assert row['config_sha256']=='e'*64 and row['exec_commit']=='d'*40
+        S.atomic(control/'intentional-supervisor-stop.json',current)
+    out=p.communicate(timeout=20)[0]
+    assert p.returncode==(0 if kind=='new' else 8),out
+    assert not cancelled.exists() and not (control/'STOP').exists()
 
 
 def test_old_five_second_startup_can_stop_fresh_heartbeat_new_isolated_startup_passes(tmp_path):
@@ -333,6 +359,28 @@ def mail_config(tmp_path):
            notification=dict(enabled=True,to=S.MAIL_TO,command='/usr/sbin/sendmail',timeout=30))
     (tmp_path/'control').mkdir()
     return c
+
+
+@pytest.mark.parametrize('kind',['valid','missing','context','channel'])
+def test_legacy_notification_reuses_only_same_channel_received_proof(tmp_path,kind):
+    import copy
+    c=mail_config(tmp_path); c['models']={}; old=copy.deepcopy(c); old.pop('config_sha256')
+    path=tmp_path/'control/old-config.json'; S.atomic(path,old); old=S.load_config(path)
+    current=copy.deepcopy(old); current.update(exec_commit='d'*40,config_sha256='e'*64,
+        legacy_source=dict(config=str(path),sha256=S.sha(path),exec_commit=old['exec_commit']))
+    base={k:old[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+    S.atomic(tmp_path/'control/notification-probe.json',dict(base,event='probe',state='submitted',rc=0,to=S.MAIL_TO,subject='原探针',time=time.time()))
+    proof=dict(base,received=True,source='user_confirmation',to=S.MAIL_TO,subject='原探针')
+    if kind=='context': proof['controller_job_id']='999'
+    if kind=='channel': current['notification']['command']='/usr/bin/mailx'
+    if kind!='missing': S.atomic(tmp_path/'control/mail-delivery-confirmed.json',proof)
+    before={p:p.read_bytes() for p in (tmp_path/'control').iterdir()}
+    if kind=='valid':
+        report=S.require_probe(current); assert report['reused'] and report['delivery_verified']
+        assert report['legacy_config_sha256']==old['config_sha256']
+    else:
+        with pytest.raises((ValueError,FileNotFoundError)): S.require_probe(current)
+    assert all(p.read_bytes()==data for p,data in before.items())
 
 
 def test_notification_submit_is_bound_idempotent_and_not_delivery(tmp_path,monkeypatch):

@@ -1,0 +1,2 @@
+INITIAL_RAW=PASS models=3 task=VideoUnmask tier=xhard1 first_tries=3 source_hashes=matched decoded=[{"decoded": {"front": 248, "wrist": 286}, "model": "pp"}, {"decoded": {"front": 248, "wrist": 279}, "model": "smvla"}, {"decoded": {"front": 412, "wrist": 450}, "model": "groundsg-ground-sg-qwenvl"}]
+EXIT_CODE=0
