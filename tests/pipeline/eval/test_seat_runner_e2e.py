@@ -119,6 +119,14 @@ def test_retry_preserves_previous_raw_bytes_and_history(tmp_path, monkeypatch):
     # NFS 上 renameat2(RENAME_NOREPLACE) 会 EINVAL；本实现不得再调用该原语。
     import ctypes
     monkeypatch.setattr(ctypes, "CDLL", lambda *_a, **_k: (_ for _ in ()).throw(OSError(22, "NFS EINVAL")))
+    import os
+    original_mkdir = os.mkdir
+    def inherited_acl(path, mode=0o777, *, dir_fd=None):
+        out = original_mkdir(path, mode, dir_fd=dir_fd)
+        if "/attempts/" in str(path):
+            os.chmod(path, 0o2770)
+        return out
+    monkeypatch.setattr(os, "mkdir", inherited_acl)
     second = F.make_runner(stage, LABEL, F.fake_seat_policy(), F.World(), infra_retries=19)
     assert F.run_rows(second, [ident]) == 0
     mappings = [json.loads(s) for s in (second.seat_dir / "attempt-archives.jsonl").read_text().splitlines()]
@@ -130,11 +138,15 @@ def test_retry_preserves_previous_raw_bytes_and_history(tmp_path, monkeypatch):
     import hashlib
     assert mappings[-1]["result_sha256"] == hashlib.sha256(snapshot["result.json"]).hexdigest()
     assert mappings[-1]["archive"] == str(archived)
+    assert mappings[-1]["container_mode"] == "0o2770"
+    assert all(row["sha256"] == hashlib.sha256(snapshot[row["path"]]).hexdigest()
+               for row in mappings[-1]["files"])
 
 
-@pytest.mark.parametrize("failure", ["reservation_race", "inner_conflict", "move_failure", "mapping_failure"])
+@pytest.mark.parametrize("failure", ["reservation_race", "inner_conflict", "move_failure", "mapping_failure",
+                                     "file_conflict", "source_change"])
 def test_archive_exclusive_container_failures_preserve_recovery_evidence(tmp_path, monkeypatch, failure):
-    """独占预约竞争、内部目标冲突和半归档均保留原字节或移后字节，并明确拒绝自动恢复。"""
+    """独占竞争、复制故障及半归档保留原目录；源被改时拒绝继续，恢复需人工核对。"""
     import os
     ec = F.env_client()
     ident = _ident()
@@ -145,7 +157,7 @@ def test_archive_exclusive_container_failures_preserve_recovery_evidence(tmp_pat
     raw = Path(F.seat_results(stage, LABEL)[0]["result"]).parent
     before = {str(p.relative_to(raw)): p.read_bytes() for p in raw.rglob("*") if p.is_file()}
     container = stage / "attempts" / LABEL / "seed7" / ident["key"] / "a1"
-    original_mkdir, original_rename, original_append = os.mkdir, os.rename, ec.append_result
+    original_mkdir, original_open, original_append = os.mkdir, os.open, ec.append_result
 
     def mkdir(path, mode=0o777, *, dir_fd=None):
         if Path(path) == container and failure == "reservation_race":
@@ -154,12 +166,19 @@ def test_archive_exclusive_container_failures_preserve_recovery_evidence(tmp_pat
         out = original_mkdir(path, mode, dir_fd=dir_fd)
         if Path(path) == container and failure == "inner_conflict":
             original_mkdir(container / "raw", 0o700)
+        if Path(path) == container / "raw" and failure == "file_conflict":
+            (container / "raw" / "result.json").write_bytes(b"competing-file")
         return out
 
-    def rename(src, dest, **kw):
-        if Path(src) == raw and failure == "move_failure":
-            raise OSError("NFS 临时移动失败")
-        return original_rename(src, dest, **kw)
+    changed = []
+    def exclusive_open(path, flags, mode=0o777, *, dir_fd=None):
+        if Path(path).parent == container / "raw" and flags & os.O_EXCL:
+            if failure == "move_failure":
+                raise OSError("NFS 临时复制失败")
+            if failure == "source_change" and not changed:
+                (raw / "result.json").write_bytes(before["result.json"] + b"\n")
+                changed.append(True)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
 
     def append(path, row):
         if Path(path).name == "attempt-archives.jsonl" and failure == "mapping_failure":
@@ -167,12 +186,19 @@ def test_archive_exclusive_container_failures_preserve_recovery_evidence(tmp_pat
         return original_append(path, row)
 
     monkeypatch.setattr(os, "mkdir", mkdir)
-    monkeypatch.setattr(os, "rename", rename)
+    monkeypatch.setattr(os, "open", exclusive_open)
     monkeypatch.setattr(ec, "append_result", append)
     second = F.make_runner(stage, LABEL, F.fake_seat_policy(), F.World(), infra_retries=19)
     assert F.run_rows(second, [ident]) == 3
-    retained = container / "raw" if failure == "mapping_failure" else raw
-    assert {str(p.relative_to(retained)): p.read_bytes() for p in retained.rglob("*") if p.is_file()} == before
+    expected_source = dict(before)
+    if failure == "source_change":
+        expected_source["result.json"] += b"\n"
+    assert {str(p.relative_to(raw)): p.read_bytes() for p in raw.rglob("*") if p.is_file()} == expected_source
+    if failure == "mapping_failure":
+        assert {str(p.relative_to(container / "raw")): p.read_bytes()
+                for p in (container / "raw").rglob("*") if p.is_file()} == before
+    if failure == "file_conflict":
+        assert (container / "raw" / "result.json").read_bytes() == b"competing-file"
     assert container.is_dir()
     if failure != "reservation_race":
         reservation = json.loads((container / "reservation.json").read_text())

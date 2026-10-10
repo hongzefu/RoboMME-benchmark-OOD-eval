@@ -58,6 +58,7 @@ import os
 import random
 import re
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -1267,12 +1268,41 @@ class SeatRunner:
                 return
             if not raw.is_dir():
                 raise ValueError("原始产物不是目录")
-            files = []
-            for path in sorted(raw.rglob("*")):
-                if path.is_symlink() or not (path.is_file() or path.is_dir()):
-                    raise ValueError(f"原始产物含链接或特殊文件：{path}")
-                if path.is_file():
-                    files.append({"path": str(path.relative_to(raw)), "bytes": path.stat().st_size})
+            if raw.stat().st_uid != os.getuid():
+                raise ValueError("原始产物目录归属错误")
+            source_root = raw.stat(follow_symlinks=False)
+            def fingerprint(path):
+                digest = hashlib.sha256()
+                size = 0
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(fd, "rb") as fh:
+                    if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                        raise ValueError(f"归档源不是普通文件：{path}")
+                    for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                        size += len(chunk)
+                return size, digest.hexdigest()
+
+            def inventory():
+                current_root = raw.stat(follow_symlinks=False)
+                if raw.is_symlink() or (current_root.st_dev, current_root.st_ino) != \
+                        (source_root.st_dev, source_root.st_ino):
+                    raise ValueError("原始目录身份发生变化")
+                files, directories = [], []
+                for path in sorted(raw.rglob("*")):
+                    if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                        raise ValueError(f"原始产物含链接或特殊文件：{path}")
+                    if path.stat().st_uid != os.getuid():
+                        raise ValueError(f"原始产物归属错误：{path}")
+                    relative = str(path.relative_to(raw))
+                    if path.is_file():
+                        size, digest = fingerprint(path)
+                        files.append({"path": relative, "bytes": size, "sha256": digest})
+                    else:
+                        directories.append(relative)
+                return files, directories
+
+            files, directories = inventory()
             old = read_json(result_path)
             expected = {"key": c.key, "model": policy.model, "dataset": c.ident["dataset"],
                         "task": c.ident["task"], "episode": int(c.ident["builder_episode"]),
@@ -1282,30 +1312,63 @@ class SeatRunner:
             mismatch = self.E.check_identity(old, c.ident, dataset=c.ident["dataset"])
             if mismatch or old.get("infra") is not True:
                 raise ValueError(f"上一尝试不是同身份基础设施失败：{mismatch}")
-            digest = hashlib.sha256(result_path.read_bytes()).hexdigest()
+            digest = next(row["sha256"] for row in files if row["path"] == "result.json")
             target.parent.mkdir(parents=True, exist_ok=True)
-            # NFS 支持原子的独占 mkdir；新建私有容器归本次持锁写者，拒绝复用半归档容器。
+            # 独占 mkdir 只保证命名空间预约；共享 ACL 不是权限沙箱，唯一写者仍由身份锁约定。
             os.mkdir(target, 0o700)
             container = target.stat(follow_symlinks=False)
             content = target / "raw"
             mapping = {"key": c.key, "dataset": c.ident["dataset"], "attempt": c.attempt - 1,
                        "next_attempt": c.attempt, "source": str(raw), "archive": str(content),
-                       "result_sha256": digest, "files": files}
+                       "result_sha256": digest, "files": files, "directories": directories,
+                       "container_mode": oct(stat.S_IMODE(container.st_mode))}
             # 预约记录先落盘；失败或崩溃时容器及原目录均不删除，恢复须人工核对预约与内容。
-            with (target / "reservation.json").open("x", encoding="utf-8") as fh:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+            fd = os.open(target / "reservation.json", flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(dumps({**mapping, "state": "reserved", "owner": os.getuid(), "token": c.token}) + "\n")
                 fh.flush()
                 os.fsync(fh.fileno())
             current = target.stat(follow_symlinks=False)
-            if target.is_symlink() or current.st_uid != os.getuid() or current.st_mode & 0o077 \
+            if target.is_symlink() or current.st_uid != os.getuid() \
                     or (current.st_dev, current.st_ino) != (container.st_dev, container.st_ino):
-                raise ValueError("新归档容器归属、权限或身份改变")
+                raise ValueError("新归档容器归属或身份改变")
             entries = list(target.iterdir())
             if len(entries) != 1 or entries[0].name != "reservation.json" or entries[0].is_symlink() \
                     or content.exists() or content.is_symlink():
                 raise ValueError("新归档容器含非预期内容或内部目标冲突")
-            # 同身份锁和独占容器保证唯一写者；rename 只移入这个刚创建且核验过的容器。
-            os.rename(raw, content)
+            os.mkdir(content, 0o700)
+            content_root = content.stat(follow_symlinks=False)
+            for relative in directories:
+                os.mkdir(content / relative, 0o700)
+            for row in files:
+                destination = content / row["path"]
+                for parent in [destination.parent, *destination.parent.parents]:
+                    if parent == target.parent:
+                        break
+                    if parent.is_symlink() or not parent.is_dir() or parent.stat().st_uid != os.getuid():
+                        raise ValueError(f"归档目录归属或路径改变：{parent}")
+                src_fd = os.open(raw / row["path"], os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(src_fd, "rb") as source:
+                    if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                        raise ValueError("复制源不是普通文件")
+                    dst_fd = os.open(destination, flags, 0o600)
+                    with os.fdopen(dst_fd, "wb") as output:
+                        if os.fstat(output.fileno()).st_uid != os.getuid():
+                            raise ValueError("复制目标归属错误")
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            output.write(chunk)
+                        output.flush()
+                        os.fsync(output.fileno())
+                if fingerprint(destination) != (row["bytes"], row["sha256"]):
+                    raise ValueError(f"归档副本校验失败：{destination}")
+            if inventory() != (files, directories):
+                raise ValueError("复制期间原始目录清单或字节发生变化")
+            for path, original in ((target, container), (content, content_root)):
+                current = path.stat(follow_symlinks=False)
+                if path.is_symlink() or current.st_uid != os.getuid() or \
+                        (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+                    raise ValueError("复制期间归档目录身份发生变化")
             append_result(self.seat_dir / "attempt-archives.jsonl", mapping)
             print(f"ATTEMPT_ARCHIVE=PASS key={c.key} attempt={c.attempt - 1} "
                   f"archive={content} result_sha256={digest} files={len(files)}", flush=True)
