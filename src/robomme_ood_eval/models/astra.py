@@ -9,13 +9,13 @@ The four methods of ``AstraPolicy`` (called by the outer ``load_policy`` / ``run
   ``validate_checkpoints``; check ``group_*/STOP.json`` (refuse if already stopped; the ledger is kept); start via
   ``ServerProcess`` the **cost guard** ``servers/astra_cost_guard.py --cap <astra_cap_usd<=5>`` (ledger
   ``astra_ledger``, unit prices ``astra_prices``, ready = guard heartbeat state is fresh) and the **Astra VLA server**
-  (the submodule's ``scripts/serve_policy.py``, ``--seed=<policy_seed>``, ``CUDA_VISIBLE_DEVICES=gpus[0]``, ready =
+  (the submodule's ``scripts/serve_policy.py`` via the shared audit wrapper, ``--seed=<policy_seed>``, ``CUDA_VISIBLE_DEVICES=gpus[0]``, ready =
   port listening); pin this process to ``gpus[1]`` and load ``runner.Monitor``; build one ``GuardedResponsesClient``
   (the 20-second send interval is kept by the same instance) and one ``core.Planner``.
 - ``reset(spec)`` (first statement of each episode; sends no server message and never touches the environment):
   probe that both servers are alive; raise ``AstraStop`` if a stop condition left by the previous episode or
   ``group_*/STOP.json`` holds; ``CostGate.register_episode`` registers the episode count across processes (the third
-  episode is refused).
+  episode is refused by default; an explicitly approved ``astra_max_episodes=3`` allows three).
 - ``play(session, spec, recorder)``: hand the outer ``EnvSession`` via ``SessionBuilder`` to the submodule's
   ``runner.episode(args, task, ep, builder, monitor, planner, client)``, wrapped in ``Traced*`` recorders that write
   this episode's ``trace.jsonl`` / ``language.jsonl``; ``args.max_steps`` follows each episode's ``spec.max_steps``
@@ -49,7 +49,8 @@ the outer ``EnvSession`` into the outer recorder; this module no longer creates 
 Cost policy (Astra has its own cost ledger with a hard 5 USD limit): the guard's ``--cap`` defaults to and is at most
 5 USD (``HARD_CAP_USD``); ``GuardedResponsesClient`` synchronously reads the guard state before every real send and
 atomically reserves the single-request worst-case cost, refusing to send when the guard is lost (heartbeat older
-than 10 seconds), STOP is set, or the reservation fails; the hard episode limit is 2, registered across processes in
+than 10 seconds), STOP is set, or the reservation fails; the episode limit defaults to 2 and may explicitly be set
+to at most 3, registered across processes in
 the guard reservation file. The ledger, reservation file and ``STOP.json`` all live long-term in the directory of
 ``astra_ledger``; a new ledger is never created to get around the limit.
 
@@ -77,6 +78,8 @@ from typing import Any, Callable
 
 from robomme_ood_eval.policy import AstraStop as _PolicyAstraStop
 from robomme_ood_eval.policy import Policy, Ready, ServerProcess, pick_port
+from robomme_ood_eval.servers.policy_server_wrap import AUDIT_KEY
+from robomme_ood_eval.timing import ChunkTimer, attach_policy_timing
 
 HERE = Path(__file__).resolve().parent
 #: evaluation repo root (three levels above ``src/robomme_ood_eval/models``)
@@ -277,7 +280,7 @@ class TraceContext:
 
     def __init__(self, writer, open_recorder: Callable | None = None, *, effective_cap: int | None = None,
                  strict_cap: bool = False, lang=None, action_params: dict | None = None,
-                 monitor_params: dict | None = None) -> None:
+                 monitor_params: dict | None = None, timer=None) -> None:
         self.writer = writer
         self.t = 0
         self.subgoal: str | None = None
@@ -296,6 +299,29 @@ class TraceContext:
         self.action_params = dict(action_params or {})
         self.monitor_params = dict(monitor_params or {})
         self._sha_cache: dict = {}
+        self.timer = timer if timer is not None else ChunkTimer()
+        self.chunk_started = False
+        self.chunk_has_planner = self.chunk_has_review = False
+        self.chunk_n_lang = 0
+        self.orphan_ms = 0.0
+        self.orphan_n = 0
+        self.gpu_name = None
+
+    def begin_chunk(self) -> None:
+        if not self.chunk_started:
+            self.timer.start()
+            self.chunk_started = True
+
+    def _reset_chunk_flags(self) -> None:
+        self.chunk_started = False
+        self.chunk_has_planner = self.chunk_has_review = False
+        self.chunk_n_lang = 0
+
+    def abort_chunk(self, reason: str) -> None:
+        orphan = self.timer.orphan()
+        self.orphan_ms += orphan["orphan_lang_ms"]
+        self.orphan_n += orphan["n"]
+        self._reset_chunk_flags()
 
     def ensure_recorder(self):
         if self.recorder is None and self._open_recorder is not None:
@@ -551,23 +577,32 @@ class PlannerLanguageCall:
         self.images: list | None = None
         self.params: dict | None = None
         self.step = ctx.t
+        self.book_ms = 0.0
 
     def _open(self, transport_attempt: int) -> None:
-        lang = self.ctx.lang
-        self.call_id = lang.open_call("planner", self.step, params=self.params, transport_attempt=transport_attempt)
-        lang.message(self.call_id, dir="in", role="user", text=self.prompt, images=self.images)
+        started = time.perf_counter()
+        try:
+            lang = self.ctx.lang
+            self.call_id = lang.open_call("planner", self.step, params=self.params, transport_attempt=transport_attempt)
+            lang.message(self.call_id, dir="in", role="user", text=self.prompt, images=self.images)
+        finally:
+            self.book_ms += (time.perf_counter() - started) * 1000
 
     def wrap(self, inner: Callable) -> Callable:
         def responder(out):
-            out = Path(out)
-            self.out = out
-            request = json.loads((out / "request.json").read_text())
-            self.prompt = (out / "prompt.txt").read_text()
-            self.images = self.image_fn(out, request)
-            self.params = {"temperature": None, "max_tokens": PLANNER_MAX_OUTPUT_TOKENS,
-                           "model_id": request.get("model"), "adapter_sha": None, "effort": request.get("effort"),
-                           "kind": request.get("kind", self.kind), "request_id": out.name, "cloud_seed": None,
-                           "policy_seed": self.ctx.action_params.get("policy_seed")}
+            started = time.perf_counter()
+            try:
+                out = Path(out)
+                self.out = out
+                request = json.loads((out / "request.json").read_text())
+                self.prompt = (out / "prompt.txt").read_text()
+                self.images = self.image_fn(out, request)
+                self.params = {"temperature": None, "max_tokens": PLANNER_MAX_OUTPUT_TOKENS,
+                               "model_id": request.get("model"), "adapter_sha": None, "effort": request.get("effort"),
+                               "kind": request.get("kind", self.kind), "request_id": out.name, "cloud_seed": None,
+                               "policy_seed": self.ctx.action_params.get("policy_seed")}
+            finally:
+                self.book_ms += (time.perf_counter() - started) * 1000
             self._open(0)  # persist before sending
             has_hook = hasattr(inner, "transport_hook")
             if has_hook:
@@ -585,7 +620,11 @@ class PlannerLanguageCall:
         opened by ``wrap``."""
         if int(attempt) == 0 or self.call_id is None:
             return
-        self.ctx.lang.close_call(self.call_id, status="error")
+        started = time.perf_counter()
+        try:
+            self.ctx.lang.close_call(self.call_id, status="error")
+        finally:
+            self.book_ms += (time.perf_counter() - started) * 1000
         self._open(int(attempt))
 
     def finish(self, *, parsed=None, fallback=None, failed: bool = False) -> None:
@@ -624,7 +663,8 @@ class TracedClient:
     """Wraps the VLA websocket client: records the normalized request and full action chunk of every ``infer``; with
     the language ledger open each ``infer`` records one ``action_model`` call (``in``: raw ``prompt`` /
     ``grounded_subgoal`` / ``simple_subgoal`` fields and references to the two current frames, persisted before
-    sending; Astra's VLA server has no audit reply, so ``server_final_text=None``)."""
+    sending; the shared server wrapper provides ``server_timing`` when auditing is enabled, while
+    ``server_final_text=None`` remains unchanged for the action model)."""
 
     def __init__(self, inner, ctx: TraceContext) -> None:
         self._inner = inner
@@ -650,15 +690,42 @@ class TracedClient:
 
     def infer(self, element):
         ctx = self._ctx
+        ctx.begin_chunk()
         ctx.subgoal = element.get("grounded_subgoal")
         call_id = self._open_lang(element)
         ctx.source_call_id, ctx.chunk_index = call_id, 0
         ctx.writer.log_request("vla_infer", _canonical(element), step=ctx.t)
         try:
+            if hasattr(self._inner, "_last_audit"):
+                self._inner._last_audit = None
+            started = time.perf_counter()
             out = self._inner.infer(element)
+            received = time.perf_counter()
+            rtt_ms = (received - started) * 1000
+            import numpy as np  # noqa: PLC0415
+            if not isinstance(out, dict) or "actions" not in out:
+                raise ValueError("Astra VLA reply must contain actions")
+            actions = np.asarray(out["actions"])
+            if actions.ndim != 2 or actions.shape[0] == 0 or actions.shape[1] != 8 or not np.isfinite(actions).all():
+                raise ValueError("Astra VLA actions must be a finite, nonempty (n, 8) chunk")
+            audit = out.pop(AUDIT_KEY, None)
+            if audit is None:
+                audit = getattr(self._inner, "_last_audit", None)
+            server_timing = audit.get("server_timing") if isinstance(audit, dict) else None
+            server_timing = server_timing if isinstance(server_timing, dict) else {}
+            if ctx.gpu_name is None:
+                ctx.gpu_name = server_timing.get("gpu")
+            ctx.timer.close(decision=len(ctx.timer.chunks), env_step=ctx.t, action_rtt_ms=rtt_ms,
+                            server_infer_ms=server_timing.get("infer_ms"), t=received,
+                            extra={"has_planner": ctx.chunk_has_planner, "has_review": ctx.chunk_has_review,
+                                   "no_lang": ctx.chunk_n_lang == 0})
+            ctx._reset_chunk_flags()
         except BaseException:
-            if call_id is not None:
-                ctx.lang.close_call(call_id, status="error")
+            try:
+                if call_id is not None:
+                    ctx.lang.close_call(call_id, status="error")
+            finally:
+                ctx.abort_chunk("infer_error")
             raise
         if call_id is not None:
             ctx.lang.close_call(call_id, status="reply", server_final_text=None, server_truncated=None)
@@ -693,21 +760,37 @@ class TracedPlanner:
 
     def _call(self, method: str, image_fn: Callable, parse: Callable, a, k):
         ctx = self._ctx
+        ctx.begin_chunk()
+        kind = "planner" if method == "predict" else "review"
         fn = getattr(self._inner, method)
         responder = getattr(self._inner, "responder", None)
-        if ctx.lang is None or responder is None:
-            return fn(*a, **k)
-        call = PlannerLanguageCall(ctx, image_fn, method)
-        self._inner.responder = call.wrap(responder)
+        call = None
+        if ctx.lang is not None and responder is not None:
+            call = PlannerLanguageCall(ctx, image_fn, method)
+            self._inner.responder = call.wrap(responder)
         try:
+            started = time.perf_counter()
             result = fn(*a, **k)
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            book_ms = call.book_ms if call is not None else 0.0
+            ctx.timer.add_lang(elapsed_ms - book_ms, kind=kind, env_step=ctx.t,
+                               third_party_s=result[2], book_ms=book_ms)
+            ctx.chunk_n_lang += 1
+            ctx.chunk_has_planner |= kind == "planner"
+            ctx.chunk_has_review |= kind == "review"
         except BaseException:
-            call.finish(failed=True)
+            try:
+                if call is not None:
+                    call.finish(failed=True)
+            finally:
+                ctx.abort_chunk(f"{kind}_error")
             raise
         finally:
-            self._inner.responder = responder
-        parsed, fallback = parse(result)
-        call.finish(parsed=parsed, fallback=fallback)
+            if call is not None:
+                self._inner.responder = responder
+        if call is not None:
+            parsed, fallback = parse(result)
+            call.finish(parsed=parsed, fallback=fallback)
         return result
 
     def predict(self, task, goal, frames, demo, memory, completed, issued, episode, t):
@@ -777,12 +860,21 @@ class TracedMonitor:
             lang.close_call(call_id, status="reply", parsed=pred)
 
     def predict(self, task, goal, subgoal, frames, command_start, wrist, out):
+        ctx = self._ctx
+        ctx.begin_chunk()
         call_id = self._open_lang(task, goal, subgoal, frames, command_start, wrist)
         try:
+            started = time.perf_counter()
             result = self._inner.predict(task, goal, subgoal, frames, command_start, wrist, out)
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            ctx.timer.add_lang(elapsed_ms, kind="monitor", env_step=ctx.t, third_party_s=result[2])
+            ctx.chunk_n_lang += 1
         except BaseException:
-            if call_id is not None:
-                self._close_lang(call_id, out, None, failed=True)
+            try:
+                if call_id is not None:
+                    self._close_lang(call_id, out, None, failed=True)
+            finally:
+                ctx.abort_chunk("monitor_error")
             raise
         if call_id is not None:
             self._close_lang(call_id, out, result[0], failed=False)
@@ -865,7 +957,7 @@ def group_stop_file(group_dir: Path) -> Path:
 
 
 def run_one(args, task, ep, identity, builder, monitor, planner, client, astra, *, attempt: int, trace_dir: Path,
-            strict_cap: bool | None = None) -> dict:
+            strict_cap: bool | None = None, timer=None) -> dict:
     """One episode: create the attempt directory ``<args.output>/<task>/ep<NNN>/<key>.a<attempt>/`` and
     ``trace_dir/trace.jsonl``, call Astra's ``runner.episode`` through the delegating wrappers, and finalize uniformly
     in ``finally``: write ``arrays.npz`` -> finalize the language ledger -> trace ``close`` -> append the mapping to
@@ -891,6 +983,7 @@ def run_one(args, task, ep, identity, builder, monitor, planner, client, astra, 
     write_provenance(a_dir / PROVENANCE_FILE, astra=astra, args=args, key=key, strict_cap=strict,
                      language=lang is not None, attempt=attempt)
     ctx = TraceContext(writer, open_recorder=None, effective_cap=int(args.max_steps), strict_cap=strict, lang=lang,
+                       timer=timer,
                        action_params={"temperature": None, "max_tokens": None, "model_id": "mme_vla_suite",
                                       "adapter_sha": None, "checkpoint": str(args.vla_checkpoint),
                                       "policy_seed": policy_seed},
@@ -921,6 +1014,7 @@ def _supported_kwargs(fn: Callable, **candidates) -> dict:
 
 def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, attempt: int, ctx: TraceContext,
                 writer, result: dict | None, driver_error: BaseException | None) -> None:
+    ctx.abort_chunk("episode_end")
     terminal = terminal_of(result) if driver_error is None else "error"
     if ctx.cap_hit and driver_error is None:  # strict cap refused step cap+1: the error Astra recorded becomes timeout
         terminal = "timeout"
@@ -935,6 +1029,8 @@ def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, atte
              "effective_cap": ctx.effective_cap, "cap_hit": ctx.cap_hit,
              "language": "language.jsonl" if ctx.lang is not None else None, "provenance": PROVENANCE_FILE}
     if result is not None:
+        _crosscheck_language(ep_dir / "decisions.jsonl", ctx.timer.lang_calls, result)
+        result["vla_gpu_name"] = ctx.gpu_name
         extra.update({k: result.get(k) for k in ("planner_calls", "monitor_calls", "review_calls", "error")})
     if driver_error is not None:
         extra["driver_exception"] = f"{type(driver_error).__name__}: {driver_error}"[:800]
@@ -955,6 +1051,42 @@ def _finish_one(args, ep_dir: Path, a_dir: Path, trace_dir: Path, key: str, atte
         if (ep_dir / "result.json").is_file():
             from core import atomic_json  # noqa: PLC0415  Astra's atomic write (the same function it uses for result.json)
             atomic_json(ep_dir / "result.json", result)
+    ctx.timer.absorb_orphan(ctx.orphan_ms, ctx.orphan_n)
+
+
+def _crosscheck_language(path: Path, calls: list[dict], result: dict) -> None:
+    """Pair language calls with upstream decision seconds, preferring planner over continue-last duplicates."""
+    import statistics  # noqa: PLC0415
+    kinds = {"monitor": "monitor", "second_button_review": "review",
+             "planner": "planner", "continue_last_subgoal": "planner"}
+    rows = {}
+    if path.is_file():
+        for line in path.read_text().splitlines():
+            row = json.loads(line)
+            kind = kinds.get(row.get("type"))
+            if kind is None:
+                continue
+            key = (row.get("t"), kind)
+            if key not in rows or row.get("type") == "planner":
+                rows[key] = row
+    mismatches, diffs, unpaired = [], {}, 0
+    for call in calls:
+        if call["kind"] not in kinds.values():
+            continue
+        row = rows.pop((call["env_step"], call["kind"]), None)
+        if row is None or row.get("seconds") is None:
+            unpaired += 1
+            continue
+        third_ms = float(row["seconds"]) * 1000
+        diff = call["ms"] - third_ms
+        diffs.setdefault(call["kind"], []).append(diff)
+        if diff < 0:
+            mismatches.append({"t": call["env_step"], "kind": call["kind"], "proxy_ms": call["ms"],
+                               "third_party_ms": third_ms, "diff_ms": diff})
+    result["lang_calls_mismatch"] = mismatches
+    result["lang_diff_ms"] = {kind: [min(values), statistics.median(values), max(values)]
+                              for kind, values in diffs.items()}
+    result["lang_unpaired"] = unpaired + len(rows)
 
 
 # -- hard cost limit: synchronous reservation against guard state + ResponsesClient subclass --
@@ -1033,11 +1165,12 @@ class CostGate:
     ``GUARD_HEARTBEAT_TIMEOUT_S``), or the guard has exited or stopped -- better to stop than to send."""
 
     def __init__(self, state_path: str | Path, *, clock: Callable[[], float] = time.time,
-                 heartbeat_timeout: float = GUARD_HEARTBEAT_TIMEOUT_S) -> None:
+                 heartbeat_timeout: float = GUARD_HEARTBEAT_TIMEOUT_S, max_episodes: int | None = None) -> None:
         self.state_path = Path(state_path)
         self.clock = clock
         self.heartbeat_timeout = float(heartbeat_timeout)
         self.guard = guard_module()
+        self.max_episodes = self.guard.ASTRA_MAX_EPISODES if max_episodes is None else self.guard.check_max_episodes(max_episodes)
 
     def read_state(self) -> dict:
         try:
@@ -1053,6 +1186,10 @@ class CostGate:
             raise GuardRefused(f"Planner API cost guard unavailable: heartbeat age {age:.1f}s > {self.heartbeat_timeout:g}s")
         if state.get("stop"):
             raise GuardRefused(f"Planner API cost guard stopped: {state.get('reason')}")
+        state_limit = state.get("max_episodes")
+        if isinstance(state_limit, bool) or not isinstance(state_limit, int) or state_limit != self.max_episodes:
+            raise GuardRefused(f"Planner API cost guard episode limit mismatch: requested={self.max_episodes} "
+                               f"state={state_limit!r}")
         return state
 
     def cap(self, state: dict) -> float:
@@ -1099,16 +1236,16 @@ class CostGate:
                 g.save_reservations(self.state_path, doc)
 
     def register_episode(self, episode_id: str) -> int:
-        """Hard episode limit: registered in the same reservation file across runs; the same episode is not counted
-        twice; the third episode is refused."""
+        """Register in the same cumulative file across runs; refuse new identities at the requested limit.
+        Explicit run prefixes distinguish smoke-on, smoke-off and formal runs of the same dataset identity."""
         g = self.guard
         with g.locked(self.state_path):
             self.read_state()
             doc = g.load_reservations(self.state_path)
             if episode_id not in doc["episodes"]:
-                if len(doc["episodes"]) >= g.ASTRA_MAX_EPISODES:
+                if len(doc["episodes"]) >= self.max_episodes:
                     print(f"ASTRA_STOP reason=episode_cap episode={episode_id} used={len(doc['episodes'])}", flush=True)
-                    raise AstraStop("episode_cap", f"Astra episode cap {g.ASTRA_MAX_EPISODES} reached")
+                    raise AstraStop("episode_cap", f"Astra episode cap {self.max_episodes} reached")
                 doc["episodes"].append(episode_id)
                 g.save_reservations(self.state_path, doc)
             return len(doc["episodes"])
@@ -1122,11 +1259,13 @@ def registered_episodes(state_path: str | Path) -> list:
         return list(g.load_reservations(Path(state_path))["episodes"])
 
 
-def check_episode_cap(state_path: str | Path) -> int:
-    """Hard episode limit: raise ``AstraStop(episode_cap)`` when the registered count reaches
-    ``ASTRA_MAX_EPISODES``; returns the registered count."""
-    limit = guard_module().ASTRA_MAX_EPISODES
-    used = len(registered_episodes(state_path))
+def check_episode_cap(state_path: str | Path, *, max_episodes: int | None = None) -> int:
+    """Check the guard agrees with the requested cumulative episode limit and refuse when it is exhausted."""
+    gate = CostGate(state_path, max_episodes=max_episodes)
+    with gate.guard.locked(gate.state_path):
+        gate.read_state()
+        used = len(gate.guard.load_reservations(gate.state_path)["episodes"])
+    limit = gate.max_episodes
     if used >= limit:
         print(f"ASTRA_STOP reason=episode_cap used={used} cap={limit}", flush=True)
         raise AstraStop("episode_cap", f"Astra episode cap {limit} reached")
@@ -1419,6 +1558,12 @@ class AstraPolicy(Policy):
         self.prices = self._cfg_path("astra_prices")
         g = guard_module()
         self.cap_usd = g.check_cap(float(self.cfg.get("astra_cap_usd", g.HARD_CAP_USD)))
+        self.max_episodes_explicit = "astra_max_episodes" in self.cfg
+        self.max_episodes = (g.check_max_episodes(self.cfg["astra_max_episodes"]) if self.max_episodes_explicit
+                             else g.ASTRA_MAX_EPISODES)
+        self.registration_prefix = self.cfg.get("astra_registration_prefix", "")
+        if not isinstance(self.registration_prefix, str):
+            raise ValueError("RUN_BLOCKED reason=astra_registration_prefix prefix must be a string")
         self.state_path = g.default_state_path(self.ledger)
         self.group_dir = self._cfg_path("astra_group_dir", required=False) or self.ledger.parent / "group_0"
         if self.group_dir.name not in GROUP_DIR_NAMES:
@@ -1449,13 +1594,19 @@ class AstraPolicy(Policy):
 
     # -- server commands -------------------------------------------------------
     def guard_argv(self) -> list[str]:
-        return [sys.executable, str(Path(guard_module().__file__).resolve()), "--root", str(self.group_dir),
+        argv = [sys.executable, str(Path(guard_module().__file__).resolve()), "--root", str(self.group_dir),
                 "--prices", str(self.prices), "--ledger", str(self.ledger), "--state", str(self.state_path),
                 "--cap", f"{self.cap_usd:g}", "--interval", f"{self.guard_interval:g}"]
+        if self.max_episodes_explicit:
+            argv += ["--max-episodes", str(self.max_episodes)]
+        return argv
 
     def vla_argv(self, port: int) -> list[str]:
-        """Copied from upstream ``run.sh``, only replacing the fixed ``--seed`` 42 with ``policy_seed``."""
-        return [str(self.vla_python), "scripts/serve_policy.py", f"--port={port}", f"--seed={self.policy_seed}",
+        """Serve the pinned Astra root through the shared audit wrapper, keeping upstream arguments and cwd."""
+        return [str(self.vla_python), str(REPO_ROOT / "src/robomme_ood_eval/servers/policy_server_wrap.py"),
+                f"--sgeval-serve-root={self.root}",
+                f"--sgeval-metadata-out={self.server_dir}/server-wrap-metadata-{port}.json",
+                f"--port={port}", f"--seed={self.policy_seed}",
                 "policy:checkpoint", "--policy.config=mme_vla_suite", f"--policy.dir={self.vla_checkpoint}"]
 
     def vla_env(self) -> dict:
@@ -1508,9 +1659,10 @@ class AstraPolicy(Policy):
                                            log_path=self.server_dir / "astra-guard.log",
                                            ready_timeout_s=GUARD_READY_TIMEOUT_S, state_path=self.state_path)
         self.guard.start()
-        self.gate = CostGate(self.state_path)
+        requested_limit = self.max_episodes if self.max_episodes_explicit else None
+        self.gate = CostGate(self.state_path, max_episodes=requested_limit)
         state = self.gate.read_state()
-        used = check_episode_cap(self.state_path)
+        used = check_episode_cap(self.state_path, max_episodes=requested_limit)
         print(f"ASTRA_GUARD=PASS cap={self.gate.cap(state):g} committed={float(state.get('committed_usd') or 0):.4f} "
               f"episodes_used={used} ledger={self.ledger}", flush=True)
         # (2) VLA server (first GPU)
@@ -1536,7 +1688,7 @@ class AstraPolicy(Policy):
     def reset(self, spec) -> None:
         """Pre-episode refusal point (no server message, no environment access): stop condition left by the previous
         episode -> STOP.json -> liveness of both servers -> dataset / step-cap pairing -> cross-process episode
-        registration (the third episode is refused)."""
+        registration (the default third or explicitly approved fourth episode is refused)."""
         if self._stop is not None:
             raise self._stop
         stop = group_stop_file(self.group_dir)
@@ -1546,7 +1698,7 @@ class AstraPolicy(Policy):
             raise self._stop
         self.check_server()
         check_pairing(spec.dataset, spec.max_steps)
-        self.gate.register_episode(f"{spec.dataset}:{spec.task}:{spec.episode}")
+        self.gate.register_episode(f"{self.registration_prefix}{spec.dataset}:{spec.task}:{spec.episode}")
 
     def episode_args(self, spec) -> SimpleNamespace:
         """``args`` for ``runner.episode``: ``output`` points at ``astra/`` under this episode's raw directory, and
@@ -1565,23 +1717,30 @@ class AstraPolicy(Policy):
             raise RuntimeError(f"Astra episode directory already exists (keeping the previous attempt's evidence, not overwriting): {ep_dir}")
         identity = {k: v for k, v in spec.identity().items() if k not in ("task", "dataset", "attempt", "key")}
         builder = SessionBuilder(session, E.builder_for(spec.task, spec.dataset), spec.episode)
+        timer = ChunkTimer()
         try:
             result = run_one(args, spec.task, int(spec.episode), identity, builder, self.monitor, self.planner,
                              self.client, self.astra, attempt=spec.attempt, trace_dir=Path(spec.out_dir),
-                             strict_cap=spec.strict_cap)
+                             strict_cap=spec.strict_cap, timer=timer)
         except Exception as exc:  # driver exception: count one non-planner error and re-raise unchanged (the outer loop records error)
             self._after_episode({"status": "error", "error": f"{type(exc).__name__}: {exc}"}, spec)
             raise
         self._after_episode(result, spec)
         status = terminal_of(result)
+        timing = {"astra_seconds": result.get("seconds"), "lang_calls_mismatch": result.get("lang_calls_mismatch", []),
+                  "lang_diff_ms": result.get("lang_diff_ms"), "lang_unpaired": result.get("lang_unpaired")}
+        attach_policy_timing(timing, timer, gpu_name=result.get("vla_gpu_name"), model_kind="serial")
+        timing["server_infer_available"] = bool(timer.chunks) and all(
+            chunk["server_infer_ms"] is not None for chunk in timer.chunks)
         out = {"status": status, "task_success": int(status == "success"), "steps": int(result.get("steps") or 0),
                "error": result.get("error"), "infra": False, "infra_reason": None,
                "decisions": int(result.get("planner_calls") or 0),
+               "action_decisions": len(timer.chunks),
                "planner_calls": int(result.get("planner_calls") or 0),
                "monitor_calls": int(result.get("monitor_calls") or 0),
                "review_calls": int(result.get("review_calls") or 0),
                "astra_dir": os.path.relpath(ep_dir, spec.out_dir), "cloud_seed": None,
-               "timing": {"astra_seconds": result.get("seconds")}}
+               "timing": timing}
         if builder.env is not None:
             out["astra_env_close_calls"] = builder.env.close_calls
         return out
@@ -1600,7 +1759,7 @@ class AstraPolicy(Policy):
             self._stop = AstraStop("infra_errors", "Three consecutive infrastructure/protocol errors; stopping shard")
         else:
             try:
-                check_episode_cap(self.state_path)
+                check_episode_cap(self.state_path, max_episodes=self.max_episodes if self.max_episodes_explicit else None)
             except AstraStop as exc:
                 self._stop = exc
 
