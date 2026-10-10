@@ -61,6 +61,8 @@ import uuid
 import subprocess
 import sys
 import time
+import threading
+import fcntl
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -629,11 +631,315 @@ def sgeval_main(args) -> int:
     return rc
 
 
+RAW_SCHEMA = "raw-ood-v1"
+RAW_CONTEXT = ("run", "run_name", "exec_commit", "config_sha256", "controller_job_id")
+
+
+def raw_atomic(path: Path, value: dict) -> None:
+    """同目录临时文件、落盘后替换，消费者不会读到半份 JSON。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}")
+    with temporary.open("x", encoding="utf-8") as handle:
+        json.dump(value, handle, ensure_ascii=False, sort_keys=True)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def raw_relative(value: str) -> Path:
+    if not isinstance(value, str):
+        raise ValueError("相对路径必须是字符串")
+    path = Path(value)
+    if path.is_absolute() or not path.parts or any(p in ("..", ".") for p in value.split("/")):
+        raise ValueError(f"非法相对路径：{value!r}")
+    return path
+
+
+def raw_tree(root: Path) -> dict:
+    """禁止符号链接和特殊文件，完整集合不忽略隐藏文件。"""
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError(f"不是实体目录：{root}")
+    out = {}
+    for path in root.rglob("*"):
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise ValueError(f"非法文件类型：{path}")
+        if path.is_file():
+            out[str(path.relative_to(root))] = {"size": path.stat().st_size, "sha256": sha256(path)}
+    return out
+
+
+def raw_signature(root: Path) -> tuple:
+    """轮询只核文件集合与 stat，启动和最终验收才全量读取字节。"""
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("缓存目录不再是实体目录")
+    signature = []
+    for path in root.rglob("*"):
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise ValueError("缓存目录出现非法文件类型")
+        if path.is_file():
+            st = path.stat()
+            signature.append((str(path.relative_to(root)), st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino))
+    return tuple(sorted(signature))
+
+
+def raw_validate_publication(row: dict, context: dict) -> None:
+    required = {"schema", *RAW_CONTEXT, "model", "shard_id", "identity_key", "relative_dir", "files", "delete_files"}
+    if not required <= row.keys() or row["schema"] != RAW_SCHEMA:
+        raise ValueError("发布项缺键或协议不符")
+    if any(row[k] != context[k] for k in RAW_CONTEXT):
+        raise ValueError("发布项版本或运行身份不符")
+    raw_relative(row["relative_dir"])
+    if not all(isinstance(row[k], str) and row[k] for k in ("model", "shard_id", "identity_key")):
+        raise ValueError("发布项身份为空")
+    if not isinstance(row["files"], dict) or not row["files"]:
+        raise ValueError("发布项文件集合为空")
+    for name, info in row["files"].items():
+        raw_relative(name)
+        if set(info) != {"size", "sha256"} or type(info["size"]) is not int or info["size"] < 0 or not re.fullmatch(r"[a-f0-9]{64}", info["sha256"]):
+            raise ValueError("发布项文件指纹非法")
+    if not isinstance(row["delete_files"], list) or len(set(row["delete_files"])) != len(row["delete_files"]):
+        raise ValueError("删除清单非法")
+    for name in row["delete_files"]:
+        if name not in row["files"] or name not in ("front.mkv", "wrist.mkv", "arrays.npz", "raw/front.mkv", "raw/wrist.mkv", "raw/arrays.npz"):
+            raise ValueError("删除清单含小文件或非发布文件")
+
+
+def raw_verify_media(directory: Path) -> dict:
+    """完整解码并核帧索引与动作原字节，不启动仿真。"""
+    import numpy as np
+    raw = directory / "raw" if (directory / "raw").is_dir() else directory
+    meta = json.loads((raw / "meta.json").read_text())
+    if meta["raw_codec"] != "av1-yuv444p" or meta["level"] > 1:
+        raise ValueError("录像编码或退化档不符")
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        raise ValueError("完整解码需要 ffmpeg 和 ffprobe")
+    decoded = {}
+    frame_indices = {}
+    for stream in ("front", "wrist"):
+        rows = [json.loads(line) for line in (raw / f"frames-{stream}.jsonl").read_text().splitlines()]
+        if not rows or [r["idx"] for r in rows] != list(range(len(rows))) or any(type(r["enc"]) is not int or r["enc"] < 0 for r in rows):
+            raise ValueError("帧索引不连续或缺失")
+        encoded = max(r["enc"] for r in rows) + 1
+        if set(r["enc"] for r in rows) != set(range(encoded)):
+            raise ValueError("编码帧索引缺口")
+        if any(not re.fullmatch(r"[a-f0-9]{64}", r["sha256"]) for r in rows):
+            raise ValueError("帧索引哈希非法")
+        frame_indices[stream] = rows
+        video = raw / f"{stream}.mkv"
+        proc = subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-xerror", "-i", str(video), "-map", "0:v:0", "-f", "null", "-"], capture_output=True, text=True, timeout=1800)
+        if proc.returncode or proc.stderr.strip():
+            raise ValueError(f"完整解码失败：{stream} {proc.stderr[:300]}")
+        probe = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_frames", "-show_streams", "-show_entries", "frame=best_effort_timestamp_time:stream=codec_name,pix_fmt", "-of", "json", str(video)], capture_output=True, text=True, timeout=1800)
+        if probe.returncode:
+            raise ValueError("视频探测失败")
+        data = json.loads(probe.stdout)
+        if len(data["frames"]) != encoded or data["streams"][0]["codec_name"] != "av1" or data["streams"][0]["pix_fmt"] != "yuv444p":
+            raise ValueError("视频帧数或格式不符")
+        if any(abs(float(f["best_effort_timestamp_time"]) - i / 30) > 0.5 / 30 for i, f in enumerate(data["frames"])):
+            raise ValueError("视频时间戳不符")
+        decoded[stream] = encoded
+    rows = [json.loads(line) for line in (raw / "trace.jsonl").read_text().splitlines()]
+    spec = importlib.util.spec_from_file_location("_raw_trace_checker", Path(__file__).resolve().parents[2] / "src/robomme_ood_eval/record/trace_writer.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    problems = module.validate_trace(rows)
+    if problems:
+        raise ValueError(f"轨迹结构不符：{problems}")
+    if len(frame_indices["front"]) != len(frame_indices["wrist"]):
+        raise ValueError("双视角逻辑帧数不符")
+    with np.load(raw / "arrays.npz", allow_pickle=False) as arrays:
+        for row in rows:
+            if row["kind"] != "step":
+                continue
+            action = arrays[f"exec_action__{row['step'] - 1:05d}"]
+            expected = row["action"]
+            actual = module.array_record(action)
+            if any(actual[k] != expected[k] for k in ("dtype", "shape", "sha256")):
+                raise ValueError("动作数组与轨迹不符")
+    result = json.loads((directory / "result.json").read_text())
+    for key in ("dataset", "task", "tier", "seed", "key"):
+        if result[key] != rows[0]["identity"][key]:
+            raise ValueError("轨迹与结果身份不符")
+    if type(result["task_success"]) not in (bool, int) or result["task_success"] not in (0, 1):
+        raise ValueError("成功字段非法")
+    if result["exec_steps"] != rows[-1]["exec_steps"] or result["error_kind"] is not None:
+        raise ValueError("结果步骤或基础设施状态不符")
+    return decoded
+
+
+def raw_move(row: dict, stage: Path, dest: Path, *, min_free_gib: float = 50) -> dict:
+    """先完整落本机再删已核验大文件；崩溃重启只恢复删除，不生成重复局。"""
+    rel = raw_relative(row["relative_dir"])
+    source, target = stage / rel, dest / rel
+    for base, path in ((stage, source), (dest, target)):
+        if not path.resolve().is_relative_to(base.resolve()):
+            raise ValueError("目录越界")
+        if any(p.is_symlink() for p in [path, *path.parents] if p != base.parent):
+            raise ValueError("目录链含符号链接")
+    if free_gib(dest) < min_free_gib + sum(v["size"] for v in row["files"].values()) / (1 << 30):
+        raise ValueError("low_disk")
+    if target.exists():
+        if raw_tree(target) != row["files"]:
+            raise ValueError("本机同名目录内容冲突，禁止覆盖")
+    else:
+        if raw_tree(source) != row["files"]:
+            raise ValueError("源文件集合或 SHA 不符")
+        incoming = dest / ".incoming" / uuid.uuid4().hex
+        incoming.parent.mkdir(parents=True, exist_ok=True)
+        proc = subprocess.run(["rsync", "-a", f"{source}/", f"{incoming}/"], capture_output=True, text=True, timeout=1800)
+        if proc.returncode:
+            raise ValueError(f"rsync失败：{proc.stderr[:300]}")
+        if raw_tree(incoming) != row["files"] or raw_tree(source) != row["files"]:
+            raise ValueError("拷贝后文件集合或 SHA 不符")
+        raw_verify_media(incoming)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            raise ValueError("落地时同名冲突")
+        os.rename(incoming, target)
+    decoded = raw_verify_media(target)
+    result_identity = json.loads((target / "result.json").read_text())["key"]
+    if not result_identity or not row["identity_key"].endswith(":" + result_identity):
+        raise ValueError("发布项与结果身份不符")
+    # 每个删除再次核对，缺失只在本机完整副本已验证时允许。
+    remaining = raw_tree(source)
+    if any(name not in row["files"] or info != row["files"][name] for name, info in remaining.items()):
+        raise ValueError("删除前源文件变化")
+    if any(name not in remaining for name in set(row["files"]) - set(row["delete_files"])):
+        raise ValueError("源小文件缺失")
+    for name in row["delete_files"]:
+        path = source / name
+        if path.exists():
+            if {"size": path.stat().st_size, "sha256": sha256(path)} != row["files"][name]:
+                raise ValueError("删除前大文件变化")
+            path.unlink()
+    return {**row, "dest": str(target), "bytes": sum(v["size"] for v in row["files"].values()), "decoded": decoded, "trace_checked": True, "result": "moved"}
+
+
+def raw_main(args) -> int:
+    stage, dest = Path(args.stage).resolve(), Path(args.dest).resolve()
+    manifest_bytes = Path(args.manifest).read_bytes()
+    manifest = json.loads(manifest_bytes)
+    config_sha = hashlib.sha256(manifest_bytes).hexdigest()
+    if "config_sha256" in manifest and manifest["config_sha256"] != config_sha:
+        raise ValueError("配置内哈希与原字节哈希冲突")
+    manifest["config_sha256"] = config_sha
+    context = {k: manifest[k] for k in RAW_CONTEXT}
+    if context["run"] != context["run_name"]:
+        raise ValueError("run 与 run_name 不一致")
+    expected = manifest["expected_publications"]
+    identities = manifest["expected_identities"]
+    if not isinstance(identities, list) or len(set(identities)) != len(identities) or {hashlib.sha256(k.encode()).hexdigest() + ".json" for k in identities} != set(expected):
+        raise ValueError("期望身份与发布文件集合不一致")
+    if not isinstance(expected, list) or not expected or len(set(expected)) != len(expected) or any(not re.fullmatch(r"[a-f0-9]{64}\.json", name) for name in expected):
+        raise ValueError("权威发布清单非法")
+    dest.mkdir(parents=True, exist_ok=True)
+    state = stage / "mover"
+    state.mkdir(parents=True, exist_ok=True)
+    heartbeat_path = Path(args.heartbeat_file) if args.heartbeat_file else state / "heartbeat.json"
+    error_path = Path(args.error_file) if args.error_file else state / "error.json"
+    stop_path = Path(args.stop_file) if args.stop_file else stage / "STOP"
+    lock = (dest / ".raw-mover.lock").open("a")
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    status = {"schema": RAW_SCHEMA, **context, "time": time.time(), "pid": os.getpid(), "pending": 0, "moved": 0, "last_progress": time.time()}
+    done = threading.Event()
+    heartbeat_error = []
+    def heartbeat():
+        while not done.is_set():
+            try:
+                raw_atomic(heartbeat_path, {**status, "time": time.time()})
+            except Exception as exc:
+                heartbeat_error.append(exc)
+                return
+            done.wait(10)
+    thread = threading.Thread(target=heartbeat, daemon=True)
+    thread.start()
+    verified_receipts = {}
+    try:
+        while True:
+            if heartbeat_error:
+                raise RuntimeError(f"心跳写入失败：{heartbeat_error[0]}")
+            if stop_path.exists():
+                raise RuntimeError("收到全局 STOP")
+            published = {p.name: p for p in (stage / "published").glob("*.json")}
+            if set(published) - set(expected):
+                raise ValueError("出现非权威发布项")
+            receipts = {p.name for p in (state / "receipts").glob("*.json")}
+            if receipts - set(published):
+                raise ValueError("回执存在非发布身份")
+            status["pending"] = 0
+            for name, path in sorted(published.items()):
+                row = json.loads(path.read_text())
+                raw_validate_publication(row, context)
+                if row["identity_key"] not in identities:
+                    raise ValueError("发布身份不在权威清单")
+                if name != hashlib.sha256(row["identity_key"].encode()).hexdigest() + ".json":
+                    raise ValueError("发布文件名与身份不符")
+                receipt = state / "receipts" / name
+                if receipt.exists():
+                    target = dest / raw_relative(row["relative_dir"])
+                    signature = (sha256(path), sha256(receipt), raw_signature(target))
+                    if name in verified_receipts:
+                        if verified_receipts[name] != signature:
+                            raise ValueError("已核验发布、回执或本机文件发生变化")
+                        continue
+                    prior = json.loads(receipt.read_text())
+                    if any(prior[k] != row[k] for k in row) or prior["result"] != "moved" or prior["trace_checked"] is not True or raw_tree(dest / raw_relative(row["relative_dir"])) != row["files"]:
+                        raise ValueError("已有回执内容或本机副本不符")
+                    if prior["dest"] != str(dest / raw_relative(row["relative_dir"])) or prior["bytes"] != sum(v["size"] for v in row["files"].values()) or set(prior["decoded"]) != {"front", "wrist"} or any(type(n) is not int or n <= 0 for n in prior["decoded"].values()):
+                        raise ValueError("已有回执路径、字节数或解码计数不符")
+                    verified_receipts[name] = signature
+                    continue
+                status["pending"] += 1
+                result = raw_move(row, stage, dest, min_free_gib=args.min_free_gib)
+                raw_atomic(receipt, result)
+                verified_receipts[name] = (sha256(path), sha256(receipt), raw_signature(dest / raw_relative(row["relative_dir"])))
+                status["last_progress"] = time.time()
+            status["moved"] = len(list((state / "receipts").glob("*.json")))
+            status["pending"] = len(published) - status["moved"]
+            if (stage / "gpu_work_complete.json").exists() or args.once:
+                if not args.once:
+                    marker = json.loads((stage / "gpu_work_complete.json").read_text())
+                    if any(marker[k] != context[k] for k in RAW_CONTEXT):
+                        raise ValueError("GPU完成标记版本不符")
+                if set(published) != set(expected) or status["moved"] != len(expected):
+                    raise ValueError("最终发布或回执集合不完整")
+                for path in published.values():
+                    row = json.loads(path.read_text())
+                    if raw_tree(dest / raw_relative(row["relative_dir"])) != row["files"]:
+                        raise ValueError("最终本机文件集合或 SHA 不符")
+                    raw_verify_media(dest / raw_relative(row["relative_dir"]))
+                    source_files = raw_tree(stage / raw_relative(row["relative_dir"]))
+                    retained = {k: v for k, v in row["files"].items() if k not in row["delete_files"]}
+                    if source_files != retained:
+                        raise ValueError("最终源大文件未排空或小文件变化")
+                report = {"schema": RAW_SCHEMA, **context, "expected": len(expected), "moved": len(expected), "missing": 0, "decode_fail": 0, "sha_mismatch": 0, "pending": 0, "time": time.time()}
+                raw_atomic(state / "completed.json", report)
+                print(f"RAW_DELIVERY=PASS expected={len(expected)} moved={len(expected)} missing=0 decode_fail=0 sha_mismatch=0 pending=0", flush=True)
+                return 0
+            done.wait(min(args.interval, 5))
+    except Exception as exc:
+        error = {"schema": RAW_SCHEMA, **context, "component": "mover", "error": type(exc).__name__, "message": str(exc), "time": time.time()}
+        raw_atomic(error_path, error)
+        if not stop_path.exists():
+            raw_atomic(stop_path, error)
+        print(f"RAW_DELIVERY=FAIL error={type(exc).__name__} message={exc}", flush=True)
+        return 1
+    finally:
+        done.set()
+        thread.join(timeout=11)
+        lock.close()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", default="v8", choices=("v8",),
                     help="v8（缺省且唯一）：整目录搬 V8／V9 评估录像，见 v8_main")
-    ap.add_argument("--layout", default="v8", choices=("v8", "sgeval"),
+    ap.add_argument("--manifest", help="raw-ood：冻结运行配置及权威发布项清单")
+    ap.add_argument("--heartbeat-file", help="raw-ood：NFS 独立心跳路径")
+    ap.add_argument("--error-file", help="raw-ood：NFS 结构化错误路径")
+    ap.add_argument("--layout", default="v8", choices=("v8", "sgeval", "raw-ood"),
                     help="v8（缺省）：运行根 sNN/<policy>/rec/ 布局；sgeval：媒体根下 <label>/<dataset>/<side>/<key>.a<n>/，见 sgeval_main")
     ap.add_argument("--min-free-gib", type=float, default=50.0,
                     help="sgeval：--dest 所在盘剩余低于该值即停止搬运（MOVER_STOP reason=low_disk）")
@@ -648,6 +954,27 @@ def main() -> int:
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--stop-file", default=None)
     args = ap.parse_args()
+    if args.layout == "raw-ood":
+        if not args.manifest:
+            ap.error("raw-ood 必须提供 --manifest")
+        try:
+            return raw_main(args)
+        except Exception as exc:
+            # 配置与独占锁的前置失败也必须通知监督器，不能仅写标准错误。
+            context = {}
+            try:
+                config = json.loads(Path(args.manifest).read_text())
+                context = {k: config[k] for k in RAW_CONTEXT if k in config}
+                context["config_sha256"] = sha256(Path(args.manifest))
+            except Exception:
+                pass
+            error = {"schema": RAW_SCHEMA, **context, "component": "mover", "error": type(exc).__name__, "message": str(exc), "time": time.time()}
+            raw_atomic(Path(args.error_file) if args.error_file else Path(args.stage) / "mover/error.json", error)
+            stop = Path(args.stop_file) if args.stop_file else Path(args.stage) / "STOP"
+            if not stop.exists():
+                raw_atomic(stop, error)
+            print(f"RAW_DELIVERY=FAIL error={type(exc).__name__} message={exc}", flush=True)
+            return 1
     if args.layout == "sgeval":
         return sgeval_main(args)
     return v8_main(args)
