@@ -103,6 +103,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from robomme_ood_eval.report import speed_from_rows
+
 TERMINAL = ("success", "fail", "timeout")
 DEFAULT_CAP = 1600
 DEFAULT_TOTAL = 1070
@@ -455,6 +457,89 @@ def _fmt_s(sec: float | None) -> str:
     return f"{h}h{rem // 60:02d}m"
 
 
+def speed_of(row: dict) -> dict | None:
+    """只读新的策略计时；旧结果由调用方单列为缺失。"""
+    timing = (row.get("timing") or {}).get("policy") or {}
+    return timing if timing.get("chunk_summary") is not None else None
+
+
+def _speed_mult(identities: list[dict]) -> str:
+    triples = {(r.get("task"), r.get("tier"), r.get("episode")) for r in identities}
+    tasks, tiers, episodes = (len({r[i] for r in triples}) for i in range(3))
+    n = len(triples)
+    if n and tasks * tiers * episodes == n:
+        return f"{tasks} 任务 × {tiers} 档 × {episodes} 局 = {n}"
+    return f"{n} 局（{tasks} 任务、{tiers} 档、局号 {episodes} 种，非满格／不齐）"
+
+
+def _speed_section(rows_by_policy: dict[str, list[dict]]) -> dict:
+    """与 log.json 共用分组、排除和原始稳态聚合；不改变成功率口径。"""
+    rows = [{**r, "policy_label": r.get("policy_label") or label}
+            for label, rows in rows_by_policy.items() for r in rows]
+    speed = speed_from_rows(rows, include_empty=True)
+    labels = {"planner+review": "规划+复核", "planner_only": "仅规划", "review_only": "仅复核",
+              "neither": "仅监视", "no_lang": "无语言"}
+    table = []
+    for group in speed["groups"]:
+        if not group["episodes_with_timing"]:
+            continue
+        layers = group.get("by_planner_review")
+        sources = [(f"{group['policy_label']}·{labels[layer]}", sub, group["layer_identities"].get(layer, []))
+                   for layer, sub in layers.items() if sub.get("decisions", 0)] if layers is not None else [
+                       (group["policy_label"], group, group["identities"])]
+        for label, summary, identities in sources:
+            wall = summary["decision_wall_ms"]
+            table.append({"policy_label": label, "gpu_name": group["gpu_name"], "mult": _speed_mult(identities),
+                          **{k: summary[k] for k in ("decisions", "violations", "missing_fields", "checked", "expected",
+                                                     "steady_short_eps", "approx", "episodes_with_timing")},
+                          "wall_first_ms": wall["first_mean"], "wall_steady_mean_ms": wall["steady_mean"],
+                          "wall_steady_p50_ms": wall["steady_p50"], "wall_steady_p95_ms": wall["steady_p95"],
+                          **{k: summary[k] for k in ("action_rtt_steady_mean_ms", "lang_steady_mean_ms", "server_infer_steady_mean_ms")}})
+    return {"rows": table, **{k: speed[k] for k in ("missing", "excluded_infra", "excluded_timeout", "excluded_reconnected", "excluded_status")}}
+
+
+def speed_table(rows_by_policy: dict[str, list[dict]]) -> list[dict]:
+    return _speed_section(rows_by_policy)["rows"]
+
+
+def speed_table_from_results(paths: list[Path]) -> dict:
+    """显式 results.jsonl 路径直接读取，不扫描席位目录。"""
+    rows = [row for path in paths for row in read_jsonl(path)]
+    by_policy = defaultdict(list)
+    for row in rows:
+        label = row.get("policy_label") or row.get("model") or row.get("policy") or "unknown"
+        if row.get("policy_variant") and not row.get("policy_label"):
+            label = f"{label}:{row['policy_variant']}"
+        by_policy[label].append(row)
+    return {"schema": "v8-eval-report/2", "speed": _speed_section(by_policy)}
+
+
+def speed_line(speed: dict) -> str:
+    totals = {k: sum(row[k] for row in speed["rows"]) for k in ("decisions", "violations", "missing_fields", "checked", "expected")}
+    passed = not totals["violations"] and not totals["missing_fields"] and totals["checked"] == totals["expected"]
+    return (f"SPEED_TABLE={'PASS' if passed else 'FAIL'} rows={len(speed['rows'])} "
+            f"decisions={totals['decisions']} violations={totals['violations']} missing={speed['missing']} "
+            f"checked={totals['checked']} expected={totals['expected']} missing_fields={totals['missing_fields']}")
+
+
+def _fmt_ms(value: float | None) -> str:
+    return "—" if value is None else f"{value:.0f} ms"
+
+
+def _render_speed(speed: dict) -> list[str]:
+    lines = ["## 推理速度", "", "| 模型 | GPU | decision 数（乘式） | 首次 | 稳态 mean | p50 | p95 | 动作往返 | 语言 | 服务端推理 | 守恒违例 |",
+             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    fields = ("wall_first_ms", "wall_steady_mean_ms", "wall_steady_p50_ms", "wall_steady_p95_ms",
+              "action_rtt_steady_mean_ms", "lang_steady_mean_ms", "server_infer_steady_mean_ms")
+    for row in speed["rows"]:
+        label = row["policy_label"] + ("（分位数近似）" if row["approx"] else "")
+        lines.append(f"| {label} | {row['gpu_name'] or '未知'} | {row['decisions']}（{row['mult']}） | "
+                     + " | ".join(_fmt_ms(row[k]) for k in fields) + f" | {row['violations']} |")
+    lines.extend(["", f"旧计时缺失 {speed['missing']} 局；排除 infra={speed['excluded_infra']}、timeout={speed['excluded_timeout']}、PP 重连={speed['excluded_reconnected']}、其他非正常终局={speed['excluded_status']}。",
+                  "GL A40 与本机 RTX 6000 Ada 不混比；未知 GPU 单独分组。PP 的 decision_wall_ms 为 fresh 步往返与桶内 S2 的合成值。Astra 含规划行包含 SEND_INTERVAL_S=20。", ""])
+    return lines
+
+
 def wall_of(row: dict) -> float | None:
     t = row.get("timing") or {}
     v = t.get("episode_wall_s") if isinstance(t, dict) else None
@@ -565,10 +650,12 @@ def build_report(manifest_path: Path, stage: Path, policies: list[str], videos: 
     index: list[dict] = []
     per_policy: dict[str, Any] = {}
     observed_seat: dict[str, str] = {}
+    speed_inputs = {}
 
     for pol in policies:
         cm_before = len(count_mismatch)
         st = load_policy(stage, pol)
+        speed_inputs[pol] = st["results"]
         # 实际所在席位以运行根里观测到的目录为准（分片可能重分到别的 sNN），不依赖 manifest 的 shard 字段
         for r in st["results"] + st["ledger"]:
             if r.get("key") and r.get("_seat"):
@@ -789,7 +876,8 @@ def build_report(manifest_path: Path, stage: Path, policies: list[str], videos: 
     coverage_pass = all(cov[k] == 0 for k in ("missing", "extra", "duplicate", "conflicting_terminal"))
     report_pass = not count_mismatch and not media_unexplained and not exec_over_cap and not cap_mismatch
     return {
-        "schema": "v8-eval-report/1", "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "schema": "v8-eval-report/2", "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "speed": _speed_section(speed_inputs),
         "manifest": str(manifest_path), "stage": str(stage), "videos": str(videos) if videos else None,
         "partial": partial, "cap": cap, "expect_total": expect_total, "policies": policies, "dataset": dataset,
         "side": side if dataset is not None else None,
@@ -891,6 +979,8 @@ def render_md(rep: dict, *verdict_lines: str) -> str:
                  f"{pct(p['task_macro_success_rate'])} | {len(p['late'])} | {len(p['abandoned'])} |")
     L.append("")
     pols = list(rep["per_policy"])
+    if "speed" in rep:
+        L.extend(_render_speed(rep["speed"]))
     L.append("## 任务×档成功率（成功／分母；括号内 timeout／error／缺失）")
     L.append("")
     L.append("| 格 | " + " | ".join(pols) + " |")
@@ -1389,8 +1479,9 @@ def render_v9_md(rep: dict, lines: tuple[str, ...]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--manifest", required=True)
-    ap.add_argument("--stage", required=True, help="运行根（含 sNN/<policy>/）")
+    ap.add_argument("--manifest")
+    ap.add_argument("--stage", help="运行根（含 sNN/<policy>/）")
+    ap.add_argument("--results", nargs="+", help="显式 results.jsonl 路径；只产出速度表与守恒判定")
     ap.add_argument("--policies", default="smvla,perceptual-framesamp-modul",
                     help="逗号分隔的 <policy>[:<variant>]（如 perceptual-framesamp-modul,groundsg:ground-sg-oracle,pp）；运行根目录 sNN/<policy>[-<variant>]/")
     ap.add_argument("--dataset", default=None, choices=list(DATASETS),
@@ -1413,6 +1504,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--reuse-manifest", default=None, help="V9：V8 manifest.json（与 reused.json 的 v8_manifest_sha256 核对）")
     ap.add_argument("--expect-reused", type=int, default=V9_DEFAULT_REUSED, help="V9：复用行数（默认 720）")
     args = ap.parse_args(argv)
+    if args.results:
+        rep = speed_table_from_results([Path(p) for p in args.results])
+        line = speed_line(rep["speed"])
+        rep["verdict_lines"] = [line]
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        (out / "report.md").write_text("\n".join(_render_speed(rep["speed"]) + [f"`{line}`", ""]), encoding="utf-8")
+        print(line, flush=True)
+        return 0
+    if not args.manifest or not args.stage:
+        ap.error("非 --results 入口必须提供 --manifest 与 --stage")
     old = [p for p in args.policies.split(",") if p and official_defs().canonical_policy(p.partition(":")[0]) != p.partition(":")[0]]
     if old:
         ap.error(f"--policies 只接受官方名，收到旧名 {old}")
@@ -1445,7 +1548,8 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     index = rep.pop("_index")
     cov_line, rep_line = lines_of(rep)
-    rep["verdict_lines"] = [cov_line, rep_line]
+    speed_verdict = speed_line(rep["speed"])
+    rep["verdict_lines"] = [cov_line, rep_line, speed_verdict]
     if v9_out:
         rep["v9_verdict_lines"] = list(v9_out)
     (out / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
@@ -1453,7 +1557,7 @@ def main(argv: list[str] | None = None) -> int:
     with (out / "video-index.jsonl").open("w", encoding="utf-8") as fh:
         for row in index:
             fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-    md = render_md(rep, cov_line, rep_line)
+    md = render_md(rep, cov_line, rep_line, speed_verdict)
     if v9_out:
         md = render_v9_md(rep, v9_out) + md.replace("# V8 双模型评估汇总", "## 新评身份分表（V8 口径）", 1)
     (out / "report.md").write_text(md, encoding="utf-8")
@@ -1466,9 +1570,11 @@ def main(argv: list[str] | None = None) -> int:
     if v9_out:
         for line in v9_out:
             print(line, flush=True)
+        print(speed_verdict, flush=True)
         return 0 if all(line.split()[0].endswith("=PASS") for line in v9_out) else 1
     print(cov_line, flush=True)
     print(rep_line, flush=True)
+    print(speed_verdict, flush=True)
     return 0 if rep["coverage"]["pass"] and rep["report"]["pass"] else 1
 
 
@@ -1486,16 +1592,17 @@ def main_dataset(args) -> int:
         p.pop("_acc")
         p.pop("_outcome")
     lines = dataset_lines(rep, vid)
+    speed_verdict = speed_line(rep["speed"])
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     index = rep.pop("_index")
-    rep["verdict_lines"] = lines
+    rep["verdict_lines"] = [*lines, speed_verdict]
     (out / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
                                      encoding="utf-8")
     with (out / "video-index.jsonl").open("w", encoding="utf-8") as fh:
         for row in index:
             fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-    (out / "report.md").write_text(render_md(rep, *lines), encoding="utf-8")
+    (out / "report.md").write_text(render_md(rep, *lines, speed_verdict), encoding="utf-8")
     if rep.get("progress"):
         pr = rep["progress"]
         done = " ".join(f"{p}={v['done']}/{v['denominator']}" for p, v in pr["policies"].items())
@@ -1504,6 +1611,7 @@ def main_dataset(args) -> int:
               f"slowest_seat={pr['slowest_seat']}", flush=True)
     for line in lines:
         print(line, flush=True)
+    print(speed_verdict, flush=True)
     return 0 if all(line.split()[0].endswith("=PASS") for line in lines) else 1
 
 
