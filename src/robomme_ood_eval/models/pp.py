@@ -3,7 +3,7 @@
 
 ``run_episode(session, identity, conn_info, recorder) -> dict`` is called by the seat runner's ``run_one`` (loaded
 via ``load_sibling("pp_client")`` for ``--policy pp``). The environment side is this repo's ``EnvSession``
-(``robomme_hard``); the model side is a PonderPounce server speaking the vla-eval 0.7.0 protocol
+(``robomme_ood``); the model side is a PonderPounce server speaking the vla-eval 0.7.0 protocol
 (``python -m ponderpounce.eval.robomme_server``).
 
 Reproduced item by item from the vla-eval 0.7.0 source (``runners/sync_runner.py::SyncEpisodeRunner.run_episode``,
@@ -88,6 +88,12 @@ The original side ``pp_official_runner.py`` (unchanged) only calls the default p
 ``TRACE_SCHEMA_ROUTE_ORIG`` is still ``pp-orig`` and ``trace_reset`` / ``trace_step`` get no new arguments, so the
 original side's serialized output is byte-identical to ``BASE``.
 
+Timing records every successful observation RTT. A fresh S1 chunk requires both cursor=1 and an increased S1 fire
+count. For its RTT R, same-step S2 time s, and earlier nonfresh S2 bucket B, the recorded wall is the synthetic
+R+B, action RTT is R-s, and language time is B+s. Initial hold time enters B; a final unassigned bucket becomes
+orphan language time. Failed transport attempts have no RTT entry, and any reconnect marks the entire episode
+for exclusion by timing reports. Timing is independent of the language ledger.
+
 At import time this only depends on the standard library and numpy; ``vla_eval`` (in the client extension
 environment client-env), ``anyio``, ``msgpack`` and ``websockets`` are imported only when used. Unit tests inject
 stand-in connections via ``run_episode(..., connection_factory=...)``.
@@ -103,6 +109,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+
+from robomme_ood_eval.timing import ChunkTimer, attach_policy_timing
 
 #: benchmark name sent in the HELLO handshake, same as ``benchmark`` in PonderPounce's official configs/robomme.yaml
 PP_BENCHMARK = "vla_eval.benchmarks.robomme.benchmark:RoboMMEBenchmark"
@@ -465,6 +473,15 @@ class TracedConnection:
         self.demo_index: int | None = None    # index of the last demo frame (initial image) in the trace demo line
         self._failed_step: int | None = None
         self._transport_attempt = 0
+        self.timer = ChunkTimer()
+        self.step_rtt_ms: list[float] = []
+        self._bucket_ms = 0.0
+        self._n_fresh = 0
+        self._last_n_s1 = 0
+        self.gpu_name = None
+        self.timing_missing = 0
+        self.fresh_mismatch = 0
+        self.reconnect_steps: list[int] = []
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._conn, name)
@@ -616,6 +633,8 @@ class TracedConnection:
             if cid is not None:
                 fields = {"task_description": obs.get("task_description")} if isinstance(obs, dict) else None
                 self._lang("message", cid, dir="in", role="fields", text=fields, images=self._image_refs(obs, step))
+        t0 = time.perf_counter()
+        self.timer.start(t0)
         try:
             action = await self._conn.act(obs)
         except BaseException:
@@ -626,6 +645,9 @@ class TracedConnection:
         self._failed_step = None
         # pop the server wrapper audit key before actions reach the environment (it only goes to the language ledger)
         self.last_audit = action.pop(AUDIT_KEY, None) if isinstance(action, dict) else None
+        rtt = (time.perf_counter() - t0) * 1000
+        self.step_rtt_ms.append(rtt)
+        self._account(step, rtt)
         self.actions_received += 1
         if isinstance(action, dict) and SUBGOAL_KEY in action:
             sg = action[SUBGOAL_KEY]
@@ -658,6 +680,30 @@ class TracedConnection:
                 self._log_generation(step, g, obs)
         self.last_call_id = cid
         return action
+
+    def _account(self, step: int, rtt: float) -> None:
+        """Assign S2 time to the next fresh S1 chunk, including initial hold steps."""
+        pt = self.last_audit.get("pp_timing") if isinstance(self.last_audit, dict) else None
+        if not isinstance(pt, dict):
+            self.timing_missing += 1
+            return
+        s2 = pt["s2_infer_ms"] or 0.0
+        if pt["s2_fired"]:
+            self.timer.add_lang(s2, kind="s2", env_step=step, s2_fired=True)
+        fresh = pt["chunk_fresh"] and pt["n_s1_fires"] > self._last_n_s1
+        if pt["chunk_fresh"] and not fresh:
+            self.fresh_mismatch += 1
+        if fresh:
+            self.timer.close(decision=self._n_fresh, env_step=step, action_rtt_ms=rtt - s2,
+                             server_infer_ms=pt["s1_infer_ms"], decision_wall_ms=rtt + self._bucket_ms,
+                             extra={"step_rtt_ms": rtt, "s2_infer_ms_at_fresh": s2,
+                                    "bucket_ms": self._bucket_ms, "n_s2_fires": pt["n_s2_fires"]})
+            self._n_fresh += 1
+            self._bucket_ms = 0.0
+            self._last_n_s1 = pt["n_s1_fires"]
+        else:
+            self._bucket_ms += s2
+        self.gpu_name = pt.get("gpu") or self.gpu_name
 
     async def end_episode(self, result: dict) -> None:
         self.trace.log_request(EPISODE_END, canonical_frame_bytes(EPISODE_END, result), step=self.actions_received)
@@ -870,6 +916,10 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
         except Exception:  # noqa: BLE001
             pass
     timing["episode_s"] = time.perf_counter() - t_start
+    attach_policy_timing(timing, tconn.timer, gpu_name=tconn.gpu_name, model_kind="pp")
+    timing.update(step_rtt_ms=tconn.step_rtt_ms, pp_timing_missing=tconn.timing_missing,
+                  reconnect_steps=tconn.reconnect_steps, reconnected=bool(tconn.reconnect_steps),
+                  fresh_mismatch=tconn.fresh_mismatch)
     result.update(status=status, task_success=status == "success", steps=executed, error=error, infra=bool(infra),
                   infra_reason=infra_reason, env_exception=env_exc, frames_sent=tconn.frames_sent,
                   decisions=tconn.actions_received, timing=timing)
@@ -912,6 +962,7 @@ async def _act_with_reconnect(tconn: TracedConnection, conn: Any, obs: dict, res
             if not is_connection_closed(e) or result["reconnects"] >= max_reconnects:
                 raise
             result["reconnects"] += 1
+            tconn.reconnect_steps.append(tconn.actions_received)
             _rec_event(recorder, {"kind": "pp_reconnect", "n": result["reconnects"], "error": repr(e)[:400],
                                   "decision": tconn.actions_received})
             await conn.reconnect()

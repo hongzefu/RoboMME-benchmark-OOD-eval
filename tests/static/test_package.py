@@ -1,7 +1,7 @@
 """L0 (slow): packaging and provenance of the eval package ``robomme-ood-eval`` (C18-WHEEL).
 
 After the repo split this repo only packages the eval package ``src/robomme_ood_eval``
-(``[tool.hatch.build.targets.wheel] packages``); the ``robomme`` / ``robomme_hard`` wheels are guarded by the
+(``[tool.hatch.build.targets.wheel] packages``); the ``robomme`` / ``robomme_ood`` wheels are guarded by the
 benchmark repo's own tests of the same name.
 
 Build the wheel -> create a fresh uv env in tmp -> non-editable install (``--no-deps``; dependencies are borrowed

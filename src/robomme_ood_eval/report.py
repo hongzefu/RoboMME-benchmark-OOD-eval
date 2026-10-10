@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Iterable
 
 from robomme_ood_eval.episode import TASKS
+from robomme_ood_eval.timing import merge_summaries
 
-SCHEMA = "robomme-ood-eval-log/1"
+SCHEMA = "robomme-ood-eval-log/2"
 
 
 def read_results(path: str | Path) -> list[dict]:
@@ -43,8 +44,65 @@ def _latest_by_key(rows: Iterable[dict]) -> list[dict]:
     return list(last.values())
 
 
+def speed_from_rows(rows: Iterable[dict], *, include_empty: bool = False) -> dict | None:
+    """Aggregate latest identities by policy variant and GPU, excluding abnormal episodes.
+
+    Missing old timing is counted separately from unavailable conservation evidence.
+    The shared timing helper owns phase preservation, weighting and percentiles.
+    """
+    by_policy: dict[str, list[dict]] = {}
+    for row in rows:
+        label = row.get("policy_label") or row.get("model") or row.get("policy") or "unknown"
+        variant = row.get("policy_variant")
+        if variant and not row.get("policy_label"):
+            label = f"{label}:{variant}"
+        by_policy.setdefault(str(label), []).append(row)
+    groups: dict[tuple, dict] = {}
+    has_timing = False
+    totals = {k: 0 for k in ("missing", "excluded_infra", "excluded_timeout", "excluded_reconnected", "excluded_status")}
+    for label, policy_rows in by_policy.items():
+        for row in _latest_by_key(policy_rows):
+            timing = (row.get("timing") or {}).get("policy") or {}
+            has_timing |= timing.get("chunk_summary") is not None
+            group = groups.setdefault((label, timing.get("gpu_name")), {
+                "policy_label": label, "gpu_name": timing.get("gpu_name"), "inputs": [], "identities": [], "layer_identities": {},
+                **{k: 0 for k in totals}})
+            if row.get("infra"):
+                reason = "excluded_infra"
+            elif row.get("status") == "timeout":
+                reason = "excluded_timeout"
+            elif timing.get("reconnected") is True and (
+                    row.get("model") == "pp" or row.get("policy") == "pp" or label == "pp" or label.startswith("pp:")):
+                reason = "excluded_reconnected"
+            elif row.get("status") not in ("success", "fail", "failure"):
+                reason = "excluded_status"
+            elif timing.get("chunk_summary") is None:
+                reason = "missing"
+            else:
+                group["inputs"].append(timing)
+                episode = next((row[k] for k in ("episode", "builder_episode", "source_episode", "seed")
+                                if row.get(k) is not None), None)
+                identity = {"task": row.get("task"), "tier": row.get("tier"), "episode": episode}
+                group["identities"].append(identity)
+                for layer, stats in timing["chunk_summary"].get("by_planner_review", {}).items():
+                    if stats.get("n_decisions", 0):
+                        group["layer_identities"].setdefault(layer, []).append(identity)
+                continue
+            group[reason] += 1
+            totals[reason] += 1
+    if not has_timing and not include_empty:
+        return None
+    merged = []
+    for group in groups.values():
+        inputs = group.pop("inputs")
+        merged.append({**merge_summaries(inputs), **group})
+    return {"groups": merged, **totals}
+
+
 def summarize_rows(rows: Iterable[dict]) -> dict:
     """Aggregate per task; returns the ``log.json`` content."""
+    rows = list(rows)
+    speed = speed_from_rows(rows)
     rows = _latest_by_key(rows)
     per: dict[str, dict] = {}
     for r in rows:
@@ -86,6 +144,7 @@ def summarize_rows(rows: Iterable[dict]) -> dict:
         "counted": sum(d["counted"] for d in per.values()),
         "success": sum(d["success"] for d in per.values()),
         "infra": sum(d["infra"] for d in per.values()),
+        "speed": speed,
     }
 
 

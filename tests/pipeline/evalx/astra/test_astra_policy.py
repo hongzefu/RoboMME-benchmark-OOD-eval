@@ -49,7 +49,11 @@ def test_load_starts_guard_and_vla_once_and_close_stops(tmp_path, monkeypatch):
                               "--cap", "5", "--interval", "2"]
         assert guard.port == vla.port + 1 and guard.metadata_dir == vla.metadata_dir == h.ledger.parent / "servers"
         ckpt = h.cfg["ckpt"]
-        assert vla.argv == [h.cfg["astra_vla_python"], "scripts/serve_policy.py", f"--port={policy.port}", "--seed=7",
+        assert vla.argv == [h.cfg["astra_vla_python"],
+                            str(mod.REPO_ROOT / "src/robomme_ood_eval/servers/policy_server_wrap.py"),
+                            f"--sgeval-serve-root={third_party()}",
+                            f"--sgeval-metadata-out={policy.server_dir}/server-wrap-metadata-{policy.port}.json",
+                            f"--port={policy.port}", "--seed=7",
                             "policy:checkpoint", "--policy.config=mme_vla_suite", f"--policy.dir={ckpt}"]
         assert vla.gpu == 0 and vla.cwd == str(third_party()) and vla.policy_seed == 7 and vla.ckpt == ckpt
         assert [r.kind for r in vla.ready] == ["port"] and "OPENAI_API_KEY" not in vla.env

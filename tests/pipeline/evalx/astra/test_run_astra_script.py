@@ -43,7 +43,10 @@ def test_evaluate_cli_astra_args_map_to_policy_cfg():
         assert (p.vla_gpu, p.monitor_gpu, p.cap_usd) == (0, 1, 5.0)
         assert str(p.ledger) == "/cost/ledger.json" and str(p.state_path) == "/cost/ledger.state.json"
         assert str(p.group_dir) == "/cost/group_0" and p.port_base == mod.DEFAULT_PORT_BASE == 18762
-        assert p.vla_argv(18762)[1:] == ["scripts/serve_policy.py", "--port=18762", "--seed=7", "policy:checkpoint",
+        assert p.vla_argv(18762)[1:] == [str(mod.REPO_ROOT / "src/robomme_ood_eval/servers/policy_server_wrap.py"),
+                                         f"--sgeval-serve-root={mod.astra_root()}",
+                                         "--sgeval-metadata-out=/cost/servers/server-wrap-metadata-18762.json",
+                                         "--port=18762", "--seed=7", "policy:checkpoint",
                                          "--policy.config=mme_vla_suite",
                                          "--policy.dir=/ckpt/symbolic-grounded-subgoal/79999"]
 
@@ -61,7 +64,10 @@ def test_vla_command_and_env_copied_from_upstream_run_sh():
         p._parse_cfg()
         argv = p.vla_argv(18762)
         env = p.vla_env()
-        assert argv[1:] == ["scripts/serve_policy.py", "--port=18762", "--seed=7", "policy:checkpoint",
+        assert argv[1:] == [str(mod.REPO_ROOT / "src/robomme_ood_eval/servers/policy_server_wrap.py"),
+                            f"--sgeval-serve-root={third_party()}",
+                            "--sgeval-metadata-out=/c/servers/server-wrap-metadata-18762.json",
+                            "--port=18762", "--seed=7", "policy:checkpoint",
                             "--policy.config=mme_vla_suite", "--policy.dir=/ck"]
         assert mod.VLAServerProcess.DROP_ENV == ("OPENAI_API_KEY",)
         exports = dict(kv.split("=", 1) for line in re.findall(r"^export ((?:[A-Z_]+=[^\s\"$]+ ?)+)$", upstream, re.M)

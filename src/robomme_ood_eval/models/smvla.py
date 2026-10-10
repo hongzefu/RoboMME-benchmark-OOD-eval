@@ -69,6 +69,8 @@ from typing import Any
 
 import numpy as np
 
+from robomme_ood_eval.timing import ChunkTimer, attach_policy_timing
+
 MAX_STEPS = 1300
 EXECUTE_HORIZON = 16
 RESET_RETRIES = 2
@@ -676,6 +678,8 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
     t_start = time.monotonic()
     timing: dict[str, Any] = {"reset_env_s": None, "infer_ms": [], "rtt_ms": [], "step_env_s": 0.0,
                               "observe_ms": [], "connect_s": None}
+    timer = ChunkTimer()
+    timing["failed_calls"] = []
     out = {"status": "error", "task_success": False, "steps": 0, "error": None, "decisions": 0,
            "infra": False, "infra_reason": None,
            "hard_bound": hb, "timing": timing, "server_meta": None,
@@ -700,11 +704,28 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         return {k: [v[0], v[-1]] if v else [] for k, v in idx.items()}
 
     last_audit: list[Any] = [None]  # server wrapper audit block popped from the most recent reply
+    last_rtt = [None]
+    last_observe_rtt = [0.0]
+    last_t_chunk = [None]
+    last_t_obs = [None]
+    last_n_frames = [0]
+
+    def start_chunk():
+        last_t_obs[0] = time.perf_counter()
+        timer.start(t=last_t_obs[0])
+        last_observe_rtt[0] = 0.0
+        last_n_frames[0] = 0
 
     def call(kind: str, msg: dict, extra: dict | None = None) -> dict:
         t0 = time.monotonic()
         reply, raw, rep_raw = conn.call(msg)
+        if kind == "infer":
+            last_t_chunk[0] = time.perf_counter()
         rtt = (time.monotonic() - t0) * 1000.0
+        if kind == "infer":
+            last_rtt[0] = rtt
+        elif kind == "observe":
+            last_observe_rtt[0] = rtt
         proto["messages"] += 1
         ev = {"kind": "msg", "type": kind, "send_sha256": sha256_bytes(raw), "send_bytes": len(raw),
               "recv_sha256": sha256_bytes(rep_raw), "recv_bytes": len(rep_raw), "rtt_ms": round(rtt, 3)}
@@ -727,6 +748,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
     def observe(frames, tag):
         if not frames:
             return
+        last_n_frames[0] = len(frames)
         idx = record_frames_(frames, tag)
         payload = [{CAM_FRONT: fr[CAM_FRONT], CAM_WRIST: fr[CAM_WRIST]} for fr in frames]
         reply = call("observe", {"observe": {"frames": payload}}, {"n_frames": len(frames), "tag": tag,
@@ -771,6 +793,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
             reply = call("reset", {"reset": {"episode_key": episode_key(identity)}})
             rec.add_event({"kind": "server_rng", "rng": reply.get("rng")})
             instruction = r["instruction"]
+            start_chunk()
             observe(r["frames"], "reset")
             cur_state = np.asarray(r["states"][-1], dtype=np.float32)
             for i, s in enumerate(r["states"]):
@@ -795,7 +818,24 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                             reply.get("recv_instruction_sha") != sha256_bytes(instruction.encode("utf-8")):
                         proto["sha_mismatch"] += 1
                         raise ProtocolError("infer reply state/instruction fingerprints do not match what was sent")
-                except BaseException:
+                    timing["infer_ms"].append(round(float(reply["infer_ms"]), 3))
+                    actions_full = np.asarray(reply["actions_full"])
+                    if "actions" not in reply:
+                        raise ProtocolError("infer reply missing actions")
+                    chunk = np.asarray(reply["actions"])[:execute_horizon]
+                    if not np.array_equal(chunk, actions_full[:execute_horizon]):
+                        raise ProtocolError("infer reply actions do not match actions_full[:16]")
+                    tm = (last_audit[0] or {}).get("timing") or {}
+                    if "lang_ms" in tm:
+                        timer.add_lang(tm["lang_ms"], kind="lang_in_forward", env_step=steps,
+                                       action_ms=tm.get("action_ms"))
+                    timer.close(decision=decisions - 1, env_step=steps, action_rtt_ms=last_rtt[0],
+                                server_infer_ms=float(reply["infer_ms"]), t=last_t_chunk[0],
+                                extra={"observe_rtt_ms": last_observe_rtt[0], "action_ms": tm.get("action_ms"),
+                                       "n_frames": last_n_frames[0]})
+                except BaseException as exc:
+                    timing["failed_calls"].append({"ms": round((time.perf_counter() - last_t_obs[0]) * 1000, 3),
+                                                   "kind": "infer", "error": str(exc)})
                     trace.lang_close(cid, status="error")
                     raise
                 final_text, final_trunc = trace.lang_audit(cid, last_audit[0])
@@ -803,12 +843,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                 trace.lang_close(cid, status="reply", parsed=reply.get("subtask"), server_final_text=final_text,
                                  server_truncated=final_trunc)
                 trace.begin_chunk(cid)
-                timing["infer_ms"].append(round(float(reply["infer_ms"]), 3))
-                actions_full = np.asarray(reply["actions_full"])
                 rec.add_array("model_action", actions_full, step=steps)
-                chunk = np.asarray(reply["actions"])[:execute_horizon]
-                if not np.array_equal(chunk, actions_full[:execute_horizon]):
-                    raise ProtocolError("infer reply actions do not match actions_full[:16]")
                 rec.add_event({"kind": "decision", "decision": decisions - 1, "step": steps,
                                "subtask": reply.get("subtask"), "infer_ms": round(float(reply["infer_ms"]), 3),
                                "model_action_sha": array_sha(actions_full)})
@@ -853,6 +888,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                         out.update(infra=True, infra_reason=f"env_step:{m}")
                     rec.add_event({"kind": "step_exc", "error": error})
                     break
+                start_chunk()
                 observe(res["frames"], "step")
                 if res.get("states"):
                     cur_state = np.asarray(res["states"][-1], dtype=np.float32)
@@ -887,6 +923,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
         status = "error"
     timing["step_env_s"] = round(timing["step_env_s"], 3)
     timing["episode_s"] = round(time.monotonic() - t_start, 3)
+    attach_policy_timing(timing, timer, gpu_name=(out["server_meta"] or {}).get("gpu_name"), model_kind="smvla")
     out.update(status=status, task_success=status == "success", steps=steps, error=error)
     rec.add_event({"kind": "episode_end", "status": status, "steps": steps, "error": error,
                    "decisions": out["decisions"]})

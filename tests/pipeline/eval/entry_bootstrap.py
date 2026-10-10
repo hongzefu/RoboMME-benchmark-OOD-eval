@@ -54,7 +54,7 @@ class FakeEnv:
         emit(kind="close", task=self.task, ep=self.ep)
 
 
-wrapper = ("robomme_hard.env_record_wrapper" if entry.endswith(("evaluation_ood.py", "evaluation_hard.py"))
+wrapper = ("robomme_ood.env_record_wrapper" if entry.endswith(("evaluation_ood.py", "evaluation_hard.py"))
            else "robomme.env_record_wrapper")
 Builder = importlib.import_module(wrapper).BenchmarkEnvBuilder
 

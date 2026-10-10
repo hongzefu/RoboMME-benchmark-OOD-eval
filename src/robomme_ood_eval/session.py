@@ -174,7 +174,7 @@ class EnvSession:
     @property
     def builder(self):
         if self._builder is None:
-            from robomme_hard.env_record_wrapper import BenchmarkEnvBuilder
+            from robomme_ood.env_record_wrapper import BenchmarkEnvBuilder
 
             if self.max_steps is None:
                 raise ValueError("EnvSession needs max_steps to build its own builder (the step cap is set by the "

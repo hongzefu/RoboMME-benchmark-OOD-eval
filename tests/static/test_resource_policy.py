@@ -49,7 +49,7 @@ def test_real_env_construction_is_refused(private_ledger):
 def test_gym_make_of_registered_task_is_refused(private_ledger):
     import gymnasium as gym
 
-    import robomme_hard  # noqa: F401  registers the 16 tasks
+    import robomme_ood  # noqa: F401  registers the 16 tasks
 
     with pytest.raises(rp.ResourcePolicyError):
         gym.make("PickXtimes", obs_mode="rgb", difficulty="easy", seed=0)

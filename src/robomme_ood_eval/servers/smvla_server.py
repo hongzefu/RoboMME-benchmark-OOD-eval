@@ -224,6 +224,27 @@ def _git_head(path: Path) -> str | None:
         return None
 
 
+class _TimedSample:
+    """Observe the real sample call, forwarding arguments and its result intact."""
+
+    def __init__(self, orig, host):
+        self._orig = orig
+        self._host = host
+
+    def __call__(self, *args, **kwargs):
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        t_lang_end = time.monotonic()
+        out = self._orig(*args, **kwargs)
+        self._host._sample_calls += 1
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        self._host._split = (t_lang_end, time.monotonic())
+        return out
+
+
 class SMVLAPolicyHost:
     """Holds the model; one Episode state (buffer) per connection."""
 
@@ -240,6 +261,7 @@ class SMVLAPolicyHost:
         self.args = official_args(self.ckpt)
         self.batched, self.buffer_factory, self.normalize_state = build_policy(self.args)
         self.to_full, self.state_norm = make_closures(self.buffer_factory, self.normalize_state, self.batched)
+        self._install_timed_sample()
         self.load_s = time.monotonic() - t0
         # reference random state: after loading and before any warm-up / inference, do one clean reseed and take its
         # digest; the digest after every later episode reset (new_episode) must equal it.
@@ -272,6 +294,14 @@ class SMVLAPolicyHost:
         }
 
     # ---- per-episode operations ----
+    def _install_timed_sample(self) -> bool:
+        if not audit_enabled():
+            return False
+        self._split = None
+        head = self.batched.model.action_head
+        head.sample = _TimedSample(head.sample, self)
+        return True
+
     def seed(self) -> int:
         """This server's model seed (unit-test hosts built via object.__new__ lack the attribute and fall back to the
         legacy constant)."""
@@ -298,6 +328,8 @@ class SMVLAPolicyHost:
         audit = audit_enabled()
         if audit:
             self._watch_prompt(buf)
+            self._split = None
+            self._sample_calls = 0
         t0 = time.monotonic()
         processed = buf._prepare_inputs(instruction)
         decisions = self.batched.generate_batch([processed], [self.state_norm(state)])
@@ -315,6 +347,12 @@ class SMVLAPolicyHost:
         }
         if audit:
             reply[AUDIT_KEY] = self._audit_block(buf)
+            split = getattr(self, "_split", None)
+            if split is not None:
+                t_lang_end, t_act_end = split
+                reply[AUDIT_KEY]["timing"] = {"lang_ms": (t_lang_end - t0) * 1000.0,
+                                             "action_ms": (t_act_end - t_lang_end) * 1000.0,
+                                             "sample_calls": self._sample_calls}
         return reply
 
     # ---- reply audit (only observes real upstream results) ----
