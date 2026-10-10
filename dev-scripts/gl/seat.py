@@ -376,6 +376,7 @@ class AttemptLedger:
         kw = {"token": token} if token else {}
         return bool(self.shared.claim_retry(route=self.route, key=key,
                                             interrupt=interrupt or self.retry_interrupt(key),
+                                            max_attempts=1 + int(self.infra_retry_budget or 0),
                                             seat=self.seat, policy=self.policy, **kw))
 
     def expired_jobs(self) -> set[str]:
@@ -654,8 +655,8 @@ def entry_blockers(args) -> tuple[str, str] | None:
     vp = variant_problems(args, check_dirs=True)
     if vp:
         return "variant_pairing", "; ".join(vp)
-    if int(getattr(args, "infra_retries", 0) or 0) < 0:
-        return "args", "--infra-retries 须为非负整数"
+    if not 0 <= int(getattr(args, "infra_retries", 0) or 0) <= 19:
+        return "args", "--infra-retries 须为 0 至 19 的整数（每身份至多 20 次尝试）"
     return None
 
 
@@ -1286,6 +1287,10 @@ class SeatRunner:
         self._end(c, attempt_id, row, void=False)
         self.episodes_done += 1
         self.progress("done")
+        if infra and d.get("infra_reason") == "env_build" and getattr(self.args, "stop_on_env_build_error", False):
+            print(f"RUN_BLOCKED reason=env_build policy={self.args.policy} seat={self.seat} key={c.key} "
+                  f"attempt={c.attempt} settled=1", flush=True)
+            raise SeatStop(EXIT_BLOCKED, "env_build")
         if stop is not None:  # pragma: no cover - 预留
             raise stop
         return row
@@ -1461,6 +1466,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seat", default=None, help="席位名（缺省 <主机>-<作业号>-gpu<CUDA_VISIBLE_DEVICES>，重起客户端不变）")
     p.add_argument("--infra-retries", type=int, default=DEFAULT_INFRA_RETRIES,
                    help="每身份基础设施重试次数（本轮 0：失败即停交用户）")
+    p.add_argument("--stop-on-env-build-error", action="store_true",
+                   help="环境构建基础设施失败时先完整结算本次尝试，再阻塞退出席位")
     p.add_argument("--reset-budget", type=int, default=None, help="可选：本席位账本的 reset 额度（不给只计量）")
     p.add_argument("--wall-s", type=float, default=None, help="单局墙钟（秒；缺省按模型取）")
     p.add_argument("--heartbeat-s", type=float, default=DEFAULT_HEARTBEAT_S, help="领取文件心跳间隔（秒）")

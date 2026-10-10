@@ -49,6 +49,55 @@ def _ident():
     return F.packaged_identity(task, tier, 0)
 
 
+def test_env_build_guard_settles_then_stops(tmp_path, capsys, monkeypatch):
+    """构建失败保存真实结果并结清 rid，关闭策略，第二身份完全不尝试。"""
+    # 复用生产席位打开账本的模块，避免重复导入数据类。
+    bm = F.env_client().load_sibling("budget_ledger")
+    shared = bm.BudgetLedger(tmp_path / "budget.jsonl")
+    a = _ident()
+    task, tier = F.v9_cells_sorted()[1]
+    b = F.packaged_identity(task, tier, 0)
+    server = F.FakePolicyServer()
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(server), F.World(),
+                           budget_ledger=shared, stop_on_env_build_error=True, infra_retries=19)
+    closed = []
+    monkeypatch.setattr(runner.fake_policy, "close", lambda: closed.append(True))
+    def broken(*_args):
+        raise RuntimeError("svulkan2 构建失败")
+    monkeypatch.setattr(F.HybridBuilder, "make_env_for_episode", broken)
+    assert F.run_rows(runner, [a, b]) == 3
+    rows = F.seat_results(tmp_path / "stage", LABEL)
+    assert len(rows) == 1 and rows[0]["infra_reason"] == "env_build"
+    assert Path(rows[0]["result"]).is_file()
+    assert len(shared.state().reserves) == len(shared.state().commits) == 1
+    assert not shared.state().retries
+    ledger = F.seat_ledger(tmp_path / "stage", LABEL)
+    assert sum(r["kind"] == "attempt_end" for r in ledger) == 1
+    assert json.loads(next((F.queue_dir(tmp_path / "stage", LABEL) / "claims").glob("*.json")).read_text())["ended"]
+    assert closed == [True]
+    assert "RUN_BLOCKED reason=env_build" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("first", [F.Plan(fail_at=2), F.Plan()])
+def test_env_build_guard_keeps_normal_terminal_results(tmp_path, first):
+    """正常失败或截断仍接受并继续下一身份，重启不重跑已接受身份。"""
+    a = _ident()
+    task, tier = F.v9_cells_sorted()[1]
+    b = F.packaged_identity(task, tier, 0)
+    world = F.World({(a["task"], a["builder_episode"]): [first],
+                     (b["task"], b["builder_episode"]): [F.Plan(success_at=2)]})
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), world,
+                           stop_on_env_build_error=True, infra_retries=19)
+    assert F.run_rows(runner, [a, b]) == 0
+    rows = F.seat_results(tmp_path / "stage", LABEL)
+    assert [r["status"] for r in rows] == ["fail" if first.fail_at else "timeout", "success"]
+    assert all(r["accepted"] and not r["infra"] for r in rows)
+    again = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World(),
+                          stop_on_env_build_error=True, infra_retries=19)
+    assert F.run_rows(again, [a, b]) == 0
+    assert len(F.seat_results(tmp_path / "stage", LABEL)) == 2
+
+
 def _run(tmp_path, name: str):
     sc = SCENARIOS[name]
     ident = _ident()
