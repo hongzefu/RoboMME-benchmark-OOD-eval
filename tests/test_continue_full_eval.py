@@ -497,7 +497,8 @@ def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='
     queue_ident = sm.identity_for_queue(identity, 'ood')
     label = module.MODELS[model]
     policy = 'groundsg' if label.startswith('groundsg-') else label
-    route = f"{label}/seed{stage_spec['seed']}/new"
+    route = sm.policy_route(SimpleNamespace(policy=policy, policy_seed=stage_spec['seed'],
+        groundsg_variant=label.removeprefix('groundsg-') if policy == 'groundsg' else None))
     seat_name = 'fe-A-pp-01'
     caps = stage_spec['caps']
     shared = sm.load_sibling('budget_ledger').BudgetLedger(stage_spec['budget'],
@@ -547,7 +548,7 @@ def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='
     return c, seat, raw, ledger_path, shared.path, queue, calls
 
 
-@pytest.mark.parametrize('stage,model', [('A', 'pp'), ('B', 'memer'), ('C', 'qwen'), ('D', 'pp')])
+@pytest.mark.parametrize('stage,model', [('A', 'pp'), ('B', 'memer'), ('C', 'qwen'), ('D', 'oracle')])
 def test_legacy_max2_serialized_settlement_resumes_r3(tmp_path, stage, model):
     c, seat, _, _, budget, queue, calls = legacy_fixture(tmp_path, stage=stage, model=model)
     original_budget = budget.read_bytes()

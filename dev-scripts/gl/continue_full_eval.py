@@ -162,7 +162,8 @@ class Controller:
         spec = self.c['stages'][seat['stage']]
         label = MODELS[seat['model']]
         policy = 'groundsg' if label.startswith('groundsg-') else label
-        route = f"{label}/seed{spec['seed']}/new"
+        head = 'groundsg/' + label.removeprefix('groundsg-') if policy == 'groundsg' else policy
+        route = f"{head}/seed{spec['seed']}/new"
         rows = read_rows(spec['identities'])
         if (seat['stage'] != self.state['stage'] or seat['model'] == 'smvla'
                 or seat.get('onlykey') or not missing or 'RUN_BLOCKED ' in log):
