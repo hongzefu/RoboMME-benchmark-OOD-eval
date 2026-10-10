@@ -78,6 +78,27 @@
 <tr><td>3. 锁定 v1.2</td><td>eval 的 dev：子模块及 <code>BENCH_LOCK</code> 一起更新为 v1.2 的提交 SHA，提交并 push。</td><td>恢复该 eval 提交即得到最新 v1.2 环境。</td></tr>
 </table>
 <p class="muted">实现全部由主会话在两仓现有分支完成；只读定位用 Luna，图用 Astra，不派写入子代理创建新分支。必要代码检查与指针检查保留，不增加实际评估或最后验收。</p>
+<h2 id="repo-scope">三、两个仓库分别需要改哪些内容</h2>
+<h3>benchmark 仓（main）：修改成功判据，发布 v1.2</h3>
+<p>这个仓的生产代码只改<strong>两个源文件</strong>。StopCube 的判定实际写在共用 helper 中，因此不需要修改 StopCube.py 本身；MoveCube 修改自己的 evaluate 任务列表。</p>
+<table>
+<tr><th>改动类别</th><th>大概范围与代表锚点</th></tr>
+<tr><td>StopCube 判据</td><td><code>subgoal_evaluate_func.py::is_obj_stopped_onto</code>：加入 OOD 难度判断，新档倍率 2.5、原档仍为 3，移除重复覆盖赋值；停止状态和时机规则保留。</td></tr>
+<tr><td>MoveCube 判据</td><td><code>MoveCube.py::evaluate</code>：两个执行任务项按难度选择 must_gripper_open，OOD 为 False；演示、原档和抓取放置保留。</td></tr>
+<tr><td>配套测试／契约</td><td>现有 <code>test_stopcube.py</code>、<code>test_movecube.py</code> 和对应 contracts：更新新档行为期待，保留原档和演示检查。只做轻量代码短测。</td></tr>
+<tr><td>版本发布</td><td>在现有 main 提交并 push，在新提交创建 <code>v1.2-ood</code> 标签并推送。v1.0／v1.1 标签保留；五份规格、身份与交付哈希、官方源码和录像器均不改。</td></tr>
+</table>
+<h3>评估仓（dev）：迁移接入包名，同步工具与锁定检查</h3>
+<p>这个仓<strong>不重写两个任务的判据</strong>，而是让现有评估代码能正确读取新版 <code>robomme_ood</code>。范围包括生产入口、辅助工具、轻量测试和子模块指针，不能只换 gitlink。</p>
+<table>
+<tr><th>改动类别</th><th>大概范围与代表文件</th></tr>
+<tr><td>生产接入</td><td><code>episode.py</code>、<code>session.py</code>、<code>models/astra.py</code> 改 builder 导入及环境来源检查；<code>models/pp.py</code> 更新包名说明。策略推理、服务器协议和 Report 统计不变。</td></tr>
+<tr><td>辅助工具接入</td><td><code>dev-scripts/gl/</code> 的起跑来源检查、清单、规格加载与席位来源记录；<code>checks/</code> 的包路径和版本检查；<code>parity/</code>、<code>orig/</code>、<code>media/</code>、<code>site/</code> 的当前版本路径适配。只改接入代码，不运行评估、对拍、生成或渲染工具。</td></tr>
+<tr><td>测试与现行契约</td><td>包来源、环境替身、当前路径期待和对应 contracts 一起迁移；<code>test_submodule_lock.py::BENCH_LOCK</code> 与 gitlink 同步。<code>bench_gates.py</code> 需适配 v1.1／v1.2 结构，不能继续硬套 v1.0 的白名单。旧版本证据保留，<code>AGENTS.md</code> 只同步标记块外的当前包名与发布口径。</td></tr>
+<tr><td>依赖环境</td><td>根及三个子环境仍依赖 distribution <code>robomme</code>，路径不变、不升级依赖；必要时刷新 editable 安装并检查来源。pyproject／uv.lock 原则上保留，只有实际锁校验要求时才改对应 lock。</td></tr>
+<tr><td>子模块锁定</td><td><code>third_party/robomme_benchmark</code> 和 BENCH_LOCK 先锁 v1.1，再锁已发布 v1.2 的完整提交 SHA；两次都在现有 dev 提交并 push，评估仓公开 main 不同步。</td></tr>
+</table>
+<p class="muted">上面是改动范围导读；第二部分列出具体文件与执行顺序。历史留档、冻结快照和明确的旧版对拍侧不批量改名，不改数据、权重、任务规模或运行预算。</p>
 <h1 id="technical">第二部分（技术细节，供 agent 追踪）</h1>
 <h2>〇、基线、授权与不变项</h2>
 <p>远端已核：benchmark main 与 <code>v1.1-ood^{commit}</code> 均为 <code>51e05feb05c61b9a5a25cef3ba189ad625f2cd83</code>，尚无 v1.2 标签。本次读取的 eval 代码锚点为 <code>3596622ea4ff289a2759002c80c1ffc4c4df3a9c</code>，现 gitlink 为 <code>a5efb992e769b7011281a1d31739b76d8868602a</code>。实施前复核；main 若已前进或 v1.2 已存在，不覆盖、不自行换基线。</p>
