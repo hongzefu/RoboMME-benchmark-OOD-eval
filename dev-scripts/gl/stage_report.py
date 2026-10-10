@@ -48,6 +48,16 @@ def relocated_path(root, stored):
 
 def bind_trace(raw, row, checker):
     """按 episode._classify 归一化终态；完整绑定真实 trace 的身份契约。"""
+    meta = object_json(raw / 'meta.json')
+    recorded = meta.get('identity')
+    if not isinstance(recorded, dict):
+        raise ValueError('录制器 meta.identity 缺失')
+    for key in ('dataset', 'task', 'tier', 'seed', 'candidate', 'spec_sha256', 'source_episode',
+                'key', 'attempt', 'policy_seed', 'episode', 'max_steps', 'strict_cap'):
+        if key not in recorded or recorded[key] != row[key] or type(recorded[key]) is not type(row[key]):
+            raise ValueError(f'录制器 meta.identity 不符：{key}')
+    if type(recorded.get('builder_episode')) is not int or recorded['builder_episode'] != row['episode']:
+        raise ValueError('录制器 meta.identity builder 局号不符')
     trace = checker.read_rows(raw / 'trace.jsonl')
     if not trace or not all(isinstance(v, dict) for v in trace) or trace[0].get('kind') != 'header' or trace[-1].get('kind') != 'end':
         raise ValueError('trace 不完整')

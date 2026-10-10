@@ -169,13 +169,14 @@ def recovery_fixture(root):
     raw = root / 'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'
     raw.mkdir(parents=True)
     row = {k: v for k, v in ident.items() if k != 'builder_episode'}
-    row.update(model='pp', policy_seed=7, attempt=1, status='success', task_success=1)
+    row.update(model='pp', policy_seed=7, attempt=1, status='success', task_success=1, max_steps=1800, strict_cap=True)
     (raw / 'result.json').write_text(json.dumps(row))
     trace_ident = {**ident, 'attempt': 1, 'policy_seed': 7}
     (raw / 'trace.jsonl').write_text(json.dumps({'kind': 'header', 'identity': trace_ident, 'policy_seed': 7}) + '\n' +
                                     json.dumps({'kind': 'end', 'status': 'success', 'frames_recorded': 2, 'policy_seed': 7}) + '\n')
     for name in ('arrays.npz', 'front.mkv', 'wrist.mkv', 'frames-front.jsonl', 'frames-wrist.jsonl', 'meta.json'):
         (raw / name).write_bytes(b'fixture')
+    (raw / 'meta.json').write_text(json.dumps({'identity': {**row, 'builder_episode': row['episode']}}))
     rec = raw / 'recovered-video'
     rec.mkdir()
     video = rec / 'VideoUnmask_ep0_success_goal_xhard1.mp4'
@@ -231,6 +232,7 @@ def test_standard_media_white_list(tmp_path, monkeypatch, media_status):
         trace_identity = {**ident, 'attempt': 1, 'policy_seed': 7}
         (raw_path.parent / 'trace.jsonl').write_text(json.dumps({'kind': 'header', 'identity': trace_identity, 'policy_seed': 7}) + '\n' +
                                                   json.dumps({'kind': 'end', 'status': 'fail', 'policy_seed': 7}) + '\n')
+        (raw_path.parent / 'meta.json').write_text(json.dumps({'identity': {**json.loads(raw_path.read_text()), 'builder_episode': 0}}))
         write_episode(tmp_path, model, other)
     calls = []
     def verify(raw, run_dir, ff, **kwargs):
@@ -324,3 +326,36 @@ def test_recovery_updated_fingerprints_do_not_override_identity(tmp_path, monkey
     (raw / 'recovered-video/recovery.json').write_text(json.dumps(proof))
     with pytest.raises(ValueError):
         report.verify_recovery(raw, tmp_path, row, 'fake', checker)
+
+
+@pytest.mark.parametrize('damage', ['candidate', 'spec_sha256', 'attempt', 'seed', 'episode', 'missing'])
+def test_meta_recorded_identity_cannot_be_resealed(tmp_path, monkeypatch, damage):
+    raw, row, checker, _ = recovery_fixture(tmp_path)
+    monkeypatch.setattr(checker, 'decoded_frames', lambda ff, path: 2)
+    meta = report.object_json(raw / 'meta.json')
+    if damage == 'missing':
+        del meta['identity']
+    else:
+        meta['identity'][damage] = 'b' * 64 if damage == 'spec_sha256' else 999
+    (raw / 'meta.json').write_text(json.dumps(meta))
+    proof = report.object_json(raw / 'recovered-video/recovery.json')
+    render = report.object_json(raw / 'recovered-video/render.json')
+    fp = {'size': (raw / 'meta.json').stat().st_size, 'sha256': checker.sha256_file(raw / 'meta.json')}
+    render['source_media']['index']['meta.json'] = fp
+    proof['render'] = render
+    for stored in proof['original_files']:
+        if stored.endswith('/meta.json'):
+            proof['original_files'][stored] = {'bytes': fp['size'], 'sha256': fp['sha256']}
+    (raw / 'recovered-video/render.json').write_text(json.dumps(render))
+    (raw / 'recovered-video/recovery.json').write_text(json.dumps(proof))
+    with pytest.raises(ValueError, match='meta.identity'):
+        report.verify_recovery(raw, tmp_path, row, 'fake', checker)
+
+
+def test_legacy_trace_without_spec_uses_recorded_meta(tmp_path):
+    raw, row, checker, _ = recovery_fixture(tmp_path)
+    rows = checker.read_rows(raw / 'trace.jsonl')
+    del rows[0]['identity']['candidate']
+    del rows[0]['identity']['spec_sha256']
+    (raw / 'trace.jsonl').write_text(''.join(json.dumps(v) + '\n' for v in rows))
+    assert report.bind_trace(raw, row, checker)[2] == 'success'
