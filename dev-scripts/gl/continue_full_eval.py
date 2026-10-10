@@ -7,8 +7,19 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from select_stage_identities import read_rows
+
+ROOT = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010')
+MODELS = {'perceptual-framesamp-modul': 'perceptual-framesamp-modul', 'smvla': 'smvla',
+          'pp': 'pp', 'oracle': 'groundsg-ground-sg-oracle',
+          'qwen': 'groundsg-ground-sg-qwenvl', 'memer': 'groundsg-ground-sg-memer'}
+SEEDS = dict(A=7, B=7, C=0, D=42)
+CAPS = {'A': (4680, 9360, 420, 420, 426), 'B': (41580, 83160, 3780, 3780, 3780),
+        'C': (46200, 92400, 4200, 4200, 4200), 'D': (46200, 92400, 4200, 4200, 4200)}
 
 
 def read(path):
@@ -23,12 +34,26 @@ class Controller:
     def __init__(self, config, command=run):
         self.c, self.command = config, command
         self.root = Path(config['controller_root'])
+        if self.root != ROOT / 'controller' or Path(config['carrier']) != ROOT / 'run-model-r2.sh':
+            raise ValueError('控制器或载体不属于本轮固定路径')
+        if config['models'] != MODELS or set(config['priority']) != set(MODELS) or len(config['priority']) != 6:
+            raise ValueError('模型必须为已批准六项且优先队列无重复')
+        if set(config['stages']) != set('ABCD'):
+            raise ValueError('阶段必须恰为 A/B/C/D')
+        for stage, spec in config['stages'].items():
+            if (type(spec['seed']) is not int or spec['seed'] != SEEDS[stage]
+                    or Path(spec['identities']) != ROOT / 'identities' / f'stage-{stage}.jsonl'
+                    or Path(spec['out']) != ROOT / f'seed{SEEDS[stage]}'
+                    or Path(spec['budget']) != ROOT / 'budget' / f'stage-{stage}.jsonl'
+                    or tuple(spec['caps']) != CAPS[stage]):
+                raise ValueError('阶段身份、种子、产物或预算与固定载体不符')
         self.root.mkdir(parents=True, exist_ok=True)
         self.path = self.root / 'state.json'
         digest = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
         self.state = read(self.path) if self.path.exists() else {
             'config_sha256': digest,
-            'stage': 'A', 'seats': config['seats'], 'serial': 0, 'done': False,
+            'stage': 'A', 'seats': json.loads(json.dumps(config['seats'])), 'serial': 0, 'done': False,
+            'expired_jobs': [],
             'missing': 0, 'media_failed': 0, 'report_failed': 0}
         if self.state['config_sha256'] != digest:
             raise ValueError('配置指纹改变，禁止接手')
@@ -36,6 +61,75 @@ class Controller:
             raise ValueError('仅允许主会话指定的四席')
         if {s['slot'] for s in self.state['seats']} != set(range(4)):
             raise ValueError('席位编号必须互异且为 0～3')
+        if len({str(s['job']) for s in self.state['seats']}) != 4:
+            raise ValueError('四席作业编号重复')
+        for seat in self.state['seats']:
+            if not str(seat['job']).isdigit():
+                raise ValueError('非法作业编号')
+            if seat.get('session'):
+                self.validate_session(seat)
+
+    def validate_session(self, seat):
+        name = seat['session']
+        initial = {s.get('session'): s for s in self.c['seats'] if s.get('session')}
+        generated = re.fullmatch(r'fe-controller-[ABCD]-(?:' + '|'.join(MODELS) + r')-[0-3]-\d+', name)
+        if name not in initial and not generated:
+            raise ValueError('会话不在主会话接手清单中')
+        if name in initial and (seat['log'] != initial[name]['log'] or seat['model'] != initial[name]['model']):
+            raise ValueError('接手会话与原清单不符')
+        if not Path(seat['log']).resolve().is_relative_to(ROOT.resolve()):
+            raise ValueError('会话日志不属于本轮路径')
+        if seat['model'] not in MODELS or seat['stage'] not in SEEDS:
+            raise ValueError('会话模型或阶段不符')
+
+    def job_state(self, seat):
+        active = self.active_state(seat)
+        if active:
+            return active
+        states = [x.strip().split('|')[0] for x in self.command(
+            ['sacct', '-n', '-X', '-j', str(seat['job']), '-o', 'State', '-P']).stdout.splitlines() if x.strip()]
+        if states and all(x == 'TIMEOUT' for x in states):
+            return 'EXPIRED'
+        raise ValueError('占位作业消失但未确认 TIMEOUT')
+
+    def active_state(self, seat):
+        result = self.command(['squeue', '-h', '-j', str(seat['job']), '-o', '%T'], check=False)
+        if result.returncode != 0:
+            if (result.returncode == 1 and not result.stdout.strip()
+                    and re.fullmatch(r'(?:squeue: error: )?Invalid job id specified\s*', getattr(result, 'stderr', ''))):
+                return ''
+            raise ValueError('squeue 查询失败，禁止推断到期')
+        value = result.stdout.strip()
+        if '\n' in value:
+            raise ValueError('squeue 返回多个作业状态')
+        return value
+
+    def env_build_settled(self, seat, log):
+        key = seat['onlykey']
+        matches = re.findall(r'RUN_BLOCKED reason=env_build .*key=' + re.escape(key)
+                             + r' attempt=(\d+) settled=1', log)
+        if not matches:
+            raise ValueError('退出码 3 缺少环境创建结算日志')
+        attempt = int(matches[-1])
+        if attempt >= 20:
+            raise ValueError('身份达到二十次尝试上限')
+        stage = seat['stage']
+        spec = self.c['stages'][stage]
+        label = MODELS[seat['model']]
+        ledger_path = Path(spec['out']) / 'seats' / label / f"seed{spec['seed']}" / seat['seat_name'] / f'{label}.ledger.jsonl'
+        records = [json.loads(x) for x in ledger_path.read_text().splitlines() if x.strip()]
+        starts = [r for r in records if r.get('kind') == 'attempt_start' and r.get('key') == key]
+        if not starts or starts[-1]['attempt_no'] != attempt:
+            raise ValueError('环境故障不是该身份最后一次尝试')
+        start = starts[-1]
+        ends = [r for r in records if r.get('kind') == 'attempt_end' and r.get('attempt_id') == start['attempt_id']]
+        if not ends or not (ends[-1]['infra'] is True and ends[-1]['infra_reason'] == 'env_build'
+                            and ends[-1]['status'] == 'error' and ends[-1]['budget_exhausted'] is False):
+            raise ValueError('环境故障本地账本未结算')
+        budget = [json.loads(x) for x in Path(spec['budget']).read_text().splitlines() if x.strip()]
+        commits = [r for r in budget if r.get('kind') == 'commit' and r.get('rid') == start['budget_rid']]
+        if not commits or not (commits[-1]['infra'] is True and commits[-1]['status'] == 'error'):
+            raise ValueError('环境故障共享预算未结算')
 
     def save(self):
         tmp = self.path.with_suffix('.tmp')
@@ -44,6 +138,9 @@ class Controller:
             f.flush()
             os.fsync(f.fileno())
         tmp.replace(self.path)
+        expired_tmp = self.root / 'expired-jobs.tmp'
+        expired_tmp.write_text('\n'.join(self.state['expired_jobs']) + '\n')
+        expired_tmp.replace(self.root / 'expired-jobs.txt')
 
     def event(self, kind, **fields):
         with (self.root / 'events.jsonl').open('a') as f:
@@ -58,7 +155,7 @@ class Controller:
 
     def remaining(self, stage, model):
         spec = self.c['stages'][stage]
-        rows = [json.loads(x) for x in Path(spec['identities']).read_text().splitlines() if x.strip()]
+        rows = read_rows(spec['identities'])
         queue = Path(spec['out']) / 'queue' / self.c['models'][model] / f"seed{spec['seed']}"
         missing = []
         for row in rows:
@@ -84,7 +181,11 @@ class Controller:
                     or data['model'] != expected or data['infra'] is not False
                     or data['run_blocked'] is not False or data['budget_exhausted'] is not False):
                 raise ValueError('模型或基础设施终态不符')
-            if (accepted['key'] != row['key'] or data['key'] != row['key']
+            if label.startswith('groundsg-') and data['policy_variant'] != label.removeprefix('groundsg-'):
+                raise ValueError('GroundSG 变体不符')
+            if (accepted['dataset'] != 'ood' or accepted['key'] != row['key'] or data['key'] != row['key']
+                    or type(data['attempt']) is not int or not 1 <= data['attempt'] <= 20
+                    or type(data['task_success']) is not int or data['task_success'] != int(data['status'] == 'success')
                     or accepted['attempt'] != data['attempt']
                     or accepted['status'] != data['status']
                     or data['status'] not in ('success', 'fail', 'timeout', 'error')):
@@ -93,12 +194,8 @@ class Controller:
 
     def replace_expired(self, seat):
         job = str(seat['job'])
-        active = self.command(['squeue', '-h', '-j', job, '-o', '%T']).stdout.strip()
-        if active:
+        if self.job_state(seat) != 'EXPIRED':
             return False
-        states = self.command(['sacct', '-n', '-X', '-j', job, '-o', 'State', '-P']).stdout.splitlines()
-        if not states or any(x.strip().split('|')[0] != 'TIMEOUT' for x in states if x.strip()):
-            raise ValueError('作业未确认到期，不申请接替')
         # 提交意图先持久化；回执不明或崩溃后绝不重复提交。
         if seat.get('submission_pending'):
             raise ValueError('上次提交状态不明，交主会话核查')
@@ -111,7 +208,11 @@ class Controller:
         if not re.fullmatch(r'[0-9]+(?:;[\w.-]+)?', value):
             raise ValueError('sbatch 回执不明，禁止重试')
         seat['job'] = value.split(';')[0]
+        if sum(str(s['job']) == seat['job'] for s in self.state['seats']) != 1:
+            raise ValueError('新作业回执与已登记席位重复')
         seat['submission_pending'] = False
+        if job not in self.state['expired_jobs']:
+            self.state['expired_jobs'].append(job)
         self.event('hold_replaced', old_job=job, job=seat['job'])
         return True
 
@@ -123,10 +224,11 @@ class Controller:
                 f"controller-{seat['slot']}-{self.state['serial']}", 'formal', str(seat['slot'])]
         if key:
             argv.append(key)
-        body = 'set -o pipefail; PYTHONUNBUFFERED=1 ' + shlex.join(argv)
+        body = 'set -o pipefail; PYTHONUNBUFFERED=1 SGEVAL_EXPIRED_JOBS=' + shlex.quote(str(self.root / 'expired-jobs.txt')) + ' ' + shlex.join(argv)
         body += ' 2>&1 | tee ' + shlex.quote(str(log)) + '; echo "EXIT_CODE=$?" >> ' + shlex.quote(str(log))
         # 起跑意图先保存；重启只接手，不重复创建。
-        seat.update(session=name, log=str(log), model=model, stage=stage, onlykey=key, pending=True)
+        seat.update(session=name, log=str(log), model=model, stage=stage, onlykey=key,
+                    seat_name=argv[5], pending=True)
         self.event('launch_intent', argv=argv, session=name, log=str(log))
         self.command(['tmux', 'new-session', '-d', '-s', name, 'bash -c ' + shlex.quote(body)])
         seat['pending'] = False
@@ -147,10 +249,13 @@ class Controller:
         else:
             if output.exists():
                 raise ValueError('报告已存在但阶段未结算，交主会话核查')
-            seat = next((s for s in self.state['seats'] if self.command(
-                ['squeue', '-h', '-j', str(s['job']), '-o', '%T']).stdout.strip() == 'RUNNING'), None)
+            seat = next((s for s in self.state['seats'] if self.active_state(s) == 'RUNNING'), None)
             if not seat:
-                raise ValueError('没有可执行报告的 RUNNING 占位作业')
+                for candidate in self.state['seats']:
+                    if self.job_state(candidate) == 'EXPIRED':
+                        self.replace_expired(candidate)
+                self.event('report_wait_hold', stage=stage)
+                return False
             name = 'fe-controller-report-' + stage
             log = self.root / (name + '.log')
             argv = ['srun', '--jobid=' + str(seat['job']), '--overlap', '--exact', '--ntasks=1',
@@ -165,13 +270,33 @@ class Controller:
             self.command(['tmux', 'new-session', '-d', '-s', name, 'bash -c ' + shlex.quote(body)])
             return False
         report = read(output)
+        identities = read_rows(spec['identities'])
+        labels = set(MODELS.values())
+        if report['policy_seed'] != spec['seed']:
+            raise ValueError('报告模型种子不符')
+        for field in ('coverage', 'cap'):
+            if len(report[field]) != 6 or {r['model'] for r in report[field]} != labels:
+                raise ValueError('报告模型集合不完整：' + field)
+        for row in report['coverage']:
+            if (any(type(row[k]) is not int for k in ('expected', 'accepted', 'missing', 'invalid', 'no_frame_error'))
+                    or row['expected'] != len(identities) or row['accepted'] != len(identities)
+                    or row['missing'] != 0 or row['invalid'] != 0
+                    or type(row['no_frame_error']) is not int):
+                raise ValueError('报告覆盖计数不完整')
+        if any(r['cap_mismatch'] != 0 or r['exec_over_cap'] != 0 for r in report['cap']):
+            raise ValueError('报告步数判据失败')
+        expected_media = {(label, r['key']) for label in labels for r in identities}
+        actual_media = [(r['model'], r['key']) for r in report['media']]
+        if (len(actual_media) != len(expected_media) or set(actual_media) != expected_media
+                or any(r['status'] not in ('pass', 'no_frame_error') for r in report['media'])):
+            raise ValueError('报告媒体身份或完整性不符')
         required = {'EVAL_COVERAGE', 'STAGE_MODELS', 'EVAL_REPORT', 'STAGE_TIMING',
                     'OFFICIAL_MEDIA_INPUTS', 'OFFICIAL_MEDIA'}
         names = {line.split('=', 1)[0] for line in report['verdicts']}
         if (report['stage'] != stage or report['ok'] is not True or report['errors'] != []
                 or not required <= names
                 or not report['verdicts'] or any('=FAIL' in x for x in report['verdicts'])
-                or not all('=PASS' in x for x in report['verdicts'])):
+                or not all(re.match(r'^[A-Z_]+=PASS(?: |$)', x) for x in report['verdicts'])):
             raise ValueError('阶段报告契约失败')
         for line in report['verdicts']:
             print(line, flush=True)
@@ -185,19 +310,28 @@ class Controller:
         busy = set()
         for seat in self.state['seats']:
             if seat.get('session'):
+                self.validate_session(seat)
                 if self.alive(seat['session']):
                     busy.add(seat['model'])
                     continue
                 log = Path(seat['log']).read_text()
                 codes = re.findall(r'^EXIT_CODE=(\d+)$', log, re.M)
+                if self.job_state(seat) == 'EXPIRED':
+                    self.event('worker_expired', session=seat['session'], job=seat['job'],
+                               exit_code=int(codes[-1]) if codes else None)
+                    seat.pop('session')
+                    if seat['model'] == 'smvla' and seat.get('onlykey') in remaining['smvla']:
+                        seat['resume_key'] = seat['onlykey']
+                    self.replace_expired(seat)
+                    continue
                 if not codes:
                     raise ValueError('席位退出但缺少退出码，停止受影响调度')
                 code = int(codes[-1])
                 if code == 3 and seat['model'] == 'smvla':
-                    if not re.search(r'RUN_BLOCKED reason=env_build .*key=' + re.escape(str(seat.get('onlykey'))) + r' attempt=\d+ settled=1', log):
-                        raise ValueError('退出码 3 缺少环境创建故障证据')
                     if not seat.get('onlykey'):
                         raise ValueError('SMVLA 环境失败缺少独立身份')
+                    self.env_build_settled(seat, log)
+                    seat['resume_key'] = seat['onlykey']
                     key = seat['onlykey']
                     count = seat.setdefault('recoveries', {}).get(key, 0) + 1
                     seat['recoveries'][key] = count
@@ -221,7 +355,7 @@ class Controller:
                 continue
             if seat.get('submission_pending'):
                 raise ValueError('占位提交待核查')
-            active = self.command(['squeue', '-h', '-j', str(seat['job']), '-o', '%T']).stdout.strip()
+            active = self.active_state(seat)
             if active != 'RUNNING':
                 if not active:
                     self.replace_expired(seat)
@@ -233,8 +367,16 @@ class Controller:
             if not available:
                 continue
             model = available[0]
-            key = remaining[model][0] if model == 'smvla' else None
+            if seat.get('resume_key'):
+                if seat['resume_key'] not in remaining['smvla']:
+                    seat.pop('resume_key')
+                elif 'smvla' in busy:
+                    continue
+                else:
+                    model = 'smvla'
+            key = (seat.get('resume_key') or remaining[model][0]) if model == 'smvla' else None
             self.launch(seat, stage, model, key)
+            seat.pop('resume_key', None)
             busy.add(model)
 
 
