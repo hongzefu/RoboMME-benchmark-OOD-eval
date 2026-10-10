@@ -633,6 +633,10 @@ def sgeval_main(args) -> int:
 
 RAW_SCHEMA = "raw-ood-v1"
 RAW_CONTEXT = ("run", "run_name", "exec_commit", "config_sha256", "controller_job_id")
+RAW_MODELS = {"qwenvl": ("groundsg", "groundsg-ground-sg-qwenvl"),
+              "oracle": ("groundsg", "groundsg-ground-sg-oracle"),
+              "framesamp": ("perceptual-framesamp-modul", "perceptual-framesamp-modul"),
+              "smvla": ("smvla", "smvla"), "pp": ("pp", "pp")}
 
 
 def raw_atomic(path: Path, value: dict) -> None:
@@ -691,6 +695,12 @@ def raw_validate_publication(row: dict, context: dict) -> None:
     raw_relative(row["relative_dir"])
     if not all(isinstance(row[k], str) and row[k] for k in ("model", "shard_id", "identity_key")):
         raise ValueError("发布项身份为空")
+    if row["model"] not in RAW_MODELS or not row["identity_key"].startswith(f"{row['model']}:ood:"):
+        raise ValueError("发布模型与完整身份前缀不符")
+    relative = raw_relative(row["relative_dir"])
+    prefix = ("rollouts", RAW_MODELS[row["model"]][1], "ood", "seed7", "raw")
+    if relative.parts[:-1] != prefix:
+        raise ValueError("发布模型与 OOD 局目录不符")
     if not isinstance(row["files"], dict) or not row["files"]:
         raise ValueError("发布项文件集合为空")
     for name, info in row["files"].items():
@@ -759,6 +769,52 @@ def raw_verify_media(directory: Path) -> dict:
             if any(actual[k] != expected[k] for k in ("dtype", "shape", "sha256")):
                 raise ValueError("动作数组与轨迹不符")
     result = json.loads((directory / "result.json").read_text())
+    summary = json.loads((raw / "summary.json").read_text())
+    if result["infra"] is not False or result["recorder_verify"] != "PASS" or summary["RECORDER_VERIFY"] != "PASS":
+        raise ValueError("基础设施或录像器验收失败")
+    if any(type(summary[k]) is not int or summary[k] != 0 for k in ("decode_mismatch", "dropped", "reordered", "discarded_after_writer_error")) or summary["errors"] != []:
+        raise ValueError("录像汇总存在失败")
+    demo = next(r for r in rows if r["kind"] == "demo")
+    steps = [r for r in rows if r["kind"] == "step"]
+    events = [json.loads(line) for line in (raw / "events.jsonl").read_text().splitlines()]
+    resets = [r for r in events if r["kind"] == "env_reset"]
+    event_steps = [r for r in events if r["kind"] == "env_step"]
+    if len(resets) != 1 or [r["step"] for r in event_steps] != list(range(len(steps))):
+        raise ValueError("录像事件 reset 或 step 计数不符")
+    if demo["frames"] != result["demo_frames"] + 1 or resets[0]["frames"] != demo["frames"]:
+        raise ValueError("演示与结果录像帧数不符")
+    for stream in ("front", "wrist"):
+        if len(demo[f"{stream}_sha256"]) != demo["frames"]:
+            raise ValueError("演示图像哈希数量不符")
+        if len(resets[0][stream]) != demo["frames"] or any(not isinstance(h, str) or not re.fullmatch(r"[a-f0-9]{64}", h) for h in demo[f"{stream}_sha256"]):
+            raise ValueError("演示图像哈希缺失")
+        fingerprints = list(zip(resets[0][stream], demo[f"{stream}_sha256"]))
+        logical = [("reset", digest) for digest in resets[0][stream]]
+        for step, event in zip(steps, event_steps):
+            observed = step.get("observed", True)
+            if type(observed) is not bool:
+                raise ValueError("轨迹观察字段非法")
+            if observed:
+                if not re.fullmatch(r"[a-f0-9]{64}", step[f"{stream}_sha256"]) or not event[stream]:
+                    raise ValueError("步骤图像哈希缺失")
+                logical.extend((f"step{event['step']}", digest) for digest in event[stream])
+                fingerprints.append((event[stream][-1], step[f"{stream}_sha256"]))
+            elif step[f"{stream}_sha256"] is not None or event[stream] is not None:
+                raise ValueError("未观察步骤却存在图像")
+        index = frame_indices[stream]
+        # events 与索引均为原像素字节哈希；trace 图像哈希包含 dtype/shape 前缀，不能直接等同。
+        if [(r["tag"], r["sha256"]) for r in index] != logical:
+            raise ValueError("帧索引与 reset/step 图像事件不符")
+        # 两种哈希算法不可直接求等；同视角重复帧的等价分组应一致。
+        pixel_to_trace, trace_to_pixel = {}, {}
+        for pixel_hash, trace_hash in fingerprints:
+            if pixel_to_trace.setdefault(pixel_hash, trace_hash) != trace_hash or trace_to_pixel.setdefault(trace_hash, pixel_hash) != pixel_hash:
+                raise ValueError("轨迹与录像图像哈希重复关系不符")
+        stats = summary["streams"][stream]
+        if stats["frames"] != len(index) or stats["encoded"] != decoded[stream] or stats["decoded"] != decoded[stream] or stats["mismatch"] != 0 or stats["error"] is not None or stats["timestamps_ok"] is not True:
+            raise ValueError("录像视角汇总与实际内容不符")
+    if summary["frames"] != sum(len(v) for v in frame_indices.values()) or summary["encoded_frames"] != sum(decoded.values()):
+        raise ValueError("录像汇总帧总数不符")
     for key in ("dataset", "task", "tier", "seed", "key"):
         if result[key] != rows[0]["identity"][key]:
             raise ValueError("轨迹与结果身份不符")
@@ -767,6 +823,17 @@ def raw_verify_media(directory: Path) -> dict:
     if result["exec_steps"] != rows[-1]["exec_steps"] or result["error_kind"] is not None:
         raise ValueError("结果步骤或基础设施状态不符")
     return decoded
+
+
+def raw_verify_identity(row: dict, target: Path) -> None:
+    """发布身份、策略标签与路径必须同时绑定，不能只比较局键后缀。"""
+    result = json.loads((target / "result.json").read_text())
+    if row["model"] not in RAW_MODELS:
+        raise ValueError("非本轮模型")
+    model, label = RAW_MODELS[row["model"]]
+    relative = Path("rollouts") / label / "ood" / "seed7" / "raw" / f"{result['task']}_ep{result['episode']}_{result['tier']}"
+    if not result["key"] or row["identity_key"] != f"{row['model']}:ood:{result['key']}" or result["dataset"] != "ood" or result["model"] != model or result["policy_label"] != label or result["policy_seed"] != 7 or raw_relative(row["relative_dir"]) != relative:
+        raise ValueError("发布项与结果身份不符")
 
 
 def raw_move(row: dict, stage: Path, dest: Path, *, min_free_gib: float = 50) -> dict:
@@ -778,7 +845,8 @@ def raw_move(row: dict, stage: Path, dest: Path, *, min_free_gib: float = 50) ->
             raise ValueError("目录越界")
         if any(p.is_symlink() for p in [path, *path.parents] if p != base.parent):
             raise ValueError("目录链含符号链接")
-    if free_gib(dest) < min_free_gib + sum(v["size"] for v in row["files"].values()) / (1 << 30):
+    reserve = 0 if target.exists() else sum(v["size"] for v in row["files"].values()) / (1 << 30)
+    if free_gib(dest) < min_free_gib + reserve:
         raise ValueError("low_disk")
     if target.exists():
         if raw_tree(target) != row["files"]:
@@ -799,9 +867,7 @@ def raw_move(row: dict, stage: Path, dest: Path, *, min_free_gib: float = 50) ->
             raise ValueError("落地时同名冲突")
         os.rename(incoming, target)
     decoded = raw_verify_media(target)
-    result_identity = json.loads((target / "result.json").read_text())["key"]
-    if not result_identity or not row["identity_key"].endswith(":" + result_identity):
-        raise ValueError("发布项与结果身份不符")
+    raw_verify_identity(row, target)
     # 每个删除再次核对，缺失只在本机完整副本已验证时允许。
     remaining = raw_tree(source)
     if any(name not in row["files"] or info != row["files"][name] for name, info in remaining.items()):
@@ -885,6 +951,7 @@ def raw_main(args) -> int:
                             raise ValueError("已核验发布、回执或本机文件发生变化")
                         continue
                     prior = json.loads(receipt.read_text())
+                    raw_verify_identity(row, target)
                     if any(prior[k] != row[k] for k in row) or prior["result"] != "moved" or prior["trace_checked"] is not True or raw_tree(dest / raw_relative(row["relative_dir"])) != row["files"]:
                         raise ValueError("已有回执内容或本机副本不符")
                     if prior["dest"] != str(dest / raw_relative(row["relative_dir"])) or prior["bytes"] != sum(v["size"] for v in row["files"].values()) or set(prior["decoded"]) != {"front", "wrist"} or any(type(n) is not int or n <= 0 for n in prior["decoded"].values()):
@@ -907,6 +974,7 @@ def raw_main(args) -> int:
                     raise ValueError("最终发布或回执集合不完整")
                 for path in published.values():
                     row = json.loads(path.read_text())
+                    raw_verify_identity(row, dest / raw_relative(row["relative_dir"]))
                     if raw_tree(dest / raw_relative(row["relative_dir"])) != row["files"]:
                         raise ValueError("最终本机文件集合或 SHA 不符")
                     raw_verify_media(dest / raw_relative(row["relative_dir"]))

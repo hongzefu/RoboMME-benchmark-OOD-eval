@@ -21,7 +21,7 @@ CONTEXT = {"run": "fixture", "run_name": "fixture", "exec_commit": "a" * 40,
 @pytest.fixture
 def publication(tmp_path):
     stage, dest = tmp_path / "stage", tmp_path / "dest"
-    episode = stage / "rollouts/model/ood/seed7/raw/VideoUnmask_ep0_xhard1"
+    episode = stage / "rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1"
     episode.mkdir(parents=True)
     dest.mkdir()
     # 真 AV1 单帧解码，而非用文件存在代替解码。
@@ -30,16 +30,19 @@ def publication(tmp_path):
     (episode / "wrist.mkv").write_bytes((episode / "front.mkv").read_bytes())
     MOVER.raw_atomic(episode / "meta.json", {"raw_codec": "av1-yuv444p", "level": 0})
     for stream in ("front", "wrist"):
-        (episode / f"frames-{stream}.jsonl").write_text(json.dumps({"idx": 0, "enc": 0, "sha256": "c" * 64}) + "\n")
+        (episode / f"frames-{stream}.jsonl").write_text("\n".join(json.dumps({"idx": i, "enc": 0, "sha256": "c" * 64, "tag": tag}) for i, tag in enumerate(("reset", "step0"))) + "\n")
     action = np.zeros(8, dtype=np.float32)
     np.savez(episode / "arrays.npz", exec_action__00000=action)
     identity = {"dataset": "ood", "task": "VideoUnmask", "tier": "xhard1", "seed": 0, "key": "key"}
-    rows = [{"kind": "header", "schema": "sgeval-trace/1", "identity": identity}, {"kind": "demo"},
-            {"kind": "step", "step": 1, "action": {"dtype": action.dtype.str, "shape": [8], "sha256": hashlib.sha256(action.tobytes()).hexdigest(), "f32hex": action.tobytes().hex()}},
+    rows = [{"kind": "header", "schema": "sgeval-trace/1", "identity": identity}, {"kind": "demo", "frames": 1, "front_sha256": ["d"*64], "wrist_sha256": ["d"*64]},
+            {"kind": "step", "step": 1, "front_sha256": "d"*64, "wrist_sha256": "d"*64, "action": {"dtype": action.dtype.str, "shape": [8], "sha256": hashlib.sha256(action.tobytes()).hexdigest(), "f32hex": action.tobytes().hex()}},
             {"kind": "end", "exec_steps": 1}]
     (episode / "trace.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-    MOVER.raw_atomic(episode / "result.json", {**identity, "task_success": False, "exec_steps": 1, "error_kind": None})
-    row = {"schema": MOVER.RAW_SCHEMA, **CONTEXT, "model": "model", "shard_id": "0", "identity_key": "model:key", "relative_dir": str(episode.relative_to(stage)), "files": MOVER.raw_tree(episode), "delete_files": ["front.mkv", "wrist.mkv", "arrays.npz"]}
+    MOVER.raw_atomic(episode / "result.json", {**identity, "task_success": False, "exec_steps": 1, "error_kind": None, "infra": False, "recorder_verify": "PASS", "demo_frames": 0, "model": "smvla", "policy_label": "smvla", "policy_seed": 7, "episode": 0})
+    events = [{"kind": "env_reset", "frames": 1, "front": ["c"*64], "wrist": ["c"*64]}, {"kind": "env_step", "step": 0, "front": ["c"*64], "wrist": ["c"*64]}]
+    (episode / "events.jsonl").write_text("\n".join(json.dumps(r) for r in events) + "\n")
+    MOVER.raw_atomic(episode / "summary.json", {"RECORDER_VERIFY": "PASS", "frames": 4, "encoded_frames": 2, "decode_mismatch": 0, "dropped": 0, "reordered": 0, "discarded_after_writer_error": 0, "errors": [], "streams": {s: {"frames": 2, "encoded": 1, "decoded": 1, "mismatch": 0, "error": None, "timestamps_ok": True} for s in ("front", "wrist")}})
+    row = {"schema": MOVER.RAW_SCHEMA, **CONTEXT, "model": "smvla", "shard_id": "0", "identity_key": "smvla:ood:key", "relative_dir": str(episode.relative_to(stage)), "files": MOVER.raw_tree(episode), "delete_files": ["front.mkv", "wrist.mkv", "arrays.npz"]}
     return stage, dest, episode, row
 
 
@@ -183,3 +186,49 @@ def test_polling_does_not_rehash_delivered_large_files(publication, monkeypatch)
     assert MOVER.raw_main(args) == 0
     assert len(calls) == 4
     assert len(hashes) == 1  # 三次轮询不重哈希，最后完整核验一次。
+
+
+@pytest.mark.parametrize("field,value", [("infra", True), ("recorder_verify", "FAIL")])
+def test_result_infrastructure_and_recorder_failure(publication, field, value):
+    _, _, source, _ = publication
+    result = json.loads((source / "result.json").read_text())
+    result[field] = value
+    MOVER.raw_atomic(source / "result.json", result)
+    with pytest.raises(ValueError, match="验收失败"):
+        MOVER.raw_verify_media(source)
+
+
+def test_summary_failure_and_both_views_missing_tail(publication):
+    _, _, source, _ = publication
+    summary = json.loads((source / "summary.json").read_text())
+    summary["dropped"] = 1
+    MOVER.raw_atomic(source / "summary.json", summary)
+    with pytest.raises(ValueError, match="汇总存在失败"):
+        MOVER.raw_verify_media(source)
+    summary["dropped"] = 0
+    MOVER.raw_atomic(source / "summary.json", summary)
+    for stream in ("front", "wrist"):
+        path = source / f"frames-{stream}.jsonl"
+        path.write_text(path.read_text().splitlines()[0] + "\n")
+    with pytest.raises(ValueError, match="图像事件不符"):
+        MOVER.raw_verify_media(source)
+
+
+def test_cross_model_same_key_and_wrong_directory_fail(publication):
+    stage, dest, source, row = publication
+    wrong = {**row, "model": "pp", "identity_key": "pp:ood:key"}
+    with pytest.raises(ValueError, match="目录不符"):
+        MOVER.raw_validate_publication(wrong, CONTEXT)
+    with pytest.raises(ValueError, match="身份不符"):
+        MOVER.raw_move(wrong, stage, dest, min_free_gib=0)
+    assert (source / "front.mkv").exists()
+
+
+def test_delete_recovery_needs_only_floor_space(publication, monkeypatch):
+    stage, dest, _, row = publication
+    MOVER.raw_move(row, stage, dest, min_free_gib=0)
+    monkeypatch.setattr(MOVER, "free_gib", lambda _: 50)
+    assert MOVER.raw_move(row, stage, dest)["result"] == "moved"
+    monkeypatch.setattr(MOVER, "free_gib", lambda _: 49.9)
+    with pytest.raises(ValueError, match="low_disk"):
+        MOVER.raw_move(row, stage, dest)
