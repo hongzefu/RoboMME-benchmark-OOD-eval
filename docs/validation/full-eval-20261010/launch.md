@@ -107,3 +107,20 @@ srun --jobid=63431430 --overlap --exact --ntasks=1 --cpus-per-task=4 --gpu_cmode
 补齐两个工具的 `C13-STAGED-EVAL-TOOLS` 契约后，登记改动独立固定提交审查通过，未增加豁免或放宽验收。主检出复验命令 `UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python -m pytest tests/static/test_inventory.py tests/test_select_stage_identities.py tests/test_stage_report.py -q`，退出 0，36 项通过，4.38 秒；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。其余核心短测已在前次整合运行通过；没有声称登记后重跑了全部套件。`git diff --check`、运行载体 `bash -n`、HTML 两个一级标题检查通过。
 
 本机固定运行副本及五个子模块已核实状态为空；mme-vla 的内嵌 benchmark 目录为空。起跑前将固定到本次准备完成的提交，复制至新的 NFS 目录，并核对复制后 HEAD 与字节身份。
+
+## 实际起跑记录（第一批 smoke）
+
+评估代码固定在 `a02a4dad039b326530068977f22a04f4a4a287eb`（1.67）；后续本机留档提交不改变独立执行副本。rsync 退出 0，603156625 字节、约 86 秒。复制后本机对 NFS 路径核对根与五个子模块，六项状态均为空；`EXEC_COPY=PASS head=a02a4dad039b326530068977f22a04f4a4a287eb dirty=0`，原始证据在 [执行副本核验](records/execution-copy.json)。没有在 GL 进行 git 操作。
+
+以下四个 detached tmux 已在 gl-login3 启动，均为本轮清单所有；日期为 2026-10-10，时间按 EDT。运行载体调用格式为 `bash <NFS产物根>/run-model.sh A <模型> <JobID> <席位> smoke <槽号>`，完整展开参数见上节与各日志首行。
+
+| 模型 | JobID／节点 | tmux | 席位／槽号 | 启动时间 | 日志（相对 NFS 产物根） |
+|---|---|---|---|---|---|
+| MemER | 63431430／gl1525 | fe-smoke-memer-63431430 | fe-smoke-memer-01／0 | 00:41:49 | logs/fe-smoke-memer-63431430.log |
+| QwenVL | 63431431／gl1512 | fe-smoke-qwen-63431431 | fe-smoke-qwen-01／1 | 00:42:02 | logs/fe-smoke-qwen-63431431.log |
+| SimpleMemVLA | 63431432／gl1512 | fe-smoke-smvla-63431432 | fe-smoke-smvla-01／2 | 00:42:16 | logs/fe-smoke-smvla-63431432.log |
+| PonderPounce | 63431433／gl1513 | fe-smoke-pp-63431433 | fe-smoke-pp-01／3 | 00:42:21 | logs/fe-smoke-pp-63431433.log |
+
+四条命令各为 1 任务（VideoUnmask）× 1 档（xhard1）× 1 局，不重试。FrameSamp、Oracle 在后两条对应作业完成并核验媒体后启动；合计仍是六模型 × 同一任务档位 × 1 局 = 6 次冒烟轨迹，预占 12 次 reset。当前阶段为服务加载／起跑核验，不能据启动回执称 smoke 已通过。MemER 已见 `RUN_INPUTS=PASS`、`CLIENT_READY ... git=a02a4dad039b dirty=False`、`VARIANT_PAIRING=PASS`、`TOKENIZER_SHA=PASS`、`MME_VLA_PREFLIGHT=PASS`；首局与服务就绪另核对。
+
+主会话保持活动，运行代理流式观察各自日志，主会话负责接续、账本和最终核验。当前未建立后续自动唤醒，不因 tmux 存活宣称无人值守已验证。

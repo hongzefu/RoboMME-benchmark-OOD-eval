@@ -1,0 +1,30 @@
+{
+  "head": "a02a4dad039b326530068977f22a04f4a4a287eb",
+  "checks": [
+    {
+      "path": ".",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/Astra-on-RoboMME",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/PonderPounce",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/SimpleMemVLA",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/mme-vla",
+      "dirty": ""
+    },
+    {
+      "path": "third_party/robomme_benchmark",
+      "dirty": ""
+    }
+  ],
+  "verdict": "EXEC_COPY=PASS head=a02a4dad039b326530068977f22a04f4a4a287eb dirty=0"
+}

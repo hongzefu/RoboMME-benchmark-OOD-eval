@@ -1,0 +1,12 @@
+{
+  "git_commit": "a02a4dad039b326530068977f22a04f4a4a287eb",
+  "root": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010",
+  "launches": [
+    {"model": "memer", "job": "63431430", "seat": "fe-smoke-memer-01", "slot": 0, "tmux": "fe-smoke-memer-63431430", "log": "fe-smoke-memer-63431430.log"},
+    {"model": "qwen", "job": "63431431", "seat": "fe-smoke-qwen-01", "slot": 1, "tmux": "fe-smoke-qwen-63431431", "log": "fe-smoke-qwen-63431431.log"},
+    {"model": "smvla", "job": "63431432", "seat": "fe-smoke-smvla-01", "slot": 2, "tmux": "fe-smoke-smvla-63431432", "log": "fe-smoke-smvla-63431432.log"},
+    {"model": "pp", "job": "63431433", "seat": "fe-smoke-pp-01", "slot": 3, "tmux": "fe-smoke-pp-63431433", "log": "fe-smoke-pp-63431433.log"}
+  ],
+  "next": {"63431432": "perceptual-framesamp-modul", "63431433": "oracle"},
+  "attempts": {"tasks": 1, "tiers": 1, "episodes_per_model": 1, "models": 6, "total": 6, "retries": 0}
+}
