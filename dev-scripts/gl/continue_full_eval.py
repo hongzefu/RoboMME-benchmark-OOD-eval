@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from select_stage_identities import read_rows
+from budget_ledger import BudgetLedger, BudgetState
 
 ROOT = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010')
 REPORT_CODE = Path('/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-code-r3/dev-scripts/gl/stage_report.py')
@@ -155,6 +156,133 @@ class Controller:
         commits = [r for r in budget if r.get('kind') == 'commit' and r.get('rid') == start['budget_rid']]
         if not commits or not (commits[-1]['infra'] is True and commits[-1]['status'] == result['status']):
             raise ValueError('环境故障共享预算未结算')
+
+    def legacy_retry_settled(self, seat, log, missing):
+        """只核实旧两次上限退出；不领取额度，不修复证据，重试仍由原队列原子领取。"""
+        spec = self.c['stages'][seat['stage']]
+        label = MODELS[seat['model']]
+        policy = 'groundsg' if label.startswith('groundsg-') else label
+        route = f"{label}/seed{spec['seed']}/new"
+        rows = read_rows(spec['identities'])
+        if (seat['stage'] != self.state['stage'] or seat['model'] == 'smvla'
+                or seat.get('onlykey') or not missing or 'RUN_BLOCKED ' in log):
+            raise ValueError('旧上限接续范围或缺失身份不符')
+
+        def fields(name):
+            lines = re.findall(r'^' + name + r' (.+)$', log, re.M)
+            if len(lines) != 1:
+                raise ValueError('旧上限日志缺失或重复：' + name)
+            pairs = [word.split('=', 1) for word in lines[0].split()]
+            if any(len(p) != 2 for p in pairs) or len({p[0] for p in pairs}) != len(pairs):
+                raise ValueError('旧上限日志字段损坏：' + name)
+            result = dict(pairs)
+            if (result['policy'] != policy or result['seat'] != seat['seat_name']
+                    or result['total'] != str(len(rows))):
+                raise ValueError('旧上限日志身份不符：' + name)
+            return result
+
+        plan, summary, incomplete = (fields(name) for name in ('RUN_PLAN', 'RUN_SUMMARY', 'RUN_INCOMPLETE'))
+        prefix = incomplete['first'].split(',')
+        if (plan['label'] != label or plan['route'] != route or plan['max_attempts'] != '2'
+                or summary['label'] != label or summary['running_elsewhere'] != '0'
+                or summary['accepted'] != str(len(rows) - len(missing))
+                or summary['missing'] != str(len(missing)) or incomplete['missing'] != str(len(missing))
+                or len(prefix) != min(5, len(missing)) or len(set(prefix)) != len(prefix)
+                or not set(prefix) <= {'ood:' + key for key in missing}):
+            raise ValueError('旧上限日志与实际缺失集合不符')
+        if not log.index('RUN_PLAN ') < log.index('RUN_SUMMARY ') < log.index('RUN_INCOMPLETE '):
+            raise ValueError('旧上限日志顺序不符')
+
+        def records(path):
+            return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+
+        caps = spec['caps']
+        shared = BudgetLedger(spec['budget'], trajectory_cap=caps[0], reset_cap=caps[1],
+                              shared_infra_cap=caps[2], expired_cap=caps[3], planned_first_tries=caps[4])
+        # 只读已有账本；不能调用 state() 在缺 config 时补写证据。
+        with Path(str(spec['budget']) + '.lock').open('r') as lock:
+            fcntl.flock(lock, fcntl.LOCK_SH)
+            budget = BudgetState(records(spec['budget']))
+        if budget.bad_rows or shared._config_diff(budget):
+            raise ValueError('旧上限共享预算损坏或配置不符')
+        queue = Path(spec['out']) / 'queue' / label / f"seed{spec['seed']}"
+        attempts = {}
+        for ident in rows:
+            key = ident['key']
+            if key not in missing:
+                continue
+            claims = sorted((int(p.name.rsplit('.a', 1)[1].removesuffix('.json')), p, read(p))
+                            for p in (queue / 'claims').glob('ood__' + key + '.a*.json'))
+            if (not claims or [n for n, _, _ in claims] != list(range(1, claims[-1][0] + 1))
+                    or any(doc.get('ended') is not True or doc.get('key') != key
+                           or doc.get('dataset') != 'ood' or type(doc.get('attempt')) is not int
+                           or doc['attempt'] != n for n, _, doc in claims)):
+                raise ValueError('旧上限领取缺失或尚未收尾')
+            attempt, claim_path, claim = claims[-1]
+            token = f'{route}|{key}|a{attempt}'
+            if (not 2 <= attempt < 20 or type(claim['attempt']) is not int or claim['attempt'] != attempt
+                    or claim['dataset'] != 'ood' or claim['key'] != key or claim['route'] != route
+                    or claim['token'] != token or claim['end_status'] != 'infra'
+                    or claim['final'] is not False or claim['accepted'] is not False
+                    or not re.fullmatch(r'[A-Za-z0-9._-]+', claim['seat'])):
+                raise ValueError('旧上限领取身份、终态或二十次上限不符')
+            local = records(Path(spec['out']) / 'seats' / label / f"seed{spec['seed']}"
+                            / claim['seat'] / f'{label}.ledger.jsonl')
+            starts = [r for r in local if r.get('kind') == 'attempt_start' and r.get('key') == key]
+            if not starts:
+                raise ValueError('旧上限本地尝试缺失')
+            start = starts[-1]
+            if (start['attempt_no'] != attempt or start['budget_rid'] != claim['rid']
+                    or start['token'] != token or start['route'] != route
+                    or start['seat'] != claim['seat'] or start['policy'] != policy
+                    or Path(start['claim']) != claim_path
+                    or start['identity'] != {k: v for k, v in ident.items() if k != 'episode'}):
+                raise ValueError('旧上限本地尝试与领取不符')
+            stored = Path(start['result_path'])
+            if not stored.resolve().is_relative_to((Path(spec['out']) / 'rollouts').resolve()):
+                raise ValueError('旧上限原结果路径越界')
+            result = read(stored)
+            if any(result[k] != ident[k] or type(result[k]) is not type(ident[k])
+                   for k in ident if k != 'builder_episode'):
+                raise ValueError('旧上限原结果完整身份不符')
+            if (type(result['attempt']) is not int or result['attempt'] != attempt
+                    or result['policy_seed'] != spec['seed'] or result['policy_label'] != label
+                    or result['model'] != policy or result['infra'] is not True
+                    or not isinstance(result['infra_reason'], str) or not result['infra_reason']
+                    or result['budget_exhausted'] is not False or result['run_blocked'] is not False
+                    or result['status'] not in ('fail', 'error')
+                    or type(result['task_success']) is not int or result['task_success'] != 0):
+                raise ValueError('旧上限缺失身份不是完整基础设施结果')
+            ends = [r for r in local if r.get('kind') == 'attempt_end' and r.get('attempt_id') == start['attempt_id']]
+            if (len(ends) != 1 or any(r.get('kind') == 'accept' and r.get('key') == key for r in local)
+                    or not (ends[0]['key'] == key and ends[0]['attempt_no'] == attempt
+                            and ends[0]['status'] == 'error' and ends[0]['infra'] is True
+                            and ends[0]['infra_reason'] == result['infra_reason']
+                            and ends[0]['budget_exhausted'] is False and not ends[0].get('run_blocked'))):
+                raise ValueError('旧上限本地结束未结算或已有正常终态')
+            reserve = budget.reserves.get(claim['rid'], {})
+            commit = budget.commits.get(claim['rid'], {})
+            retries = [r for r in budget.retries if r.get('token') == token]
+            if (reserve.get('route') != route or reserve.get('key') != key or reserve.get('token') != token
+                    or reserve.get('attempt_no') != attempt or reserve.get('dataset') != 'ood'
+                    or reserve.get('kind_of_try') != 'recovery' or len(retries) != 1
+                    or retries[0].get('route') != route or retries[0].get('key') != key
+                    or retries[0].get('interrupt') not in ('infra', 'expired')
+                    or claim['rid'] in budget.releases or commit.get('infra') is not True
+                    or commit.get('status') != result['status']
+                    or any(r.get('route') == route and r.get('key') == key and rid not in budget.commits
+                           and rid not in budget.releases for rid, r in budget.reserves.items())):
+                raise ValueError('旧上限共享预约未结算或身份不符')
+            if budget.retries_for(route, key) >= 19:
+                raise ValueError('旧上限身份重试预算耗尽')
+            attempts[key] = attempt
+        needed = len(missing)
+        pending = max(0, caps[4] - budget.first_started)
+        if (budget.trajectories + needed + pending > caps[0] or budget.resets + 2 * needed > caps[1]
+                or budget.retries_of('infra') + needed > caps[2]
+                or max(budget.recovery_used, len(budget.retries)) + needed > caps[0] - caps[4]):
+            raise ValueError('旧上限接续共享预算耗尽')
+        return attempts
 
     def save(self):
         tmp = self.path.with_suffix('.tmp')
@@ -360,6 +488,11 @@ class Controller:
                     scope = f"{seat['model']}|{self.c['stages'][seat['stage']]['seed']}|{seat['onlykey']}"
                     # 仅诊断计数；是否可恢复由真实 attempt_no < 20 决定，不新增预算。
                     seat.setdefault('recoveries', {})[scope] = seat.get('recoveries', {}).get(scope, 0) + 1
+                elif code == 6:
+                    attempts = self.legacy_retry_settled(seat, log, remaining[seat['model']])
+                    self.event('legacy_retry_resume', slot=seat['slot'], model=seat['model'],
+                               stage=seat['stage'], session=seat['session'], attempts=attempts,
+                               max_attempts=20)
                 elif code != 0:
                     raise ValueError(f'席位失败退出码 {code}，交主会话恢复')
                 seat.pop('session')
