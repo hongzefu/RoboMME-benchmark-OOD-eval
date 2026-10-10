@@ -314,7 +314,7 @@ def make_context(variant: str, *, host: str, port: int, max_steps: int, policy_s
 
     def ws_factory(h, p):
         ep = ctx["episode"]
-        client = groundsg.TracingClient(ctx["client_factory"](h, p, ep), ep["tap"])
+        client = groundsg.TracingClient(ctx["client_factory"](h, p, ep), ep["tap"], timer=ep["chunk_timer"], timing=ep["timing"])
         ep["clients"].append(client)
         return client
 
