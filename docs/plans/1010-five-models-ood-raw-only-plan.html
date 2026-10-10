@@ -5,11 +5,11 @@
 :root{--ink:#182c3a;--blue:#165a9d;--line:#ccd8e1;--soft:#edf4fa;--warn:#fff2d9}*{box-sizing:border-box}body{margin:0;background:#f5f7fa;color:var(--ink);font:16px/1.75 system-ui,"Noto Sans CJK SC","Microsoft YaHei",sans-serif}main{max-width:1180px;margin:auto;background:white;padding:36px}h1{font-size:28px;border-bottom:3px solid var(--blue);padding-bottom:10px;margin-top:46px}h2{font-size:22px;margin-top:30px}h3{font-size:18px}p{margin:10px 0}.intro,.notice{padding:18px;background:var(--soft);border-left:5px solid var(--blue)}.notice{background:var(--warn);border-color:#b67916}table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}th,td{border:1px solid var(--line);padding:9px;vertical-align:top;text-align:left}th{background:var(--soft)}code,pre{font-family:ui-monospace,monospace;font-size:13px}code{overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#f1f4f7;padding:16px;border:1px solid var(--line)}a{color:var(--blue)}svg{width:100%;height:auto}svg text{font-family:system-ui,"Noto Sans CJK SC",sans-serif}figure{margin:20px 0}figcaption{font-size:14px;color:#546b7d}.wide{overflow-x:auto}@media(max-width:700px){main{padding:16px}table{font-size:12px}h1{font-size:23px}}@media print{body,main{background:white}main{padding:0}table,figure{break-inside:avoid}}
 </style></head><body><main>
 <div class="intro">
-<p><strong>本轮唯一执行方案：五个真实策略、全部 16 任务、只跑 OOD、原始录像异步搬回本机；一次申请四个 120 小时占位作业。</strong></p>
+<p><strong>本轮唯一执行方案：五个真实策略、全部 16 任务、只跑 OOD、原始录像异步搬回本机；一次登记四个 120 小时 GPU 占位作业和一个 120 小时纯 CPU 监督作业。</strong></p>
 <p>本轮只交付计划，不改评估代码、不启动评估、不提交作业。完整计划获得用户无修改的明确认可后才实施；若用户修改口径，先改计划并再次呈现。旧计划 <a href="../../1010-full-eval-staged-plan.html">1010-full-eval-staged-plan.html</a> 的三种子、六模型、阶段预览及旧作业授权不扩展到本轮。</p>
-<p>创建日期：2026-10-10（America/New_York）。工作副本 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>，唯一开发分支 <code>dev</code>；规划源码锚点 <code>7e68466a61fcc0af891800b9ed8ce0819403daae</code>（1.99），开工时重新核对状态，正式执行另冻结验证后的 clean HEAD，不把本计划提交当成已实现版本。提交体例沿用 <code>&lt;大&gt;.&lt;小&gt; 中文描述</code>，从提交时最近编号接续。</p>
+<p>创建日期：2026-10-10（America/New_York）。工作副本 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>，唯一开发分支 <code>dev</code>；规划源码锚点 <code>7e68466a61fcc0af891800b9ed8ce0819403daae</code>（1.99）；本次文档修订基于 <code>c833170</code>（1.100），开工时重新核对状态，正式执行另冻结验证后的 clean HEAD，不把本计划提交当成已实现版本。提交体例沿用 <code>&lt;大&gt;.&lt;小&gt; 中文描述</code>，从提交时最近编号接续。</p>
 <p>固定外部依赖：benchmark <code>adf19363d4347af77f3fb6746c3a6b685991aba0</code>（v1.2-ood）；mme-vla <code>ecf086c3be7c2223167d9bb2f6ef1f0a6e24353b</code>；SimpleMemVLA <code>c564c17d276d7294200122b286c21901a3bfb99f</code>；PonderPounce <code>723df35762bb641e1d520e4fa9359b98644adc21</code>；Astra gitlink <code>4c3fd6a8667e7a219e547fe1a533a4b9726fc6db</code> 仅冻结、不调用。启动前记录权重指纹、解释器及实际导入路径。</p>
-<p>用户原话：「写计划 html」「我要执行所有模型除了astra和memer 总共5个模型 所有16个task 但是不渲染官方视频 只保留原始视频 并且异步搬运到本机data 启动后不需要agent再监控 只跑ood task」「全部gl 重新申请job」「第一部分口径规模 耗时 顺序 都要说清楚 job怎么重新申请 占多久」。追加纠偏：「只申请一次 占用足够的时间 可以超过48小时」。</p>
+<p>用户原话：「写计划 html」「我要执行所有模型除了astra和memer 总共5个模型 所有16个task 但是不渲染官方视频 只保留原始视频 并且异步搬运到本机data 启动后不需要agent再监控 只跑ood task」「全部gl 重新申请job」「第一部分口径规模 耗时 顺序 都要说清楚 job怎么重新申请 占多久」。追加纠偏：「只申请一次 占用足够的时间 可以超过48小时」。本次修改原话：「这里还是没看懂 到什么时候agent退出 开始自动化执行」「是怎么分配的 本机的独立监督器？这样不是一直依赖本机的监控吗 是否可以单独一个cpu job？」「我需要加入报错停止job功能 如果有错误这个cpu job要立刻停止 让用户知道有问题了」「agent监控 直到第一次成功分配再退出」。通知确认：「使用 hongzefu@umich.edu」。</p>
 </div>
 <h1>第一部分（给人看）</h1>
 <h2>一、口径与全部运行规模</h2>
@@ -19,9 +19,9 @@
 <tr><td>数据与步数</td><td>仅 <code>ood</code>；builder 局号 <code>0:50</code>；每局 strict 1800 执行步。规格中的环境 seed 保持原值，策略 seed=7。</td><td><code>episode.py::DATASET_MAX_STEPS</code>、<code>hard_specs.py::_v9_cells</code>。</td></tr>
 <tr><td>保存</td><td>每局前视／腕视有损 AV1 4:4:4（CRF=24）、动作数组、轨迹、事件、结果与索引；不生成官方叠字拼接 MP4。</td><td><code>seat.py::SeatRunner._episode_kw</code> 的 <code>--no-render</code>；既有两局实测。</td></tr>
 <tr><td>从头跑</td><td>全新 <code>run_name=ood-five-raw-seed7-20261010-01</code>；若名字已存在即阻塞，不能覆盖。旧成绩只作耗时依据。</td><td>避免入口跳过已有 result，保证 4000 个身份同一执行版本。</td></tr>
-<tr><td>一次申请</td><td>一批四个新 hold，每个 1 GPU、1 CPU、24G、120 小时；不续租、不替换、不重新提交失败作业。</td><td>用户最新指令覆盖本轮 48 小时默认；§四给查询与申请方式。</td></tr>
-<tr><td>故障与预算</td><td>正常失败记录 0，不重试；冒烟基础设施故障阻止全量启动并释放本轮资源；全量启动后单模型基础设施故障停止该模型，其它健康模型继续；零重试、零递补。五次最小冒烟复用正式首局。</td><td>§五定义总预算与停止条件；不足 4000 不能判完成。</td></tr>
-<tr><td>启动后</td><td>常驻控制器＋独立监督器接管分派、进度、搬运、结果汇总和释放；无须代理等待或接续。最终状态落文件，不承诺外部推送或代理自动唤醒。</td><td>§六必须在代理退出前实测完整交接。</td></tr></table>
+<tr><td>一次申请</td><td>资源清单共5个新作业：4个GPU hold各1 GPU／1 CPU／24G／120小时，1个纯CPU作业为standard／1 CPU／4G／120小时。不续租、不替换、不重提；CPU作业直接sbatch跑监督程序。</td><td>本轮用户要求CPU监督作业，构成本轮standard及直接sbatch的明确例外，不修改通用集群规则。</td></tr>
+<tr><td>故障与预算</td><td>任何基础设施／程序／数据交付错误都立即停止整轮：不再分配，取消本轮四GPU作业，CPU非零退出。正常task_success=0或正常步数上限继续记录；零重试、零递补。</td><td>§六定义检测期限、停止顺序与邮件通知，不再保留健康模型继续的旧规则。</td></tr>
+<tr><td>代理退出点</td><td>五模型冒烟通过后，代理继续监控；直到CPU首次分配正式全量分片，GPU客户端确认领取、首次合法ActionChunk执行一步并更新本席进度，代理核验成功回执才结束回合。</td><td>§三列FIRST_DISPATCH与AGENT_HANDOFF，不要求第一正式全量片的100局全部完成。</td></tr></table>
 <p>规模按实际档表展开，不能写成 16 任务 × 5 档的全矩形。权威表为 benchmark <code>env_record_wrapper/hard_specs.py::_v9_cells</code>，43 格／模型。</p>
 <table><tr><th>任务分组（完整 16 项）</th><th>档位与每格局数</th><th>每模型乘式</th></tr>
 <tr><td>BinFill、VideoUnmaskSwap、ButtonUnmaskSwap、VideoPlaceButton、VideoPlaceOrder、PickHighlight、VideoRepick</td><td>xhard1／2 各 25</td><td>7 任务 × 2 档 × 25 局 = 350</td></tr>
@@ -41,100 +41,125 @@
 <tr><td colspan="4">基础合计（尚未计本轮分片加载、排队和最终搬运）</td><td><strong>182.145</strong></td></tr></table>
 <p><strong>理想墙钟 = 182.145 ÷ 4 = 45.54 小时。</strong>控制器按每片 100 局、总计 40 片调度，片内客户端／服务端常驻，片间可能重新加载；按历史加载粗留总计 1～4 GPU·小时，加上调度尾部和验证，建议预计从四席可用起 <strong>48～72 小时</strong>。排队另计，不保证四个作业同时开始；全部数据落本机的时间还包含最终搬运尾部。</p>
 <div class="notice">这是外推，不是本轮全量实测：历史只覆盖 14 任务的部分样本；MoveCube／InsertPeg 没有本轮同配置计时，新 benchmark v1.2 成功判据、1 CPU／24G 新席位及长期常驻的影响尚待冒烟确认。SimpleMemVLA 关闭视频的两局实测为 93.871／56.044 秒，原始录像收尾 4.640／12.398 秒，只支持扣除法，不能直接把短局均值乘 800。不能保证 120 小时一定完成；到期未完如实报告，不自动申请更多时间。</div>
-<h2>三、执行顺序与四卡分配</h2>
-<p>先把每模型的 800 身份分成 8 个互不相交、尽量覆盖各任务与档位的 100 局片；同模型多个席位共享锁、全局预算与身份终态。先取各模型首片的一个正式身份完成最小冒烟，再直接沿其余身份继续，不另加演示或完整回合。五模型冒烟全部结束后才放开四席全量分派；期间完成冒烟的席位不提前扩大。</p>
-<table><tr><th>顺序</th><th>四个新席位的动作</th><th>预计时间／判据</th></tr>
-<tr><td>1 开工准备</td><td>主会话先一次申请四个新 hold，让排队与控制器／搬运适配并行；核实旧任务隔离。实现、测试、提交、冻结执行副本。</td><td>工程准备约半天～一天，属于估计；排队不可预报，hold 未准备好不启动评估。</td></tr>
-<tr><td>2 最小冒烟</td><td>先 QwenVL／SimpleMemVLA／PP／Oracle 各首局；空出的席位跑 FrameSamp 首局。</td><td>5 模型 × 1 任务 VideoUnmask × 1 档 xhard1 × 1 局 = 5，计入正式 4000；正常任务失败也可通过链路检查。</td></tr>
-<tr><td>3 初始全量分派</td><td>席 1、2 跑 QwenVL 不同片；席 3 跑 SimpleMemVLA；席 4 跑 PP。Oracle 和 FrameSamp 首局已完，其余进入统一待分派集合。</td><td>QwenVL 最大工作量先分摊，避免单卡 69 小时成为尾部。</td></tr>
-<tr><td>4 滚动均衡</td><td>每片完成，按剩余预测 GPU 时间最大的健康模型挑下一片；模型同优先级按 QwenVL→SimpleMemVLA→PP→Oracle→FrameSamp 决定。允许同模型双席以上执行不同片。</td><td>片内常驻；片大小上限 100；不把某个模型固定绑到一张卡，也不以席位退出码代替模型全量完成。</td></tr>
-<tr><td>5 收尾</td><td>每席无剩余片立即关闭客户端与服务端并精确取消自己的 hold；CPU 搬运继续排空，核验4000结果、8000原始视频及数组轨迹，写终态报告。</td><td>预计全量 48～72 小时；搬运尾部单独实测。任何模型未满800即全量 FAIL。</td></tr></table>
-<figure><svg viewBox="0 0 1100 410" role="img" aria-label="一次申请四作业与异步搬运流程图" xmlns="http://www.w3.org/2000/svg">
+<h2>三、谁负责执行，代理什么时候退出</h2>
+<p><strong>自动化从CPU作业校验launch.ready并启动控制器时开始；代理此时仍在监控。代理退出的唯一正常交接点是“第一次正式全量分片已经实际开始执行”。</strong>五次冒烟、CPU作业RUNNING、srun提交成功、队列写入都不能单独当作退出点。</p>
+<table><tr><th>运行位置</th><th>负责什么</th><th>不需要谁持续在线</th></tr>
+<tr><td>GL纯CPU作业：standard，1 CPU／4G</td><td>独立监督器管理控制器子进程；分配40片，监督四GPU进度与本机搬运心跳；发现错误全局取消GPU、CPU非零退出并触发Slurm邮件。</td><td>不依赖本机代理或本机调度监控；CPU节点直接使用Slurm命令及NFS，不经本机SSH逐次发令。</td></tr>
+<tr><td>四个GL GPU hold：spgpu</td><td>每席执行策略、录像；独立守卫观察CPU作业及监督心跳，防CPU被OOM／SIGKILL／节点故障后GPU继续空占。</td><td>代理退出后仍运行；不会申请接替作业或重试轨迹。</td></tr>
+<tr><td>sled-vail本机搬运进程</td><td>仅rsync从NFS拉raw到/data、核验和删除已核验源大文件；把心跳、错误、搬运回执原子写回NFS。</td><td>不承担评估分派；但搬回/data仍依赖本机在线。本机离线超过期限触发CPU停止整轮。</td></tr>
+<tr><td>主代理</td><td>完成工程、冻结、启动与五冒烟；读真实分配／领取／进度回执，核FIRST_DISPATCH和AGENT_HANDOFF后结束回合。</td><td>交接后不继续轮询，不用代理唤醒来接下一片或处理错误。</td></tr></table>
+<table><tr><th>步骤</th><th>自动程序／代理分别做什么</th><th>代理是否可退出</th></tr>
+<tr><td>1 准备与申请</td><td>一次登记1 CPU＋4 GPU；CPU bootstrap等待launch.ready，GPU守卫等待CPU监督就绪。准备代码、测试、提交、冻结代码与800身份、40片manifest。</td><td>否。排队／准备均仍由代理负责；本轮不实施或申请。</td></tr>
+<tr><td>2 启动自动化</td><td>启动本机搬运并验证有效心跳；原子发布包含EXEC_COMMIT、配置哈希、5个JobID的launch.ready。CPU核验后exec监督器，监督器启动控制器。</td><td>否。CPU接管成功不等于正式分片已分配成功。</td></tr>
+<tr><td>3 五模型冒烟</td><td>CPU先分派QwenVL／SimpleMemVLA／PP／Oracle各首局，空席跑FrameSamp首局。5模型×1任务VideoUnmask×1档xhard1×1局=5，包含在4000。</td><td>否。五冒烟全部零infra且raw／动作／轨迹验收通过后，控制器自行放开正式全量。</td></tr>
+<tr><td>4 第一次正式分配</td><td>初始席1、2领QwenVL不同100局片，席3领SimpleMemVLA，席4领PP；Oracle和FrameSamp余片待滚动分派。至少一个正式片出现controller派发事件、worker领取、client PID／srun step、首次合法动作执行和专属progress更新。</td><td><strong>是。主代理核回执、CPU RUNNING、CPU与mover心跳、新错误为0，写AGENT_HANDOFF并汇报后退出。其它席位无需等待整片完成，由CPU继续调度。</strong></td></tr>
+<tr><td>5 自动跑完或报错停止</td><td>每模型800身份分8片，每片最多100；片内常驻，片末按剩余预测GPU时间最大优先，平局QwenVL→SimpleMemVLA→PP→Oracle→FrameSamp。同模型多席领不同片。每局raw异步搬运。</td><td>代理已退出。CPU自动继续；任何系统错误都走整轮停止，不能等待代理决定。</td></tr>
+<tr><td>6 正常收尾</td><td>全部GPU身份结束后发布gpu_work_complete并释放四GPU；CPU等待搬运排空／完整验收，原子写completed与报告，再退出0。失败则写failure，取消GPU并退出非零。</td><td>无需代理返回；错误通知由Slurm发给用户。</td></tr></table>
+<p>首次成功分配的回执固定包含run／EXEC_COMMIT／config_sha256／controller_job_id／gpu_job_id／step_id／model／shard_id／identity_key／client_pid／first_step／progress_mtime；首次派发可从该片尚未执行的正式身份开始，冒烟已结算身份跳过，不另消耗reset预算。若一直无法完成这个交接，代理不能提前宣布自动执行已建立。</p>
+<figure><svg viewBox="0 0 1100 450" role="img" aria-label="代理退出点、GL CPU监督与本机搬运分工" xmlns="http://www.w3.org/2000/svg">
 <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#165a9d"/></marker></defs>
-<g fill="#edf4fa" stroke="#165a9d"><rect x="20" y="20" width="310" height="90" rx="8"/><rect x="390" y="20" width="310" height="90" rx="8"/><rect x="760" y="20" width="310" height="90" rx="8"/><rect x="20" y="170" width="310" height="100" rx="8"/><rect x="390" y="170" width="310" height="100" rx="8"/><rect x="760" y="170" width="310" height="100" rx="8"/><rect x="390" y="320" width="680" height="65" rx="8"/></g>
-<g font-size="16" fill="#182c3a" text-anchor="middle"><text x="175" y="50">一次提交四个新 hold</text><text x="175" y="77">每个 1 GPU × 120 小时</text><text x="175" y="99">排队与工程准备并行</text><text x="545" y="50">五次正式首局冒烟</text><text x="545" y="77">实现与脱离代理夹具先验收</text><text x="545" y="99">首局复用，不追加预算</text><text x="915" y="50">40 片动态分配给四席</text><text x="915" y="77">QwenVL 分片先并行</text><text x="915" y="99">片内常驻，片末重新均衡</text><text x="175" y="200">独立监督器（本机）</text><text x="175" y="227">监督控制器与搬运进程</text><text x="175" y="253">进程死／无进展：失败封闭</text><text x="545" y="200">GL 完整关闭的单局 raw</text><text x="545" y="227">前视＋腕视 AV1／动作／轨迹</text><text x="545" y="253">result＋账本终态后发布</text><text x="915" y="200">异步 rsync → 本机 /data</text><text x="915" y="227">SHA256＋字节数＋原子落地</text><text x="915" y="253">核验后只删对应 NFS 大文件</text><text x="730" y="348">四席各自释放；搬运排空后写 PASS／FAIL</text><text x="730" y="372">不续租，无须代理接续；异常保留证据</text></g>
-<g stroke="#165a9d" stroke-width="2" marker-end="url(#arrow)" fill="none"><path d="M330 65H388"/><path d="M700 65H758"/><path d="M915 110V140H545V168"/><path d="M330 220H388"/><path d="M700 220H758"/><path d="M915 270V318"/></g></svg><figcaption>上图控制器、监督器与 raw 搬运适配属于拟新增能力；本轮只写计划。正式交接必须证明代理结束后程序仍能完成、失败停止和释放资源。</figcaption></figure>
-<h2>四、新作业如何申请、占多久、如何释放</h2>
-<p>hold 从 Slurm 的实际 StartTime 开始计时，工程准备和冒烟都消耗这份时限。若提前排到、准备占12～24小时，再扣两小时排空，正式执行可用约94～106小时；控制器按各席实际EndTime调度，不能把申请的120小时全部算成评估时间。选择五天上限正是给准备与预计48～72小时执行留出余量。</p>
-<p><strong>一次申请一批四个全新作业，每个时限 120:00:00（五天），最大预约包络 4 × 120 = 480 GPU·小时。</strong>预计有效执行约 182～186 GPU·小时，正常约两至三天完成后立即释放，不空占到第五天；排队时间不计入作业 RUNNING 时限。此处“只申请一次”指一批四个作业，每个仅一次 sbatch；控制器不能申请第五个或接替作业。</p>
-<p>本轮只读查询 <code>ssh greatlakes 'scontrol show partition spgpu'</code> 返回 <code>MaxTime=14-00:00:00</code>、<code>State=UP</code>；<code>sacctmgr show assoc</code> 的 chaijy2／hongzefu MaxWall 为空，<code>show qos</code> 的 normal／foe／spgpu MaxWall 为空。当前可见配置未禁止 120 小时，但真实接纳仍以 sbatch 回执为准。若拒绝时限／额度，记录原报错并停，不自动退回 48 小时、不换账户／分区。</p>
-<pre># 开工后由本机复用已认证 ControlMaster，逐个且仅一次提交。
-# i = 1,2,3,4；每份原始回执与 JobID 写入本轮 jobs.json，不重复提交。
+<g fill="#edf4fa" stroke="#165a9d"><rect x="20" y="20" width="310" height="100" rx="8"/><rect x="390" y="20" width="310" height="100" rx="8"/><rect x="760" y="20" width="310" height="100" rx="8"/><rect x="20" y="175" width="310" height="105" rx="8"/><rect x="390" y="175" width="310" height="105" rx="8"/><rect x="760" y="175" width="310" height="105" rx="8"/><rect x="20" y="335" width="1050" height="90" rx="8"/></g>
+<g font-size="16" fill="#182c3a" text-anchor="middle"><text x="175" y="49">代理准备并启动五个作业</text><text x="175" y="77">CPU就绪 → 五模型冒烟</text><text x="175" y="105">此时代理继续监控</text><text x="545" y="49">CPU首次派发正式全量片</text><text x="545" y="77">GPU领取＋首步＋进度回执</text><text x="545" y="105">代理核验后在这里退出</text><text x="915" y="49">GL纯CPU作业独立接管</text><text x="915" y="77">监督子进程＋动态分配40片</text><text x="915" y="105">无需本机代理发令</text><text x="175" y="204">四GL GPU席位</text><text x="175" y="232">原始AV1＋动作／轨迹／结果</text><text x="175" y="260">独立守卫防CPU整体消失</text><text x="545" y="204">NFS完成项与心跳</text><text x="545" y="232">CPU读取各席与搬运状态</text><text x="545" y="260">唯一预算与身份终态</text><text x="915" y="204">本机搬运：只写/data</text><text x="915" y="232">rsync＋SHA＋原子落地</text><text x="915" y="260">心跳／错误写NFS给CPU</text><text x="545" y="365">任一基础设施／程序错误：立即停止派发并取消四GPU，CPU非零退出</text><text x="545" y="393">Slurm向hongzefu@umich.edu发送失败／结束通知；保存具体错误与日志</text><text x="545" y="416">正常task_success=0继续计成绩；正常全部完成则CPU退出0</text></g>
+<g stroke="#165a9d" stroke-width="2" marker-end="url(#arrow)" fill="none"><path d="M330 70H388"/><path d="M700 70H758"/><path d="M915 120V147H175V173"/><path d="M330 230H388"/><path d="M700 230H758"/><path d="M545 280V333"/></g></svg><figcaption>调度监督已迁到GL CPU作业；本机仅保留搬运。上图为拟实现机制，需先实测CPU节点发srun、错误清理、心跳丢失和退出交接。</figcaption></figure>
+<h2>四、一次申请四GPU＋一CPU，全部上限120小时</h2>
+<p><strong>资源清单一次决定：4个spgpu GPU hold（每个1 GPU／1 CPU／24G／120小时）＋1个standard纯CPU监督作业（1 CPU／4G／120小时），共5个JobID。</strong>GPU最大预约包络4×120=480 GPU·小时；另加CPU监督上限120 CPU·小时／4G。不是五个GPU hold，也不新增第二轮。预计评估48～72小时；排队、准备、冒烟、搬运尾部独立记录，完成即释放。</p>
+<p>用户要求“单独一个cpu job”，本计划将standard纯CPU、直接sbatch执行监督程序列为本轮例外；不改仓库通用spgpu与48h规则，也不扩大到其它工作负载。只读查询standard和spgpu均为State=UP、MaxTime=14-00:00:00，chaijy2／hongzefu的关联未显示较短MaxWall；真实120h接纳仍以回执为准。若拒绝就停止，不改account／qos／partition，不降成48h重提。</p>
+<p>一次按清单逐份提交：先CPU bootstrap，取得CPUJobID；再提交绑定该CPUJobID的四GPU守卫hold。每个作业只调用一次sbatch。bootstrap仅等待NFS launch.ready与固定准备期限，未准备好不执行模型；GPU守卫先等待CPU准备标记。提交前准备唯一root及最小等待／守卫bootstrap、核实体目录和日志路径；工程实现与验证继续，最后同步冻结代码并原子发布ready。最小bootstrap快照由主会话写在本轮artifacts/bootstrap、登记SHA并同步到NFS；文件名与第二部分写集一致，提交后冻结该快照字节，正式程序由ready中的EXEC_COMMIT钉死。bootstrap在sbatch里由Slurm持有，正式exec监督器，不依赖启动它的代理／SSH存活。</p>
+<pre># CPU监督作业，仅一次提交；无--gres，不占GPU。
+# 需显式unset SBATCH_GRES/SBATCH_GPUS等GPU继承变量，固定stdout为NFS日志。
+ssh greatlakes sbatch --parsable \
+  --job-name=ood-five-raw-seed7-20261010-01-cpu \
+  --account=chaijy2 --partition=standard --nodes=1 --ntasks-per-node=1 \
+  --cpus-per-task=1 --mem=4G --time=120:00:00 --no-requeue --signal=B:TERM@120 \
+  --mail-user=hongzefu@umich.edu --mail-type=BEGIN,FAIL,END,TIME_LIMIT \
+  --output=&lt;NFS本轮control&gt;/cpu-%j.out \
+  --wrap='bash &lt;NFS本轮bootstrap&gt;/raw_ood_cpu_bootstrap.sh'
+
+# i=1,2,3,4；每份仅一次提交，守卫只管理本轮登记JobID。
 ssh greatlakes sbatch --parsable \
   --job-name=ood-five-raw-seed7-20261010-01-s&lt;i&gt; \
-  --account=chaijy2 --partition=spgpu \
-  --nodes=1 --ntasks-per-node=1 --gres=gpu:1 \
-  --cpus-per-task=1 --mem=24G --time=120:00:00 \
-  --wrap='sleep infinity'
+  --account=chaijy2 --partition=spgpu --nodes=1 --ntasks-per-node=1 \
+  --gres=gpu:1 --cpus-per-task=1 --mem=24G --time=120:00:00 --no-requeue \
+  --output=&lt;NFS本轮control&gt;/hold-%j.out \
+  --wrap='bash &lt;NFS本轮bootstrap&gt;/raw_ood_hold_guard.sh &lt;CPUJobID&gt;'
 
-# 工作负载在 hold 内跑，不另提 sbatch。
-srun --jobid=&lt;本轮新JobID&gt; --overlap --exact --ntasks=1 \
+# 工作负载由CPU作业内controller发起，塞进已有GPU hold，不另提sbatch。
+srun --jobid=&lt;本轮GPUJobID&gt; --overlap --exact --ntasks=1 \
   --cpus-per-task=1 --gpu_cmode=shared \
-  bash &lt;NFS冻结代码&gt;/dev-scripts/gl/run_eval_gl.sh &lt;本轮模型与预算参数&gt;</pre>
-<p>四个新 JobID、节点、StartTime、EndTime 与 submission receipt 原文入档。提交成功但回执丢失时按本轮唯一 job-name 查队列并核实归属，不再次 sbatch。旧作业 <code>63431430／31／32／33</code> 只来自参考聊天的历史记录，不复用、不取消；不碰未知作业或其它用户资源。旧 job 是否仍占组内配额在开工时只读确认；它们可能使新作业排队，但不能以此自动取消旧任务。</p>
-<p>无新 work 时先验服务端进程组退出，再对 jobs.json 中该席唯一 JobID 执行 <code>scancel &lt;确切JobID&gt;</code>。监督器统一登记和清理，运行代理不得自行取消。保留提交、取消回执和 sacct 终态；禁止 <code>scancel -u</code>。作业结束前两小时停止发新局，允许已领局在既有墙钟期限内结束；到期仍未完成则标 <code>RUN_INCOMPLETE</code>、保存已有结果并退出，不增加 reset／轨迹次数。</p>
+  bash &lt;NFS冻结代码&gt;/dev-scripts/gl/run_eval_gl.sh &lt;冻结模型与预算参数&gt;</pre>
+<p>标准通知参数及no-requeue以<a href="https://slurm.schedmd.com/sbatch.html">Slurm官方sbatch说明</a>为依据；若集群强制requeue覆盖客户端选项，程序核SLURM_RESTART_COUNT，非0即停止，不重新消耗轨迹。CPUbootstrap与GPU守卫仅用于本轮资源生命周期，不运行训练或reset。</p>
+<p>所有作业从实际StartTime计时，准备和等待CPU都消耗120h；准备若12～24h、排空留2h，GPU可用约94～106h。CPU若先排到，其EndTime可能早于GPU；程序以CPU与GPU共同有效期限为上限，CPU到期前120秒信号清理仍存活GPU。全部期限写配置，不能让GPU超过监督作业有效期无人管理。</p>
+<p>五个新JobID、节点、StartTime／EndTime、提交原回执和配置哈希入jobs.json。回执不明按唯一job-name核查，不重复提交。旧63431430／31／32／33不复用、不取消，未知job和他人资源一律不动。取消只针对jobs.json中四个GPU ID，禁止scancel -u。GPU守卫执行清理时先取得本轮cleanup锁，依次取消另外三席，最后取消自身，防自己被杀后未清理其它GPU；其它守卫不抢锁重复清理，清理者死亡时存活守卫核取消状态后接续。正常GPU全部身份结束后发布gpu_work_complete并精确释放；CPU继续完成搬运验收后exit0。异常按§六立即取消GPU，CPU主动非零退出，不scancel自己。</p>
 <h2>五、一次明确的尝试预算与产物预算</h2>
 <table><tr><th>项目</th><th>整项工作上限</th><th>执行守卫</th></tr>
 <tr><td>正式首试</td><td>5 模型 ×〔7 任务 × 2 档 ×25＋2任务×4档（13/13/12/12）＋3任务×3档（17/17/16）＋2任务×5档×10＋2任务×1档×50〕= 4000 次轨迹尝试。</td><td><code>trajectory_cap=4000 planned_first_tries=4000</code>。</td></tr>
 <tr><td>reset 计量</td><td>上述 4000 身份 ×每身份 build／reset 两次 claim = 最多 8000；这是计量上限，不是已有实测数。</td><td><code>reset_cap=8000</code>；实际 claim 与底层复位区别记账，额度耗尽硬拒。</td></tr>
-<tr><td>冒烟／失败／续行</td><td>5 模型×1任务×1档×1局=5，包含在4000；基础设施重试、递补、额外抽样、到期重跑均0。</td><td><code>infra_retries=0 client_restarts=0 shared_infra_cap=0 expired_cap=0</code>；模型首次故障封闭。</td></tr>
+<tr><td>冒烟／失败／续行</td><td>5 模型×1任务×1档×1局=5，包含在4000；基础设施重试、递补、额外抽样、到期重跑均0。</td><td><code>infra_retries=0 client_restarts=0 shared_infra_cap=0 expired_cap=0</code>；任何系统故障整轮停止。</td></tr>
 <tr><td>原始录像</td><td>5 模型 ×800局 ×2视角=8000个正常终态录像；数组轨迹各4000套。异常缺件另列原因，不能充作完整交付。</td><td>同一预算账本跨全部40片；小记录镜像到本机，大文件核验搬离NFS。</td></tr>
 <tr><td>新增资产／付费</td><td>无新增大下载；Astra 0局／0美元；不改模型权重或规格，不生成新采样数据。</td><td>只消费包内800身份，禁止调用Astra或MemER。</td></tr></table>
 <p>这份完整清单供一次性开工认可使用。不得把分片、冒烟、supervisor重连或作业边界当成新预算。正常成功／失败／步数上限都结算一次；不能为4000个成功局挑选或重跑。若无法完成，交付已完成分母与缺失清单，下一轮扩量另行决定。</p>
-<h2>六、无须代理监控的保证与异步搬运</h2>
-<p>现有 <code>continue_full_eval.py::Controller</code> 固定旧六模型及旧路径，<code>eval_video_mover.py</code> 只支持 v8／sgeval，不识别本轮 raw 树；它们不是现成的无人值守保证。拟新增本轮受配置约束的控制器与独立监督器，扩展搬运器 raw 布局。监督器由主会话启动，在本机独立 tmux 内持续运行；主代理只在完成交接验证后结束回合，之后无需代理轮询或多阶段发令。</p>
-<p>每局完成 → raw 录像关闭及 result 写出 → 席位账本确认终态 → 原子发布可搬清单；搬运器只看已发布项，在本机用 <code>rsync -a</code> 拷到本轮 <code>.incoming</code>，逐文件 SHA256、字节数、文件集合一致后原子落地。保留 NFS 小 result／账本用于共享队列防重；只删除该项已核验的 front.mkv、wrist.mkv、arrays.npz 等大文件，不能删活跃目录或整个 run 根。消费者按搬运清单定位本机路径，不能因NFS录像被搬走将 accepted 身份重跑。</p>
-<p>输入根：<code>/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/gl</code>；最终根：<code>/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/gl</code>，相对路径一致。最终可直接查 <code>rollouts/&lt;模型标签&gt;/ood/seed7/raw/&lt;Task&gt;_ep&lt;N&gt;_&lt;tier&gt;/</code>。状态与日志在本轮 <code>control/</code>，留档在 <code>docs/validation/ood-five-raw-seed7-20261010-01/</code>。</p>
-<p>监督器检查精确PID、启动身份及进度心跳，控制器死亡／报告缺键／搬运 SHA 不符／磁盘空间低于50GiB／已发布未搬队列非空且连续30分钟无搬运进度，停止发新局、排空可安全收尾项、释放本轮资源并记录 FAIL。空搬运队列不累计搬运无进展期限，改查控制器与席位心跳。单局进展由各席专属看门狗监督；控制器锁和原子状态防止双启动。监督器不自动修代码、不重启已失败轨迹，也不通过外部消息工具通知他人。最终 <code>status.json</code>、<code>result.md</code> 记录完成或所需用户动作；操作系统或主机整体失效无法由同机监督器保证，120小时时限仍兜底释放GPU。</p>
+<h2>六、报错立即停止、CPU退出与错误通知</h2>
+<p>CPU作业是唯一常驻调度／监督入口，启动后exec监督器，监督器独立启动控制器；本机搬运只是另一受监督的数据消费者。控制器与GPU worker错误立即写带完整身份的error.json并唤醒监督器；监督器每5秒检查各精确进度和mover状态。正常task_success=0／1800步正常终止不算程序错误；身份错、异常退出、OOM、env_build、PP上下文超限、server死亡、预算守卫失败、缺结果、SHA不符／解码失败均算全局错误。</p>
+<table><tr><th>触发与发现</th><th>动作顺序</th><th>CPU及用户看到的状态</th></tr>
+<tr><td>GPU／控制器程序报错</td><td>发现即原子置全局STOP，不再发新身份，不等100局片或当前局完成；写failure.json、精确scancel本轮四GPU，读取取消回执，保存已有日志与产物。</td><td>CPU在短清理期限后exit非零，目标从发现到退出≤30秒；退出码和首个错误不被清理成功覆盖。</td></tr>
+<tr><td>本机搬运错误或机器离线</td><td>搬运每10秒独立更新NFS心跳；错误立即写error，CPU下次5秒检查触发STOP。运行阶段心跳超过120秒失效即整轮停止；只有已发布未搬队列非空才累计30分钟搬运无进展。</td><td>无需CPU访问/data或SSH本机。空队列不会误报；本机依赖被明确限定为搬运，离线仍影响本轮交付。</td></tr>
+<tr><td>监督器／整个CPU job死亡</td><td>GPU hold独立守卫每10秒查CPU JobID和CPU心跳；CPU尚PENDING或合法bootstrap等待时只等待。ready后进入监督阶段，先检查CPU异常终态或失踪（优先于等待ready），bootstrap准备超时也触发全局STOP；运行心跳超过120秒或查询连续30秒失败时，守卫幂等停止并取消本轮四GPU。</td><td>OOM／SIGKILL／节点失败不能靠Python finally兜底。Slurm直接将CPU标异常并发邮件；不重新申请CPU或GPU作业。</td></tr>
+<tr><td>正常结束</td><td>控制器核四千权威终态、全部worker／server已退出、未搬项NFS源完整或已搬项SHA回执完整后，发布gpu_work_complete再释放GPU；CPU继续等本机排空与全解码验收，原子发布completed.json并退出0。所有标记带run、版本与配置哈希。</td><td>gpu_work_complete只许可释放GPU，不表示最终搬运已验完。只有所有具名验收通过才COMPLETED；GPU守卫识别正常释放标记，不把CPU正常结束当错误。</td></tr></table>
+<p><strong>“立即”指检测到错误后立即停止派发并取消GPU，不是保证错误发生的同一毫秒就能停机。</strong>显式错误检查最长5秒，CPU整体失联的心跳判定最多120秒；Slurm处理取消与邮件投递有自身延迟。清理30秒内仍未确认全部GPU退出，CPU照样非零退出，记录cleanup_incomplete，仍存活的GPU守卫继续精确清理。不得为了等取消回执让CPU错误后一直运行。</p>
+<p>用户已确认收件人为 <code>hongzefu@umich.edu</code>。CPU提交设置 <code>--mail-user=hongzefu@umich.edu --mail-type=BEGIN,FAIL,END,TIME_LIMIT</code>；FAIL覆盖主动非零退出等失败，END补充终态通知，正常完成也会有一封结束邮件，TIME_LIMIT覆盖期限到达。应用报错时不scancel CPU自己，以免变成CANCELLED而遮掉失败退出；CPU主动返回非零。邮件告知JobID／状态，详细错误保存在NFS control/failure.json及CPU日志，本机在线时镜像到/data。<a href="https://slurm.schedmd.com/sbatch.html">Slurm官方通知参数说明</a>；BEGIN用于同一CPU作业启动通知预检；代理核验配置与Slurm通知触发证据，但外部邮件实际投递仍有延迟，不把参数存在当成用户已收到邮件。</p>
+<p>本轮五冒烟无额外失败注入。CPU-only夹具在同一CPU作业内用测试子进程和mock GPU回执验证失败→全局取消→非零退出的真实序列化契约，不取消本轮真实作业；同一CPU作业BEGIN通知作为邮件预检，不额外申请测试job，不故意杀掉唯一CPU再重提。代理退出不要求用户再次放行或确认收信；通知触发／实际投递证据分开记录，未核实的可达性不写成已验证。</p>
+<p>原始搬运沿既定文件协议：每局raw关闭、result写出、账本终态后发布完成项；本机rsync到.incoming，逐文件SHA／字节数／文件集合相同后原子落地，核验后只删对应NFS大文件，源小result／队列／账本保留防重。GL输入根 <code>/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/gl</code>，本机终点 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/gl</code>，相对树一致。本机只保留搬运tmux <code>ev-ood-five-raw-mover-20261010-01</code>，不再运行本机监督器。</p>
 <h2>七、验收、实施步骤与子代理分工</h2>
 <table><tr><th>查什么／怎么查</th><th>过了说明什么</th><th>具名判定（拟定，非实测）</th></tr>
 <tr><td>模型白名单、800身份每格计数、5个模型各800，唯一键与规格哈希读回</td><td>规模与seed／规格绑定正确</td><td><code>OOD_SCOPE=PASS models=5 tasks=16 cells=43 identities_per_model=800 planned=4000</code></td></tr>
-<tr><td>四新job原回执与120h时限，不存在第五个提交或续租</td><td>一次申请在批准包络内</td><td><code>GL_ALLOCATION=PASS jobs=4 hours_each=120 resubmits=0</code></td></tr>
-<tr><td>真实格式夹具：完成／正常失败／控制器崩溃／搬运失败／超时；断开父代理后接续与清理</td><td>程序独立接管，异常不会静默空占</td><td><code>DETACHED_FLOW=PASS success=1 failure=1 controller_crash=1 mover_crash=1 parent_exit=1</code></td></tr>
+<tr><td>五份回执：四GPU＋一纯CPU，120h时限；无第二批或重提</td><td>资源申请与本轮CPU例外一致</td><td><code>GL_ALLOCATION=PASS gpu_jobs=4 cpu_jobs=1 hours_each=120 resubmits=0</code></td></tr>
+<tr><td>真实格式夹具：父退出、controller崩溃、CPU整个job消失、搬运失联、错误取消与正常释放</td><td>CPU独立接管；故障整轮停止且CPU非零，守卫防空占</td><td><code>DETACHED_FLOW=PASS success=1 global_stop=1 cpu_lost=1 mover_lost=1 parent_exit=1</code></td></tr>
 <tr><td>五模型正式首局；每个raw双视角可读，动作轨迹齐，无官方MP4，零infra</td><td>关键路径已实跑，不要求五局都成功</td><td><code>RAW_SMOKE=PASS models=5 episodes=5 official_videos=0 raw_videos=10 infra=0</code></td></tr>
 <tr><td>共享账本读回，唯一首次尝试、实际reset额度、零重试</td><td>预算没有按片重置</td><td><code>RUN_BUDGET=PASS trajectories=4000/4000 reset_claims=&lt;实数&gt;/8000 retries=0</code></td></tr>
 <tr><td>逐模型800权威终态、缺失0、无infra，独立task_success统计</td><td>全部计划身份已完成；成功率单列</td><td><code>OOD_RESULTS=PASS models=5 expected=4000 accepted=4000 missing=0 infra=0</code></td></tr>
 <tr><td>本机逐文件哈希／字节数／集合、完整视频解码及帧索引比对、数组轨迹结构</td><td>原始数据落本机，无NFS大文件残留</td><td><code>RAW_DELIVERY=PASS episodes=4000 videos=8000 hash_mismatch=0 decode_fail=0 missing=0 nfs_large_left=0</code></td></tr>
-<tr><td>本轮四job终态、零残留workload／server、监督器结束</td><td>资源正常释放</td><td><code>RUN_CLEANUP=PASS jobs=4 active=0 servers=0</code></td></tr></table>
+<tr><td>本轮四GPU＋一CPU终态，零残留workload／server</td><td>资源全部正常释放，失败时单列非零状态与取消回执</td><td><code>RUN_CLEANUP=PASS gpu_jobs=4 cpu_jobs=1 active=0 servers=0</code></td></tr></table>
 <table><tr><th>阶段</th><th>内容</th><th>判据</th></tr>
-<tr><td>S0</td><td>批准后一次申请4×120h；登记资源；实现控制器／监督器／raw搬运及测试。</td><td>GL_ALLOCATION、CPU夹具与核心短测。</td></tr>
+<tr><td>S0</td><td>批准后一次按清单提交4 GPU＋1 CPU，各120h；登记；实现CPU监督／守卫／raw搬运及测试。</td><td>GL_ALLOCATION、CPU夹具与核心短测。</td></tr>
 <tr><td>S1</td><td>冻结clean HEAD与五gitlink，rsync执行副本，导出身份、预算、模型配置；检验解释器与资产指纹。</td><td>OOD_SCOPE、EXEC_COPY、INPUTS_LOCK。</td></tr>
-<tr><td>S2</td><td>脱离父会话夹具＋五首局冒烟；启动独立监督器与搬运器并核实接管。</td><td>DETACHED_FLOW、RAW_SMOKE；通过后代理可结束。</td></tr>
+<tr><td>S2</td><td>脱离父会话夹具＋CPU接管＋五首局冒烟；代理继续监控。</td><td>DETACHED_FLOW、RAW_SMOKE，尚不可退出。</td></tr>
+<tr><td>S2b</td><td>CPU首次分派正式全量分片，GPU确认领取并实际首步；核CPU与搬运心跳、错误零。</td><td><code>FIRST_DISPATCH=PASS shard_started=1 client_ack=1 first_step=1</code>、<code>AGENT_HANDOFF=PASS cpu_running=1 mover_alive=1 errors=0</code>；此时代理退出。</td></tr>
 <tr><td>S3</td><td>程序自动跑完40片，异步搬运；无新人工阶段或审批，异常按既定策略封闭。</td><td>RUN_BUDGET、OOD_RESULTS。</td></tr>
-<tr><td>S4</td><td>各席释放、搬运排空、本机全解码对账、结果与留档。</td><td>RAW_DELIVERY、RUN_CLEANUP；任一失败总体FAIL。</td></tr></table>
-<p><strong>子代理分工与合并（简述）：</strong>探索用 Luna 只读；控制器／监督器与搬运适配分别由 Sol 在独立 worktree 修改，固定源码评审交另一 Sol。先合搬运与报告契约，再合调度／监督器；每次合并前审固定提交差异和CPU夹具，合并后主会话核预算、跑核心短测。运行另派Sol，仅执行冻结命令并交启动回执，不修代码或取消资源。主会话负责配置、资源清单、最终授权及交接；运行期间不需任何代理持续监控。逐文件清单、命令与风险详见第二部分。</p>
+<tr><td>S4</td><td>各席释放、搬运排空、本机全解码对账、结果与留档。</td><td>RAW_DELIVERY、RUN_CLEANUP；任一系统错误立即取消全轮，CPU非零退出。</td></tr></table>
+<p><strong>子代理分工与合并（简述）：</strong>探索用 Luna 只读；控制器／监督器与搬运适配分别由 Sol 在独立 worktree 修改，固定源码评审交另一 Sol。先合搬运与报告契约，再合调度／监督器；每次合并前审固定提交差异和CPU夹具，合并后主会话核预算、跑核心短测。运行另派Sol，仅执行冻结命令并交启动回执，不修代码或取消资源。主会话负责配置、资源清单、最终授权及交接；首次正式全量分配交接后不需任何代理持续监控。逐文件清单、命令与风险详见第二部分。</p>
 <h1>第二部分（技术细节，供 agent 追踪）</h1>
 <h2>一、红线与已具备能力</h2>
-<ol><li>只消费包内800个OOD身份；冻结benchmark v1.2与四模型gitlink，不改或覆盖受保护 <code>third_party/robomme_benchmark/src/robomme/</code>，不改录像器和模型算法。</li><li>仅 dev 开发；不执行公开main同步；不触碰他人在途改动、旧运行、旧预算账本与旧JobID。正式起跑使用clean冻结代码；运行中HEAD不变，最终报告可在执行结束后提交。</li><li><code>--no-render</code> 已存在于 <code>scripts/evaluate.py</code> 和 <code>seat.py::SeatRunner._episode_kw</code>；不改生产包 <code>src/robomme_ood_eval/</code>，公共面零CJK守卫保持。仅对dev控制与搬运扩展。</li><li>现有 <code>seat.py::DynamicQueue</code>／<code>SeatRunner.run</code> 支持身份锁、常驻策略与共享预算；<code>run_eval_gl.sh</code> 支持watchdog／服务端清理，但不负责取消hold。</li><li>旧 <code>continue_full_eval.py</code> 固定六模型／A-D阶段／路径，不迁移或改写旧运行；新控制器必须白名单配置，不自动提交job或修复程序。</li><li>所有正式轨迹GL执行；本机只调度、CPU校验、搬运与留档。无新增Astra请求，零reset抽样。Python使用uv或仓库uv管理的解释器，计算节点不安装依赖。</li></ol>
+<ol><li>只消费包内800个OOD身份；冻结benchmark v1.2与四模型gitlink，不改或覆盖受保护 <code>third_party/robomme_benchmark/src/robomme/</code>，不改录像器和模型算法。</li><li>仅 dev 开发；不执行公开main同步；不触碰他人在途改动、旧运行、旧预算账本与旧JobID。正式起跑使用clean冻结代码；运行中HEAD不变，最终报告可在执行结束后提交。</li><li><code>--no-render</code> 已存在于 <code>scripts/evaluate.py</code> 和 <code>seat.py::SeatRunner._episode_kw</code>；不改生产包 <code>src/robomme_ood_eval/</code>，公共面零CJK守卫保持。仅对dev控制与搬运扩展。</li><li>现有 <code>seat.py::DynamicQueue</code>／<code>SeatRunner.run</code> 支持身份锁、常驻策略与共享预算；<code>run_eval_gl.sh</code> 支持watchdog／服务端清理，但不负责取消hold。</li><li>旧 <code>continue_full_eval.py</code> 固定六模型／A-D阶段／路径，不迁移或改写旧运行；新控制器必须白名单配置，不自动提交job或修复程序。</li><li>所有正式轨迹GL执行；本机只准备、CPU校验、搬运与留档；运行调度监督在GL纯CPU作业。无新增Astra请求，零reset抽样。Python使用uv或仓库uv管理的解释器，计算节点不安装依赖。</li></ol>
 <h2>二、逐文件修改与关闭态／开启态</h2>
 <p>队列类准确锚点为 <code>seat.py::DynamicQueue</code>；以下席位与外壳修改共同保证同模型多席不会互相掩盖无进展。</p>
 <table><tr><th>文件／稳定锚点</th><th>拟改内容</th><th>关闭态／本轮开启态</th></tr>
 <tr><td><code>dev-scripts/gl/raw_ood_controller.py</code>（新）：配置校验、分片、调度、终态汇总</td><td>四固定JobID＋五模型＋43格校验；100局互斥片；共享账本；任务进度与原子状态；120h安全排空；精确取消登记job；禁止sbatch。</td><td>不启动本命令则旧运行不变；开启后只管理本轮root/JobID。</td></tr>
-<tr><td><code>dev-scripts/gl/raw_ood_supervisor.py</code>（新）：监督器与CPU夹具</td><td>独立PID监督control/mover；检测心跳、退出与report schema，stop发新局、精确资源清理与终态。保存原始退出码；自己异常时 finally 尝试本轮清理。</td><td>旧controller不接本监督器；本轮需所有启动角色有成功回执。</td></tr>
-<tr><td><code>dev-scripts/gl/eval_video_mover.py::main</code>、新增raw扫描／搬运／对账符号</td><td>新增 <code>--layout raw-ood</code>；发布项扫描，rsync＋全文件SHA，先落本机再删NFS已核验大文件；保留小result和终态；显式零值计数；本机路径映射与最终完整解码。</td><td>v8/sgeval行为原样；raw-ood只接受本轮配置并限制路径。</td></tr>
+<tr><td><code>dev-scripts/gl/raw_ood_supervisor.py</code>（新）：GL CPU监督入口与CPU夹具</td><td>在纯CPU job内exec；监督controller子PID与NFS mover心跳／错误；5秒检查、global STOP／四GPU取消、30秒清理期限／非零退出；原始错误保存。全CPU失效由GPU独立守卫处理。</td><td>不在本机运行；bootstrap就绪身份校验通过后才启动。</td></tr>
+<tr><td><code>dev-scripts/gl/raw_ood_cpu_bootstrap.sh</code>、<code>raw_ood_hold_guard.sh</code>（新）</td><td>纯CPU等待launch.ready并exec固定监督器；GPU等待CPU准备、检查监督JobID／心跳／正常完成标记，异常幂等取消本轮GPU；异常退出及no-requeue守卫，signal trap、日志tee与EXIT_CODE。</td><td>仅用于本轮五作业；禁止自动sbatch或操作未登记JobID。</td></tr>
+<tr><td><code>dev-scripts/gl/eval_video_mover.py::main</code>、新增raw扫描／搬运／对账符号</td><td>新增 <code>--layout raw-ood</code>；发布项扫描，rsync＋全文件SHA，先落本机再删NFS已核验大文件；保留小result和终态；显式零值计数；本机路径映射与最终完整解码；独立10秒NFS心跳线程及结构化错误，长rsync不能阻塞心跳。</td><td>v8/sgeval行为原样；raw-ood只接受本轮配置并限制路径。</td></tr>
 <tr><td><code>dev-scripts/gl/seat.py::SeatRunner.run</code></td><td>仅增加每次claim前的固定“停止领取”截止时间／stop-file检查，已领局正常收尾；适配控制器分片时沿用同一模型queue；不改episode、环境或策略行为。</td><td>不给截止／停止文件则原逻辑不变；本轮EndTime-2h停止新claim。</td></tr>
 <tr><td><code>tests/unit/test_raw_ood_controller.py</code>、<code>test_raw_ood_supervisor.py</code>、<code>test_raw_ood_mover.py</code>、<code>test_raw_ood_seat_drain.py</code>（新）</td><td>真实JSON序列化再读回、零值／缺键、正常task失败、工作进程死亡、重复回执、父退出、搬运崩溃、未稳定文件、源删除崩溃窗、同名冲突、队列防重／停止领取。</td><td>CPU临时夹具，不触发环境reset或真实sbatch/scancel；单测用mock进程与回执。</td></tr>
 <tr><td><code>dev-scripts/gl/run_eval_gl.sh::newest_progress</code> 与其watchdog</td><td>给本轮显式精确progress路径，只读当前label／seat／片的心跳；不得用其他席位或其他模型的最大mtime。定向测试覆盖某席卡死、其他席持续更新的反例。</td><td>未给新参数时保持旧调用兼容；本轮必须绑定该席专属progress，超时终止只限该席进程组。</td></tr>
 <tr><td><code>tests/contract/benchmark_contracts.json</code> 及同目录实际delta文件</td><td>登记新工具、契约与有效nodeid；开工确认delta实际路径，保持测试清单闭环。</td><td>新增dev工具不加入public-manifest；公开main内容不变。</td></tr>
-<tr><td>本计划、<code>docs/validation/&lt;run&gt;/launch.md</code>／<code>result.md</code>／<code>records/</code>、总索引</td><td>启动前记录完整模型命令、版本、四JobID、tmux、预算；收尾写实测、异常和具名判定，不拷贝bash/yaml或权重。</td><td>本轮先交计划；执行档案待开工建立。</td></tr></table>
+<tr><td>本计划、<code>docs/validation/&lt;run&gt;/launch.md</code>／<code>result.md</code>／<code>records/</code>、总索引</td><td>启动前记录完整模型命令、版本、五JobID、CPU通知配置、本机搬运tmux、预算；收尾写实测、异常和具名判定，不拷贝bash/yaml或权重。</td><td>本轮先交计划；执行档案待开工建立。</td></tr></table>
 <p>计划图与搬运链路：NFS帧由既有record保存为两路AV1 yuv444p（有损，此跳改像素）；动作／状态存arrays.npz（保持既有dtype/shape，不改数）；rsync→SHA→本机原子落地为文件字节一致，此跳不转码、不改数。视频尺寸、帧数、数组shape/dtype/字节数读每局meta与索引实记，不能假定所有任务同分辨率。</p>
 <h2>三、子代理分配表与整合边界</h2>
 <table><tr><th>任务／角色</th><th>可写集合与禁触</th><th>契约／依赖／整合顺序</th><th>验收与资源</th></tr>
 <tr><td>A 搬运实现 Sol</td><td>独立 <code>artifacts/worktrees/raw-ood-mover</code>，专属codex分支；只写mover及其测试；其余源码、模型和旧产物禁触。</td><td>共享唯一发布项schema；本机最终路径映射和显式零值；先合A。</td><td>CPU定向pytest；无GPU/端口/job；临时文件仅本轮artifacts。</td></tr>
-<tr><td>B 控制／监督／drain实现 Sol</td><td>独立 <code>artifacts/worktrees/raw-ood-control</code>；只写controller、supervisor、seat、run_eval_gl.sh与对应测试。不能写A文件，不能实际提交取消job。</td><td>复用A发布schema；保留源小result防重；固定配置不含提交器；A后合B。</td><td>CPU模拟Slurm/进程夹具与真实格式报告；无GPU，进程清理仅自建精确PID。</td></tr>
+<tr><td>B 控制／监督／drain实现 Sol</td><td>独立 <code>artifacts/worktrees/raw-ood-control</code>；只写controller、supervisor、CPUbootstrap、GPUguard、seat、run_eval_gl.sh与对应测试。不能写A文件，不能实际提交取消job。</td><td>复用A发布schema；保留源小result防重；固定配置不含提交器；A后合B。</td><td>CPU模拟Slurm/进程夹具与真实格式报告；无GPU，进程清理仅自建精确PID。</td></tr>
 <tr><td>C 独立审查 Sol</td><td>固定BASE/TIP只读，无写集；不运行仓库脚本。</td><td>每个子提交审路径、幂等、预算、进程死亡与最终释放；FAIL交原写者续修。</td><td>提交级审查；主会话另做动态验证，避免把静态审查称为实测。</td></tr>
-<tr><td>D 冻结运行 Sol</td><td>仅在本轮artifacts写授权日志／结果；不得改代码、配置、脚本、依赖；不得清理job/tmux或派修复。</td><td>A/B审查整合＋短测PASS、EXEC_COMMIT确定、四JobID已登记后才派。执行第二部分runbook确定命令，启动及交接后返回。</td><td>4×1 GPU，120h上限；run名本计划固定；席位端口基数22400/22500/22600/22700；tmux前缀ev-ood-five-raw。零重试。</td></tr>
-<tr><td>主会话自做</td><td>契约inventory、配置manifest、预算、文档与资源清单；任何公共共享文件单一owner。</td><td>总接口裁决、逐提交审查、保留sub提交no-ff合并、集成测试、push；登记资源；启动监督器后验证接管。</td><td>开工第一步一次提4hold；计划阶段不提job；正式运行版本固定后不改热用代码/venv。</td></tr></table>
+<tr><td>D 冻结运行 Sol</td><td>仅在本轮artifacts写授权日志／结果；不得改代码、配置、脚本、依赖；不得清理job/tmux或派修复。</td><td>A/B审查整合＋短测PASS、EXEC_COMMIT确定、五JobID已登记后才派。执行第二部分runbook确定命令，启动及交接后返回。</td><td>4×1 GPU＋1纯CPU监督作业，120h上限；run名本计划固定；席位端口基数22400/22500/22600/22700；tmux前缀ev-ood-five-raw。零重试。</td></tr>
+<tr><td>主会话自做</td><td>契约inventory、配置manifest、预算、文档与资源清单；任何公共共享文件单一owner。</td><td>总接口裁决、逐提交审查、保留sub提交no-ff合并、集成测试、push；登记资源；验证CPU接管并监控至首次正式分片成功分配。</td><td>开工按一次清单提交1CPU＋4GPU；计划阶段不提job；正式运行版本固定后不改热用代码/venv。</td></tr></table>
 <p>实际委派前填每个worktree的BASE、分支、确定EXEC_COMMIT、运行命令与JobID；运行任务最长等待为其作业EndTime、起跑失败零重试，日志必须独立；这些动态值不以旧JobID替代。主会话负责资源清理，授权的监督器作为主会话的程序化执行者，运行子代理无清理权。</p>
 <h2>四、对拍与完整接续闸门</h2>
 <table><tr><th>门</th><th>检查／命令入口</th><th>判定</th></tr>
 <tr><td>G0短测</td><td>定向CPU测试后 <code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code>；不运行slow/reset批次。</td><td>退出0、TEST_RESOURCE通过；单项失败不放宽。</td></tr>
 <tr><td>G1身份与版本</td><td>新执行副本导出800身份、对EXPECTED_CELLS；冻结代码/5gitlink/锁文件逐一sha；venv .pth指向冻结src及唯一benchmark。</td><td><code>EXEC_COPY=PASS</code>、<code>INPUTS_LOCK=PASS</code>、OOD_SCOPE。</td></tr>
-<tr><td>G2脱离代理链路</td><td>拟新增 <code>raw_ood_supervisor.py self-test --root &lt;本轮CPU夹具根&gt;</code>；真正启动子进程，父launcher退出，成功与失败报告均写JSON再读回；模拟控制器和mover被杀、源删前后崩溃、claim截止、清理失败。</td><td>DETACHED_FLOW；schema缺键、计数省略或监督器静默必须FAIL，不能用get默认0。</td></tr>
+<tr><td>G2脱离代理链路</td><td>拟新增 <code>raw_ood_supervisor.py self-test --root &lt;本轮CPU夹具根&gt;</code>；真正启动子进程，父launcher退出，成功与失败报告均写JSON再读回；模拟控制器和mover被杀、整个CPU JobID消失、GPU守卫正常／异常终态、源删前后崩溃、claim截止、清理失败。</td><td>DETACHED_FLOW；schema缺键、计数省略或监督器静默必须FAIL，不能用get默认0。</td></tr>
 <tr><td>G3冒烟</td><td>本轮五正式首局，GL min规模；验完整raw／动作／trace与成功字段。</td><td>RAW_SMOKE；基础设施或交付故障阻止整个全量启动并释放资源，不重复耗预算；正常任务失败不阻塞。</td></tr>
 <tr><td>G4最终</td><td>真实账本→4000终态→moved manifest→本机完整解码与数组schema→取消回执读回；结果失败与任务失败区别。</td><td>RUN_BUDGET、OOD_RESULTS、RAW_DELIVERY、RUN_CLEANUP。</td></tr></table>
 <h2>五、执行 runbook（开工后才能执行）</h2>
-<p>以下新增CLI是拟定接口，实施后须将确定版本的完整命令和实际配置值写进launch.md；占位符未填不允许启动。主会话先核环境、<code>git status -sb</code>、SSH master和四新资源回执，实施与提交后才建立冻结副本。GL侧不用git、不能读/data，也不能在计算节点uv sync。同步只用rsync，NFS环境设 <code>UV_LINK_MODE=copy</code>，uv缓存显式 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>；本机其他运行缓存收敛本轮artifacts。</p>
+<p>以下新增CLI是拟定接口，实施后须将确定版本的完整命令和实际配置值写进launch.md；占位符未填不允许启动。主会话先核环境、<code>git status -sb</code>、SSH master和五新资源回执，实施与提交后才建立冻结副本。GL侧不用git、不能读/data，也不能在计算节点uv sync。同步只用rsync，NFS环境设 <code>UV_LINK_MODE=copy</code>，uv缓存显式 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>；本机其他运行缓存收敛本轮artifacts。</p>
 <pre># 导出身份：正式运行冻结副本内、不会生成轨迹；only OOD。
 UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python \
   dev-scripts/gl/export_eval_identities.py --dataset ood --episodes 0:50 \
@@ -150,23 +175,28 @@ bash &lt;NFS冻结代码&gt;/dev-scripts/gl/run_eval_gl.sh \
   --shared-infra-cap 0 --expired-cap 0 --infra-retries 0 --client-restarts 0 \
   --no-render --stop-on-env-build-error --dataset ood \
   --ckpt &lt;本模型NFS钉死权重&gt; --port-base &lt;席位固定端口&gt; \
-  --claim-deadline &lt;实际EndTime减两小时&gt; --stop-file &lt;模型停止标记&gt; \
+  --claim-deadline &lt;实际EndTime减两小时&gt; --stop-file &lt;NFS本轮全局STOP&gt; \
   --progress-file &lt;本席位label/seat专属progress.json&gt; \
   &lt;variant/adapter/解释器/cache等配置&gt;
 
-# 拟新增本机总入口：先创建独立监督tmux，由它启动控制器与搬运器。
-tmux new-session -d -s ev-ood-five-raw-20261010-01 \
-  "set -o pipefail; PYTHONUNBUFFERED=1 &lt;本机冻结代码的uv管理解释器&gt; \
-  &lt;本机冻结代码&gt;/dev-scripts/gl/raw_ood_supervisor.py run \
-  --config &lt;本轮run-config.json&gt; 2&gt;&amp;1 | tee &lt;本轮control/supervisor.log&gt;; \
-  echo EXIT_CODE=\$? &gt;&gt; &lt;本轮control/supervisor.log&gt;"
+# CPU作业中的bootstrap校验launch.ready后exec，不使用本机监督tmux。
+exec &lt;NFS冻结代码的uv管理解释器&gt; \
+  &lt;NFS冻结代码&gt;/dev-scripts/gl/raw_ood_supervisor.py run \
+  --config &lt;NFS本轮run-config.json&gt;
+# CPU监督器启动本CPU作业内的controller，记录子PID与心跳。
+&lt;NFS冻结解释器&gt; &lt;NFS冻结代码&gt;/dev-scripts/gl/raw_ood_controller.py run --config &lt;配置&gt;
 
-# 子命令由监督器启动，不由代理重复启动。
-&lt;冻结解释器&gt; &lt;冻结代码&gt;/dev-scripts/gl/raw_ood_controller.py run --config &lt;配置&gt;
-&lt;冻结解释器&gt; &lt;冻结代码&gt;/dev-scripts/gl/eval_video_mover.py \
+# 本机只保留搬运tmux；tee、pipefail、EXIT_CODE必须保存。
+tmux new-session -d -s ev-ood-five-raw-mover-20261010-01 \
+  "bash &lt;本轮artifacts/mover-run.sh&gt;"
+# mover-run.sh 固定下列完整命令以及日志管道：
+&lt;本机冻结解释器&gt; &lt;本机冻结代码&gt;/dev-scripts/gl/eval_video_mover.py \
   --layout raw-ood --stage &lt;NFS本轮gl根&gt; --dest &lt;本机本轮gl根&gt; \
-  --manifest &lt;NFS本轮完成项manifest&gt; --interval 30 \
-  --min-free-gib 50 --stop-file &lt;本轮停止标记&gt;</pre>
+  --manifest &lt;NFS本轮完成项manifest&gt; --interval 30 --min-free-gib 50 \
+  --heartbeat-file &lt;NFS本轮control/mover-heartbeat.json&gt; \
+  --error-file &lt;NFS本轮control/mover-error.json&gt; \
+  --stop-file &lt;NFS本轮全局STOP&gt;
+</pre>
 <p><code>--claim-deadline</code>、<code>--stop-file</code> 为seat拟新增；<code>--layout raw-ood</code>、<code>--manifest</code> 为搬运拟新增，不能把示例当成当前已可执行命令。预算初始化沿 <code>budget_ledger.py</code> 现有契约，config字段与CLI必须全等。40片同模型queue指向统一标签seed7路径，并保存不可改分片manifest；任何已结算身份只读，不触发隐式恢复重跑。</p>
 <table><tr><th>精确模型路由</th><th>权重／adapter（NFS根下）</th><th>解释器与参数口径</th></tr>
 <tr><td><code>perceptual-framesamp-modul</code></td><td><code>sgeval-20261006-02/ckpt/mme/perceptual-framesamp-modul/79999</code></td><td>客户端主.venv；mme_vla_py为既有mme-vla服务环境；步距16。</td></tr>
@@ -177,17 +207,17 @@ tmux new-session -d -s ev-ood-five-raw-20261010-01 \
 <p>模型实际服务环境与客户端必须在冻结配置中展开绝对路径，并校验import/.pth指向本轮固定模型gitlink；参考 <a href="../validation/infer-timing-20261009/launch.md">既有GL配置留档</a>，不能仅因旧venv存在就直接使用。历史NFS模型权重属于既有外部资产，只读使用；既有tokenizer指纹 <code>8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6</code> 须被实际前置校验读取。端口先探占用，已有服务不得连接或停止；唯一端口内服务就绪与首次推理分开验。</p>
 <h2>六、风险与盲区</h2>
 <table><tr><th>风险／反例</th><th>处理</th></tr>
-<tr><td>120h申请合法但更难排队，组配额被旧hold占用，四席开始时间不同</td><td>只用chaijy2/spgpu；不换qos、不取消旧job；各席EndTime独立登记，用户明确一次申请，无自动替换。</td></tr>
-<tr><td>1CPU/24G下加载或编码比历史4CPU慢，OOM</td><td>先正式首局冒烟；冒烟OOM阻止全量，正式期OOM记录失败并停该模型，不自动提大job；调整资源属于新计划，不假装本轮保证成功。</td></tr>
+<tr><td>120h申请合法但更难排队，组配额被旧hold占用，四席开始时间不同</td><td>GPU只用chaijy2/spgpu，纯CPU明确使用standard；不换qos、不取消旧job；各席EndTime独立登记，用户明确一次申请，无自动替换。</td></tr>
+<tr><td>1CPU/24G下加载或编码比历史4CPU慢，OOM</td><td>先正式首局冒烟；冒烟OOM阻止全量，正式期OOM立即停止整轮，不自动提大job；调整资源属于新计划，不假装本轮保证成功。</td></tr>
 <tr><td>不同模型共享进度路径导致另一个席位进展掩盖故障</td><td>监督器用每席专属progress/PID，不能仅取rollouts下所有mtime最大值；区分加载/决策/收尾期限。</td></tr>
 <tr><td>mover删source result导致accepted恢复时误重跑；哈希通过但视频截断</td><td>源小记录保持，最终读本机映射；删除只限核验清单大文件；额外完整解码并比帧索引。</td></tr>
-<tr><td>controller死后hold仍sleep infinity，supervisor也崩溃</td><td>独立监督器清理路径单测；自身finally清理、最终状态失败；主机全故障由120h Slurm超时兜底，不能保证即时释放。</td></tr>
-<tr><td>PP上下文超限、env_build失败、服务端无响应</td><td>零重试，停该模型并保留故障结果；其它模型可继续。task_success=0的正常失败继续，不按失败全局重跑。</td></tr>
+<tr><td>CPU监督作业OOM／SIGKILL／节点故障，finally无法执行</td><td>四GPU独立守卫核CPU JobID／NFS心跳，120秒失联或异常终态全局取消；正常释放标记必须含配置哈希，不误杀正常完成。Slurm邮件投递有延迟。</td></tr>
+<tr><td>PP上下文超限、env_build失败、服务端无响应</td><td>零重试，立即停止整轮并保留故障结果；CPU取消四GPU后非零退出。task_success=0的正常失败继续，不按失败全局重跑。</td></tr>
 <tr><td>已有smoke统计来自旧版本，实际v1.2轨迹发生改变</td><td>本轮五正式首局实跑，仅将历史耗时当估算；不宣称跨版本数值或成功率一致。</td></tr>
-<tr><td>本机磁盘容量或NFS积压不足</td><td>启动前df/实体根/既有样本每局字节数评估空间；不得猜测4000局体积。搬运低空间50GiB硬停，暂停发新局；启动时容量不足先阻塞。</td></tr></table>
-<p>未验证清单：五模型在全部16任务常驻／分片稳定性；1CPU/24G资源够用；本轮完整接续和崩溃清理；raw布局实际搬运吞吐、全视频核验尾部、总产物字节数；120h真实sbatch接纳。上述均由实施阶段验证，不以计划文档的存在写成PASS。</p>
+<tr><td>本机磁盘容量或NFS积压不足</td><td>启动前df/实体根/既有样本每局字节数评估空间；不得猜测4000局体积。搬运低空间50GiB写错误，CPU立即停止整轮；启动时容量不足先阻塞。</td></tr></table>
+<p>未验证清单：五模型在全部16任务常驻／分片稳定性；1CPU/24G资源够用；本轮完整接续、CPU计算节点发srun、CPU全失联守卫和崩溃清理；raw布局实际搬运吞吐、全视频核验尾部、总产物字节数；120h真实sbatch接纳。上述均由实施阶段验证，不以计划文档的存在写成PASS。</p>
 <h2>七、留档、提交纪律与计划交付验证</h2>
-<p>起跑前launch.md固定EXEC_COMMIT、五gitlink、资源四回执与EndTime、完整五模型配置、40片身份哈希、budget、端口和本轮tmux清单。records只归档git无法还原的JSON/JSONL/清洗日志/判定，不放.sh/.yaml或权重。结果包含逐任务逐档成功分母、任务宏平均与局级平均、动作块耗时、实际GPU占用、排队／加载／执行／搬运尾部、全部失败原因和缺失清单；原始日志保留在artifacts。</p>
+<p>起跑前launch.md固定EXEC_COMMIT、五gitlink、资源五回执与EndTime、完整五模型配置、40片身份哈希、budget、端口和本轮tmux清单。records只归档git无法还原的JSON/JSONL/清洗日志/判定，不放.sh/.yaml或权重。结果包含逐任务逐档成功分母、任务宏平均与局级平均、动作块耗时、实际GPU占用、排队／加载／执行／搬运尾部、全部失败原因和缺失清单；原始日志保留在artifacts。</p>
 <p>本计划交付只执行HTML结构、相对链接、乘式／预算、资源口径、diff检查，不运行评估或仿真。实施代理的sub提交保留，经主会话no-ff合并、逐明确路径暂存；中文commit body含用户原话、完整计划、实施与验证，dev提交后立即push。原有在途改动绕开；不自动同步main。</p>
 <pre>grep -c '&lt;h1[^&gt;]*&gt;第一部分\|&lt;h1[^&gt;]*&gt;第二部分' docs/plans/1010-five-models-ood-raw-only-plan.html
 # 必须为2；附加HTMLParser核验一级标题原文、链接与表格算术。
