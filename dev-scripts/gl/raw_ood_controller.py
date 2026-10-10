@@ -88,9 +88,14 @@ def validate_config(config: dict) -> list[dict]:
         adapters=values('--qwenvl-groundsg-adapter')
         if name=='qwenvl' and (len(adapters)!=1 or not adapters[0]): raise ValueError('QwenVL adapter缺失或重复')
         if name!='qwenvl' and adapters: raise ValueError('非QwenVL模型使用adapter')
-        protected={f[2:].replace('-','_') for f in forbidden}|{'groundsg_variant','qwenvl_groundsg_adapter','memer_adapter'}
+        protected={f[2:].replace('-','_') for f in forbidden}|{'groundsg_variant','qwenvl_groundsg_adapter','memer_adapter','gpu'}
+        legal_special={'--groundsg-variant','--qwenvl-groundsg-adapter'}
+        for arg in m['args']:
+            token=str(arg).split('=',1)[0]
+            if token.startswith('--') and token[2:].replace('-','_') in protected and token not in legal_special:
+                raise ValueError('透传别名覆盖固定路由或预算')
         for item in values('--cfg'):
-            if str(item).split('=',1)[0] in protected: raise ValueError('cfg覆盖固定路由或预算')
+            if str(item).split('=',1)[0].replace('-','_') in protected: raise ValueError('cfg覆盖固定路由或预算')
     if sha(Path(config['identities']))!=config['identities_sha256']: raise ValueError('身份文件SHA不符')
     rows=[json.loads(line) for line in Path(config['identities']).read_text().splitlines() if line.strip()]
     expected=Counter()
@@ -156,7 +161,8 @@ class Controller:
         seat_name=f"{seat['seat']}-{tag}"; progress=inv/'progress.json'
         expansion=dict(root=str(self.root),gl_root=str(self.gl),seat=seat_name,shard=shard,port_base=seat['port_base'],work_dir=str(inv/'work'))
         model_args=[str(x).format_map(expansion) for x in m['args']]
-        cmd=['srun',f"--jobid={seat['job_id']}",'--overlap','--exact','--ntasks=1','--cpus-per-task=1','--gpu_cmode=shared',
+        worker_name=f'raw-ood-worker-{tag}'
+        cmd=['srun',f"--jobid={seat['job_id']}",f'--job-name={worker_name}','--overlap','--exact','--ntasks=1','--cpus-per-task=1','--gpu_cmode=shared',
              'bash',self.c['runner'],'--policies',m['policy'],'--policy-seed','7','--identities',str(ids),'--out',str(self.gl),
              '--run',self.c['run'],'--seat',seat_name,'--budget-ledger',self.c['budget_ledger'],
              '--trajectory-cap','4000','--reset-cap','8000','--planned-first-tries','4000','--shared-infra-cap','0','--expired-cap','0',
@@ -169,7 +175,7 @@ class Controller:
         log=(inv/'worker.log').open('a'); p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)
         active=dict(process=p,log=log,seat=seat,shard=shard,smoke=smoke,model=model,progress=progress,
                     results=self.gl/'seats'/m['label']/'seed7'/seat_name/'seat-results.jsonl',rows=rows,offset=0,started=time.time(),acked=False,
-                    phase_key=None,phase_start=time.time(),step_id=None)
+                    phase_key=None,phase_start=time.time(),step_id=None,worker_name=worker_name)
         self.active[str(seat['job_id'])]=active
         atomic(inv/'dispatch.json',dict(self.base,gpu_job_id=str(seat['job_id']),shard_id=shard,model=model,smoke=smoke,command=cmd,srun_pid=p.pid,time=time.time()))
         self.event('dispatch',gpu_job_id=str(seat['job_id']),shard_id=shard,smoke=smoke)
@@ -223,12 +229,17 @@ class Controller:
     def check_worker(self,a):
         now=time.time()
         if not a.get('step_id'):
-            steps=subprocess.run(['squeue','--steps','-h','-j',str(a['seat']['job_id']),'-o','%i'],capture_output=True,text=True,timeout=5)
-            candidates=[s.strip() for s in steps.stdout.splitlines() if s.strip().startswith(str(a['seat']['job_id'])+'.') and not s.strip().endswith(('.batch','.extern'))]
+            steps=subprocess.run(['squeue','--steps','-h','-j',str(a['seat']['job_id']),'-o','%i %j'],capture_output=True,text=True,timeout=5)
+            candidates=[s.split()[0] for s in steps.stdout.splitlines() if len(s.split())==2 and s.split()[1]==a['worker_name'] and s.split()[0].startswith(str(a['seat']['job_id'])+'.')]
             if steps.returncode: raise RuntimeError('srun step查询失败')
             if len(candidates)==1: a['step_id']=candidates[0]
         if a['progress'].exists():
             p=read(a['progress']); phase=(p['phase'],p['key'])
+            if str(p['slurm_job_id'])!=str(a['seat']['job_id']): raise ValueError('客户端SLURM作业不符')
+            if p['slurm_step_id'] is None: raise ValueError('客户端缺少原始SLURM_STEP_ID')
+            exact=str(p['slurm_job_id'])+'.'+str(p['slurm_step_id'])
+            if a['step_id'] is not None and a['step_id']!=exact: raise ValueError('客户端SLURM StepID与调度回执冲突')
+            a['step_id']=exact
             if p['label']!=self.c['models'][a['model']]['label']: raise ValueError('专属进度标签错误')
             if now-float(p['t'])>120: raise RuntimeError('专属席位心跳失效')
             if phase!=a['phase_key']: a['phase_key']=phase; a['phase_start']=now
@@ -264,6 +275,13 @@ class Controller:
             if state.returncode: raise RuntimeError('Slurm查询失败')
             if state.stdout.strip() in ('PENDING','CONFIGURING'): continue
             if state.stdout.strip()!='RUNNING': raise RuntimeError(f'GPU异常状态{state.stdout}')
+            guardian=self.control/f"guardian-ready-{seat['job_id']}.json"
+            if not guardian.exists(): continue
+            ready=read(guardian)
+            if any(str(ready[k])!=str(v) for k,v in self.base.items()) or str(ready['gpu_job_id'])!=str(seat['job_id']):
+                raise ValueError('附加独立守卫就绪身份不符')
+            if not isinstance(ready['pid'],int) or ready['pid']<=0 or not 0<float(ready['time'])<=time.time()+30 or ready['step_id'] is None:
+                raise ValueError('附加独立守卫缺少有效PID/时间/StepID')
             if not self.formal:
                 busy={a['model'] for a in self.active.values()}
                 todo=[m for m in MODELS if m not in self.smoked and m not in busy]

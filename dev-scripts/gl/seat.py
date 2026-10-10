@@ -977,6 +977,8 @@ class SeatRunner:
                    "key": cur.key if cur else None, "dataset": cur.ident["dataset"] if cur else None,
                    "attempt_no": cur.attempt if cur else None, "episodes_done": self.episodes_done, "t": time.time(),
                    **extra}
+            if getattr(self.args, "progress_file", None):
+                doc.update(slurm_job_id=os.environ.get("SLURM_JOB_ID"), slurm_step_id=os.environ.get("SLURM_STEP_ID"))
             self._last_progress = doc
             write_json_atomic(self.progress_path, doc)
 

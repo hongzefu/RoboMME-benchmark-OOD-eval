@@ -148,13 +148,15 @@ def test_controller_heartbeat_has_single_thread_writer(tmp_path,monkeypatch):
     assert writers and len(set(writers))==1 and writers[0]!=threading.get_ident()
 
 
-@pytest.mark.parametrize('mutation',['astra','memer','budget','cfg_gpu'])
+@pytest.mark.parametrize('mutation',['astra','memer','budget','cfg_gpu','cfg_variant_alias','option_variant_alias'])
 def test_route_or_budget_override_blocked_before_process(tmp_path,mutation):
     c=config(tmp_path)
     if mutation=='astra': c['models']['qwenvl']['policy']='astra'
     elif mutation=='memer': c['models']['qwenvl']['args'][1]='ground-sg-memer'
     elif mutation=='budget': c['models']['pp']['args']+=['--trajectory-cap','9999']
-    else: c['models']['pp']['args']+=['--cfg','gpus=0']
+    elif mutation=='cfg_gpu': c['models']['pp']['args']+=['--cfg','gpus=0']
+    elif mutation=='cfg_variant_alias': c['models']['qwenvl']['args']+=['--cfg','groundsg-variant=ground-sg-memer']
+    else: c['models']['qwenvl']['args']+=['--groundsg_variant','ground-sg-memer']
     with pytest.raises(ValueError): C.validate_config(c)
 
 
@@ -164,3 +166,21 @@ def test_identity_same_size_mutation_and_manifest_mismatch_blocked(tmp_path):
     with pytest.raises(ValueError,match='SHA'): C.validate_config(c)
     c=config(tmp_path); c['expected_identities'][0]='wrong'
     with pytest.raises(ValueError,match='manifest'): C.validate_config(c)
+
+
+def test_guardian_step_does_not_hide_worker_first_step(tmp_path,monkeypatch):
+    import time
+    c=config(tmp_path); controller=C.Controller(c)
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=999))
+    controller.start(c['seats'][0],'qwenvl-00',smoke=False); a=controller.active['101']
+    def run(*args,**kwargs):
+        return types.SimpleNamespace(returncode=0,stdout=f"101.1 raw-ood-lifecycle-guard\n101.2 {a['worker_name']}\n",stderr='')
+    monkeypatch.setattr(C.subprocess,'run',run)
+    row=a['rows'][1]
+    C.atomic(a['progress'],dict(label=c['models']['qwenvl']['label'],phase='episode',key=row['key'],pid=250,t=time.time(),slurm_job_id='101',slurm_step_id='2'))
+    ep=Path(c['gl_root'])/'rollouts'/c['models']['qwenvl']['label']/'ood/seed7/progress.json'
+    C.atomic(ep,dict(key=row['key'],pid=250,step=1))
+    controller.check_worker(a); controller.poll_ack(a)
+    ack=C.read(tmp_path/'control/first_dispatch.json')
+    assert ack['step_id']=='101.2' and ack['first_step']==1 and ack['identity_key']==C.identity('qwenvl',row)
+    a['log'].close()

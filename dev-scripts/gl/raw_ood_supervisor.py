@@ -9,9 +9,47 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 from raw_ood_controller import atomic, cancel_gpu, load_config, read, validate_config
+
+
+def start_guardians(c: dict, guardians: list[dict] | None=None) -> list[dict]:
+    """在已登记四hold各追加一个纯CPU守卫，不申请资源。"""
+    control=Path(c['root'])/'control'; guardians=[] if guardians is None else guardians
+    env={k:v for k,v in os.environ.items() if not k.startswith(('SLURM_','SBATCH_','SRUN_')) and k!='CUDA_VISIBLE_DEVICES'}
+    env.update(BENCH_PY=c['python'],PYTHONUNBUFFERED='1')
+    for seat in c['seats']:
+        job=str(seat['job_id'])
+        if job in {g['job_id'] for g in guardians}: continue
+        state=subprocess.run(['squeue','-h','-j',job,'-o','%T'],capture_output=True,text=True,timeout=5)
+        if state.returncode: raise RuntimeError('附加守卫GPU作业查询失败')
+        status=state.stdout.strip()
+        if status in ('PENDING','CONFIGURING'): continue
+        if status!='RUNNING': raise RuntimeError(f'附加守卫GPU状态异常 {job} {status}')
+        log=(control/f'guardian-{job}.log').open('a')
+        cmd=['srun',f'--jobid={job}','--gres=none','--overlap','--exact','--ntasks=1','--cpus-per-task=1',
+             '--job-name=raw-ood-lifecycle-guard','bash',str(Path(__file__).with_name('raw_ood_hold_guard.sh')),
+             c['root'],c['run'],str(c['controller_job_id']),str(int(c['cpu_end_time']))]
+        try: p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=env)
+        except BaseException: log.close(); raise
+        guardians.append(dict(job_id=job,process=p,log=log,command=cmd))
+    atomic(control/'guardian-launches.json',dict(run=c['run'],run_name=c['run_name'],exec_commit=c['exec_commit'],
+           config_sha256=c['config_sha256'],controller_job_id=c['controller_job_id'],
+           guardians=[dict(job_id=g['job_id'],pid=g['process'].pid,command=g['command']) for g in guardians],time=time.time()))
+    return guardians
+
+
+def check_guardians(guardians: list[dict], c: dict) -> None:
+    marker=Path(c['root'])/'control'/'gpu_work_complete.json'; normal=False
+    if marker.exists():
+        d=read(marker)
+        normal=all(str(d[k])==str(c[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
+        if not normal: raise ValueError('GPU正常完成标记身份错误')
+    for g in guardians:
+        rc=g['process'].poll()
+        if rc is not None and not normal: raise RuntimeError(f"独立守卫提前退出 gpu={g['job_id']} rc={rc}")
 
 
 def check_heartbeat(path: Path, base: dict, *, now: float, timeout: float=120) -> dict:
@@ -45,9 +83,12 @@ def run(config_path: Path) -> int:
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     if str(os.environ.get('SLURM_JOB_ID',''))!=str(c['controller_job_id']): raise ValueError('监督器不在登记CPU作业')
     if int(os.environ.get('SLURM_RESTART_COUNT','0')): raise ValueError('禁止重排队')
-    controller=None; started=time.time(); last_moved=None; last_progress=started
-    def term(*_): raise RuntimeError('CPU监督收到终止信号')
-    signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term)
+    controller=None; guardians=[]; started=time.time(); last_moved=None; last_progress=started
+    guard_monitor_stop=threading.Event(); guard_monitor=None
+    def term(signum,*_):
+        if signum==signal.SIGUSR1: raise RuntimeError('独立守卫异常: '+(control/'guardian-error.json').read_text())
+        raise RuntimeError('CPU监督收到终止信号')
+    signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term); signal.signal(signal.SIGUSR1,term)
     try:
         ready=read(control/'launch.ready'); jobs=read(control/'jobs.json')
         for k,v in base.items():
@@ -60,13 +101,24 @@ def run(config_path: Path) -> int:
         mover_error=Path(c.get('mover_error',control/'mover-error.json'))
         check_heartbeat(mover,base,now=time.time())
         atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),pid=os.getpid()))
+        def watch_guards():
+            while not guard_monitor_stop.wait(1):
+                try: check_guardians(list(guardians),c)
+                except BaseException as e:
+                    atomic(control/'guardian-error.json',dict(base,error=str(e),time=time.time()))
+                    atomic(control/'STOP',dict(base,component='guardian-monitor',message=str(e),time=time.time()))
+                    os.kill(os.getpid(),signal.SIGUSR1)
+                    return
+        guard_monitor=threading.Thread(target=watch_guards,daemon=True); guard_monitor.start()
+        start_guardians(c,guardians)
         log=(control/'controller.log').open('a')
         controller=subprocess.Popen([c['python'],str(Path(__file__).with_name('raw_ood_controller.py')),'run','--config',str(config_path)],
                                     stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=dict(os.environ,PYTHONUNBUFFERED='1'))
         atomic(control/'supervisor-started.json',dict(base,pid=os.getpid(),controller_pid=controller.pid,time=time.time()))
         while True:
             now=time.time(); atomic(control/'cpu-heartbeat.json',dict(base,t=now,pid=os.getpid(),controller_pid=controller.pid))
-            for f in (control/'controller-error.json',mover_error,gl/'mover'/'error.json',control/'STOP',gl/'STOP'):
+            check_guardians(guardians,c)
+            for f in (control/'controller-error.json',control/'guardian-error.json',mover_error,gl/'mover'/'error.json',control/'STOP',gl/'STOP'):
                 if f.exists(): raise RuntimeError(f'已发布错误{f}: {f.read_text()[:3000]}')
             h=check_heartbeat(mover,base,now=now)
             # 零值必须实际写入JSON；缺键属于错误，不能默认成功。
@@ -101,8 +153,22 @@ def run(config_path: Path) -> int:
                     print('RAW_DELIVERY=PASS episodes=4000 videos=8000 hash_mismatch=0 decode_fail=0 missing=0 nfs_large_left=0',flush=True)
                     print('RUN_CLEANUP=PASS gpu_jobs=4 cpu_jobs=1 active=0 cpu_exit_code=0',flush=True)
                     print('RAW_SUPERVISOR=PASS expected=4000 moved=4000 infra=0',flush=True); return 0
+            if rc is None: start_guardians(c,guardians)
             time.sleep(5)
-    except BaseException as e: return fail(c,e,process=controller)
+    except BaseException as e:
+        # 清理会使守卫srun退出；先关闭独立监控，不能用二次信号打断首次错误清理。
+        signal.signal(signal.SIGUSR1,signal.SIG_IGN)
+        guard_monitor_stop.set()
+        if guard_monitor is not None: guard_monitor.join(timeout=2)
+        return fail(c,e,process=controller)
+    finally:
+        guard_monitor_stop.set()
+        if guard_monitor is not None: guard_monitor.join(timeout=2)
+        for g in guardians:
+            if g['process'].poll() is None:
+                try: os.killpg(g['process'].pid,signal.SIGTERM)
+                except ProcessLookupError: pass
+            g['log'].close()
 
 
 def self_test(root: Path) -> int:
