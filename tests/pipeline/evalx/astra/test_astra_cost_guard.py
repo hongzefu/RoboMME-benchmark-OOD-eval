@@ -3,6 +3,8 @@ projection of in-flight calls, and where STOP.json is written."""
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -123,3 +125,156 @@ def test_prices_must_be_given(tmp_path):
     bad.write_text(json.dumps({"input": 1.0}))
     with pytest.raises(ValueError, match="output"):
         guard.load_prices(bad)
+
+
+@pytest.mark.parametrize("value", [1, 2, 3])
+def test_explicit_episode_limit_accepts_only_authorized_integers(value):
+    """Explicit limits allow one to three episodes; the hard cost cap remains five USD."""
+    guard = load_guard()
+    assert guard.check_max_episodes(value) == value
+    assert guard.ASTRA_MAX_EPISODES == 2 and guard.HARD_MAX_EPISODES == 3
+    assert guard.HARD_CAP_USD == 5.0
+
+
+@pytest.mark.parametrize("value", [0, -1, 4, True, False, 1.0, 2.5, "3", None])
+def test_episode_limit_rejects_invalid_type_or_range(value):
+    """Reject booleans, floats, strings and non-positive values without coercion."""
+    with pytest.raises(ValueError, match="ASTRA_COST_BLOCKED.*max-episodes"):
+        load_guard().check_max_episodes(value)
+
+
+@pytest.mark.parametrize("value", [0, -1, 4, True, False, 1.0, 2.5, "3"])
+@pytest.mark.parametrize("entry", ["guard_round", "write_state"])
+def test_invalid_explicit_episode_limit_has_no_disk_side_effect(tmp_path, value, entry):
+    """Reject invalid configuration before creating locks, state, cost files or stop markers."""
+    guard = load_guard()
+    root = tmp_path / "absent"
+    state_path = root / "guard.state.json"
+    ledger = guard.new_ledger()
+    summary = guard.cycle([], ledger, PRICES, 5.0, 2048)
+    with pytest.raises(ValueError, match="max-episodes"):
+        if entry == "guard_round":
+            guard.guard_round([root], ledger, PRICES, 5.0, 2048, state_path, max_episodes=value)
+        else:
+            guard.write_state(state_path, summary, ledger, PRICES, 2048, max_episodes=value)
+    assert not root.exists() and ledger["calls"] == {}
+
+
+@pytest.mark.parametrize("limit", [None, 3])
+def test_heartbeat_and_final_state_keep_requested_episode_limit(tmp_path, limit):
+    """Read back persisted states: default two or explicit three applies to heartbeat and final exit."""
+    guard = load_guard()
+    state_path = tmp_path / "guard.state.json"
+    ledger = guard.new_ledger()
+    summary = guard.guard_round([], ledger, PRICES, 5.0, 2048, state_path, clock=lambda: 10.0,
+                                max_episodes=limit)
+    heartbeat = json.loads(state_path.read_text())
+    assert heartbeat["max_episodes"] == (2 if limit is None else 3)
+    assert heartbeat["heartbeat"] == 10.0 and heartbeat["exited"] is False
+    guard.write_state(state_path, summary, ledger, PRICES, 2048, exited=True, clock=lambda: 11.0,
+                      max_episodes=limit)
+    final = json.loads(state_path.read_text())
+    assert final["max_episodes"] == heartbeat["max_episodes"]
+    assert final["heartbeat"] == 11.0 and final["exited"] is True
+
+
+def test_omitted_episode_limit_reads_dynamic_default(tmp_path, monkeypatch):
+    """Preserve fixture overrides of the default constant instead of freezing it at function definition."""
+    guard = load_guard()
+    ledger = guard.new_ledger()
+    state_path = tmp_path / "guard.state.json"
+    for limit in (3, 10):
+        monkeypatch.setattr(guard, "ASTRA_MAX_EPISODES", limit)
+        guard.guard_round([], ledger, PRICES, 5.0, 2048, state_path)
+        assert json.loads(state_path.read_text())["max_episodes"] == limit
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "4", "true", "2.5"])
+def test_main_invalid_episode_limit_does_not_create_files(tmp_path, value):
+    """Invalid CLI arguments fail before reading prices or writing files."""
+    guard = load_guard()
+    root = tmp_path / "absent"
+    argv = ["--root", str(root), "--prices", str(root / "prices.json"), "--ledger", str(root / "ledger.json"),
+            "--max-episodes", value, "--once"]
+    if value in ("true", "2.5"):
+        with pytest.raises(SystemExit) as exc:
+            guard.main(argv)
+        assert exc.value.code == 2
+    else:
+        assert guard.main(argv) == 2
+    assert not root.exists()
+
+
+@pytest.mark.parametrize("limit", [None, 3])
+def test_main_once_serializes_default_or_explicit_episode_limit(tmp_path, limit):
+    """The real single-round entry preserves the default two or explicit three in its state."""
+    guard = load_guard()
+    price_path = tmp_path / "prices.json"
+    price_path.write_text(json.dumps(PRICES))
+    ledger_path = tmp_path / "ledger.json"
+    argv = ["--root", str(tmp_path), "--prices", str(price_path), "--ledger", str(ledger_path), "--once"]
+    if limit is not None:
+        argv += ["--max-episodes", str(limit)]
+    assert guard.main(argv) == 0
+    state = json.loads(guard.default_state_path(ledger_path).read_text())
+    assert state["max_episodes"] == (2 if limit is None else 3)
+    assert state["cap"] == 5.0 and state["exited"] is False
+
+
+def test_main_shutdown_final_state_preserves_explicit_three(tmp_path, monkeypatch):
+    """A simulated stop after the first round persists the explicit three on normal exit."""
+    guard = load_guard()
+    price_path = tmp_path / "prices.json"
+    price_path.write_text(json.dumps(PRICES))
+    ledger_path = tmp_path / "ledger.json"
+    handlers = {}
+    monkeypatch.setattr(guard.signal, "signal", lambda signum, handler: handlers.update({signum: handler}))
+    original_round = guard.guard_round
+    heartbeats = []
+
+    def round_then_stop(*args, **kwargs):
+        summary = original_round(*args, **kwargs)
+        heartbeats.append(json.loads(guard.default_state_path(ledger_path).read_text()))
+        handlers[guard.signal.SIGTERM](guard.signal.SIGTERM, None)
+        return summary
+
+    monkeypatch.setattr(guard, "guard_round", round_then_stop)
+    assert guard.main(["--root", str(tmp_path), "--prices", str(price_path), "--ledger", str(ledger_path),
+                       "--max-episodes", "3"]) == 0
+    final = json.loads(guard.default_state_path(ledger_path).read_text())
+    assert len(heartbeats) == 1 and heartbeats[0]["max_episodes"] == final["max_episodes"] == 3
+    assert heartbeats[0]["exited"] is False and final["exited"] is True
+
+
+def test_guard_process_restart_keeps_same_cumulative_ledger(tmp_path):
+    """Two independent guard processes reuse one ledger without clearing episodes, reservations or costs."""
+    guard = load_guard()
+    price_path = tmp_path / "prices.json"
+    price_path.write_text(json.dumps(PRICES))
+    spool = tmp_path / "group_0" / "planner_calls"
+    _call(spool, "first", USAGE)
+    ledger_path = tmp_path / "ledger.json"
+    state_path = guard.default_state_path(ledger_path)
+    reservations = {"schema": guard.RESERVATIONS_SCHEMA,
+                    "episodes": ["off", "on", "formal"],
+                    "reservations": {"first": {"usd": 0.1, "state": "sent"},
+                                     "pending": {"usd": 0.25, "state": "reserved"}}}
+    guard.save_reservations(state_path, reservations)
+    reservation_bytes = guard.reservations_path(state_path).read_bytes()
+    command = [sys.executable, "-m", "robomme_ood_eval.servers.astra_cost_guard", "--root", str(spool),
+               "--prices", str(price_path), "--ledger", str(ledger_path), "--max-episodes", "3", "--cap", "5",
+               "--once"]
+    for expected_calls in (1, 2):
+        if expected_calls == 2:
+            _call(spool, "second", USAGE)
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=15)
+        assert completed.returncode == 0, completed.stderr
+        ledger = guard.load_ledger(ledger_path)
+        assert len(ledger["calls"]) == expected_calls
+        state = json.loads(state_path.read_text())
+        assert state["max_episodes"] == 3 and state["cap"] == 5.0
+        assert state["committed_usd"] == pytest.approx(0.022 * expected_calls)
+        assert state["projected_usd"] == pytest.approx(0.022 * expected_calls + 0.25)
+        assert guard.reservations_path(state_path).read_bytes() == reservation_bytes
+        assert guard.load_reservations(state_path) == reservations
+    print("ASTRA_EPISODE_LIMIT=PASS default=2 explicit=3 hard_max=3 restart_calls=2 reservations_preserved=1")

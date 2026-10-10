@@ -49,8 +49,9 @@ Hard limits:
   ``<state>.reservations.json`` (``fcntl`` lock ``<state>.lock``); the guard also includes reservations not yet in
   the ledger in its projection. On a normal exit the guard writes ``exited=true``; if it crashes the heartbeat stops
   updating and the runner refuses to send after 10 seconds.
-- Hard episode limit ``ASTRA_MAX_EPISODES=2``: before each episode the runner registers it in the ``episodes`` list
-  of the same reservation file, cumulative across runs.
+- Episode limit defaults to ``ASTRA_MAX_EPISODES=2``; explicit ``--max-episodes`` must be an integer in 1..3.
+  The selected limit is written as ``max_episodes`` in the heartbeat and final state. Before each episode the runner
+  registers it in the ``episodes`` list of the same reservation file, cumulative across runs.
 """
 from __future__ import annotations
 
@@ -69,14 +70,16 @@ LEDGER_SCHEMA = "astra-cost-ledger/1"
 GROUP_RE = re.compile(r"^group_\d+$")
 #: valid unit-price unit
 PRICE_UNIT = "usd_per_1m_tokens"
-#: fixed hard cost limit (USD; Astra local smoke runs are limited to <= 2 episodes and 5 USD); --cap must not exceed it
+#: fixed hard cost limit (USD); --cap must not exceed it
 HARD_CAP_USD = 5.0
 #: default guard scan interval (seconds)
 DEFAULT_INTERVAL_S = 2.0
 #: heartbeat timeout (seconds) after which the runner treats the guard as lost; --interval must not exceed half of it
 HEARTBEAT_TIMEOUT_S = 10.0
-#: hard Astra episode limit; the runner counts across runs via the episodes list of the reservation file
+#: default Astra episode limit; the runner counts across runs via the episodes list of the reservation file
 ASTRA_MAX_EPISODES = 2
+#: maximum explicitly configured episode limit
+HARD_MAX_EPISODES = 3
 STATE_SCHEMA = "astra-guard-state/1"
 RESERVATIONS_SCHEMA = "astra-reservations/1"
 #: marker written in the request directory when the runner refuses before sending; the guard counts such requests as
@@ -334,25 +337,28 @@ def save_reservations(state_path: Path, doc: dict) -> None:
 
 
 def write_state(state_path: Path, summary: dict, ledger: dict, prices: dict, max_output_tokens: int, *,
-                exited: bool = False, clock=time.time) -> dict:
+                exited: bool = False, clock=time.time, max_episodes: int | None = None) -> dict:
+    limit = ASTRA_MAX_EPISODES if max_episodes is None else check_max_episodes(max_episodes)
     state = {"schema": STATE_SCHEMA, "pid": os.getpid(), "heartbeat": clock(), "exited": bool(exited),
              "cap": float(summary["cap"]), "hard_cap": HARD_CAP_USD, "committed_usd": summary["committed_usd"],
              "usd": summary["usd"], "projected_usd": summary["projected_usd"], "stop": bool(summary["stop"]),
              "reason": summary.get("reason"), "unknown_usage": summary.get("unknown_usage", 0),
              "counted": sorted(ledger["calls"]), "prices": prices, "max_output_tokens": int(max_output_tokens),
-             "max_episodes": ASTRA_MAX_EPISODES}
+             "max_episodes": limit}
     atomic_write_json(Path(state_path), state)
     return state
 
 
 def guard_round(roots: list[Path], ledger: dict, prices: dict, cap: float, max_output_tokens: int,
-                state_path: Path, *, clock=time.time) -> dict:
+                state_path: Path, *, clock=time.time, max_episodes: int | None = None) -> dict:
     """One guard round: read reservations inside the lock -> scan and project (write STOP when the limit is reached)
     -> write the heartbeat state. Shared by ``main`` and tests."""
+    if max_episodes is not None:
+        check_max_episodes(max_episodes)
     with locked(state_path):
         reservations = load_reservations(state_path)
         summary = cycle(roots, ledger, prices, cap, max_output_tokens, reservations)
-        write_state(state_path, summary, ledger, prices, max_output_tokens, clock=clock)
+        write_state(state_path, summary, ledger, prices, max_output_tokens, clock=clock, max_episodes=max_episodes)
     return summary
 
 
@@ -361,6 +367,13 @@ def check_cap(cap: float) -> float:
     if not 0 < cap <= HARD_CAP_USD:
         raise ValueError(f"ASTRA_COST_BLOCKED --cap={cap:g} exceeds the hard limit of {HARD_CAP_USD:g} USD")
     return cap
+
+
+def check_max_episodes(value: int) -> int:
+    """Validate an explicit episode limit without coercing booleans, floats or strings."""
+    if type(value) is not int or not 1 <= value <= HARD_MAX_EPISODES:
+        raise ValueError(f"ASTRA_COST_BLOCKED --max-episodes={value!r} must be an integer in 1..{HARD_MAX_EPISODES}")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -373,6 +386,8 @@ def build_parser() -> argparse.ArgumentParser:
                                                         "back every round")
     parser.add_argument("--cap", type=float, default=HARD_CAP_USD,
                         help=f"USD; default and maximum {HARD_CAP_USD:g} (hard limit)")
+    parser.add_argument("--max-episodes", type=int, default=ASTRA_MAX_EPISODES,
+                        help=f"cumulative episodes; default {ASTRA_MAX_EPISODES}, maximum {HARD_MAX_EPISODES}")
     parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_S,
                         help=f"seconds; must not exceed half the heartbeat timeout of {HEARTBEAT_TIMEOUT_S:g} seconds")
     parser.add_argument("--state", default=None, help="heartbeat state file (read synchronously by the runner before "
@@ -386,6 +401,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         check_cap(args.cap)
+        check_max_episodes(args.max_episodes)
     except ValueError as exc:
         print(str(exc), file=sys.stderr, flush=True)
         return 2
@@ -410,7 +426,8 @@ def main(argv: list[str] | None = None) -> int:
     stop_seen = False
     summary = None
     while running["go"]:
-        summary = guard_round(roots, ledger, prices, args.cap, args.max_output_tokens, state_path)
+        summary = guard_round(roots, ledger, prices, args.cap, args.max_output_tokens, state_path,
+                              max_episodes=args.max_episodes)
         save_ledger(ledger_path, ledger)
         key = (summary["calls"], summary["pending"], summary["usd"])
         if key != last:
@@ -432,7 +449,8 @@ def main(argv: list[str] | None = None) -> int:
     if summary is not None and not args.once:
         # normal exit: write exited=true so the runner refuses immediately (without waiting for the heartbeat timeout)
         with locked(state_path):
-            write_state(state_path, summary, ledger, prices, args.max_output_tokens, exited=True)
+            write_state(state_path, summary, ledger, prices, args.max_output_tokens, exited=True,
+                        max_episodes=args.max_episodes)
         print(f"ASTRA_COST_GUARD_EXIT state={state_path}", flush=True)
     return 0
 
