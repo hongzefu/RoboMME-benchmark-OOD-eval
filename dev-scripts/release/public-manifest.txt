@@ -21,6 +21,7 @@ src/robomme_ood_eval/models/framesamp_modul.py
 src/robomme_ood_eval/models/groundsg.py
 src/robomme_ood_eval/models/pp.py
 src/robomme_ood_eval/models/smvla.py
+src/robomme_ood_eval/timing.py
 src/robomme_ood_eval/policy.py
 src/robomme_ood_eval/record/__init__.py
 src/robomme_ood_eval/record/official_render.py
