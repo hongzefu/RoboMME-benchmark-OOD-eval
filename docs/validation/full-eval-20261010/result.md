@@ -66,3 +66,13 @@ SimpleMemVLA 正式 A 首个新身份正常截断，已接受且不重跑；随�
 私有恢复逻辑定向 67 项测试通过；整合前核心短测 1507 项通过、6 项跳过、101 项慢测排除，187.86 秒、退出 0，资源守卫未触发 reset、GPU、权重或网络。最终复制修订再次定向验证，并独立固定提交审查通过。下一步在新冻结执行副本恢复原失败身份，保留三个健康席位当前执行版本。
 
 六变体 smoke 完整媒体验收通过，自动续行 A；某模型 A 清单完成即按计划滚动进入 B，阶段完成只报告不等待放行。之后种子 0、42，同一四席动态队列；到期后才申请接替。正式成绩、阶段耗时、三种子汇总与最终具名验收仍未验证。
+
+## 旧两次上限席位的接续修订
+
+PonderPounce 的 1 任务（VideoPlaceOrder）× 1 档（xhard1）× 1 身份 × 2 次尝试，均在执行 1660 步后遇到同一服务端上下文错误：长度 16439 超过上限 16384，`infra_reason=pp_server_error`。这沿原计划既有裁决记基础设施失败，未接受、未计入正常失败成绩；模型上下文、评估步数与失败分类均未改。两次结果还报告视频估计内存 6343 MiB 超过默认 6144 MiB，不能据此宣称媒体通过。第二次原结果逐字节快照见 [原结果](records/pp-context-overflow/result-a2.json)：`PP_FAILURE_SNAPSHOT=PASS attempt=2 bytes=64231 sha256=34f9662f242c70968c3f8e09e10d4dd9f90514626e659df6c1c2c9933283f13e`；未将已被旧入口覆盖的首次 raw 目录宣称为完整保存。
+
+三个健康旧席位仍使用起跑时的两次上限。私有控制器仅对其 `EXIT_INCOMPLETE=6` 新增核证：旧 `RUN_PLAN max_attempts=2`、实际缺失集合、原领取与结果、本地结束及共享预算预约／重试／结算全部一致，最后尝试小于 20 且预算充足，才按原 r3 入口与同一账本接续已批准的二十次上限。真正二十次耗尽、正常终态漏接受、活领取、未知退出码及未结算仍拒绝，不放宽最终验收。
+
+独立静态审查发现首稿把 GroundSG 队列标签误当预算路线；已修为生产 `policy_route` 的 `groundsg/<variant>/seed<n>/new`，夹具直接调用该生产函数。保留两个子提交 `3f2eb070d52db10f20ea0b9224709ce068890a1b`、`cf3c3962214652f5b24814ba00199b1b4fdf74af`；新固定提交审查 `STATIC_REVIEW=PASS findings=0`。生产队列、结束与预算序列化夹具的 68 项定向测试通过、0.58 秒，资源守卫全零。实际控制器接手与下一次真实重试另记，当前仍未完成阶段 A。
+
+主树整合后的核心短测 `UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q` 退出 0，1644 项通过、6 项跳过、101 项慢测排除，187.69 秒；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6`。这是控制器与核心软件验证，不是新增仿真，也不是阶段成绩验收。

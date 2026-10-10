@@ -477,3 +477,182 @@ def test_report_entry_must_be_r3(tmp_path):
     c.c['report_code'] = '/runtime-code-r2/dev-scripts/gl/stage_report.py'
     with pytest.raises(ValueError, match='报告入口'):
         module.Controller(c.c)
+
+
+def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='A', model='pp'):
+    """真实队列、尝试账本和共享账本落盘；只伪造命令执行，不导入环境。"""
+    calls = []
+    def command(argv, **kwargs):
+        calls.append(argv)
+        return SimpleNamespace(stdout='RUNNING', returncode=1 if 'has-session' in argv else 0)
+    c = fixture(tmp_path, command)
+    c.state['stage'] = stage
+    seat_spec = importlib.util.spec_from_file_location('legacy_fixture_seat',
+        Path(__file__).parents[1] / 'dev-scripts/gl/seat.py')
+    sm = importlib.util.module_from_spec(seat_spec)
+    sys.modules[seat_spec.name] = sm
+    seat_spec.loader.exec_module(sm)
+    stage_spec = c.c['stages'][stage]
+    identity = module.read(stage_spec['identities'])
+    queue_ident = sm.identity_for_queue(identity, 'ood')
+    label = module.MODELS[model]
+    policy = 'groundsg' if label.startswith('groundsg-') else label
+    route = sm.policy_route(SimpleNamespace(policy=policy, policy_seed=stage_spec['seed'],
+        groundsg_variant=label.removeprefix('groundsg-') if policy == 'groundsg' else None))
+    seat_name = 'fe-A-pp-01'
+    caps = stage_spec['caps']
+    shared = sm.load_sibling('budget_ledger').BudgetLedger(stage_spec['budget'],
+        trajectory_cap=caps[0], reset_cap=caps[1], shared_infra_cap=caps[2],
+        expired_cap=caps[3], planned_first_tries=caps[4])
+    queue = sm.DynamicQueue(Path(stage_spec['out']) / f"queue/{label}/seed{stage_spec['seed']}",
+                            seat=seat_name, wall_s=60, max_attempts=max_attempts)
+    ledger_path = Path(stage_spec['out']) / f"seats/{label}/seed{stage_spec['seed']}/{seat_name}/{label}.ledger.jsonl"
+    ledger = sm.AttemptLedger(ledger_path, seat=seat_name, policy=policy, shared=shared, route=route)
+    runner = sm.SeatRunner.__new__(sm.SeatRunner)
+    runner.ledger, runner.queue, runner._lock = ledger, queue, threading.Lock()
+    runner.args, runner.seat = SimpleNamespace(policy=policy), seat_name
+    runner.results_path = ledger_path.parent / f'{label}.results.jsonl'
+    raw = Path(stage_spec['out']) / f'rollouts/{label}/result.json'
+    raw.parent.mkdir(parents=True)
+    for n in range(1, attempts + 1):
+        token = f'{route}|{identity["key"]}|a{n}'
+        if n > 1:
+            assert shared.claim_retry(route=route, key=identity['key'], interrupt='infra',
+                                      token=token, max_attempts=20)
+        rid = shared.reserve(resets=2, route=route, key=identity['key'], token=token,
+                             dataset='ood', attempt_no=n, kind_of_try='first' if n == 1 else 'recovery')
+        claim_path = queue.create_claim(queue_ident, n, token=token, rid=rid, route=route)
+        aid = f'aid-{n}'
+        ledger.attempt_start(key=identity['key'], attempt_id=aid, attempt_no=n, retry=n > 1,
+                             identity=queue_ident, result_path=str(raw), budget_rid=rid,
+                             claim=str(claim_path), token=token)
+        result = {**{k: v for k, v in identity.items() if k != 'builder_episode'},
+                  'attempt': n, 'policy_seed': stage_spec['seed'], 'policy_label': label,
+                  'model': policy, 'status': 'fail', 'task_success': 0, 'infra': not final,
+                  'infra_reason': 'pp_server_error', 'budget_exhausted': False, 'run_blocked': False}
+        raw.write_text(json.dumps(result))
+        runner._end(sm.Claim(queue_ident, n, claim_path, token, rid, n > 1), aid,
+                    {**result, 'result': str(raw)}, void=False)
+    log = c.root / 'legacy.log'
+    missing, accepted = (0, 1) if final else (1, 0)
+    log.write_text(f'RUN_PLAN policy={policy} label={label} seat={seat_name} total=1 claimable=1 '
+                   f'max_attempts={max_attempts} route={route} reset_left=inf\n'
+                   f'RUN_SUMMARY policy={policy} label={label} seat={seat_name} total=1 '
+                   f'accepted={accepted} running_elsewhere=0 missing={missing} episodes_run={attempts}\n'
+                   + (f'RUN_INCOMPLETE policy={policy} seat={seat_name} total=1 missing=1 '
+                      f'first=ood:{identity["key"]}\n' if missing else '')
+                   + f'EXIT_CODE={6 if missing else 0}\n')
+    seat = c.state['seats'][0]
+    seat.update(session=f'fe-controller-{stage}-{model}-0-1', model=model, stage=stage,
+                log=str(log), seat_name=seat_name, onlykey=None)
+    return c, seat, raw, ledger_path, shared.path, queue, calls
+
+
+@pytest.mark.parametrize('stage,model', [('A', 'pp'), ('B', 'memer'), ('C', 'qwen'), ('D', 'oracle')])
+def test_legacy_max2_serialized_settlement_resumes_r3(tmp_path, stage, model):
+    c, seat, _, _, budget, queue, calls = legacy_fixture(tmp_path, stage=stage, model=model)
+    original_budget = budget.read_bytes()
+    c.tick()
+    events = [json.loads(line) for line in (c.root / 'events.jsonl').read_text().splitlines()]
+    resumed = next(e for e in events if e['kind'] == 'legacy_retry_resume')
+    assert resumed['attempts'] == {'Task_xhard1_1': 2} and resumed['max_attempts'] == 20
+    assert 'run-model-r3.sh' in next(x[-1] for x in calls if 'new-session' in x)
+    assert budget.read_bytes() == original_budget
+    assert module.read(c.path)['stage'] == stage
+    assert len(list(queue.claims.glob('*.json'))) == 2
+
+
+@pytest.mark.parametrize('attempts,max_attempts', [(2, 20), (20, 2), (1, 2)])
+def test_legacy_new20_or_exhausted_attempts_refuse(tmp_path, attempts, max_attempts):
+    c, seat, _, _, _, _, calls = legacy_fixture(tmp_path, attempts=attempts, max_attempts=max_attempts)
+    with pytest.raises(ValueError):
+        c.tick()
+    assert not any('new-session' in argv for argv in calls)
+    assert seat['session']
+
+
+def test_legacy_normal_failure_accepted_is_never_reclaimed(tmp_path):
+    c, seat, _, _, _, queue, calls = legacy_fixture(tmp_path, attempts=1, final=True)
+    assert c.remaining('A', 'pp') == []
+    c.tick()
+    assert not any('new-session' in argv and 'fe-controller-A-pp-' in str(argv) for argv in calls)
+    assert module.read(queue.accepted_dir / 'ood__Task_xhard1_1.json')['status'] == 'fail'
+    assert len(list(queue.claims.glob('*.json'))) == 1
+    assert queue.claimable(module.read(c.c['stages']['A']['identities'])) is False
+
+
+def test_legacy_attempt19_remains_allowed_without_spending_budget(tmp_path):
+    c, seat, _, _, budget, _, _ = legacy_fixture(tmp_path, attempts=19)
+    before = budget.read_bytes()
+    assert c.legacy_retry_settled(seat, Path(seat['log']).read_text(), ['Task_xhard1_1']) == {'Task_xhard1_1': 19}
+    assert budget.read_bytes() == before
+
+
+@pytest.mark.parametrize('cap', ['reset', 'trajectory', 'reserved_first', 'identity_retry'])
+def test_legacy_each_shared_budget_guard_refuses(tmp_path, cap):
+    c, seat, _, _, budget, _, _ = legacy_fixture(tmp_path)
+    rows = [json.loads(line) for line in budget.read_text().splitlines()]
+    if cap == 'reset':
+        next(r for r in rows if r['kind'] == 'reserve')['resets'] = module.CAPS['A'][1]
+    elif cap in ('trajectory', 'reserved_first'):
+        extra = module.CAPS['A'][0] - 2 if cap == 'trajectory' else module.CAPS['A'][0] - module.CAPS['A'][4]
+        rows += [{'kind': 'reserve', 'rid': f'extra-{i}', 'resets': 0} for i in range(extra)]
+    else:
+        rows += [{'kind': 'retry_claim', 'route': 'pp/seed7/new', 'key': 'Task_xhard1_1', 'interrupt': 'infra'}
+                 for _ in range(18)]
+    budget.write_text('\n'.join(json.dumps(r) for r in rows) + '\n')
+    with pytest.raises(ValueError, match='预算耗尽'):
+        c.legacy_retry_settled(seat, Path(seat['log']).read_text(), ['Task_xhard1_1'])
+
+
+@pytest.mark.parametrize('mutation', ['fake_identity', 'no_local_end', 'no_shared_commit', 'live_claim',
+    'normal_result', 'lost_accept', 'budget', 'bad_summary', 'running_elsewhere', 'missing_log', 'unknown_exit',
+    'bad_reserve', 'budget_config', 'open_reserve', 'no_shared_retry', 'missing_prior_claim'])
+def test_legacy_inconsistent_or_unsettled_evidence_refuses(tmp_path, mutation):
+    c, seat, raw, local, budget, queue, calls = legacy_fixture(tmp_path)
+    if mutation in ('fake_identity', 'normal_result'):
+        doc = module.read(raw)
+        doc['seed' if mutation == 'fake_identity' else 'infra'] = 999 if mutation == 'fake_identity' else False
+        raw.write_text(json.dumps(doc))
+    elif mutation in ('no_local_end', 'lost_accept'):
+        rows = [json.loads(line) for line in local.read_text().splitlines()]
+        if mutation == 'no_local_end':
+            rows = [r for r in rows if r.get('attempt_id') != 'aid-2' or r['kind'] != 'attempt_end']
+        else:
+            rows.append({'kind': 'accept', 'key': 'Task_xhard1_1'})
+        local.write_text('\n'.join(json.dumps(r) for r in rows) + '\n')
+    elif mutation == 'missing_prior_claim':
+        (queue.claims / 'ood__Task_xhard1_1.a1.json').unlink()
+    elif mutation == 'live_claim':
+        path = queue.claims / 'ood__Task_xhard1_1.a2.json'
+        doc = module.read(path)
+        doc['ended'] = False
+        path.write_text(json.dumps(doc))
+    elif mutation in ('no_shared_commit', 'budget', 'bad_reserve', 'budget_config', 'open_reserve', 'no_shared_retry'):
+        rows = [json.loads(line) for line in budget.read_text().splitlines()]
+        if mutation == 'no_shared_commit':
+            rows = [r for r in rows if r['kind'] != 'commit']
+        elif mutation == 'no_shared_retry':
+            rows = [r for r in rows if r['kind'] != 'retry_claim']
+        elif mutation == 'budget':
+            rows += [{'kind': 'retry_claim', 'route': 'other', 'key': str(i), 'interrupt': 'infra'}
+                     for i in range(module.CAPS['A'][2])]
+        elif mutation == 'bad_reserve':
+            next(r for r in reversed(rows) if r['kind'] == 'reserve')['key'] = 'wrong'
+        elif mutation == 'budget_config':
+            rows[0]['trajectory_cap'] += 1
+        else:
+            rows.append({'kind': 'reserve', 'rid': 'open', 'route': 'pp/seed7/new', 'key': 'Task_xhard1_1'})
+        budget.write_text('\n'.join(json.dumps(r) for r in rows) + '\n')
+    else:
+        path = Path(seat['log'])
+        text = path.read_text()
+        before, after = {'bad_summary': ('accepted=0', 'accepted=1'),
+                         'running_elsewhere': ('running_elsewhere=0', 'running_elsewhere=1'),
+                         'missing_log': ('RUN_INCOMPLETE', 'UNKNOWN'),
+                         'unknown_exit': ('EXIT_CODE=6', 'EXIT_CODE=75')}[mutation]
+        path.write_text(text.replace(before, after))
+    with pytest.raises(ValueError):
+        c.tick()
+    assert not any('new-session' in argv for argv in calls)
+    assert not (c.root / 'events.jsonl').exists()
