@@ -123,6 +123,6 @@ Qwen 的 1 任务（VideoPlaceOrder）× 1 档（xhard2）× 1 身份 × 1 次�
 
 PP 另一个上下文耗尽身份按用户新裁决为模型失败 0，原接受记录仍未改变，未将其冒充为已自动接受或完整媒体通过；也不把它的二十次基础设施尝试当二十个不同任务失败。B／C／D 未启动。全流程目标六模型 × 十四任务 × 每任务跨档 50 局 × 三个种子 = 12600 身份，未完成，当前数字只能作为提前停止的部分结果。
 
-精确停止清单：监督器 `fe-full-eval-controller-r6-20261010`，工作会话 `fe-A-memer-63431430`、`fe-controller-A-smvla-1-78`、`fe-controller-A-oracle-2-63`、`fe-controller-A-perceptual-framesamp-modul-3-64`。逐次 tmux 清单差集仅删除指定会话；随后只向其数字执行 step `63431430.7`、`63431431.24`、`63431432.79`、`63431433.8` 发 TERM，未向任何占位 job 或 `.batch/.extern` 发取消。复核 Slurm 仅剩四个 job 的 batch／extern，四个 job 都 RUNNING；本輪只读子代理停止，本机本轮 tail 监听关闭，其它项目监听未动。首次 step 查询误用不支持的 `%T` 格式字段，随后以 `%i|%j|%N` 正确复核，不把格式报错当作作业状态。
+精确停止清单：监督器 `fe-full-eval-controller-r6-20261010`，工作会话 `fe-A-memer-63431430`、`fe-controller-A-smvla-1-78`、`fe-controller-A-oracle-2-63`、`fe-controller-A-perceptual-framesamp-modul-3-64`。逐次 tmux 清单差集仅删除指定会话；随后只向其数字执行 step `63431430.7`、`63431431.24`、`63431432.79`、`63431433.8` 发 TERM，未向任何占位 job 或 `.batch/.extern` 发取消。复核 Slurm 仅剩四个 job 的 batch／extern，四个 job 都 RUNNING；本轮只读子代理停止，本机本轮 tail 监听关闭，其它项目监听未动。首次 step 查询误用不支持的 `%T` 格式字段，随后以 `%i|%j|%N` 正确复核，不把格式报错当作作业状态。
 
 预算原样保留：392 个轨迹预约，其中 388 已结算、4 个停止时开放；reset 预算计量 784，实际 `reset_claim` 共 690，两者不是同一口径。四个开放回合分别属于当前 MemER、SimpleMemVLA、Oracle、framesamp-modul，中断现场保留，不伪造结束记录、不释放或重试原预约。详细逐模型计数见 [停止快照](records/user-stop-summary.json)。已经核对复制的完整产物仍为 230 个回合、3717 文件、2007243540 字节；其余产物保留在 NFS，本次停止不再启动额外搬运或视频修复。
