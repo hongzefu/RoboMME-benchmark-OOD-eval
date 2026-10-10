@@ -46,6 +46,39 @@ def relocated_path(root, stored):
     return target
 
 
+def bind_trace(raw, row, checker):
+    """按 episode._classify 归一化终态；完整绑定真实 trace 的身份契约。"""
+    trace = checker.read_rows(raw / 'trace.jsonl')
+    if not trace or not all(isinstance(v, dict) for v in trace) or trace[0].get('kind') != 'header' or trace[-1].get('kind') != 'end':
+        raise ValueError('trace 不完整')
+    header, end = trace[0], trace[-1]
+    identity = header.get('identity')
+    if not isinstance(identity, dict):
+        raise ValueError('trace identity 缺失')
+    for key in ('dataset', 'task', 'tier', 'seed', 'key', 'source_episode', 'attempt', 'policy_seed'):
+        if key not in identity or identity[key] != row[key] or (key in ('attempt', 'policy_seed', 'seed') and type(identity[key]) is not int):
+            raise ValueError(f'trace 身份不符：{key}')
+    if identity.get('builder_episode') != row['episode'] or type(identity.get('builder_episode')) is not int:
+        raise ValueError('trace builder 局号不符')
+    for key in ('candidate', 'spec_sha256'):
+        # 现有 trace 格式未写两字段；若写了则必须逐键核对，结果自身已与阶段清单绑定。
+        if key in identity and identity[key] != row[key]:
+            raise ValueError(f'trace 身份不符：{key}')
+    for doc in (header, end):
+        if 'policy_seed' not in doc or type(doc['policy_seed']) is not int or doc['policy_seed'] != row['policy_seed']:
+            raise ValueError('trace header/end 模型种子不符或缺失')
+    status = end.get('status')
+    if status not in ('success', 'fail', 'timeout', 'error'):
+        raise ValueError('trace 终态未知')
+    normalized = 'timeout' if end.get('cap_hit') is True else ('fail' if status == 'error' else status)
+    if row['status'] != normalized:
+        # 已登记无帧错误终局是历史例外，仍不算成功。
+        no_frame = end.get('no_frame') is True or end.get('frames_recorded') == 0
+        if not (row['status'] == status == 'error' and no_frame and not end.get('cap_hit')):
+            raise ValueError('trace 归一化终态不符')
+    return header, end, normalized
+
+
 def verify_recovery(raw, root, row, ff, checker):
     """恢复证据须绑定原输入字节、身份与实际全解码视频，标志位不构成证据。"""
     recovery = raw / 'recovered-video'
@@ -75,12 +108,10 @@ def verify_recovery(raw, root, row, ff, checker):
         verified.add(path.resolve())
     required = [raw / name for name in ('result.json', 'trace.jsonl', 'arrays.npz', 'front.mkv', 'wrist.mkv',
                                        'frames-front.jsonl', 'frames-wrist.jsonl', 'meta.json')]
+    required.append(raw.parent.parent / 'results.jsonl')
     if not all(path.resolve() in verified for path in required):
         raise ValueError('恢复原文件清单缺少核心输入')
-    trace = checker.read_rows(raw / 'trace.jsonl')
-    if not trace or trace[0].get('kind') != 'header' or trace[-1].get('kind') != 'end':
-        raise ValueError('恢复 trace 不完整')
-    header, end = trace[0], trace[-1]
+    header, end, normalized = bind_trace(raw, row, checker)
     identity = header['identity']
     if render['identity'] != identity:
         raise ValueError('恢复 trace 与 sidecar 身份不符')
@@ -89,7 +120,10 @@ def verify_recovery(raw, root, row, ff, checker):
             raise ValueError(f'恢复身份不符：{key}')
     if identity.get('builder_episode') != row['episode'] or header.get('policy_seed', identity.get('policy_seed')) != row['policy_seed']:
         raise ValueError('恢复 builder 局号或模型种子不符')
-    if end.get('status') != row['status'] or render['status'] != row['status'] or render['policy_seed'] != row['policy_seed']:
+    for key in ('candidate', 'spec_sha256'):
+        if key in render['identity'] and render['identity'][key] != row[key]:
+            raise ValueError(f'恢复渲染身份不符：{key}')
+    if render['status'] != end['status'] or render.get('terminal_reason') != normalized or render['policy_seed'] != row['policy_seed']:
         raise ValueError('恢复 trace 终态或渲染种子不符')
     for key, name in (('source_trace', 'trace.jsonl'), ('source_arrays', 'arrays.npz')):
         fp = render[key]
@@ -264,6 +298,7 @@ def build_report(out_root, identities, stage, *, models=MODELS, check_media=Fals
                         if (raw / 'recovered-video' / 'recovery.json').exists():
                             media = verify_recovery(raw, root, row, ffmpeg, media_checker)
                         else:
+                            bind_trace(raw, row, media_checker)
                             media = media_checker.verify_new_episode(raw, raw.parent.parent, ffmpeg, dataset='ood',
                                                                      seed=seed, expected_policy_seed=seed)
                         if media['status'] not in ('pass', 'no_frame_error'):
