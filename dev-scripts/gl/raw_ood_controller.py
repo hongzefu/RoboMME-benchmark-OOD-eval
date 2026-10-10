@@ -282,9 +282,9 @@ class Controller:
         if not a.get('step_id'): return
         self.write_ack(a,f"{a['model']}:ood:{p['key']}",p['pid'],d['step'],str(ep))
 
-    def check_worker(self,a):
+    def check_worker(self,a,*,exited=False):
         now=time.time()
-        if not a.get('step_id'):
+        if not exited and not a.get('step_id'):
             steps=subprocess.run(['squeue','--steps','-h','-j',str(a['seat']['job_id']),'-o','%i %j'],capture_output=True,text=True,timeout=5)
             candidates=[s.split()[0] for s in steps.stdout.splitlines() if len(s.split())==2 and s.split()[1]==a['worker_name'] and s.split()[0].startswith(str(a['seat']['job_id'])+'.')]
             if steps.returncode: raise RuntimeError('srun step查询失败')
@@ -297,30 +297,68 @@ class Controller:
             if a['step_id'] is not None and a['step_id']!=exact: raise ValueError('客户端SLURM StepID与调度回执冲突')
             a['step_id']=exact
             if p['label']!=self.c['models'][a['model']]['label']: raise ValueError('专属进度标签错误')
-            if now-float(p['t'])>120: raise RuntimeError('专属席位心跳失效')
+            if not exited and now-float(p['t'])>120: raise RuntimeError('专属席位心跳失效')
             if phase!=a['phase_key']: a['phase_key']=phase; a['phase_start']=now
             limits=self.c.get('phase_limits',{'context_load':3600,'claim':120,'episode':3600,'done':300,'finished':120})
-            if now-a['phase_start']>float(limits[p['phase']]): raise RuntimeError(f"席位阶段超时{phase}")
-        elif now-a['started']>120: raise RuntimeError('席位未建立进度')
+            if not exited and now-a['phase_start']>float(limits[p['phase']]): raise RuntimeError(f"席位阶段超时{phase}")
+            return True
+        elif not exited and now-a['started']>120: raise RuntimeError('席位未建立进度')
+        return False
+
+    def read_worker_results(self,a):
+        """直接打开报告；新建文件的可见性与工作进程退出分开确认。"""
+        try: content=a['results'].read_text()
+        except FileNotFoundError: return dict(opened=False,bytes_read=0,complete_lines=0,partial_tail=False)
+        lines=content.splitlines(); partial=bool(content and not content.endswith('\n'))
+        if partial: lines=lines[:-1]
+        for line in lines[a['offset']:]:
+            self.publish(a,json.loads(line)); a['offset']+=1
+        return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial)
+
+    def final_confirmation(self,a,rc,read_info,identity_valid):
+        now=time.monotonic()
+        if 'exit_observed_monotonic' not in a:
+            a['exit_observed_monotonic']=now; a['exit_observed_wall']=time.time()
+        expected={identity(a['model'],r) for r in a['rows']}; missing=sorted(expected-self.published)
+        elapsed=now-a['exit_observed_monotonic']
+        try: size=a['results'].stat().st_size
+        except FileNotFoundError: size=None
+        ok=not missing and identity_valid and not read_info['partial_tail']
+        state='confirmed' if ok and elapsed<=120 else ('failed' if elapsed>=120 else 'waiting')
+        evidence=dict(self.base,model=a['model'],shard_id=a['shard'],gpu_job_id=str(a['seat']['job_id']),rc=rc,state=state,
+                      expected_path=str(a['results']),path_exists=a['results'].exists(),stat_size=size,read_info=read_info,
+                      expected=len(expected),published=len(expected & self.published),
+                      missing_identities=missing,identity_valid=identity_valid,consumed_lines=a['offset'],
+                      exit_observed_wall=a['exit_observed_wall'],elapsed_s=elapsed,deadline_s=120,time=time.time())
+        atomic(a['progress'].parent/'final-confirmation.json',evidence)
+        if state=='failed':
+            raise ValueError('WORKER_REPORT_CONFIRMATION=FAIL '+json.dumps(evidence,ensure_ascii=False,sort_keys=True))
+        return state=='confirmed'
 
     def scan(self):
         for jid,a in list(self.active.items()):
-            self.check_worker(a)
-            if a['results'].exists():
-                content=a['results'].read_text(); lines=content.splitlines()
-                if content and not content.endswith('\n'): lines=lines[:-1]
-                for line in lines[a['offset']:]:
-                    self.publish(a,json.loads(line)); a['offset']+=1
-            self.poll_ack(a)
             rc=a['process'].poll()
+            if rc==0 and 'exit_observed_monotonic' not in a:
+                a['exit_observed_monotonic']=time.monotonic(); a['exit_observed_wall']=time.time()
+            try: identity_valid=self.check_worker(a,exited=rc==0)
+            except RuntimeError:
+                if rc is None and a['process'].poll()==0:
+                    rc=0; identity_valid=self.check_worker(a,exited=True)
+                else: raise
+            read_info=self.read_worker_results(a)
+            self.poll_ack(a)
+            if rc is None: rc=a['process'].poll()
             if rc is not None:
-                a['log'].close(); del self.active[jid]
                 if rc!=0:
+                    a['log'].close(); del self.active[jid]
                     if rc==6 and time.time()>=self.deadline:
                         self.event('drained',shard_id=a['shard'],accepted=a['offset']); continue
                     raise RuntimeError(f"worker失败 model={a['model']} shard={a['shard']} rc={rc}")
-                expected={identity(a['model'],r) for r in a['rows']}
-                if not expected<=self.published: raise ValueError('worker正常退出但缺结果')
+                # 已退出后再读一次；仍不可见则保留active等待，绝不重跑该worker。
+                read_info=self.read_worker_results(a)
+                identity_valid=self.check_worker(a,exited=True)
+                if not self.final_confirmation(a,rc,read_info,identity_valid): continue
+                a['log'].close(); del self.active[jid]
                 if a['smoke']: self.smoked.add(a['model'])
                 else: self.completed.add(a['shard'])
 

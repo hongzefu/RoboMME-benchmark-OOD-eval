@@ -236,3 +236,82 @@ def test_cross_round_budget_rejects_tamper_omission_and_overage(tmp_path,kind):
         with pytest.raises(ValueError): C.work_budget(c,current=state)
         return
     with pytest.raises((ValueError,KeyError)): C.validate_config(c)
+
+
+def scan_fixture(tmp_path,*,rc=0):
+    import time
+    c=config(tmp_path); ctl=C.Controller(c); ident=ctl.shards['pp-00']['rows'][0]
+    inv=tmp_path/'control/invocations/pp-00-smoke'; inv.mkdir(parents=True)
+    progress=inv/'progress.json'; results=Path(c['gl_root'])/'seats/pp/seed7/s3-pp-00-smoke/seat-results.jsonl'
+    results.parent.mkdir(parents=True)
+    C.atomic(progress,dict(label='pp',phase='finished',key=None,pid=1000,t=time.time()-300,slurm_job_id='103',slurm_step_id='1'))
+    directory=Path(c['gl_root'])/'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
+    for name in ('front.mkv','wrist.mkv','arrays.npz','trace.jsonl','meta.json','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'):
+        (directory/name).write_text('fixture')
+    result=directory/'result.json'; C.atomic(result,dict(key=ident['key'],dataset='ood',infra=False,task_success=1))
+    row=dict(key=ident['key'],infra=False,final=True,accepted=True,result=str(result),exec_steps=276,
+             task_success=1,budget_exhausted=False,run_blocked=False)
+    a=dict(process=types.SimpleNamespace(poll=lambda:rc),log=(inv/'worker.log').open('a'),seat=c['seats'][2],shard='pp-00',
+           smoke=True,model='pp',progress=progress,results=results,rows=[ident],offset=0,started=time.time()-300,
+           acked=False,phase_key=None,phase_start=time.time()-300,step_id='103.1',worker_name='raw-ood-worker-pp-00-smoke')
+    ctl.active['103']=a
+    return ctl,a,row
+
+
+def test_terminal_single_lf_report_is_read_once_despite_stale_heartbeat(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); a['results'].write_text(json.dumps(row)+'\n')
+    ctl.scan()
+    assert 'pp' in ctl.smoked and not ctl.active and a['offset']==1
+    proof=C.read(a['progress'].parent/'final-confirmation.json')
+    assert proof['state']=='confirmed' and proof['rc']==0 and proof['consumed_lines']==1 and proof['missing_identities']==[]
+
+
+def test_terminal_file_appears_late_without_relaunch_or_republish(tmp_path,monkeypatch):
+    ctl,a,row=scan_fixture(tmp_path); clock=[10.]
+    monkeypatch.setattr(C.time,'monotonic',lambda:clock[0])
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**k:pytest.fail('不得重新启动worker'))
+    monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:pytest.fail('已退出worker不应查询或取消作业'))
+    ctl.scan(); assert ctl.active and not ctl.smoked and a['offset']==0
+    clock[0]=30; a['results'].write_text(json.dumps(row)+'\n'); ctl.scan()
+    assert not ctl.active and ctl.smoked=={'pp'} and a['offset']==1 and len(ctl.published)==1
+
+
+def test_terminal_partial_tail_becomes_complete_jsonl(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); text=json.dumps(row)
+    a['results'].write_text(text[:len(text)//2]); ctl.scan()
+    assert ctl.active and a['offset']==0
+    a['results'].write_text(text+'\n'); ctl.scan()
+    assert not ctl.active and a['offset']==1
+
+
+def test_terminal_permanent_missing_fails_at_bounded_deadline_with_evidence(tmp_path,monkeypatch):
+    ctl,a,row=scan_fixture(tmp_path); clock=[0.]
+    monkeypatch.setattr(C.time,'monotonic',lambda:clock[0])
+    ctl.scan(); clock[0]=119; ctl.scan(); assert ctl.active
+    clock[0]=120
+    with pytest.raises(ValueError,match='WORKER_REPORT_CONFIRMATION=FAIL'): ctl.scan()
+    proof=C.read(a['progress'].parent/'final-confirmation.json')
+    assert proof['state']=='failed' and proof['elapsed_s']==120 and proof['expected_path']==str(a['results'])
+    assert proof['path_exists'] is False and proof['stat_size'] is None and proof['consumed_lines']==0
+    assert len(proof['missing_identities'])==1 and proof['rc']==0
+    a['log'].close()
+
+
+@pytest.mark.parametrize('kind',['bad_json','duplicate','cross_identity','wrong_slurm'])
+def test_terminal_confirmation_never_accepts_invalid_reports_or_identity(tmp_path,kind):
+    ctl,a,row=scan_fixture(tmp_path)
+    if kind=='bad_json': text='{bad}\n'
+    elif kind=='duplicate': text=(json.dumps(row)+'\n')*2
+    elif kind=='cross_identity': row['key']='foreign'; text=json.dumps(row)+'\n'
+    else:
+        p=C.read(a['progress']); p['slurm_job_id']='104'; C.atomic(a['progress'],p); text=json.dumps(row)+'\n'
+    a['results'].write_text(text)
+    with pytest.raises((ValueError,json.JSONDecodeError)): ctl.scan()
+    assert ctl.active and not ctl.smoked
+    a['log'].close()
+
+
+def test_live_worker_heartbeat_gate_is_not_relaxed(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path,rc=None)
+    with pytest.raises(RuntimeError,match='心跳失效'): ctl.scan()
+    a['log'].close()
