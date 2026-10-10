@@ -1,0 +1,12 @@
+{
+  "run": "ood-five-raw-seed7-20261010-01",
+  "controller_job_id": "63660978",
+  "gpu_job_ids": ["63661000", "63661005", "63661007", "63661014"],
+  "preparation_deadline_epoch": 1791750249,
+  "hours_each": 120,
+  "resubmits": 0,
+  "bootstrap_sha256": {
+    "raw_ood_cpu_bootstrap.sh": "cbbae1d037e7abc6da693ee673d241481291797d1ea834fc95fcc9970fcfb1db",
+    "raw_ood_hold_guard.sh": "81d1f448d260a170f2d5c67e44a59e1f011b08a7aca1f069c64765321ef3a10a"
+  }
+}

@@ -126,6 +126,9 @@ srun --jobid=&lt;本轮GPUJobID&gt; --overlap --exact --ntasks=1 \
 <tr><td>S2b</td><td>CPU首次分派正式全量分片，GPU确认领取并实际首步；核CPU与搬运心跳、错误零。</td><td><code>FIRST_DISPATCH=PASS shard_started=1 client_ack=1 first_step=1</code>、<code>AGENT_HANDOFF=PASS cpu_running=1 mover_alive=1 errors=0</code>；此时代理退出。</td></tr>
 <tr><td>S3</td><td>程序自动跑完40片，异步搬运；无新人工阶段或审批，异常按既定策略封闭。</td><td>RUN_BUDGET、OOD_RESULTS。</td></tr>
 <tr><td>S4</td><td>各席释放、搬运排空、本机全解码对账、结果与留档。</td><td>RAW_DELIVERY、RUN_CLEANUP；任一系统错误立即取消全轮，CPU非零退出。</td></tr></table>
+<h3>实施实测追加：2026-10-10 工程准备</h3>
+<p>用户原话：「开始实现 有问题问用户」。已一次登记 CPU <code>63660978</code> 与 GPU <code>63661000／63661005／63661007／63661014</code>，各 120 小时，<code>GL_ALLOCATION=PASS gpu_jobs=4 cpu_jobs=1 hours_each=120 resubmits=0</code>。已提交的等待／守卫快照保持原字节；对 Slurm 查询挂起窗口，用户追加选择「采用，同一批作业内追加独立守卫」，由正式 CPU 监督器在已有 hold 内启动带查询超时的纯 CPU 守卫，不增加作业或轨迹预算。</p>
+<p>独立工作树的搬运与控制／监督提交均经固定提交静态审查；主会话定向测试 <code>43 passed in 55.22s</code>，独立进程夹具 <code>DETACHED_FLOW=PASS success=1 global_stop=1 cpu_lost=1 mover_lost=1 parent_exit=1 simulated_slurm=1</code>。核心短测退出 0：<code>1733 passed, 6 skipped, 110 deselected in 252.13s</code>，资源守卫 <code>TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6</code>；跳过项保留未验证，不替代真实五模型冒烟。实际结果与原始记录见 <a href="../validation/ood-five-raw-seed7-20261010-01/result.md">本轮留档</a>。真实冒烟、首次正式分片和完整交付仍待起跑验收，原方案正文不改写成已运行。</p>
 <p><strong>子代理分工与合并（简述）：</strong>探索用 Luna 只读；控制器／监督器与搬运适配分别由 Sol 在独立 worktree 修改，固定源码评审交另一 Sol。先合搬运与报告契约，再合调度／监督器；每次合并前审固定提交差异和CPU夹具，合并后主会话核预算、跑核心短测。运行另派Sol，仅执行冻结命令并交启动回执，不修代码或取消资源。主会话负责配置、资源清单、最终授权及交接；首次正式全量分配交接后不需任何代理持续监控。逐文件清单、命令与风险详见第二部分。</p>
 <h1>第二部分（技术细节，供 agent 追踪）</h1>
 <h2>一、红线与已具备能力</h2>

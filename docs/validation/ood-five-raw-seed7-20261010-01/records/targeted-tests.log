@@ -1,0 +1,4 @@
+...........................................                              [100%]
+TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0
+43 passed in 55.22s
+EXIT_CODE=0

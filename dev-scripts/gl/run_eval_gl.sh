@@ -38,6 +38,7 @@ REPO="$(cd "$HERE/../.." && pwd)"
 POLICIES="" ; GROUNDSG_VARIANT="" ; POLICY_SEED="" ; IDENTITIES="" ; BUDGET_LEDGER="" ; RUN_NAME="" ; OUT="" ; SEAT=""
 GPUS="0" ; TRAJECTORY_CAP=26 ; RESET_CAP=60 ; SHARED_INFRA_CAP=0 ; EXPIRED_CAP=0 ; PLANNED_FIRST_TRIES=26
 INFRA_RETRIES=0 ; CLIENT_RESTARTS=0 ; NOPROG_S=2700 ; POLL_S=30 ; TERM_GRACE_S=90
+PROGRESS_FILE=""
 PASS=()
 
 usage() { sed -n '2,/^# 中断 130/p' "${BASH_SOURCE[0]}" >&2; }
@@ -68,6 +69,7 @@ while [[ $# -gt 0 ]]; do
     --noprog-s) NOPROG_S="$2"; shift 2;;
     --poll-s) POLL_S="$2"; shift 2;;
     --term-grace-s) TERM_GRACE_S="$2"; shift 2;;
+    --progress-file) PROGRESS_FILE="$2"; PASS+=("$1" "$2"); shift 2;;
     -h|--help) usage; exit 0;;
     --*=*) PASS+=("$1"); shift;;
     --*) if [[ $# -ge 2 && "$2" != --* ]]; then PASS+=("$1" "$2"); shift 2; else PASS+=("$1"); shift; fi;;
@@ -101,6 +103,10 @@ label_of() { if [[ "$1" == "groundsg" ]]; then echo "groundsg-$GROUNDSG_VARIANT"
 
 newest_progress() {  # $1 = 标签；打印本策略各 progress.json 的最新修改时间（epoch 秒，取整），没有打印 0
   local lab="$1" t
+  if [[ -n "$PROGRESS_FILE" ]]; then
+    stat -c %Y "$PROGRESS_FILE" 2>/dev/null || echo 0
+    return
+  fi
   t="$( { find "$OUT/seats/$lab" -name progress.json -printf '%T@\n' 2>/dev/null
           find "$OUT/rollouts" -path "*/seed$POLICY_SEED/progress.json" -printf '%T@\n' 2>/dev/null; } \
         | sort -n | tail -n 1)"

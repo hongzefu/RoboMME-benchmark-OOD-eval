@@ -120,6 +120,36 @@
   }
  ],
  "entries": [
+{
+  "id": "C16-RAW-OOD",
+  "domain": "C16",
+  "source": [
+    "dev-scripts/gl/raw_ood_controller.py",
+    "dev-scripts/gl/raw_ood_supervisor.py",
+    "dev-scripts/gl/raw_ood_cpu_bootstrap.sh",
+    "dev-scripts/gl/raw_ood_hold_guard.sh",
+    "dev-scripts/gl/eval_video_mover.py",
+    "dev-scripts/gl/seat.py",
+    "dev-scripts/gl/run_eval_gl.sh"
+  ],
+  "symbol": "五模型原始录像调度／CPU监督／GPU独立守卫／异步搬运／停止领取与专属进度",
+  "oracle": "计划固定的五模型800身份与40片、手写真实序列化报告、模拟Slurm与独立子进程、真实AV1和动作轨迹夹具",
+  "positive": "正式首局复用预算；正常任务失败独立记分；原始字节哈希与媒体完整性验收后搬运；CPU脱离父进程与正常释放",
+  "negative": "缺字段、错模型、重复身份、基础设施错误、过期心跳、异常进程、同名冲突、源删除崩溃及跨席进度掩盖都拒绝",
+  "boundaries": "CPU夹具不执行环境reset或真实Slurm取消；真实集群冒烟与首次正式分配另留档",
+  "nodeids": [
+    "tests/unit/test_raw_ood_controller.py",
+    "tests/unit/test_raw_ood_supervisor.py",
+    "tests/unit/test_raw_ood_seat_drain.py",
+    "tests/unit/test_raw_ood_mover.py"
+  ],
+  "resource": "cpu",
+  "mutants": [],
+  "status": "verified",
+  "merged_from": [
+    "tests/unit/contracts.delta.json"
+  ]
+},
   {
     "id": "C13-FULL-EVAL-CONTINUATION",
     "domain": "C13",
@@ -3589,6 +3619,10 @@
   }
  ],
  "files": {
+  "dev-scripts/gl/raw_ood_controller.py": ["C16-RAW-OOD"],
+  "dev-scripts/gl/raw_ood_supervisor.py": ["C16-RAW-OOD"],
+  "dev-scripts/gl/raw_ood_cpu_bootstrap.sh": ["C16-RAW-OOD"],
+  "dev-scripts/gl/raw_ood_hold_guard.sh": ["C16-RAW-OOD"],
   "dev-scripts/gl/continue_full_eval.py": ["C13-FULL-EVAL-CONTINUATION"],
   "dev-scripts/gl/select_stage_identities.py": ["C13-STAGED-EVAL-TOOLS"],
   "dev-scripts/gl/stage_report.py": ["C13-STAGED-EVAL-TOOLS"],
@@ -3650,6 +3684,7 @@
    "C13-LEGACY-NAMES"
   ],
   "dev-scripts/gl/eval_video_mover.py": [
+   "C16-RAW-OOD",
    "C13-16"
   ],
   "dev-scripts/gl/export_eval_identities.py": [
@@ -3660,11 +3695,13 @@
    "C13-SG-VIDEO-LAYOUT"
   ],
   "dev-scripts/gl/run_eval_gl.sh": [
+   "C16-RAW-OOD",
    "C16-02",
    "C16-04",
    "C13-R3-STAGE3"
   ],
   "dev-scripts/gl/seat.py": [
+   "C16-RAW-OOD",
    "C13-INFRA-RECOVERY",
    "C13-01",
    "C13-02",
