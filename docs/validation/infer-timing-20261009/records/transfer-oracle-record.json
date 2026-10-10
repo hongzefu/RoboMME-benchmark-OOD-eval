@@ -1,0 +1,444 @@
+{
+  "time_utc": "2026-10-10T02:40:56.858801+00:00",
+  "model": "oracle",
+  "source": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle",
+  "target": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle",
+  "rsync_command": "rsync -a --info=progress2 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/",
+  "rsync_exit_code": 0,
+  "precheck": "BASE/artifacts 和 NFS 源均为实体目录；目标复制前不存在；无覆盖旧产物",
+  "verification": "全部普通文件两端分别 SHA256、字节数及路径全集比较；符号链接逐项核对不穿透",
+  "source_retained": true,
+  "provenance_modified": false,
+  "files": 35,
+  "bytes": 4048009,
+  "file_manifest": [
+    {
+      "path": "logs/client-groundsg-ground-sg-oracle-gl1512.arc-ts.umich.edu-1904861-r0.log",
+      "source": {
+        "bytes": 4173,
+        "sha256": "3c0061e1703bab74daecf7f549efc704aeb312a3af9c17c090bd1c10d9d7332f"
+      },
+      "target": {
+        "bytes": 4173,
+        "sha256": "3c0061e1703bab74daecf7f549efc704aeb312a3af9c17c090bd1c10d9d7332f"
+      },
+      "match": true
+    },
+    {
+      "path": "logs/run_eval_gl-gl1512.arc-ts.umich.edu-1904861.log",
+      "source": {
+        "bytes": 6929,
+        "sha256": "3ddaf7e5a40cedfd7da3923e61d295ce2ad53d7f7d8d8a31722b8c3d26b2bdeb"
+      },
+      "target": {
+        "bytes": 6929,
+        "sha256": "3ddaf7e5a40cedfd7da3923e61d295ce2ad53d7f7d8d8a31722b8c3d26b2bdeb"
+      },
+      "match": true
+    },
+    {
+      "path": "queue/groundsg-ground-sg-oracle/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json",
+      "source": {
+        "bytes": 473,
+        "sha256": "8fc608db53814077410e4bcf08f146b76fb64713ff7c7f3f675359d51c2f8c1c"
+      },
+      "target": {
+        "bytes": 473,
+        "sha256": "8fc608db53814077410e4bcf08f146b76fb64713ff7c7f3f675359d51c2f8c1c"
+      },
+      "match": true
+    },
+    {
+      "path": "queue/groundsg-ground-sg-oracle/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json",
+      "source": {
+        "bytes": 504,
+        "sha256": "442132461760bb4aad5efc33d71701e2ff2622b1965bc083668c28d5cc799ce4"
+      },
+      "target": {
+        "bytes": 504,
+        "sha256": "442132461760bb4aad5efc33d71701e2ff2622b1965bc083668c28d5cc799ce4"
+      },
+      "match": true
+    },
+    {
+      "path": "queue/groundsg-ground-sg-oracle/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock",
+      "source": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "target": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+      "source": {
+        "bytes": 727750,
+        "sha256": "57bed2a0d1c15fac790b6014ac2442bc92e89a0c6cf52534bd7218040ec3e80a"
+      },
+      "target": {
+        "bytes": 727750,
+        "sha256": "57bed2a0d1c15fac790b6014ac2442bc92e89a0c6cf52534bd7218040ec3e80a"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/media-finish.log",
+      "source": {
+        "bytes": 425,
+        "sha256": "31048df918596f7ba97a742f14d849d07c0ae5ade16593427182f70540fced2c"
+      },
+      "target": {
+        "bytes": 425,
+        "sha256": "31048df918596f7ba97a742f14d849d07c0ae5ade16593427182f70540fced2c"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/original-result.json",
+      "source": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "target": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/original-results.jsonl",
+      "source": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "target": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/recovery.json",
+      "source": {
+        "bytes": 10598,
+        "sha256": "4dfb82291070115944ce548c65a9bd45fb763b009ed599581bb477be427d0b94"
+      },
+      "target": {
+        "bytes": 10598,
+        "sha256": "4dfb82291070115944ce548c65a9bd45fb763b009ed599581bb477be427d0b94"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/render.json",
+      "source": {
+        "bytes": 4326,
+        "sha256": "9f2c8016c3a6368bc1b5d8ed941b680bd72bec17ea4c5d56f15e379b8d3b4d50"
+      },
+      "target": {
+        "bytes": 4326,
+        "sha256": "9f2c8016c3a6368bc1b5d8ed941b680bd72bec17ea4c5d56f15e379b8d3b4d50"
+      },
+      "match": true
+    },
+    {
+      "path": "recovered-video/source-before.json",
+      "source": {
+        "bytes": 8778,
+        "sha256": "5017fe7019401b3234f200bd0e90b9a2212322b49ab0b0104497c50bf011cad6"
+      },
+      "target": {
+        "bytes": 8778,
+        "sha256": "5017fe7019401b3234f200bd0e90b9a2212322b49ab0b0104497c50bf011cad6"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/progress.json",
+      "source": {
+        "bytes": 206,
+        "sha256": "b87263505fb0555884bb409da6039b9a83f83d4dc139bc306df5674715486e09"
+      },
+      "target": {
+        "bytes": 206,
+        "sha256": "b87263505fb0555884bb409da6039b9a83f83d4dc139bc306df5674715486e09"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+      "source": {
+        "bytes": 221253,
+        "sha256": "d1ed72857a9e46c02671625c7180633b35163ddb6fba597445f5e52c38eac49a"
+      },
+      "target": {
+        "bytes": 221253,
+        "sha256": "d1ed72857a9e46c02671625c7180633b35163ddb6fba597445f5e52c38eac49a"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+      "source": {
+        "bytes": 463408,
+        "sha256": "20d00c45e1650681b89cb3b2d341aaff43f6186b960677ba271dea8f1068f193"
+      },
+      "target": {
+        "bytes": 463408,
+        "sha256": "20d00c45e1650681b89cb3b2d341aaff43f6186b960677ba271dea8f1068f193"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+      "source": {
+        "bytes": 256579,
+        "sha256": "b59c1142fd65b2834894351777ad76f22cfdd807ab56980ea1aebb6a62b6418a"
+      },
+      "target": {
+        "bytes": 256579,
+        "sha256": "b59c1142fd65b2834894351777ad76f22cfdd807ab56980ea1aebb6a62b6418a"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl",
+      "source": {
+        "bytes": 43880,
+        "sha256": "e30053b28b585d9345cf30505581bc003d2902fbb93938b5bf58d4811a264378"
+      },
+      "target": {
+        "bytes": 43880,
+        "sha256": "e30053b28b585d9345cf30505581bc003d2902fbb93938b5bf58d4811a264378"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl",
+      "source": {
+        "bytes": 43944,
+        "sha256": "8f607dbb9e311d251cde33f429cd67740ccaeed58bb2161f7d29173d050069a5"
+      },
+      "target": {
+        "bytes": 43944,
+        "sha256": "8f607dbb9e311d251cde33f429cd67740ccaeed58bb2161f7d29173d050069a5"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv",
+      "source": {
+        "bytes": 178528,
+        "sha256": "d603d892ecf07cbb76b7a79c595bebbd45bcb5c73dc7d983a2092a3ca46c1fdf"
+      },
+      "target": {
+        "bytes": 178528,
+        "sha256": "d603d892ecf07cbb76b7a79c595bebbd45bcb5c73dc7d983a2092a3ca46c1fdf"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+      "source": {
+        "bytes": 100138,
+        "sha256": "cde026137e89c2c16617ab3e6bba67f194216da53153d85a2f6881731a32d98f"
+      },
+      "target": {
+        "bytes": 100138,
+        "sha256": "cde026137e89c2c16617ab3e6bba67f194216da53153d85a2f6881731a32d98f"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json",
+      "source": {
+        "bytes": 1327,
+        "sha256": "790b32fe7820a2a812b79d22650f24671b7d31446ac5f5609098a05d3a52efec"
+      },
+      "target": {
+        "bytes": 1327,
+        "sha256": "790b32fe7820a2a812b79d22650f24671b7d31446ac5f5609098a05d3a52efec"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4",
+      "source": {
+        "bytes": 916351,
+        "sha256": "3228e6dbc0ded52175a9c55d7be4893b6405b3566c1255c6303b270c26c3ecf3"
+      },
+      "target": {
+        "bytes": 916351,
+        "sha256": "3228e6dbc0ded52175a9c55d7be4893b6405b3566c1255c6303b270c26c3ecf3"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json",
+      "source": {
+        "bytes": 1553,
+        "sha256": "18ae56dbdfe7466664f89e6d7a7557e757bb4fcf249b410bfdf9763af045b94e"
+      },
+      "target": {
+        "bytes": 1553,
+        "sha256": "18ae56dbdfe7466664f89e6d7a7557e757bb4fcf249b410bfdf9763af045b94e"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "source": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "target": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json",
+      "source": {
+        "bytes": 675,
+        "sha256": "b5069b540e84b7d7cc5b7341294e91c4cd560d1962c560fd241f5e47529337bd"
+      },
+      "target": {
+        "bytes": 675,
+        "sha256": "b5069b540e84b7d7cc5b7341294e91c4cd560d1962c560fd241f5e47529337bd"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+      "source": {
+        "bytes": 267160,
+        "sha256": "a33d4ef25ae7fef89a22dcec9fcd1e3b9f5365d09077f67390f6be10b324df3f"
+      },
+      "target": {
+        "bytes": 267160,
+        "sha256": "a33d4ef25ae7fef89a22dcec9fcd1e3b9f5365d09077f67390f6be10b324df3f"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv",
+      "source": {
+        "bytes": 732315,
+        "sha256": "d3b8ebf283a7799ca55c963ac5513b5b2fd4c3eb7ce08b8a808ff1f4ee450fac"
+      },
+      "target": {
+        "bytes": 732315,
+        "sha256": "d3b8ebf283a7799ca55c963ac5513b5b2fd4c3eb7ce08b8a808ff1f4ee450fac"
+      },
+      "match": true
+    },
+    {
+      "path": "rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/results.jsonl",
+      "source": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "target": {
+        "bytes": 10587,
+        "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033"
+      },
+      "match": true
+    },
+    {
+      "path": "seats/groundsg-ground-sg-oracle/seed7/infer-timing-oracle-63431432/groundsg-ground-sg-oracle.ledger.jsonl",
+      "source": {
+        "bytes": 2560,
+        "sha256": "a5c3ec55310074840f6a7bdd2920143b90fe0dbb471b23159c18fe06d68351db"
+      },
+      "target": {
+        "bytes": 2560,
+        "sha256": "a5c3ec55310074840f6a7bdd2920143b90fe0dbb471b23159c18fe06d68351db"
+      },
+      "match": true
+    },
+    {
+      "path": "seats/groundsg-ground-sg-oracle/seed7/infer-timing-oracle-63431432/process-1904991.json",
+      "source": {
+        "bytes": 924,
+        "sha256": "065ddce8646a61282be06540cb3f64bc91f1ea455d63570cef32f84e2f289c32"
+      },
+      "target": {
+        "bytes": 924,
+        "sha256": "065ddce8646a61282be06540cb3f64bc91f1ea455d63570cef32f84e2f289c32"
+      },
+      "match": true
+    },
+    {
+      "path": "seats/groundsg-ground-sg-oracle/seed7/infer-timing-oracle-63431432/progress.json",
+      "source": {
+        "bytes": 294,
+        "sha256": "c794dd8dedf621585ca45b59b63fb32646746db121037a6dfe5fffe0e1c90368"
+      },
+      "target": {
+        "bytes": 294,
+        "sha256": "c794dd8dedf621585ca45b59b63fb32646746db121037a6dfe5fffe0e1c90368"
+      },
+      "match": true
+    },
+    {
+      "path": "seats/groundsg-ground-sg-oracle/seed7/infer-timing-oracle-63431432/seat-results.jsonl",
+      "source": {
+        "bytes": 1358,
+        "sha256": "af3eb3d5ef0a9d1b50faf6c5464d2c1fcfc82f548913ef4a6429811e6bb30615"
+      },
+      "target": {
+        "bytes": 1358,
+        "sha256": "af3eb3d5ef0a9d1b50faf6c5464d2c1fcfc82f548913ef4a6429811e6bb30615"
+      },
+      "match": true
+    },
+    {
+      "path": "servers/ckpt-fingerprint-groundsg-ground-sg-oracle.txt",
+      "source": {
+        "bytes": 223,
+        "sha256": "cb6302a7ae102edefcd16b4fd2c3db62e951700e210642b9e44f4d94e2f7ce3b"
+      },
+      "target": {
+        "bytes": 223,
+        "sha256": "cb6302a7ae102edefcd16b4fd2c3db62e951700e210642b9e44f4d94e2f7ce3b"
+      },
+      "match": true
+    },
+    {
+      "path": "servers/groundsg-ground-sg-oracle-19720.log",
+      "source": {
+        "bytes": 8092,
+        "sha256": "4e5e5e8e5b6bb56e11dbe849b6e05613e0c43165424869244a944ab6ecfdb0ef"
+      },
+      "target": {
+        "bytes": 8092,
+        "sha256": "4e5e5e8e5b6bb56e11dbe849b6e05613e0c43165424869244a944ab6ecfdb0ef"
+      },
+      "match": true
+    },
+    {
+      "path": "servers/server-wrap-metadata-19720.json",
+      "source": {
+        "bytes": 937,
+        "sha256": "a42e59d3cd24f1f018cb8b89f15560340f413f1dcce8b4b31a7866ebe0e6ff19"
+      },
+      "target": {
+        "bytes": 937,
+        "sha256": "a42e59d3cd24f1f018cb8b89f15560340f413f1dcce8b4b31a7866ebe0e6ff19"
+      },
+      "match": true
+    }
+  ],
+  "symlinks": [],
+  "mismatch": 0,
+  "mismatches": [],
+  "recovered_videos": [
+    "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4"
+  ],
+  "pass": true,
+  "verdict": "TRANSFER=PASS model=oracle files=35 bytes=4048009 mismatch=0 symlinks=0"
+}

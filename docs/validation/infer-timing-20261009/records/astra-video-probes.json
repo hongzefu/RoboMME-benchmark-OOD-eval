@@ -1,0 +1,44 @@
+{
+  "说明": "只读已生成外层官方视频，经/usr/bin/ffprobe -count_frames核验，未重新渲染或执行模型。",
+  "verdict": "ASTRA_OFFICIAL_VIDEO_READBACK=PASS videos=2 off_frames=68 formal_frames=341 codec=av1 pix_fmt=yuv420p fps=30",
+  "videos": {
+    "off": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off/rollouts/astra/hard-verify/seed0/videos/VideoUnmask_ep3_timeout_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+      "sha256": "c52d830af3111b40c17a1340ec76c65f53b15f1d9ac075bfefb6e147556d9b04",
+      "bytes": 69308,
+      "ffprobe_exit": 0,
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "av1",
+            "width": 512,
+            "height": 528,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "30/1",
+            "nb_read_frames": "68"
+          }
+        ]
+      }
+    },
+    "formal": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra/rollouts/astra/hard-verify/seed0/videos/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+      "sha256": "834133310c1003d4148c0e2e87fa294df78c7679d3d09d7508c75114699a66a9",
+      "bytes": 733711,
+      "ffprobe_exit": 0,
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "av1",
+            "width": 512,
+            "height": 528,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "30/1",
+            "nb_read_frames": "341"
+          }
+        ]
+      }
+    }
+  }
+}

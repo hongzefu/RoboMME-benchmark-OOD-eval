@@ -1,0 +1,6 @@
+OFFICIAL_VIDEO=PASS model=framesamp frames=171 fps=30 codec=av1 pix_fmt=yuv420p
+RAW_STREAMS=PASS model=framesamp streams=2 front=82 wrist=111 codec=av1 pix_fmt=yuv444p
+ARRAYS_TRACE=PASS model=framesamp precision=verified-original byte_changes=0
+MEDIA_RECOVERY=PASS model=framesamp official_video=1 raw_streams=2 arrays_trace=1 originals=15 reset=0 trajectory=0 api=0 task_success=0
+ORIGINAL_BYTES=PASS model=framesamp files=15
+EXIT_CODE=0

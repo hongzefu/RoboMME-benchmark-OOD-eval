@@ -1,0 +1,47 @@
+LOCAL_COMMAND mode=formal audit=1 registration=formal
+env ROBOMME_EVAL_ROOT=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime IT_BUDGET_LEDGER=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl SGEVAL_AUDIT=1 SGEVAL_THIRD_PARTY=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party PYTHONPATH=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/src:/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/robomme_benchmark/src PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/hf-cache OPENPI_DATA_HOME=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data UV_CACHE_DIR=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache/uv XDG_CACHE_HOME=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/cache /data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/bin/python /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/dev-scripts/checks/infer_timing_smoke.py --it-formal --model astra --dataset hard-verify --tasks VideoUnmask --episodes 0:1 --seed 0 --out /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra --gpus 1\,0 --ckpt /nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/mme/symbolic-grounded-subgoal/79999 --port-base 19760 --cfg astra_ledger=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.json --cfg astra_prices=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/split-accept-20261008-01/astra-cost/astra-prices.json --cfg astra_cap_usd=5 --cfg astra_max_episodes=3 --cfg astra_registration_prefix=formal --cfg astra_monitor_adapter=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/ckpt/astra-monitor --cfg astra_monitor_base=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-monitor-base --cfg astra_vla_python=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/robomme_benchmark-sgeval/third_party/mme-vla/.venv/bin/python --cfg astra_root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/Astra-on-RoboMME --cfg openpi_data_home=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/sg-eval/openpi-data --cfg tokenizer_sha256=8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6 --cfg jax_cache_root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/jax-cache
+SMOKE_IMPORT=PASS root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime model=astra out=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra
+ASTRA_SOURCE root=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/Astra-on-RoboMME runner.py=774c6dd1c41772d695a5e5890194364053f3c454d601c0fe8c747099db96fbb6 core.py=7095550ef19e7476932077dbbdcf3f10aa2bec586464d3d4097d79938a1429e5 api_client.py=6718298c03b9c22e91f57fa1f6d440ca458320e8099ef8cf9ac6e1ea3eaa6297 input_contract.py=066d5b01d767ab4f3e2931022601763e2bbc0557bf93055f9372eed86b1d2e59 release_utils.py=469b9be59666feeb116823caeb7bfff4dbba4c926b9c878673a38e136b38ef39 train_entry.py=632fc97c6ba418fa2d35b3fc85070fdb1fc112e0d9cb76905d295e928baf5912 weights.json=0859d7d49a555d4114a028346b17837212254dc170ca4b4970f6bb81ee4b1178
+/data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/lib/python3.11/site-packages/sapien/__init__.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+ASTRA_ENV_SOURCE robomme_hard=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/robomme_benchmark/src/robomme_hard/__init__.py robomme=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/robomme_benchmark/src/robomme/__init__.py
+SERVER_START name=astra-guard port=19761 pid=448045 log=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/servers/astra-guard.log
+SERVER_READY name=astra-guard port=19761 ready_s=0.5
+ASTRA_GUARD=PASS cap=5 committed=0.1007 episodes_used=1 ledger=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.json
+SERVER_START name=astra-vla port=19760 pid=448047 log=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/servers/astra-vla-19760.log
+SERVER_READY name=astra-vla port=19760 ready_s=41.5
+`torch_dtype` is deprecated! Use `dtype` instead!
+[WARNING:swift] Please install the package: `pip install "decord" -U`.
+[INFO:swift] attn_impl: flash_attention_2
+[INFO:swift] model_kwargs: {'device_map': {'': 0}, 'dtype': torch.bfloat16}
+[INFO:swift] Setting max_ratio: 200. You can adjust this hyperparameter through the environment variable: `MAX_RATIO`.
+[INFO:swift] Setting frame_factor: 2. You can adjust this hyperparameter through the environment variable: `FRAME_FACTOR`.
+[INFO:swift] Setting fps: 2.0. You can adjust this hyperparameter through the environment variable: `FPS`.
+[INFO:swift] Setting fps_min_frames: 4. You can adjust this hyperparameter through the environment variable: `FPS_MIN_FRAMES`.
+[INFO:swift] Setting fps_max_frames: 768. You can adjust this hyperparameter through the environment variable: `FPS_MAX_FRAMES`.
+[INFO:swift] Setting image_max_token_num: 16384. You can adjust this hyperparameter through the environment variable: `IMAGE_MAX_TOKEN_NUM`.
+[INFO:swift] Setting image_min_token_num: 4. You can adjust this hyperparameter through the environment variable: `IMAGE_MIN_TOKEN_NUM`.
+[INFO:swift] Setting spatial_merge_size: 2. You can adjust this hyperparameter through the environment variable: `SPATIAL_MERGE_SIZE`.
+[INFO:swift] Setting video_max_token_num: 768. You can adjust this hyperparameter through the environment variable: `VIDEO_MAX_TOKEN_NUM`.
+[INFO:swift] Setting video_min_token_num: 128. You can adjust this hyperparameter through the environment variable: `VIDEO_MIN_TOKEN_NUM`.
+[INFO:swift] Create the default_template for the infer_engine
+[INFO:swift] default_system: None
+[INFO:swift] max_length: 262144
+[INFO:swift] response_prefix: ''
+[INFO:swift] agent_template: hermes
+[INFO:swift] norm_bbox: norm1000
+[INFO:swift] Setting ROOT_IMAGE_DIR: None. You can adjust this hyperparameter through the environment variable: `ROOT_IMAGE_DIR`.
+[INFO:swift] Setting QWENVL_BBOX_FORMAT: legacy. You can adjust this hyperparameter through the environment variable: `QWENVL_BBOX_FORMAT`.
+ASTRA_VLA_CLIENT openpi_client=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime/third_party/Astra-on-RoboMME/packages/openpi-client/src/openpi_client/__init__.py port=19760
+ASTRA_LOAD=PASS policy_seed=0 server_seed=0 cloud_seed=null vla_gpu=1 monitor_gpu=0 port=19760 run_dir=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/group_0/run-20261009T232317-447881
+[INFO:swift] Successfully registered `/data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/lib/python3.11/site-packages/swift/llm/dataset/data/dataset_info.json`.
+EPISODE_RESULT {"task": "VideoUnmask", "episode": 0, "status": "success", "steps": 274, "seconds": 62.04216933250427, "planner_calls": 3, "monitor_calls": 17, "continued_last_subgoal": false, "dataset": "hard-verify", "review_calls": 0}
+EPISODE_DONE model=astra dataset=hard-verify key=VideoUnmask_xhard0_560300 ep=3 status=success exec_steps=274 cap_hit=False infra=False
+EVAL_LOG path=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra/rollouts/astra/hard-verify/seed0/log.json episodes=1 counted=1 success=1 infra=0 tasks=1 total_success_rate=1.0000
+SERVER_STOPPED name=astra-vla port=19760 pid=448047 how=term gpu_free=True
+SERVER_STOPPED name=astra-guard port=19761 pid=448045 how=term gpu_free=None
+EVAL_DONE model=astra datasets=hard-verify seed=0 episodes_run=1 skipped=0 exit=0
+FORMAL_BUDGET_DONE model=astra resets=2
+EXIT_CODE=0

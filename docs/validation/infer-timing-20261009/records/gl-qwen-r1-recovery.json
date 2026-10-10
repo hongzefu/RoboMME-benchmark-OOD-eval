@@ -1,0 +1,287 @@
+{
+  "source_commit": "7e9e6e5288b683aadca4358b482f3789748e29c0",
+  "original_result": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+  "task_success": 0,
+  "status": "fail",
+  "official_video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/recovered-video/VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+  "official_video_probe": {
+    "width": 512,
+    "height": 528,
+    "frames": 356,
+    "fps": "30",
+    "codec": "av1",
+    "pix_fmt": "yuv420p"
+  },
+  "raw_stream_probes": {
+    "front": {
+      "codec": "av1",
+      "pix_fmt": "yuv444p",
+      "width": 256,
+      "height": 256,
+      "frames": 263
+    },
+    "wrist": {
+      "codec": "av1",
+      "pix_fmt": "yuv444p",
+      "width": 256,
+      "height": 256,
+      "frames": 296
+    }
+  },
+  "source_frames": 356,
+  "array_records_verified": 1448,
+  "input_array_precision": "verified-original",
+  "frame_hash_check": {
+    "mode": "skipped-lossy-av1",
+    "frames": {
+      "front": 356,
+      "wrist": 356
+    }
+  },
+  "original_fingerprints_before": {
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/logs/client-groundsg-ground-sg-qwenvl-gl1525.arc-ts.umich.edu-455505-r0.log": {
+      "sha256": "0ebe094ca2c8cbe273a54d04a76dd7248f087e6c09b859281ff7314e143c21e4",
+      "size": 37551
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/logs/run_eval_gl-gl1525.arc-ts.umich.edu-455505.log": {
+      "sha256": "0b5c5c5e159a70e9154f34a049c579ff6f977ecc2e110d93d82a40ec5cd2703c",
+      "size": 40432
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/queue/groundsg-ground-sg-qwenvl/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json": {
+      "sha256": "4e45e06fd939623416d3019284dd61034bd30dd3d83366516b974ab7700067c6",
+      "size": 470
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/queue/groundsg-ground-sg-qwenvl/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json": {
+      "sha256": "d925b6496abb3af834a2c408abc6e54fd99aad749b4ed9b0b913256e259bcf2d",
+      "size": 501
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/queue/groundsg-ground-sg-qwenvl/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/progress.json": {
+      "sha256": "1910041f8d8c82189d886c3b22004bf69648212b793e2dc6668ea51065077621",
+      "size": 205
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl": {
+      "sha256": "0e5b78f41e828ecc8bd757b6dd066e5b37a09edfdf987442ee9ad18c7dbcf2e2",
+      "size": 212421
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz": {
+      "sha256": "ea5ca8c6102a5af7d707a01706dac4e56f628aee2907e528cbbc320cee124e69",
+      "size": 445192
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/ep3a1_QwenVL_log.jsonl": {
+      "sha256": "861444b736803d767ef86d51aad9e5f80ae087d13b265e061a82685054d0ca84",
+      "size": 21186
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl": {
+      "sha256": "b0c6d70a3eba1b2a33a070111cc933ef1a0fa2863e3465e86e60b0b2870d991a",
+      "size": 250592
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl": {
+      "sha256": "f6462a4dc766d6da00b1bcb322e40f33e6bc1f2a3b726c30fd81e75f2ad9b809",
+      "size": 42426
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl": {
+      "sha256": "01d1a2c3fca72443815fd8f65e0394f0381c127da9fb64ee2c51a58bef30ff66",
+      "size": 42492
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv": {
+      "sha256": "d4565ed68186006846dac4f03cb272c1e71285c1e00854ee8c7fab6171951fdb",
+      "size": 168209
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl": {
+      "sha256": "99338d64dd1808c8eedae9bca7f479dd835cc2cab889868be00b6cf9d7fa86df",
+      "size": 143383
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json": {
+      "sha256": "6dfe5f0f9c90196cf136c5a605327c6f628b74c1ac0dc29434685dc0c6a41338",
+      "size": 1303
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4": {
+      "sha256": "bb79d4b00c230050e0c7af87a5f98123f4ebd11086b729d602e590780909c386",
+      "size": 903794
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json": {
+      "sha256": "120728efd4ee4be288de5ac13dada97f5ba84f6436bb2249e50cdd457e3ec494",
+      "size": 1650
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json": {
+      "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168",
+      "size": 15275
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json": {
+      "sha256": "a09bf0cb4b59aaaa576d81415203d71da37cebc0de9f6a377f83f69b19cb418c",
+      "size": 671
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl": {
+      "sha256": "b1910205d181f73d68883e02b2e895589e40a75aee3d6be4703ede5dd1136c75",
+      "size": 257842
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv": {
+      "sha256": "4afff44dc63ae8a9365e0f08e030df0be8db3195986d00c0bc8f589f704e6df3",
+      "size": 710065
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/results.jsonl": {
+      "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168",
+      "size": 15275
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/groundsg-ground-sg-qwenvl.ledger.jsonl": {
+      "sha256": "759807976b240d1fc2f0aed1fd0b4248ecf612ba59b689fd2eded427bc14fa03",
+      "size": 2562
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/process-455607.json": {
+      "sha256": "15532fc6ee5c96de341f0c247e68e0752c95e51497c0f780f36b30e4bd28b303",
+      "size": 900
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/progress.json": {
+      "sha256": "ef17ec302e95f6f97673ba61ce9f10fd3cc03bb68d04ca35ed5c64fd318d5c10",
+      "size": 295
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/seat-results.jsonl": {
+      "sha256": "cfd42fa4704acf6356375ca28050479e48389e677585b77efc089f0d422aaf18",
+      "size": 1358
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/servers/ckpt-fingerprint-groundsg-ground-sg-qwenvl.txt": {
+      "sha256": "666794970ad7ff3d19ff8ec3b30313222c0a99d7515760543c60babb45b0e187",
+      "size": 223
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/servers/groundsg-ground-sg-qwenvl-19740.log": {
+      "sha256": "c8b8584b4cee861a7ea31c53de9993290d6f4c32434f5872a40d16cbed0066ba",
+      "size": 8091
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/servers/server-wrap-metadata-19740.json": {
+      "sha256": "c4111a19a6ca3a6657823c0f05cd600006df8773e22b31b86fa98f67ae031aa1",
+      "size": 937
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-qwen-r1.log": {
+      "sha256": "f1a24582d228d894f2bce4253f7d8f7c044f66ac6c48ae5ac06e7254c8ca3a77",
+      "size": 43568
+    }
+  },
+  "original_fingerprints_after": {
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/logs/client-groundsg-ground-sg-qwenvl-gl1525.arc-ts.umich.edu-455505-r0.log": {
+      "sha256": "0ebe094ca2c8cbe273a54d04a76dd7248f087e6c09b859281ff7314e143c21e4",
+      "size": 37551
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/logs/run_eval_gl-gl1525.arc-ts.umich.edu-455505.log": {
+      "sha256": "0b5c5c5e159a70e9154f34a049c579ff6f977ecc2e110d93d82a40ec5cd2703c",
+      "size": 40432
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/queue/groundsg-ground-sg-qwenvl/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json": {
+      "sha256": "4e45e06fd939623416d3019284dd61034bd30dd3d83366516b974ab7700067c6",
+      "size": 470
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/queue/groundsg-ground-sg-qwenvl/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json": {
+      "sha256": "d925b6496abb3af834a2c408abc6e54fd99aad749b4ed9b0b913256e259bcf2d",
+      "size": 501
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/queue/groundsg-ground-sg-qwenvl/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/progress.json": {
+      "sha256": "1910041f8d8c82189d886c3b22004bf69648212b793e2dc6668ea51065077621",
+      "size": 205
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl": {
+      "sha256": "0e5b78f41e828ecc8bd757b6dd066e5b37a09edfdf987442ee9ad18c7dbcf2e2",
+      "size": 212421
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz": {
+      "sha256": "ea5ca8c6102a5af7d707a01706dac4e56f628aee2907e528cbbc320cee124e69",
+      "size": 445192
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/ep3a1_QwenVL_log.jsonl": {
+      "sha256": "861444b736803d767ef86d51aad9e5f80ae087d13b265e061a82685054d0ca84",
+      "size": 21186
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl": {
+      "sha256": "b0c6d70a3eba1b2a33a070111cc933ef1a0fa2863e3465e86e60b0b2870d991a",
+      "size": 250592
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl": {
+      "sha256": "f6462a4dc766d6da00b1bcb322e40f33e6bc1f2a3b726c30fd81e75f2ad9b809",
+      "size": 42426
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl": {
+      "sha256": "01d1a2c3fca72443815fd8f65e0394f0381c127da9fb64ee2c51a58bef30ff66",
+      "size": 42492
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv": {
+      "sha256": "d4565ed68186006846dac4f03cb272c1e71285c1e00854ee8c7fab6171951fdb",
+      "size": 168209
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl": {
+      "sha256": "99338d64dd1808c8eedae9bca7f479dd835cc2cab889868be00b6cf9d7fa86df",
+      "size": 143383
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json": {
+      "sha256": "6dfe5f0f9c90196cf136c5a605327c6f628b74c1ac0dc29434685dc0c6a41338",
+      "size": 1303
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4": {
+      "sha256": "bb79d4b00c230050e0c7af87a5f98123f4ebd11086b729d602e590780909c386",
+      "size": 903794
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json": {
+      "sha256": "120728efd4ee4be288de5ac13dada97f5ba84f6436bb2249e50cdd457e3ec494",
+      "size": 1650
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json": {
+      "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168",
+      "size": 15275
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json": {
+      "sha256": "a09bf0cb4b59aaaa576d81415203d71da37cebc0de9f6a377f83f69b19cb418c",
+      "size": 671
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl": {
+      "sha256": "b1910205d181f73d68883e02b2e895589e40a75aee3d6be4703ede5dd1136c75",
+      "size": 257842
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv": {
+      "sha256": "4afff44dc63ae8a9365e0f08e030df0be8db3195986d00c0bc8f589f704e6df3",
+      "size": 710065
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/results.jsonl": {
+      "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168",
+      "size": 15275
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/groundsg-ground-sg-qwenvl.ledger.jsonl": {
+      "sha256": "759807976b240d1fc2f0aed1fd0b4248ecf612ba59b689fd2eded427bc14fa03",
+      "size": 2562
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/process-455607.json": {
+      "sha256": "15532fc6ee5c96de341f0c247e68e0752c95e51497c0f780f36b30e4bd28b303",
+      "size": 900
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/progress.json": {
+      "sha256": "ef17ec302e95f6f97673ba61ce9f10fd3cc03bb68d04ca35ed5c64fd318d5c10",
+      "size": 295
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/seat-results.jsonl": {
+      "sha256": "cfd42fa4704acf6356375ca28050479e48389e677585b77efc089f0d422aaf18",
+      "size": 1358
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/servers/ckpt-fingerprint-groundsg-ground-sg-qwenvl.txt": {
+      "sha256": "666794970ad7ff3d19ff8ec3b30313222c0a99d7515760543c60babb45b0e187",
+      "size": 223
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/servers/groundsg-ground-sg-qwenvl-19740.log": {
+      "sha256": "c8b8584b4cee861a7ea31c53de9993290d6f4c32434f5872a40d16cbed0066ba",
+      "size": 8091
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/servers/server-wrap-metadata-19740.json": {
+      "sha256": "c4111a19a6ca3a6657823c0f05cd600006df8773e22b31b86fa98f67ae031aa1",
+      "size": 937
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-qwen-r1.log": {
+      "sha256": "f1a24582d228d894f2bce4253f7d8f7c044f66ac6c48ae5ac06e7254c8ca3a77",
+      "size": 43568
+    }
+  },
+  "internal_official_preserved": true,
+  "model_reset_trajectory_api_calls": 0
+}

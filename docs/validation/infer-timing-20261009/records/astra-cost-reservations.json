@@ -1,0 +1,53 @@
+{
+  "episodes": [
+    "offhard-verify:VideoUnmask:0",
+    "formalhard-verify:VideoUnmask:0"
+  ],
+  "reservations": {
+    "10a3c5117ee04c2ba177f81117297540": {
+      "image_tokens": 14510,
+      "images": 7,
+      "input_tokens": 20105,
+      "max_output_tokens": 2048,
+      "sent_at": 1791602652.3190575,
+      "state": "sent",
+      "text_bytes": 5531,
+      "time": 1791602652.3184729,
+      "usd": 0.3537125
+    },
+    "476c9ed2edd649b3ac1394223352c035": {
+      "image_tokens": 14510,
+      "images": 7,
+      "input_tokens": 20250,
+      "max_output_tokens": 2048,
+      "sent_at": 1791602678.176259,
+      "state": "sent",
+      "text_bytes": 5676,
+      "time": 1791602678.1757102,
+      "usd": 0.355525
+    },
+    "47d32d14c7a24890865c8c163360009d": {
+      "image_tokens": 14510,
+      "images": 7,
+      "input_tokens": 20325,
+      "max_output_tokens": 2048,
+      "sent_at": 1791602698.1769807,
+      "state": "sent",
+      "text_bytes": 5751,
+      "time": 1791602683.3183568,
+      "usd": 0.3564625
+    },
+    "8d875e7f5a524700a972b58750013895": {
+      "image_tokens": 14510,
+      "images": 7,
+      "input_tokens": 20105,
+      "max_output_tokens": 2048,
+      "sent_at": 1791602500.3292549,
+      "state": "sent",
+      "text_bytes": 5531,
+      "time": 1791602500.3287244,
+      "usd": 0.3537125
+    }
+  },
+  "schema": "astra-reservations/1"
+}

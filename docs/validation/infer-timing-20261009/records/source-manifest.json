@@ -1,0 +1,299 @@
+{
+  "说明": "本轮实测结果、实际启动元数据、费用/共享预算、完整耗时与核心短测的只读快照；日志清洗不丢判定或退出码。主源保留，不复制代码、配置、权重、视频或密钥。",
+  "sources": {
+    "gl-smvla-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9",
+      "bytes": 13703
+    },
+    "gl-smvla-recovery.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/recovered-video/recovery.json",
+      "sha256": "4a5ac143e784bbea84c0b7f85eba5766897a543d2b307c3d87efb848ade45bc3",
+      "bytes": 1462
+    },
+    "gl-smvla-media.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/recovered-video/media-finish.log",
+      "sha256": "d41425ad63c88e0f68ad12c63310c2ff47b4d458cab5ab5121767dff3eab93d4",
+      "bytes": 420
+    },
+    "gl-framesamp-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020",
+      "bytes": 7701
+    },
+    "gl-framesamp-recovery.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/recovered-video/recovery.json",
+      "sha256": "ea99a97f4cc29e6a871c3829b2f2e8b4e1ebfe6fea64e87d634beaf6350181af",
+      "bytes": 1483
+    },
+    "gl-framesamp-media.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/recovered-video/media-finish.log",
+      "sha256": "0c36a062c12cc2d3970102dc2c4c38e27bc3c6993f1e6ea0df6245e5d9493b5c",
+      "bytes": 439
+    },
+    "gl-oracle-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/rollouts/groundsg-ground-sg-oracle/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "bfb3e5aac0d0356bc42e951cedc46695be6da9055e8eda3d24fa848a972d4033",
+      "bytes": 10587
+    },
+    "gl-oracle-recovery.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/recovered-video/recovery.json",
+      "sha256": "4dfb82291070115944ce548c65a9bd45fb763b009ed599581bb477be427d0b94",
+      "bytes": 10598
+    },
+    "gl-oracle-media.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/recovered-video/media-finish.log",
+      "sha256": "31048df918596f7ba97a742f14d849d07c0ae5ade16593427182f70540fced2c",
+      "bytes": 425
+    },
+    "gl-pp-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61",
+      "bytes": 13441
+    },
+    "gl-pp-recovery.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/recovered-video/recovery.json",
+      "sha256": "e1cf179dca194f39ad0dedce5ccb6d7a4549dc6eed4ebb09b1c739fa880e5b64",
+      "bytes": 1453
+    },
+    "gl-pp-media.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/recovered-video/media-finish.log",
+      "sha256": "1005594357f50598e7c1ccee1e83e8a26c85ae97d9238a2d9b691316da4ddc37",
+      "bytes": 405
+    },
+    "gl-qwen-r1-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "4b3dd1e4fb09500ab9af7f479a86780ff2e3e9fa7dcee184d1c9e4659db3c168",
+      "bytes": 15275
+    },
+    "gl-qwen-r1-recovery.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/recovered-video/recovery.json",
+      "sha256": "8fe9998bdfb00bf25dc3c089a2e6389a4019ef755770e468ea4926e6b05b2759",
+      "bytes": 20199
+    },
+    "gl-qwen-r1-media.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/recovered-video/media-finish.log",
+      "sha256": "e6b996490257b4d6e3675f3cacfc5d5a9f199a629328d2db2fd55f7d09095c71",
+      "bytes": 361
+    },
+    "gl-memer-r1-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544",
+      "bytes": 16162
+    },
+    "gl-memer-r1-recovery.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/recovered-video/recovery.json",
+      "sha256": "f07e7ffbe9362fabfc5c9b72c0cf7c4e37f5ec4ed5e6442a90012a031725529a",
+      "bytes": 20230
+    },
+    "gl-memer-r1-media.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/recovered-video/media-finish.log",
+      "sha256": "20098044c22deb63bd4eca4d560f2932342f258068c7593eb4ec825e862f83a5",
+      "bytes": 369
+    },
+    "transfer-three-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/transfer-three-record.json",
+      "sha256": "04fb6c7e767c4c387db344c304032556034df026dfe0c04193111fa83f13b46d",
+      "bytes": 46949
+    },
+    "transfer-oracle-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/transfer-oracle-record.json",
+      "sha256": "48e2877854755362418589d24d2d559704fb44cef47353a02a1dc83312bf3ac0",
+      "bytes": 15472
+    },
+    "transfer-language-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/transfer-language-record.json",
+      "sha256": "e63a817dd5cd8df6347c72e62dc6890580bb194c9679d33ddbd38b86d41dc798",
+      "bytes": 36246
+    },
+    "s1-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s1-core.log",
+      "sha256": "edb2ef5911e47cbdaa35cea3f3672e379e3199c62d91fb1ec2958501475f1d9a",
+      "bytes": 5424
+    },
+    "s2-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s2-core.log",
+      "sha256": "59453978584e207e71d492264491c605a36dfb5c2b94a3409096a71e2456b944",
+      "bytes": 5504
+    },
+    "s2b-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s2b-core.log",
+      "sha256": "dfc5ed1aabe909a8b27191ae5708b76d4e6e5e3c526182187effa802fbd0e087",
+      "bytes": 5504
+    },
+    "s3-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s3-core.log",
+      "sha256": "1e20f8816c3bb9d0956427d565566100e3e6bab260a24aba1097be10311f4999",
+      "bytes": 8040,
+      "processing": "core-summary-trim-trailing/1"
+    },
+    "s3-core-r2.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s3-core-r2.log",
+      "sha256": "293e967ff8bc580c47d5715912ce0b180287988938c012cf3abe665282fd516b",
+      "bytes": 5504
+    },
+    "s4-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s4-core.log",
+      "sha256": "f8b019b5c593e04a7fa3efbdd187aab27a2a708b0b83f0a7372ae6feed89cbac",
+      "bytes": 5504
+    },
+    "s5-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s5-core.log",
+      "sha256": "b0dd5b73b4f4b47f8e195efa85c35478e6d3edea6fdc44bc08aebc0b858eb9ac",
+      "bytes": 5584
+    },
+    "s6-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s6-core.log",
+      "sha256": "125a49cbf3b94ddaa846fdfc9dc0fe44efad7fe006a09e558e6eff5bd4e6468c",
+      "bytes": 5424
+    },
+    "s7-core.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/s7-core.log",
+      "sha256": "0fe3201419fd1e14a4594890b4b0595df4fe4d68bcd1f0055b3b0cdb435c9802",
+      "bytes": 5424
+    },
+    "trace-schema.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/trace-schema.log",
+      "sha256": "b72de8d23351de7b40b566309ae61f29e56c2c889649c55a479f4519b9aebd20",
+      "bytes": 319
+    },
+    "gl-smvla-process.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/seats/smvla/seed7/infer-timing-smvla-63431430/process-426643.json",
+      "sha256": "d4fcbaadbb6cf84005af5c605028cd3224013462868aef318551d8ca348a2314",
+      "bytes": 772
+    },
+    "gl-framesamp-process.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/seats/perceptual-framesamp-modul/seed7/infer-timing-framesamp-63431431/process-1904934.json",
+      "sha256": "5cded5a8533f447dd8aa442adf515df51a14690147081065cf803c055b28b171",
+      "bytes": 908
+    },
+    "gl-oracle-process.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-oracle/seats/groundsg-ground-sg-oracle/seed7/infer-timing-oracle-63431432/process-1904991.json",
+      "sha256": "065ddce8646a61282be06540cb3f64bc91f1ea455d63570cef32f84e2f289c32",
+      "bytes": 924
+    },
+    "gl-pp-process.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/seats/pp/seed7/infer-timing-pp-63431433/process-2804706.json",
+      "sha256": "2c41053381037ee61439580a0435ceae272f8ceb0b90f02dce8f7ba1256a8893",
+      "bytes": 924
+    },
+    "gl-qwen-r1-process.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-qwen-r1/seats/groundsg-ground-sg-qwenvl/seed7/infer-timing-qwen-r1-63431430/process-455607.json",
+      "sha256": "15532fc6ee5c96de341f0c247e68e0752c95e51497c0f780f36b30e4bd28b303",
+      "bytes": 900
+    },
+    "gl-memer-r1-process.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/process-1924078.json",
+      "sha256": "ba3a88b719e5e09b15393f71048a078abf1957979dcd27b9798373accad71d54",
+      "bytes": 900
+    },
+    "report-gl-six.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/reports-gl-six/report.json",
+      "sha256": "56793e4b7802fc7f03cd72a7b4dd77b20e80bb187f8afb112a546aaab009c8fc",
+      "bytes": 4118
+    },
+    "astra-off-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off/rollouts/astra/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "d9a60e009eb53b1544f42da40f6d3bfdb8a70dbb154cfdc3ad56a5a489593a22",
+      "bytes": 4603
+    },
+    "astra-off-results.jsonl": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off/rollouts/astra/hard-verify/seed0/results.jsonl",
+      "sha256": "d9a60e009eb53b1544f42da40f6d3bfdb8a70dbb154cfdc3ad56a5a489593a22",
+      "bytes": 4603
+    },
+    "astra-off-summary.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off/rollouts/astra/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/summary.json",
+      "sha256": "e0141344c3f84821663fbdd56e5cf4b96def747c6dcc437af4caffee26faf3f7",
+      "bytes": 654
+    },
+    "astra-formal-result.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra/rollouts/astra/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "sha256": "408ba259f5f3b8426d3d376c709c7bc6f6d1b5d64d5fdc8ffa38ebbabad73b91",
+      "bytes": 11833
+    },
+    "astra-formal-results.jsonl": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra/rollouts/astra/hard-verify/seed0/results.jsonl",
+      "sha256": "408ba259f5f3b8426d3d376c709c7bc6f6d1b5d64d5fdc8ffa38ebbabad73b91",
+      "bytes": 11833
+    },
+    "astra-formal-summary.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra/rollouts/astra/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/summary.json",
+      "sha256": "fa65ef0f23532454409872bfcb21d6eb96644caa40cd46d260b57c98f9593f69",
+      "bytes": 675
+    },
+    "report-final.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/reports-final/report.json",
+      "sha256": "003bfa7f91e791bc494e12563d81f3a023e665d79c88ba38c1dcd71f67e31e21",
+      "bytes": 5370
+    },
+    "astra-cost-ledger.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.json",
+      "sha256": "e72c05bf37b85258183eb11c64a928a48a21736350797847fb68a2bc2069c41e",
+      "bytes": 2730
+    },
+    "astra-cost-state.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.state.json",
+      "sha256": "3cb32e664fe5c649b2fc222a4e75ead9f4d70c5bccfc804d00b279a63df7d9c1",
+      "bytes": 1343
+    },
+    "astra-cost-reservations.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/ledger.state.json.reservations.json",
+      "sha256": "7b2df957f205fbdd12ab61359162c002971502efbf9b1fbe6df61bde7e14fe68",
+      "bytes": 1364
+    },
+    "shared-budget-final.jsonl": {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl",
+      "sha256": "dbfad71dac8ef37f5dd1f33cb71865bd9a8420fa65e6f16b45982643228cdc35",
+      "bytes": 20776
+    },
+    "astra-on.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-on.log",
+      "sha256": "8104f4792f00081b3d984deb11571024cd2d7847a10fa8ec279379a3cb9bd280",
+      "bytes": 90595,
+      "processing": "astra-summary-preserve-embedded-verdicts/1"
+    },
+    "astra-off.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-off.log",
+      "sha256": "17c9f0bde521c65597a23bd72da1f311df3cace57bdd94aba042f31f2a926f46",
+      "bytes": 8874,
+      "processing": "astra-summary-preserve-embedded-verdicts/1"
+    },
+    "astra-formal.summary.log": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/formal-astra.log",
+      "sha256": "e5ce3d5c20c031da0d9a9d8d00afe8c23c8c03680ed243f7c309d9c4db03b6b9",
+      "bytes": 9010,
+      "processing": "astra-summary-preserve-embedded-verdicts/1"
+    },
+    "runner-A-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runner-A-record.json",
+      "sha256": "e5c09db124efeb4428f249c89156c9a30c7b2ada0cd018663a05c79404f13512",
+      "bytes": 13877
+    },
+    "runner-B-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runner-B-record.json",
+      "sha256": "8402688bf6ded556c45be62ee593fddc0a21db58ab1b6e4c07b840d3e84e00cc",
+      "bytes": 12306
+    },
+    "runner-C-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runner-C-record.json",
+      "sha256": "950cfa4a81ee14d2aedbc6a294efb81ae8aaef45e6328d007a3ced604d73684f",
+      "bytes": 11000
+    },
+    "runner-D-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runner-D-record.json",
+      "sha256": "2746b49f104f28e1856ea49f6577cc25ea6a6aa1f9a7a6c8ff3375a1aecdd765",
+      "bytes": 9150
+    },
+    "local-runner-record.json": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/local-runner-record.json",
+      "sha256": "8f04c6cf19902bf54715b5c664125c91764a62f00f6ed8c4929f105f38d39e05",
+      "bytes": 76818
+    },
+    "budget-final.txt": {
+      "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-final.txt",
+      "sha256": "de7c5404bbebbfdba18eb2780b780625c74fc30ea361d40adb859e6744341e98",
+      "bytes": 716
+    }
+  }
+}

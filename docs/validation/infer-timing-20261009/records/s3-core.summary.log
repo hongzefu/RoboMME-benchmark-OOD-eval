@@ -1,0 +1,91 @@
+........................................................................ [  5%]
+........................................................................ [ 10%]
+........................................................sss............. [ 15%]
+........................................................................ [ 20%]
+........................................................................ [ 25%]
+........................................................................ [ 30%]
+........................................................................ [ 36%]
+........................................................................ [ 41%]
+.......................................................F................ [ 46%]
+..........................................
+GATE2_SELFTEST=PASS cases=6 line=GATE2=INCOMPLETE policy=selftest compared=3 same_terminal=3 identical_trace=1 first_diverge_obs=1 first_diverge_state=0 first_diverge_text=0 first_diverge_action=1 missing=1 first_diverge_stop=0 first_diverge_request=0 duplicate=1 missing_trace=0 bad_trace=0
+.............................. [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 61%]
+........................................................................ [ 67%]
+.................................................sss.................... [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 82%]
+........................................................................ [ 87%]
+........................................................................ [ 92%]
+........................................................................ [ 97%]
+.............................                                            [100%]
+=================================== FAILURES ===================================
+___________ test_chunk_fresh_timing_language_conservation_and_obs_eq ___________
+
+    def test_chunk_fresh_timing_language_conservation_and_obs_eq():
+        calls = decisions = 0
+        max_resid = 0.0
+>       for rec in _records():
+                   ^^^^^^^^^^
+
+tests/pipeline/evalx/pp/test_pp_chunk_timing.py:189:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def _records():
+        global _CACHE
+        if _CACHE is None:
+            out = subprocess.run([_pp_python(), str(Path(__file__).resolve()), "--child"], cwd=TREE,
+                                 env=_child_env(), capture_output=True, text=True, timeout=180)
+            lines = [line for line in out.stdout.splitlines() if line.startswith("CHILD_RESULT ")]
+>           assert out.returncode == 0 and lines, f"子进程失败 rc={out.returncode}\n{out.stdout[-2000:]}\n{out.stderr[-4000:]}"
+E           AssertionError: 子进程失败 rc=1
+E
+E             /data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+E               import pynvml  # type: ignore[import]
+E             Traceback (most recent call last):
+E               File "/data/hongzefu/RoboMME-benchmark-OOD-eval/tests/pipeline/evalx/pp/test_pp_chunk_timing.py", line 290, in <module>
+E                 _child_main()
+E               File "/data/hongzefu/RoboMME-benchmark-OOD-eval/tests/pipeline/evalx/pp/test_pp_chunk_timing.py", line 36, in _child_main
+E                 from robomme_ood_eval.models.pp import TracedConnection
+E             ModuleNotFoundError: No module named 'robomme_ood_eval'
+E
+E           assert (1 == 0)
+E            +  where 1 = CompletedProcess(args=['/data/hongzefu/RoboMME-benchmark-OOD-eval/envs/client-env/.venv/bin/python', '/data/hongzefu/R... from robomme_ood_eval.models.pp import TracedConnection\nModuleNotFoundError: No module named \'robomme_ood_eval\'\n').returncode
+
+tests/pipeline/evalx/pp/test_pp_chunk_timing.py:174: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/sapien/__init__.py:18
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/sapien/__init__.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+.venv/lib/python3.11/site-packages/mani_skill/utils/registration.py:225: 16 warnings
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/lib/python3.11/site-packages/mani_skill/utils/registration.py:225: DeprecationWarning: The 'warn' method is deprecated, use 'warning' instead
+    logger.warn(f"Override registered env {uid}")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard1/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard2/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard3/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard4/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+tests/pipeline/eval/test_attempt_ledger.py::test_recover_dangling_from_result_json
+  /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_record_wrapper/hard_specs.py:463: UserWarning: /data/hongzefu/RoboMME-benchmark-OOD-eval/third_party/robomme_benchmark/src/robomme_hard/env_metadata/ood/xhard5/specs.jsonl：hard_fingerprint 与当前源码不符（只警告，不拒绝）
+    warnings.warn(f"{path}：{key} 与当前源码不符（只警告，不拒绝）")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6
+=========================== short test summary info ============================
+FAILED tests/pipeline/evalx/pp/test_pp_chunk_timing.py::test_chunk_fresh_timing_language_conservation_and_obs_eq
+1 failed, 1390 passed, 6 skipped, 101 deselected, 22 warnings in 172.28s (0:02:52)
+EXIT_CODE=1

@@ -1,0 +1,287 @@
+{
+  "source_commit": "7e9e6e5288b683aadca4358b482f3789748e29c0",
+  "original_result": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+  "task_success": 1,
+  "status": "success",
+  "official_video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+  "official_video_probe": {
+    "width": 512,
+    "height": 528,
+    "frames": 393,
+    "fps": "30",
+    "codec": "av1",
+    "pix_fmt": "yuv420p"
+  },
+  "raw_stream_probes": {
+    "front": {
+      "codec": "av1",
+      "pix_fmt": "yuv444p",
+      "width": 256,
+      "height": 256,
+      "frames": 300
+    },
+    "wrist": {
+      "codec": "av1",
+      "pix_fmt": "yuv444p",
+      "width": 256,
+      "height": 256,
+      "frames": 333
+    }
+  },
+  "source_frames": 393,
+  "array_records_verified": 1633,
+  "input_array_precision": "verified-original",
+  "frame_hash_check": {
+    "mode": "skipped-lossy-av1",
+    "frames": {
+      "front": 393,
+      "wrist": 393
+    }
+  },
+  "original_fingerprints_before": {
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/logs/client-groundsg-ground-sg-memer-gl1512.arc-ts.umich.edu-1923994-r0.log": {
+      "sha256": "4b7f426c189843ad8b00085e391e5524a10fa7aee8b5c3ef22e2f4d5a989be98",
+      "size": 88830
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/logs/run_eval_gl-gl1512.arc-ts.umich.edu-1923994.log": {
+      "sha256": "db42804d5d7b5e5251eaf393b97677063cbf7239438697644bac5c1a7b064007",
+      "size": 91707
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/queue/groundsg-ground-sg-memer/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json": {
+      "sha256": "3c600d8a3c90d02fe7c60d84e6292535b4a8c0da9e1f4d02e56c498030e0e794",
+      "size": 476
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/queue/groundsg-ground-sg-memer/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json": {
+      "sha256": "4bc08a16f92f65034821c7648d091bb73b9bd7c94a5150269b13beb02e7d24dc",
+      "size": 503
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/queue/groundsg-ground-sg-memer/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/progress.json": {
+      "sha256": "4ae545061b7f5555fdafc349ab945ea3087d29e3c42a5732587ad654cc431c30",
+      "size": 206
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl": {
+      "sha256": "287656e29ad18b27c4e55f5c927f03b0f165fdce3d1fa8bf211dd4098687b846",
+      "size": 239653
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz": {
+      "sha256": "074de5d09112c9fbe42df052938420bfbd035e29c77fa94a80c670e6f94b1c83",
+      "size": 501358
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/ep3a1_MemER_log.jsonl": {
+      "sha256": "4878484fc261f3e5f9637dd3789e94b561460562ec80d3d4498500688fa3d538",
+      "size": 78102
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl": {
+      "sha256": "e1ab8042df07416c965fc1ffbe291d7e48084eda3399fe5bf17edbf1bfe20303",
+      "size": 278574
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl": {
+      "sha256": "c60bf69f43d6e90a483ec06b4a7022f3a0b2f57e567f4428bba64c9aef0f7a77",
+      "size": 46903
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl": {
+      "sha256": "9e2dfcc24a35f64ebdcc70fae3898cb3dd4c6bb9d09c6900ab23550a823a5f36",
+      "size": 46969
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv": {
+      "sha256": "d9a23828bc47baced13fca349c1a09be61c98abd94ccf6ef6ac39919f3d2b4cf",
+      "size": 187636
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl": {
+      "sha256": "015734026a3f319a27ae6b620c219eec0c5e5270f6588320953edaf967d265f1",
+      "size": 220672
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json": {
+      "sha256": "5e3a20a3652a92499d12915820f8c458681899e5fce1b61e71873cdd61b298f7",
+      "size": 1303
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4": {
+      "sha256": "6c7a3fe25c7f106bc679939dd81db3a19b32aeeccb8f8bcae20d3db15cc86a31",
+      "size": 1004997
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json": {
+      "sha256": "f0e356b9d11f12f7de91047ed1f6dbfe0dcd5ce98e1ff9c095df762f372646ac",
+      "size": 1756
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json": {
+      "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544",
+      "size": 16162
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json": {
+      "sha256": "87c11568cc682050e9fbfca66d30cfdb342e3d07634ce0ef50f3cb0bfedf7f53",
+      "size": 672
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl": {
+      "sha256": "cc0b57686ae9815eb66ad0c895ec593c86aa040dee37c237f2e76ea6f53df13a",
+      "size": 287835
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv": {
+      "sha256": "7b52edc3aed4ae14171c62cbab42500704d9ab6a08f3d2853c0848b102712dd9",
+      "size": 811449
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/results.jsonl": {
+      "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544",
+      "size": 16162
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/groundsg-ground-sg-memer.ledger.jsonl": {
+      "sha256": "f65e90edc8ed9cf8c1e0192b0d8ce7fbe369cd9bc533ff1c58d679c5a4c3548a",
+      "size": 2574
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/process-1924078.json": {
+      "sha256": "ba3a88b719e5e09b15393f71048a078abf1957979dcd27b9798373accad71d54",
+      "size": 900
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/progress.json": {
+      "sha256": "57346e2d530bc18a794d80a0a0778e8106f4416289de91394cfa3d28be2c3956",
+      "size": 296
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/seat-results.jsonl": {
+      "sha256": "7aa0ebd39a91c7a58a438e3143226b46a578612731b6bcf9c9633efed15ff392",
+      "size": 1361
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/servers/ckpt-fingerprint-groundsg-ground-sg-memer.txt": {
+      "sha256": "a94c1af09435d6dffd4ddc771db70be791eaa6b35798be68ca6a8a6b7d6f2211",
+      "size": 223
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/servers/groundsg-ground-sg-memer-19750.log": {
+      "sha256": "cf935454f96864a775ec7d20e0c97399961c05ee23774c59dd190c5b3e4b65e6",
+      "size": 8090
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/servers/server-wrap-metadata-19750.json": {
+      "sha256": "9b1a78289e75c85f45dec2b4508ad7add3025e7f017ffb1368a536255df39bfe",
+      "size": 939
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-memer-r1.log": {
+      "sha256": "1aed7fb7d8dfc5559fe6970d580997232b6f5e68735b7613f910e745fd69844e",
+      "size": 94707
+    }
+  },
+  "original_fingerprints_after": {
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/logs/client-groundsg-ground-sg-memer-gl1512.arc-ts.umich.edu-1923994-r0.log": {
+      "sha256": "4b7f426c189843ad8b00085e391e5524a10fa7aee8b5c3ef22e2f4d5a989be98",
+      "size": 88830
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/logs/run_eval_gl-gl1512.arc-ts.umich.edu-1923994.log": {
+      "sha256": "db42804d5d7b5e5251eaf393b97677063cbf7239438697644bac5c1a7b064007",
+      "size": 91707
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/queue/groundsg-ground-sg-memer/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json": {
+      "sha256": "3c600d8a3c90d02fe7c60d84e6292535b4a8c0da9e1f4d02e56c498030e0e794",
+      "size": 476
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/queue/groundsg-ground-sg-memer/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json": {
+      "sha256": "4bc08a16f92f65034821c7648d091bb73b9bd7c94a5150269b13beb02e7d24dc",
+      "size": 503
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/queue/groundsg-ground-sg-memer/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/progress.json": {
+      "sha256": "4ae545061b7f5555fdafc349ab945ea3087d29e3c42a5732587ad654cc431c30",
+      "size": 206
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl": {
+      "sha256": "287656e29ad18b27c4e55f5c927f03b0f165fdce3d1fa8bf211dd4098687b846",
+      "size": 239653
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz": {
+      "sha256": "074de5d09112c9fbe42df052938420bfbd035e29c77fa94a80c670e6f94b1c83",
+      "size": 501358
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/ep3a1_MemER_log.jsonl": {
+      "sha256": "4878484fc261f3e5f9637dd3789e94b561460562ec80d3d4498500688fa3d538",
+      "size": 78102
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl": {
+      "sha256": "e1ab8042df07416c965fc1ffbe291d7e48084eda3399fe5bf17edbf1bfe20303",
+      "size": 278574
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl": {
+      "sha256": "c60bf69f43d6e90a483ec06b4a7022f3a0b2f57e567f4428bba64c9aef0f7a77",
+      "size": 46903
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl": {
+      "sha256": "9e2dfcc24a35f64ebdcc70fae3898cb3dd4c6bb9d09c6900ab23550a823a5f36",
+      "size": 46969
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv": {
+      "sha256": "d9a23828bc47baced13fca349c1a09be61c98abd94ccf6ef6ac39919f3d2b4cf",
+      "size": 187636
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl": {
+      "sha256": "015734026a3f319a27ae6b620c219eec0c5e5270f6588320953edaf967d265f1",
+      "size": 220672
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json": {
+      "sha256": "5e3a20a3652a92499d12915820f8c458681899e5fce1b61e71873cdd61b298f7",
+      "size": 1303
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/VideoUnmask_ep3a1_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_hard.mp4": {
+      "sha256": "6c7a3fe25c7f106bc679939dd81db3a19b32aeeccb8f8bcae20d3db15cc86a31",
+      "size": 1004997
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/official/provenance.json": {
+      "sha256": "f0e356b9d11f12f7de91047ed1f6dbfe0dcd5ce98e1ff9c095df762f372646ac",
+      "size": 1756
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json": {
+      "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544",
+      "size": 16162
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json": {
+      "sha256": "87c11568cc682050e9fbfca66d30cfdb342e3d07634ce0ef50f3cb0bfedf7f53",
+      "size": 672
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl": {
+      "sha256": "cc0b57686ae9815eb66ad0c895ec593c86aa040dee37c237f2e76ea6f53df13a",
+      "size": 287835
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv": {
+      "sha256": "7b52edc3aed4ae14171c62cbab42500704d9ab6a08f3d2853c0848b102712dd9",
+      "size": 811449
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/rollouts/groundsg-ground-sg-memer/hard-verify/seed7/results.jsonl": {
+      "sha256": "30cbc66abd20d0cdd6406572b74438cab4a8552c36be6ad436bae0d011614544",
+      "size": 16162
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/groundsg-ground-sg-memer.ledger.jsonl": {
+      "sha256": "f65e90edc8ed9cf8c1e0192b0d8ce7fbe369cd9bc533ff1c58d679c5a4c3548a",
+      "size": 2574
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/process-1924078.json": {
+      "sha256": "ba3a88b719e5e09b15393f71048a078abf1957979dcd27b9798373accad71d54",
+      "size": 900
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/progress.json": {
+      "sha256": "57346e2d530bc18a794d80a0a0778e8106f4416289de91394cfa3d28be2c3956",
+      "size": 296
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/seats/groundsg-ground-sg-memer/seed7/infer-timing-memer-r1-63431431/seat-results.jsonl": {
+      "sha256": "7aa0ebd39a91c7a58a438e3143226b46a578612731b6bcf9c9633efed15ff392",
+      "size": 1361
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/servers/ckpt-fingerprint-groundsg-ground-sg-memer.txt": {
+      "sha256": "a94c1af09435d6dffd4ddc771db70be791eaa6b35798be68ca6a8a6b7d6f2211",
+      "size": 223
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/servers/groundsg-ground-sg-memer-19750.log": {
+      "sha256": "cf935454f96864a775ec7d20e0c97399961c05ee23774c59dd190c5b3e4b65e6",
+      "size": 8090
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-memer-r1/servers/server-wrap-metadata-19750.json": {
+      "sha256": "9b1a78289e75c85f45dec2b4508ad7add3025e7f017ffb1368a536255df39bfe",
+      "size": 939
+    },
+    "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/gl-memer-r1.log": {
+      "sha256": "1aed7fb7d8dfc5559fe6970d580997232b6f5e68735b7613f910e745fd69844e",
+      "size": 94707
+    }
+  },
+  "internal_official_preserved": true,
+  "model_reset_trajectory_api_calls": 0
+}

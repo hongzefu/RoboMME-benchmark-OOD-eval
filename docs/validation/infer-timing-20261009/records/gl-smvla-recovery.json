@@ -1,0 +1,46 @@
+{
+  "原始结果": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+  "原始结果指纹": {
+    "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9",
+    "size": 13703
+  },
+  "task_success": 1,
+  "status": "success",
+  "official_video": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+  "official_video_probe": {
+    "width": 512,
+    "height": 528,
+    "frames": 329,
+    "fps": "30",
+    "codec": "av1",
+    "pix_fmt": "yuv420p"
+  },
+  "raw_stream_probes": {
+    "front": {
+      "codec": "av1",
+      "pix_fmt": "yuv444p",
+      "width": 256,
+      "height": 256,
+      "frames": 242
+    },
+    "wrist": {
+      "codec": "av1",
+      "pix_fmt": "yuv444p",
+      "width": 256,
+      "height": 256,
+      "frames": 269
+    }
+  },
+  "arrays_and_trace_unchanged": true,
+  "数组复核": "verified-original",
+  "原始帧哈希边界": {
+    "mode": "skipped-lossy-av1",
+    "frames": {
+      "front": 329,
+      "wrist": 329
+    }
+  },
+  "source_commit": "7e9e6e5288b683aadca4358b482f3789748e29c0",
+  "model_reset_trajectory_api_calls": 0,
+  "preserved_files": 15
+}

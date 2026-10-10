@@ -1,0 +1,1257 @@
+{
+  "time_utc": "2026-10-10T02:35:03.980220+00:00",
+  "method": "三个固定源目录逐个 rsync -a --info=progress2；普通文件两端分别 SHA256/字节数/路径全集校验；符号链接不穿透逐项核对",
+  "scope": "只搬运 smvla、framesamp、pp 已完成产物；内部 provenance 绝对路径逐字保留；未修改代码/配置/脚本/预算；未执行模型/仿真/GPU/API",
+  "commands": [
+    "rsync -a --info=progress2 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/",
+    "rsync -a --info=progress2 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/",
+    "rsync -a --info=progress2 /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/ /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/"
+  ],
+  "targets_precheck": "三个本机目标在复制前均不存在；BASE/artifacts 为实体目录",
+  "models": [
+    {
+      "model": "smvla",
+      "source": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla",
+      "target": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla",
+      "files": 33,
+      "bytes": 2802517,
+      "symlinks": [],
+      "mismatch": 0,
+      "mismatches": [],
+      "file_manifest": [
+        {
+          "path": "logs/client-smvla-gl1525.arc-ts.umich.edu-426566-r0.log",
+          "source": {
+            "bytes": 2340,
+            "sha256": "40d01588a3f60e5b860cc517f72411c6c9936eb6fe3783904ce41aab9b786878"
+          },
+          "target": {
+            "bytes": 2340,
+            "sha256": "40d01588a3f60e5b860cc517f72411c6c9936eb6fe3783904ce41aab9b786878"
+          },
+          "match": true
+        },
+        {
+          "path": "logs/run_eval_gl-gl1525.arc-ts.umich.edu-426566.log",
+          "source": {
+            "bytes": 4843,
+            "sha256": "17b26faca5487f0ffe4a6d072357fdb4b0aa4e47015175a22529191ae8d229d2"
+          },
+          "target": {
+            "bytes": 4843,
+            "sha256": "17b26faca5487f0ffe4a6d072357fdb4b0aa4e47015175a22529191ae8d229d2"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/smvla/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json",
+          "source": {
+            "bytes": 450,
+            "sha256": "a60c611b134750d8444de02cbeddb5690d4367d9210597b22a6158b27924ea78"
+          },
+          "target": {
+            "bytes": 450,
+            "sha256": "a60c611b134750d8444de02cbeddb5690d4367d9210597b22a6158b27924ea78"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/smvla/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json",
+          "source": {
+            "bytes": 462,
+            "sha256": "fc6b5958119378e7299e44c8963223111d4a2ad6a61d484b920902c6f6f08525"
+          },
+          "target": {
+            "bytes": 462,
+            "sha256": "fc6b5958119378e7299e44c8963223111d4a2ad6a61d484b920902c6f6f08525"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/smvla/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock",
+          "source": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "target": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+          "source": {
+            "bytes": 678622,
+            "sha256": "1e650fe5caf7d91ab79d58cfa16840ede8823b027f9b2648e82deda993597351"
+          },
+          "target": {
+            "bytes": 678622,
+            "sha256": "1e650fe5caf7d91ab79d58cfa16840ede8823b027f9b2648e82deda993597351"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/media-finish.log",
+          "source": {
+            "bytes": 420,
+            "sha256": "d41425ad63c88e0f68ad12c63310c2ff47b4d458cab5ab5121767dff3eab93d4"
+          },
+          "target": {
+            "bytes": 420,
+            "sha256": "d41425ad63c88e0f68ad12c63310c2ff47b4d458cab5ab5121767dff3eab93d4"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-result.json",
+          "source": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "target": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-results.jsonl",
+          "source": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "target": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/recovery.json",
+          "source": {
+            "bytes": 1462,
+            "sha256": "4a5ac143e784bbea84c0b7f85eba5766897a543d2b307c3d87efb848ade45bc3"
+          },
+          "target": {
+            "bytes": 1462,
+            "sha256": "4a5ac143e784bbea84c0b7f85eba5766897a543d2b307c3d87efb848ade45bc3"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/render.json",
+          "source": {
+            "bytes": 4305,
+            "sha256": "05d14be9e6582fec07627f34a211bf0447ba0af6b1c53c9b118e49254678c721"
+          },
+          "target": {
+            "bytes": 4305,
+            "sha256": "05d14be9e6582fec07627f34a211bf0447ba0af6b1c53c9b118e49254678c721"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/source-before.json",
+          "source": {
+            "bytes": 4267,
+            "sha256": "2d7749de72f313de489d3f5988508dde7c7cbca6c260a15e81537e86e6d2b1ae"
+          },
+          "target": {
+            "bytes": 4267,
+            "sha256": "2d7749de72f313de489d3f5988508dde7c7cbca6c260a15e81537e86e6d2b1ae"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/progress.json",
+          "source": {
+            "bytes": 205,
+            "sha256": "092d5f89676afbbde77eb8dd5a1222185812439c492110de5ad5aa0360b0e603"
+          },
+          "target": {
+            "bytes": 205,
+            "sha256": "092d5f89676afbbde77eb8dd5a1222185812439c492110de5ad5aa0360b0e603"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+          "source": {
+            "bytes": 210873,
+            "sha256": "6efd9f9ae7de0c2be56cd5a354c08bcbb15590ac117972362fac2b988a53b43c"
+          },
+          "target": {
+            "bytes": 210873,
+            "sha256": "6efd9f9ae7de0c2be56cd5a354c08bcbb15590ac117972362fac2b988a53b43c"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+          "source": {
+            "bytes": 450112,
+            "sha256": "453d3de27cfa52600eb1ed5144523eb55d2ed25eb757989c7377ff9f970df8a9"
+          },
+          "target": {
+            "bytes": 450112,
+            "sha256": "453d3de27cfa52600eb1ed5144523eb55d2ed25eb757989c7377ff9f970df8a9"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+          "source": {
+            "bytes": 177705,
+            "sha256": "6acb789aeba6672b4a6937759c35128be91006099872b3e2ee03ef47c679bdb8"
+          },
+          "target": {
+            "bytes": 177705,
+            "sha256": "6acb789aeba6672b4a6937759c35128be91006099872b3e2ee03ef47c679bdb8"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl",
+          "source": {
+            "bytes": 39171,
+            "sha256": "39812422f988ad26c10f70649c3d54fa8f324128c5258c786cc59509e0c3e13a"
+          },
+          "target": {
+            "bytes": 39171,
+            "sha256": "39812422f988ad26c10f70649c3d54fa8f324128c5258c786cc59509e0c3e13a"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl",
+          "source": {
+            "bytes": 39225,
+            "sha256": "b62552c0ef2487ad8d2e2aada274d6eeec3264e8a785376e2f9a4084eba61c36"
+          },
+          "target": {
+            "bytes": 39225,
+            "sha256": "b62552c0ef2487ad8d2e2aada274d6eeec3264e8a785376e2f9a4084eba61c36"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv",
+          "source": {
+            "bytes": 167191,
+            "sha256": "753f2d39fc859d44c94e5d0e3a0cbea2e139443c2e048382d7d916434ca903aa"
+          },
+          "target": {
+            "bytes": 167191,
+            "sha256": "753f2d39fc859d44c94e5d0e3a0cbea2e139443c2e048382d7d916434ca903aa"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+          "source": {
+            "bytes": 46865,
+            "sha256": "31e2e1908c0a6a6d8b91179622d1f4fca4e6f2bbe88955085d3dae85f25c6632"
+          },
+          "target": {
+            "bytes": 46865,
+            "sha256": "31e2e1908c0a6a6d8b91179622d1f4fca4e6f2bbe88955085d3dae85f25c6632"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json",
+          "source": {
+            "bytes": 1266,
+            "sha256": "7599ba0ec1a1cb03e0feafb374b6fd4225d0d9258ed7f76bd60385778196fec8"
+          },
+          "target": {
+            "bytes": 1266,
+            "sha256": "7599ba0ec1a1cb03e0feafb374b6fd4225d0d9258ed7f76bd60385778196fec8"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+          "source": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "target": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json",
+          "source": {
+            "bytes": 674,
+            "sha256": "317c1fe9ecf4edf514b9aef50b43d229e3e73db0c3484255d3a6fb95ccd3dca6"
+          },
+          "target": {
+            "bytes": 674,
+            "sha256": "317c1fe9ecf4edf514b9aef50b43d229e3e73db0c3484255d3a6fb95ccd3dca6"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+          "source": {
+            "bytes": 228083,
+            "sha256": "a677ab6ccaecf08e9dad44923575e2dc21ff43d48ea003c8dad35bf668afb3b9"
+          },
+          "target": {
+            "bytes": 228083,
+            "sha256": "a677ab6ccaecf08e9dad44923575e2dc21ff43d48ea003c8dad35bf668afb3b9"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv",
+          "source": {
+            "bytes": 678154,
+            "sha256": "7ec12dc755f76ccc11b552087085254b0ca058f46fccdc9d7a1cb2361e8fde8a"
+          },
+          "target": {
+            "bytes": 678154,
+            "sha256": "7ec12dc755f76ccc11b552087085254b0ca058f46fccdc9d7a1cb2361e8fde8a"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/smvla/hard-verify/seed7/results.jsonl",
+          "source": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "target": {
+            "bytes": 13703,
+            "sha256": "ea361a20252d26697c4249ad5082a2d1fecbf9a91f64fb20f6a9b5aae64504d9"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/smvla/seed7/infer-timing-smvla-63431430/process-426643.json",
+          "source": {
+            "bytes": 772,
+            "sha256": "d4fcbaadbb6cf84005af5c605028cd3224013462868aef318551d8ca348a2314"
+          },
+          "target": {
+            "bytes": 772,
+            "sha256": "d4fcbaadbb6cf84005af5c605028cd3224013462868aef318551d8ca348a2314"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/smvla/seed7/infer-timing-smvla-63431430/progress.json",
+          "source": {
+            "bytes": 270,
+            "sha256": "3e7ce403a6c22f41905ec20abff3b5120bfb1bbee33b5a6e3b9e221cea623317"
+          },
+          "target": {
+            "bytes": 270,
+            "sha256": "3e7ce403a6c22f41905ec20abff3b5120bfb1bbee33b5a6e3b9e221cea623317"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/smvla/seed7/infer-timing-smvla-63431430/seat-results.jsonl",
+          "source": {
+            "bytes": 1291,
+            "sha256": "0f8d77b841dd8b7282a1c5537ab219e5dadc04fdac1dc0d95b2c7fd8b9aab1cc"
+          },
+          "target": {
+            "bytes": 1291,
+            "sha256": "0f8d77b841dd8b7282a1c5537ab219e5dadc04fdac1dc0d95b2c7fd8b9aab1cc"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/smvla/seed7/infer-timing-smvla-63431430/smvla.ledger.jsonl",
+          "source": {
+            "bytes": 2455,
+            "sha256": "2f2ed234b85065abadd0860a99478c79f8e485d92c7c0760fd58a722fd83500c"
+          },
+          "target": {
+            "bytes": 2455,
+            "sha256": "2f2ed234b85065abadd0860a99478c79f8e485d92c7c0760fd58a722fd83500c"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/ckpt-fingerprint-smvla.txt",
+          "source": {
+            "bytes": 220,
+            "sha256": "c18600dc6b2fbd347ab313dd7b612e36d06c977c7377f337a30d0caa1b147b0a"
+          },
+          "target": {
+            "bytes": 220,
+            "sha256": "c18600dc6b2fbd347ab313dd7b612e36d06c977c7377f337a30d0caa1b147b0a"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/server-wrap-metadata-19700.json",
+          "source": {
+            "bytes": 2643,
+            "sha256": "a84f3e0b5516e7985590ed384aa11522dd6f6551a1297447d5be399f59b29869"
+          },
+          "target": {
+            "bytes": 2643,
+            "sha256": "a84f3e0b5516e7985590ed384aa11522dd6f6551a1297447d5be399f59b29869"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/smvla-19700.log",
+          "source": {
+            "bytes": 3359,
+            "sha256": "78675fc00bfb2a79413ac84ede09689e1c4f828bf5c3da979dfcece6555790ca"
+          },
+          "target": {
+            "bytes": 3359,
+            "sha256": "78675fc00bfb2a79413ac84ede09689e1c4f828bf5c3da979dfcece6555790ca"
+          },
+          "match": true
+        }
+      ],
+      "recovered_videos": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-smvla/recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4"
+      ],
+      "source_retained": true,
+      "rsync_exit_code": 0,
+      "verdict": "TRANSFER=PASS model=smvla files=33 bytes=2802517 mismatch=0 symlinks=0"
+    },
+    {
+      "model": "framesamp",
+      "source": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp",
+      "target": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp",
+      "files": 33,
+      "bytes": 1365166,
+      "symlinks": [],
+      "mismatch": 0,
+      "mismatches": [],
+      "file_manifest": [
+        {
+          "path": "logs/client-perceptual-framesamp-modul-gl1512.arc-ts.umich.edu-1904807-r0.log",
+          "source": {
+            "bytes": 3515,
+            "sha256": "56a05b542af080bf0c8eee5ba0ad78c26a09dca88c778c14c05a3dcc72e38def"
+          },
+          "target": {
+            "bytes": 3515,
+            "sha256": "56a05b542af080bf0c8eee5ba0ad78c26a09dca88c778c14c05a3dcc72e38def"
+          },
+          "match": true
+        },
+        {
+          "path": "logs/run_eval_gl-gl1512.arc-ts.umich.edu-1904807.log",
+          "source": {
+            "bytes": 6330,
+            "sha256": "2cd5c6408a4d5c80ede2e12983cc241d45bad3e7595140b0af5be62ebded717e"
+          },
+          "target": {
+            "bytes": 6330,
+            "sha256": "2cd5c6408a4d5c80ede2e12983cc241d45bad3e7595140b0af5be62ebded717e"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/perceptual-framesamp-modul/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json",
+          "source": {
+            "bytes": 477,
+            "sha256": "c5f8480b48347bd1c7577056acab6945f3f5b4b687d2751a9927d28f46097e20"
+          },
+          "target": {
+            "bytes": 477,
+            "sha256": "c5f8480b48347bd1c7577056acab6945f3f5b4b687d2751a9927d28f46097e20"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/perceptual-framesamp-modul/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json",
+          "source": {
+            "bytes": 506,
+            "sha256": "4f959db4ed371560e7b63293f1a6055baf103d9501d77ab5d491f2be92751fda"
+          },
+          "target": {
+            "bytes": 506,
+            "sha256": "4f959db4ed371560e7b63293f1a6055baf103d9501d77ab5d491f2be92751fda"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/perceptual-framesamp-modul/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock",
+          "source": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "target": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+          "source": {
+            "bytes": 343437,
+            "sha256": "fa2698cbfa06e6237ce8836501a2326e9e72fc9b1d6ab931ac07b2af7deb4943"
+          },
+          "target": {
+            "bytes": 343437,
+            "sha256": "fa2698cbfa06e6237ce8836501a2326e9e72fc9b1d6ab931ac07b2af7deb4943"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/media-finish.log",
+          "source": {
+            "bytes": 439,
+            "sha256": "0c36a062c12cc2d3970102dc2c4c38e27bc3c6993f1e6ea0df6245e5d9493b5c"
+          },
+          "target": {
+            "bytes": 439,
+            "sha256": "0c36a062c12cc2d3970102dc2c4c38e27bc3c6993f1e6ea0df6245e5d9493b5c"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-result.json",
+          "source": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "target": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-results.jsonl",
+          "source": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "target": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/recovery.json",
+          "source": {
+            "bytes": 1483,
+            "sha256": "ea99a97f4cc29e6a871c3829b2f2e8b4e1ebfe6fea64e87d634beaf6350181af"
+          },
+          "target": {
+            "bytes": 1483,
+            "sha256": "ea99a97f4cc29e6a871c3829b2f2e8b4e1ebfe6fea64e87d634beaf6350181af"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/render.json",
+          "source": {
+            "bytes": 4308,
+            "sha256": "6fd09ae53579f3e7e503400f1806979385c672db2c8dc24f8bcb8c381abccdbc"
+          },
+          "target": {
+            "bytes": 4308,
+            "sha256": "6fd09ae53579f3e7e503400f1806979385c672db2c8dc24f8bcb8c381abccdbc"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/source-before.json",
+          "source": {
+            "bytes": 4619,
+            "sha256": "5a88446f09cf4212748e44de5457e5ed57ee67b23144441b419a7d1f05dc9bb8"
+          },
+          "target": {
+            "bytes": 4619,
+            "sha256": "5a88446f09cf4212748e44de5457e5ed57ee67b23144441b419a7d1f05dc9bb8"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/progress.json",
+          "source": {
+            "bytes": 206,
+            "sha256": "5979729d249cdfff0b2cec13fb34198df1b500c4dc126a92eeb4b24b0d38aefc"
+          },
+          "target": {
+            "bytes": 206,
+            "sha256": "5979729d249cdfff0b2cec13fb34198df1b500c4dc126a92eeb4b24b0d38aefc"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+          "source": {
+            "bytes": 77563,
+            "sha256": "5a1ca8076f843ccd2336df38468d3ff62677d7cfb2430c7fbfd051c2f097419c"
+          },
+          "target": {
+            "bytes": 77563,
+            "sha256": "5a1ca8076f843ccd2336df38468d3ff62677d7cfb2430c7fbfd051c2f097419c"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+          "source": {
+            "bytes": 175212,
+            "sha256": "d9d9f8b4e4ca6c014bb8eb3be727bce5e0551df3196f10d3bdcbabfaf7e51e77"
+          },
+          "target": {
+            "bytes": 175212,
+            "sha256": "d9d9f8b4e4ca6c014bb8eb3be727bce5e0551df3196f10d3bdcbabfaf7e51e77"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+          "source": {
+            "bytes": 115404,
+            "sha256": "a05f8dde755eb9d861f30ce3c7cdf439ad0eb3486a3713f0674a520949fc179a"
+          },
+          "target": {
+            "bytes": 115404,
+            "sha256": "a05f8dde755eb9d861f30ce3c7cdf439ad0eb3486a3713f0674a520949fc179a"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl",
+          "source": {
+            "bytes": 20067,
+            "sha256": "8e009d77c6846c146ad730cd3deb9dbcc2c12032cca272e6058a64ef72d3773c"
+          },
+          "target": {
+            "bytes": 20067,
+            "sha256": "8e009d77c6846c146ad730cd3deb9dbcc2c12032cca272e6058a64ef72d3773c"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl",
+          "source": {
+            "bytes": 20107,
+            "sha256": "c71292893673b081c156caa2f6500a1b3ae125176e0162c3787a99abd12f4c77"
+          },
+          "target": {
+            "bytes": 20107,
+            "sha256": "c71292893673b081c156caa2f6500a1b3ae125176e0162c3787a99abd12f4c77"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv",
+          "source": {
+            "bytes": 97220,
+            "sha256": "c36f63a79f0ae1f4c9d82ae70d127a13ace91b4bd23b502c8641c8288a2819dc"
+          },
+          "target": {
+            "bytes": 97220,
+            "sha256": "c36f63a79f0ae1f4c9d82ae70d127a13ace91b4bd23b502c8641c8288a2819dc"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+          "source": {
+            "bytes": 16831,
+            "sha256": "3b5dcf85d4f285aa055ff79816fed44d40ce78f72590422ae97ccc3a5fbf1919"
+          },
+          "target": {
+            "bytes": 16831,
+            "sha256": "3b5dcf85d4f285aa055ff79816fed44d40ce78f72590422ae97ccc3a5fbf1919"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json",
+          "source": {
+            "bytes": 1334,
+            "sha256": "270cac782d5214e991b2351a03cdaceee8abdd2f1e5e62028424fdb249e7830e"
+          },
+          "target": {
+            "bytes": 1334,
+            "sha256": "270cac782d5214e991b2351a03cdaceee8abdd2f1e5e62028424fdb249e7830e"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+          "source": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "target": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json",
+          "source": {
+            "bytes": 670,
+            "sha256": "09728b9e65e2546e4bbd19ba6e2700b5ffa6913ff6a89426fb81b5882782055d"
+          },
+          "target": {
+            "bytes": 670,
+            "sha256": "09728b9e65e2546e4bbd19ba6e2700b5ffa6913ff6a89426fb81b5882782055d"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+          "source": {
+            "bytes": 101838,
+            "sha256": "d4edd611d65b889d33ccb464e41fcbf444c119c1e7e90eab5bf5e305333d0fc1"
+          },
+          "target": {
+            "bytes": 101838,
+            "sha256": "d4edd611d65b889d33ccb464e41fcbf444c119c1e7e90eab5bf5e305333d0fc1"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv",
+          "source": {
+            "bytes": 328184,
+            "sha256": "265c985190b49178cedcaaa3034beb7af4880af162a0a6195283766570f25b41"
+          },
+          "target": {
+            "bytes": 328184,
+            "sha256": "265c985190b49178cedcaaa3034beb7af4880af162a0a6195283766570f25b41"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/perceptual-framesamp-modul/hard-verify/seed7/results.jsonl",
+          "source": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "target": {
+            "bytes": 7701,
+            "sha256": "371e15eb6e8c438bcf75c99102f6f63c00deeca0793a9828d23f09e19ec0f020"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/perceptual-framesamp-modul/seed7/infer-timing-framesamp-63431431/perceptual-framesamp-modul.ledger.jsonl",
+          "source": {
+            "bytes": 2690,
+            "sha256": "85cbbf1c611d66ef22ddef610c496351a59c22deffe8c794da0e329e1bd28f74"
+          },
+          "target": {
+            "bytes": 2690,
+            "sha256": "85cbbf1c611d66ef22ddef610c496351a59c22deffe8c794da0e329e1bd28f74"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/perceptual-framesamp-modul/seed7/infer-timing-framesamp-63431431/process-1904934.json",
+          "source": {
+            "bytes": 908,
+            "sha256": "5cded5a8533f447dd8aa442adf515df51a14690147081065cf803c055b28b171"
+          },
+          "target": {
+            "bytes": 908,
+            "sha256": "5cded5a8533f447dd8aa442adf515df51a14690147081065cf803c055b28b171"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/perceptual-framesamp-modul/seed7/infer-timing-framesamp-63431431/progress.json",
+          "source": {
+            "bytes": 317,
+            "sha256": "44e216fe5bb3d17b8e1399bcd916a912c51db4e4cbea2980a2aa4e09e5311be2"
+          },
+          "target": {
+            "bytes": 317,
+            "sha256": "44e216fe5bb3d17b8e1399bcd916a912c51db4e4cbea2980a2aa4e09e5311be2"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/perceptual-framesamp-modul/seed7/infer-timing-framesamp-63431431/seat-results.jsonl",
+          "source": {
+            "bytes": 1385,
+            "sha256": "f6926eb2fcf1f2696e86b6ed5c6a4fd155dcea8ad18038aafeef1f123e9c01ea"
+          },
+          "target": {
+            "bytes": 1385,
+            "sha256": "f6926eb2fcf1f2696e86b6ed5c6a4fd155dcea8ad18038aafeef1f123e9c01ea"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/ckpt-fingerprint-perceptual-framesamp-modul.txt",
+          "source": {
+            "bytes": 235,
+            "sha256": "cfd2568b9fb4ceabef2b3590a72f0dcd3cc43864361a6f9780c3ecc23d4fd4a4"
+          },
+          "target": {
+            "bytes": 235,
+            "sha256": "cfd2568b9fb4ceabef2b3590a72f0dcd3cc43864361a6f9780c3ecc23d4fd4a4"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/perceptual-framesamp-modul-19710.log",
+          "source": {
+            "bytes": 8125,
+            "sha256": "327e1c1076735fa8114e9da777f7d0e39ad4f538840bd44a2bfdc06150262639"
+          },
+          "target": {
+            "bytes": 8125,
+            "sha256": "327e1c1076735fa8114e9da777f7d0e39ad4f538840bd44a2bfdc06150262639"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/server-wrap-metadata-19710.json",
+          "source": {
+            "bytes": 952,
+            "sha256": "97d798813404061d9998bdf5f316479a92297f4f0abc78f397a6a5fd72a22d60"
+          },
+          "target": {
+            "bytes": 952,
+            "sha256": "97d798813404061d9998bdf5f316479a92297f4f0abc78f397a6a5fd72a22d60"
+          },
+          "match": true
+        }
+      ],
+      "recovered_videos": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-framesamp/recovered-video/VideoUnmask_ep3_fail_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4"
+      ],
+      "source_retained": true,
+      "rsync_exit_code": 0,
+      "verdict": "TRANSFER=PASS model=framesamp files=33 bytes=1365166 mismatch=0 symlinks=0"
+    },
+    {
+      "model": "pp",
+      "source": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp",
+      "target": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp",
+      "files": 33,
+      "bytes": 3684927,
+      "symlinks": [],
+      "mismatch": 0,
+      "mismatches": [],
+      "file_manifest": [
+        {
+          "path": "logs/client-pp-gl1513.arc-ts.umich.edu-2804630-r0.log",
+          "source": {
+            "bytes": 2630,
+            "sha256": "2245ac4cf5afa3bc57683ef413f7af8abfb25d6835465c844b114a17265ba95c"
+          },
+          "target": {
+            "bytes": 2630,
+            "sha256": "2245ac4cf5afa3bc57683ef413f7af8abfb25d6835465c844b114a17265ba95c"
+          },
+          "match": true
+        },
+        {
+          "path": "logs/run_eval_gl-gl1513.arc-ts.umich.edu-2804630.log",
+          "source": {
+            "bytes": 5223,
+            "sha256": "9e52b6e0ee148face1af640e1cbb7fa549e2695828fafcbbda72ac96335f85fb"
+          },
+          "target": {
+            "bytes": 5223,
+            "sha256": "9e52b6e0ee148face1af640e1cbb7fa549e2695828fafcbbda72ac96335f85fb"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/pp/seed7/accepted/hard-verify__VideoUnmask_xhard0_560300.json",
+          "source": {
+            "bytes": 442,
+            "sha256": "a25d4f4c8a0bcf26b083a672da506ba5f8a8e3f8bd7a6a1b9a194835bdcd3d84"
+          },
+          "target": {
+            "bytes": 442,
+            "sha256": "a25d4f4c8a0bcf26b083a672da506ba5f8a8e3f8bd7a6a1b9a194835bdcd3d84"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/pp/seed7/claims/hard-verify__VideoUnmask_xhard0_560300.a1.json",
+          "source": {
+            "bytes": 454,
+            "sha256": "2239949ab4d54c4f5b8d224dfafb7539e74dbd00c46a9b75fdb3d48de29348e2"
+          },
+          "target": {
+            "bytes": 454,
+            "sha256": "2239949ab4d54c4f5b8d224dfafb7539e74dbd00c46a9b75fdb3d48de29348e2"
+          },
+          "match": true
+        },
+        {
+          "path": "queue/pp/seed7/locks/hard-verify__VideoUnmask_xhard0_560300.lock",
+          "source": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "target": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4",
+          "source": {
+            "bytes": 688113,
+            "sha256": "469ffc704c3bb5f5f950f567bd455447f6701d265d90effd683d79873edf9351"
+          },
+          "target": {
+            "bytes": 688113,
+            "sha256": "469ffc704c3bb5f5f950f567bd455447f6701d265d90effd683d79873edf9351"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/media-finish.log",
+          "source": {
+            "bytes": 405,
+            "sha256": "1005594357f50598e7c1ccee1e83e8a26c85ae97d9238a2d9b691316da4ddc37"
+          },
+          "target": {
+            "bytes": 405,
+            "sha256": "1005594357f50598e7c1ccee1e83e8a26c85ae97d9238a2d9b691316da4ddc37"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-result.json",
+          "source": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "target": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/original-results.jsonl",
+          "source": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "target": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/recovery.json",
+          "source": {
+            "bytes": 1453,
+            "sha256": "e1cf179dca194f39ad0dedce5ccb6d7a4549dc6eed4ebb09b1c739fa880e5b64"
+          },
+          "target": {
+            "bytes": 1453,
+            "sha256": "e1cf179dca194f39ad0dedce5ccb6d7a4549dc6eed4ebb09b1c739fa880e5b64"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/render.json",
+          "source": {
+            "bytes": 4375,
+            "sha256": "4af3fe0febb751b0b9d6f4c1d71c09ace11c73f8f38cc864805e35d820fce9ce"
+          },
+          "target": {
+            "bytes": 4375,
+            "sha256": "4af3fe0febb751b0b9d6f4c1d71c09ace11c73f8f38cc864805e35d820fce9ce"
+          },
+          "match": true
+        },
+        {
+          "path": "recovered-video/source-before.json",
+          "source": {
+            "bytes": 4183,
+            "sha256": "bd79e0ea97075b4c4de3b60d4c21523f3315866bf811504673ea3dc4385f080f"
+          },
+          "target": {
+            "bytes": 4183,
+            "sha256": "bd79e0ea97075b4c4de3b60d4c21523f3315866bf811504673ea3dc4385f080f"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/progress.json",
+          "source": {
+            "bytes": 206,
+            "sha256": "cb6bf8b1db97fd2da90472cf544d90a1bce4748fa8ed8a7fe184442128dde308"
+          },
+          "target": {
+            "bytes": 206,
+            "sha256": "cb6bf8b1db97fd2da90472cf544d90a1bce4748fa8ed8a7fe184442128dde308"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays-index.jsonl",
+          "source": {
+            "bytes": 239072,
+            "sha256": "4f577c35a66178deaafe520118ce119128c6a0b3838d9300dd487a500565932c"
+          },
+          "target": {
+            "bytes": 239072,
+            "sha256": "4f577c35a66178deaafe520118ce119128c6a0b3838d9300dd487a500565932c"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/arrays.npz",
+          "source": {
+            "bytes": 477870,
+            "sha256": "eddde524ef8cb740d3d3962662ecadc1c97b436387200085bfa92788f63adf91"
+          },
+          "target": {
+            "bytes": 477870,
+            "sha256": "eddde524ef8cb740d3d3962662ecadc1c97b436387200085bfa92788f63adf91"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/events.jsonl",
+          "source": {
+            "bytes": 156391,
+            "sha256": "2929ac02076b46b71fd8d402fb8eb6348bc06621aded5e1d34a84f8f05fccf91"
+          },
+          "target": {
+            "bytes": 156391,
+            "sha256": "2929ac02076b46b71fd8d402fb8eb6348bc06621aded5e1d34a84f8f05fccf91"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-front.jsonl",
+          "source": {
+            "bytes": 38802,
+            "sha256": "3e6c4308df1229e638b11f492bcbf331fc24fc46527eec75af6c12d4bac179dc"
+          },
+          "target": {
+            "bytes": 38802,
+            "sha256": "3e6c4308df1229e638b11f492bcbf331fc24fc46527eec75af6c12d4bac179dc"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/frames-wrist.jsonl",
+          "source": {
+            "bytes": 38862,
+            "sha256": "54faff5b7097af987d66ff3fa36ae890fe3069599a8d7eea9dca2409c9e8b0c5"
+          },
+          "target": {
+            "bytes": 38862,
+            "sha256": "54faff5b7097af987d66ff3fa36ae890fe3069599a8d7eea9dca2409c9e8b0c5"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/front.mkv",
+          "source": {
+            "bytes": 166059,
+            "sha256": "3a1e69fbe65b737d257bb9d1729623ce826509a371b8c1d0fd293592e3189dca"
+          },
+          "target": {
+            "bytes": 166059,
+            "sha256": "3a1e69fbe65b737d257bb9d1729623ce826509a371b8c1d0fd293592e3189dca"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/language.jsonl",
+          "source": {
+            "bytes": 742193,
+            "sha256": "d3da9d80b72167817fec0f5b8cd872d2c075679d37c401eec2207608059f71c0"
+          },
+          "target": {
+            "bytes": 742193,
+            "sha256": "d3da9d80b72167817fec0f5b8cd872d2c075679d37c401eec2207608059f71c0"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/meta.json",
+          "source": {
+            "bytes": 1271,
+            "sha256": "0ea7523d4a8f053163d08e0e30c2c1f5548d3b14e9164b6c7f5f99eb3f19d625"
+          },
+          "target": {
+            "bytes": 1271,
+            "sha256": "0ea7523d4a8f053163d08e0e30c2c1f5548d3b14e9164b6c7f5f99eb3f19d625"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/result.json",
+          "source": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "target": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/summary.json",
+          "source": {
+            "bytes": 674,
+            "sha256": "c3f0077a39e18208f80488a2279290f450c5cd4f5753250a7674905f5e5bfc18"
+          },
+          "target": {
+            "bytes": 674,
+            "sha256": "c3f0077a39e18208f80488a2279290f450c5cd4f5753250a7674905f5e5bfc18"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/trace.jsonl",
+          "source": {
+            "bytes": 372263,
+            "sha256": "a8167636cf2d15a10674b605e91aafd951354e790d9d65a36bff1d03b4a063c6"
+          },
+          "target": {
+            "bytes": 372263,
+            "sha256": "a8167636cf2d15a10674b605e91aafd951354e790d9d65a36bff1d03b4a063c6"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/raw/VideoUnmask_ep3_xhard0/wrist.mkv",
+          "source": {
+            "bytes": 679831,
+            "sha256": "6bc41a7031a4be5777564f8e9a912803da3e86fc750080a3941b22d71884ae03"
+          },
+          "target": {
+            "bytes": 679831,
+            "sha256": "6bc41a7031a4be5777564f8e9a912803da3e86fc750080a3941b22d71884ae03"
+          },
+          "match": true
+        },
+        {
+          "path": "rollouts/pp/hard-verify/seed7/results.jsonl",
+          "source": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "target": {
+            "bytes": 13441,
+            "sha256": "ba37611f8bd094569063153c86c0268a34233bc4ef1f0551dfae362f93921c61"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/pp/seed7/infer-timing-pp-63431433/pp.ledger.jsonl",
+          "source": {
+            "bytes": 2401,
+            "sha256": "7b4e04061da1ea6a0a7c7cf4178c9269a002eb96d83493ab712a484f9f4f7969"
+          },
+          "target": {
+            "bytes": 2401,
+            "sha256": "7b4e04061da1ea6a0a7c7cf4178c9269a002eb96d83493ab712a484f9f4f7969"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/pp/seed7/infer-timing-pp-63431433/process-2804706.json",
+          "source": {
+            "bytes": 924,
+            "sha256": "2c41053381037ee61439580a0435ceae272f8ceb0b90f02dce8f7ba1256a8893"
+          },
+          "target": {
+            "bytes": 924,
+            "sha256": "2c41053381037ee61439580a0435ceae272f8ceb0b90f02dce8f7ba1256a8893"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/pp/seed7/infer-timing-pp-63431433/progress.json",
+          "source": {
+            "bytes": 262,
+            "sha256": "e951b5c83b8ac273f3204ea11dc690461f0fc58c490de2230c2d7a250d07bea9"
+          },
+          "target": {
+            "bytes": 262,
+            "sha256": "e951b5c83b8ac273f3204ea11dc690461f0fc58c490de2230c2d7a250d07bea9"
+          },
+          "match": true
+        },
+        {
+          "path": "seats/pp/seed7/infer-timing-pp-63431433/seat-results.jsonl",
+          "source": {
+            "bytes": 1271,
+            "sha256": "08979c889f4c2be1da0760b2b2efca86e78cc62c5874e526392de4b73da3bbe7"
+          },
+          "target": {
+            "bytes": 1271,
+            "sha256": "08979c889f4c2be1da0760b2b2efca86e78cc62c5874e526392de4b73da3bbe7"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/ckpt-fingerprint-pp.txt",
+          "source": {
+            "bytes": 214,
+            "sha256": "ff58ca9a1fb73eafac7596cc33ae2448a90bc3ba746a1047bb1d5cfb83526a52"
+          },
+          "target": {
+            "bytes": 214,
+            "sha256": "ff58ca9a1fb73eafac7596cc33ae2448a90bc3ba746a1047bb1d5cfb83526a52"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/pp-19730.log",
+          "source": {
+            "bytes": 4655,
+            "sha256": "577d0bf0e11a9a5ead20542fc368ab0364ff06024eccc7a6e5b4b363d7d228c3"
+          },
+          "target": {
+            "bytes": 4655,
+            "sha256": "577d0bf0e11a9a5ead20542fc368ab0364ff06024eccc7a6e5b4b363d7d228c3"
+          },
+          "match": true
+        },
+        {
+          "path": "servers/server-wrap-metadata-19730.json",
+          "source": {
+            "bytes": 664,
+            "sha256": "dc0fd7a6b63e1319f3b8456994a0f9c56dcfba364cc9938d20fc1d9224e88c96"
+          },
+          "target": {
+            "bytes": 664,
+            "sha256": "dc0fd7a6b63e1319f3b8456994a0f9c56dcfba364cc9938d20fc1d9224e88c96"
+          },
+          "match": true
+        }
+      ],
+      "recovered_videos": [
+        "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-gl-pp/recovered-video/VideoUnmask_ep3_success_watch the video carefully, then pick up the container hiding the green cube, finally pick up another container hiding the red cube_xhard0.mp4"
+      ],
+      "source_retained": true,
+      "rsync_exit_code": 0,
+      "verdict": "TRANSFER=PASS model=pp files=33 bytes=3684927 mismatch=0 symlinks=0"
+    }
+  ],
+  "pass": true,
+  "note": "首次标准库核验脚本的局部变量覆盖 all 内置函数，退出1，未写任何文件；更正变量后重新执行只读核验，不重复rsync。"
+}

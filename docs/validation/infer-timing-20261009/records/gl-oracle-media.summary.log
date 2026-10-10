@@ -1,0 +1,6 @@
+OFFICIAL_VIDEO=PASS model=oracle frames=368 fps=30 codec=av1 pix_fmt=yuv420p
+RAW_STREAMS=PASS model=oracle streams=2 front=276 wrist=308 codec=av1 pix_fmt=yuv444p
+ARRAYS_TRACE=PASS model=oracle precision=verified-original byte_changes=0
+MEDIA_RECOVERY=PASS model=oracle official_video=1 raw_streams=2 arrays_trace=1 originals=29 reset=0 trajectory=0 api=0 task_success=1
+ORIGINAL_BYTES=PASS model=oracle files=29
+EXIT_CODE=0

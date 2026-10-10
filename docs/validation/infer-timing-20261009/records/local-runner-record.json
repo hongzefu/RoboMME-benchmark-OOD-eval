@@ -1,0 +1,1773 @@
+{
+  "source_head": "7e9e6e5288b683aadca4358b482f3789748e29c0",
+  "cases": [
+    {
+      "model": "framesamp",
+      "audit": 1,
+      "label": "on",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/framesamp-on.log",
+      "session": "it-framesamp-on",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model framesamp --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model framesamp --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/framesamp-on.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/framesamp-on.log'; exit \"$rc\"",
+      "pane_pid": 310172,
+      "started_at": 1791598640.902,
+      "status": "completed_with_reported_warning",
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-on/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": "AttributeError: 'NoneType' object has no attribute 'copy'",
+        "exec_steps": 1,
+        "steps": 2,
+        "task_success": 0,
+        "reset_calls": 2,
+        "chunks": [
+          {
+            "action_rtt_ms": 8409.924,
+            "add_buffer_rtt_ms": 4355.733,
+            "decision": 0,
+            "decision_wall_ms": 12802.115,
+            "env_step": 0,
+            "gpu": "NVIDIA RTX 6000 Ada Generation",
+            "lang_ms": 0.0,
+            "n_lang": 0,
+            "phase": "first",
+            "server_infer_ms": 8408.807
+          }
+        ],
+        "lang_calls": [],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.34308323273146657,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS"
+      },
+      "source_head": "7e9e6e5288b683aadca4358b482f3789748e29c0"
+    },
+    {
+      "model": "framesamp",
+      "audit": 0,
+      "label": "off",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/framesamp-off.log",
+      "session": "it-framesamp-off",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model framesamp --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model framesamp --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/framesamp-off.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/framesamp-off.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791599952.5788808,
+      "status": "completed",
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-framesamp-off/rollouts/perceptual-framesamp-modul/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "chunks": [
+          {
+            "action_rtt_ms": 8197.042,
+            "add_buffer_rtt_ms": 4560.545,
+            "decision": 0,
+            "decision_wall_ms": 12793.655,
+            "env_step": 0,
+            "gpu": null,
+            "lang_ms": 0.0,
+            "n_lang": 0,
+            "phase": "first",
+            "server_infer_ms": null
+          }
+        ],
+        "lang_calls": [],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.3592884910527915,
+          "violations": 0
+        },
+        "gpu_name": null,
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 14,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 17.206964,
+            "task_success": false
+          }
+        ]
+      },
+      "pane_pid": 344941,
+      "server_pid": 345001,
+      "finished_at": 1791600098.1286855
+    },
+    {
+      "model": "oracle",
+      "audit": 1,
+      "label": "on",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/oracle-on.log",
+      "session": "it-oracle-on",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model oracle --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model oracle --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/oracle-on.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/oracle-on.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791600120.9378266,
+      "status": "completed",
+      "pane_pid": 351289,
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-on/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 87.44,
+            "decision": 0,
+            "decision_wall_ms": 163.636,
+            "env_step": 0,
+            "lang_ms": 0.0,
+            "n_lang": 0,
+            "phase": "first",
+            "server_infer_ms": 86.385
+          }
+        ],
+        "lang_calls": [],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.4656432569850155,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 13,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 2.587849,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          351376
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791600348.387757
+    },
+    {
+      "model": "oracle",
+      "audit": 0,
+      "label": "off",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/oracle-off.log",
+      "session": "it-oracle-off",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model oracle --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model oracle --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/oracle-off.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/oracle-off.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791600348.6115665,
+      "status": "completed",
+      "pane_pid": 357688,
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-oracle-off/rollouts/groundsg-ground-sg-oracle/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 96.504,
+            "decision": 0,
+            "decision_wall_ms": 172.013,
+            "env_step": 0,
+            "lang_ms": 0.0,
+            "n_lang": 0,
+            "phase": "first",
+            "server_infer_ms": null
+          }
+        ],
+        "lang_calls": [],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.43897263578915546,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 13,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 2.505233,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          357765
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791600426.2002568
+    },
+    {
+      "model": "qwen",
+      "audit": 1,
+      "label": "on",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/qwen-on.log",
+      "session": "it-qwen-on",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model qwen --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model qwen --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/qwen-on.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/qwen-on.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791600426.4252245,
+      "status": "completed",
+      "pane_pid": 361094,
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-on/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 116.542,
+            "decision": 0,
+            "decision_wall_ms": 8765.994,
+            "env_step": 0,
+            "lang_ms": 8578.642,
+            "n_lang": 1,
+            "phase": "first",
+            "server_infer_ms": 115.636
+          }
+        ],
+        "lang_calls": [
+          {
+            "call_id": "c00001",
+            "env_step": 0,
+            "index": 0,
+            "kind": "ask",
+            "ms": 8436.254,
+            "retry": 0
+          },
+          {
+            "env_step": 0,
+            "index": 1,
+            "kind": "subgoal",
+            "ms": 8578.642,
+            "reuse": false,
+            "tries": 1
+          }
+        ],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.008077806122158115,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 13,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 11.185442,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          361174
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791600629.0893323
+    },
+    {
+      "model": "qwen",
+      "audit": 0,
+      "label": "off",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/qwen-off.log",
+      "session": "it-qwen-off",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model qwen --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model qwen --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/qwen-off.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/qwen-off.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791600629.3381832,
+      "status": "completed",
+      "pane_pid": 371348,
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-qwen-off/rollouts/groundsg-ground-sg-qwenvl/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 89.925,
+            "decision": 0,
+            "decision_wall_ms": 10994.062,
+            "env_step": 0,
+            "lang_ms": 10830.356,
+            "n_lang": 1,
+            "phase": "first",
+            "server_infer_ms": null
+          }
+        ],
+        "lang_calls": [
+          {
+            "call_id": "c00001",
+            "env_step": 0,
+            "index": 0,
+            "kind": "ask",
+            "ms": 10713.571,
+            "retry": 0
+          },
+          {
+            "env_step": 0,
+            "index": 1,
+            "kind": "subgoal",
+            "ms": 10830.356,
+            "reuse": false,
+            "tries": 1
+          }
+        ],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.006710986348812737,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 13,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 13.535273,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          371504
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791600770.8679116
+    },
+    {
+      "model": "memer",
+      "audit": 1,
+      "label": "on",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-on",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/memer-on.log",
+      "session": "it-memer-on",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model memer --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model memer --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/memer-on.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/memer-on.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791600771.1123827,
+      "status": "completed",
+      "pane_pid": 379146,
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-on/rollouts/groundsg-ground-sg-memer/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 92.293,
+            "decision": 0,
+            "decision_wall_ms": 8649.187,
+            "env_step": 0,
+            "lang_ms": 8469.699,
+            "n_lang": 1,
+            "phase": "first",
+            "server_infer_ms": 91.351
+          }
+        ],
+        "lang_calls": [
+          {
+            "call_id": "c00001",
+            "env_step": 0,
+            "index": 0,
+            "kind": "ask",
+            "ms": 8466.715,
+            "retry": 0
+          },
+          {
+            "env_step": 0,
+            "index": 1,
+            "kind": "subgoal",
+            "ms": 8469.699,
+            "reuse": false,
+            "tries": 1
+          }
+        ],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.010081294345930978,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 13,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 11.307213,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          379209
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791600908.7647693
+    },
+    {
+      "model": "memer",
+      "audit": 0,
+      "label": "off",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-off",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/memer-off.log",
+      "session": "it-memer-off",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model memer --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model memer --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/memer-off.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/memer-off.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791600908.9948208,
+      "status": "completed",
+      "pane_pid": 390073,
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-memer-off/rollouts/groundsg-ground-sg-memer/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 92.443,
+            "decision": 0,
+            "decision_wall_ms": 8793.636,
+            "env_step": 0,
+            "lang_ms": 8625.536,
+            "n_lang": 1,
+            "phase": "first",
+            "server_infer_ms": null
+          }
+        ],
+        "lang_calls": [
+          {
+            "call_id": "c00001",
+            "env_step": 0,
+            "index": 0,
+            "kind": "ask",
+            "ms": 8622.656,
+            "retry": 0
+          },
+          {
+            "env_step": 0,
+            "index": 1,
+            "kind": "subgoal",
+            "ms": 8625.536,
+            "reuse": false,
+            "tries": 1
+          }
+        ],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.008603608336756384,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 13,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 11.369565,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          390137
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791601046.027099
+    },
+    {
+      "model": "pp",
+      "audit": 1,
+      "label": "on",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-pp-on",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/pp-on.log",
+      "session": "it-pp-on",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model pp --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-pp-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model pp --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-pp-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/pp-on.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/pp-on.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791601046.2628129,
+      "status": "infra_failed",
+      "pane_pid": 401922,
+      "exit_code": 3,
+      "actual_resets": 0,
+      "actual_steps": 0,
+      "action_chunks": 0,
+      "task_success": null,
+      "server_pid": 401997,
+      "server_clean": true,
+      "finished_at": 1791601135.7144647,
+      "error": "服务启动CUDA驱动不兼容，found version12080"
+    },
+    {
+      "model": "astra",
+      "audit": 1,
+      "label": "on",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-on",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-on.log",
+      "session": "it-astra-on",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model astra --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model astra --audit 1 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-on' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-on.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-on.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791601255.4186928,
+      "status": "stopped_unauthorized_download",
+      "pane_pid": 408887,
+      "exit_code": 143,
+      "actual_resets": 0,
+      "action_chunks": 0,
+      "task_success": null,
+      "server_pids": [
+        409172,
+        409192
+      ],
+      "client_pid": 408888,
+      "server_clean": true,
+      "finished_at": 1791601474.3426986,
+      "error": "现成Astra模型路径触发未预期8.88GB下载；Ctrl-C未及时停止，精确TERM本轮client/guard/vla",
+      "cost_snapshot": {
+        "calls": {},
+        "prices": {
+          "cached_input": 1.0,
+          "checked_at": "2026-10-04",
+          "conservative_note": "非缓存输入按 cache write 价 12.5 计（上界，守卫公式不区分缓存写入）；272K 加价未计入，预检实测单次输入量后核对",
+          "input": 12.5,
+          "model": "gpt-6-astra",
+          "output": 50.0,
+          "reasoning_billed_separately": false,
+          "source": "https://developers.openai.com/api/docs/models/gpt-6-astra（官方：input $10、cached input $1、cache writes $12.5、output $50 每百万 token；输入超 272K 的请求整次 2x 输入／1.5x 输出）",
+          "unit": "usd_per_1m_tokens"
+        },
+        "schema": "astra-cost-ledger/1"
+      },
+      "timings": {
+        "case": "on",
+        "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-on.log",
+        "timezone": "America/Detroit (-04:00)",
+        "original_started_at_epoch": 1791601255.4186928,
+        "original_started_at_local": "2026-10-09T23:00:55.418693-04:00",
+        "original_finished_at_observation_epoch": 1791601474.3426986,
+        "original_finished_at_observation_local": "2026-10-09T23:04:34.342699-04:00",
+        "log_birth_raw": "2026-10-09 23:00:55.291791079 -0400",
+        "log_birth_epoch": 1791601255.291791,
+        "exit_log_mtime_epoch": 1791601453.1126065,
+        "exit_log_mtime_local": "2026-10-09T23:04:13.112607-04:00",
+        "exit_code": 143,
+        "final_exit_marker_present": true,
+        "whole_log_window_s": 197.8208155632019,
+        "recorded_start_to_exit_s": 197.6939136981964,
+        "start_record_lag_from_log_birth_s": 0.12690186500549316,
+        "server_ready_s": {
+          "astra-guard": 0.5,
+          "astra-vla": 55.0
+        },
+        "policy_load_s": null,
+        "policy_load_note": "未单独记录policy.load()耗时；SERVER_READY是各服务启动到健康就绪的计时，不能当整段load/warmup时长",
+        "measurement_note": "整程以本轮tee新建日志的文件birth到末尾EXIT_CODE追加后的mtime计，涵盖加载/预热/环境/媒体/服务清理；不包括tmux创建到tee打开的未记录开销。finished_at是稍后收集完成证据的观察时点，不用作真实退出时刻。",
+        "astra_model_internal_s": null,
+        "result_window_s": null,
+        "missing_note": "on在预加载下载阶段被停止，未进入局内计时，无result或模型内部秒"
+      }
+    },
+    {
+      "model": "astra",
+      "audit": 0,
+      "label": "off",
+      "mode": "smoke",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-off.log",
+      "session": "it-astra-off",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model astra --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model astra --audit 0 --mode smoke --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-off.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-off.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791602439.751094,
+      "status": "completed",
+      "pane_pid": 443420,
+      "launcher_sha256": "3455d14e65ecccefb1f767c21809d56e4d587e7586d6dab797ceca40c8d57551",
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-smoke-astra-off/rollouts/astra/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "timeout",
+        "error": null,
+        "exec_steps": 1,
+        "steps": 1,
+        "task_success": 0,
+        "reset_calls": 2,
+        "action_chunks": 1,
+        "chunks": [
+          {
+            "action_rtt_ms": 11549.222,
+            "decision": 0,
+            "decision_wall_ms": 15129.436,
+            "env_step": 0,
+            "has_planner": true,
+            "has_review": false,
+            "lang_ms": 3564.368,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "first",
+            "server_infer_ms": null
+          }
+        ],
+        "lang_calls": [
+          {
+            "book_ms": 9.859297424554825,
+            "env_step": 0,
+            "index": 0,
+            "kind": "planner",
+            "ms": 3564.368,
+            "third_party_s": 3.4884811006486416
+          }
+        ],
+        "conservation": {
+          "checked": 1,
+          "expected": 1,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.0010473622413948245,
+          "violations": 0
+        },
+        "gpu_name": null,
+        "recorder_verify": "PASS",
+        "native_env_steps": 1,
+        "smoke_markers": [
+          {
+            "chunk": true,
+            "kind": "single_chunk_smoke_stop",
+            "reason": "first_chunk",
+            "seq": 6,
+            "steps": 1,
+            "steps_after_chunk": 1,
+            "t": 17.50659,
+            "task_success": false
+          }
+        ],
+        "server_pids": [
+          443615,
+          443618
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791602576.0503588,
+      "cost_snapshot": {
+        "calls": {
+          "8d875e7f5a524700a972b58750013895": {
+            "cached_tokens": 0,
+            "counted_at": 1791602504.8780887,
+            "input_tokens": 7975,
+            "missing": [],
+            "output_tokens": 20,
+            "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/group_0/run-20261009T232044-443421/planner_calls/8d875e7f5a524700a972b58750013895/response.json",
+            "reasoning_tokens": 0,
+            "status": "ok",
+            "usd": 0.1006875
+          }
+        },
+        "prices": {
+          "cached_input": 1.0,
+          "checked_at": "2026-10-04",
+          "conservative_note": "非缓存输入按 cache write 价 12.5 计（上界，守卫公式不区分缓存写入）；272K 加价未计入，预检实测单次输入量后核对",
+          "input": 12.5,
+          "model": "gpt-6-astra",
+          "output": 50.0,
+          "reasoning_billed_separately": false,
+          "source": "https://developers.openai.com/api/docs/models/gpt-6-astra（官方：input $10、cached input $1、cache writes $12.5、output $50 每百万 token；输入超 272K 的请求整次 2x 输入／1.5x 输出）",
+          "unit": "usd_per_1m_tokens"
+        },
+        "schema": "astra-cost-ledger/1"
+      },
+      "timings": {
+        "case": "off",
+        "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-off.log",
+        "timezone": "America/Detroit (-04:00)",
+        "original_started_at_epoch": 1791602439.751094,
+        "original_started_at_local": "2026-10-09T23:20:39.751094-04:00",
+        "original_finished_at_observation_epoch": 1791602576.0503588,
+        "original_finished_at_observation_local": "2026-10-09T23:22:56.050359-04:00",
+        "log_birth_raw": "2026-10-09 23:20:39.626729121 -0400",
+        "log_birth_epoch": 1791602439.626729,
+        "exit_log_mtime_epoch": 1791602523.3216562,
+        "exit_log_mtime_local": "2026-10-09T23:22:03.321656-04:00",
+        "exit_code": 0,
+        "final_exit_marker_present": true,
+        "whole_log_window_s": 83.69492721557617,
+        "recorded_start_to_exit_s": 83.57056212425232,
+        "start_record_lag_from_log_birth_s": 0.12436509132385254,
+        "server_ready_s": {
+          "astra-guard": 0.5,
+          "astra-vla": 42.5
+        },
+        "policy_load_s": null,
+        "policy_load_note": "未单独记录policy.load()耗时；SERVER_READY是各服务启动到健康就绪的计时，不能当整段load/warmup时长",
+        "measurement_note": "整程以本轮tee新建日志的文件birth到末尾EXIT_CODE追加后的mtime计，涵盖加载/预热/环境/媒体/服务清理；不包括tmux创建到tee打开的未记录开销。finished_at是稍后收集完成证据的观察时点，不用作真实退出时刻。",
+        "result_t_start_epoch": 1791602497.7682078,
+        "result_t_end_epoch": 1791602520.5352542,
+        "result_window_s": 22.767046451568604,
+        "launch_log_birth_to_result_t_start_s": 58.14147877693176,
+        "astra_model_internal_s": 15.827913045883179,
+        "outer_episode_wall_s": 17.542,
+        "recorder_finalize_s": 1.523,
+        "recorder_encode_cpu_s": 7.99,
+        "recorder_queue_wait_s": 0.0,
+        "recorder_verify_s": 0.189,
+        "result_window_note": "结果t_start/t_end是局内结果窗口，不作为整程起点；encode_cpu_s是编码CPU累计秒，非墙钟阶段，不与wall相加"
+      }
+    },
+    {
+      "model": "astra",
+      "audit": 1,
+      "label": "formal",
+      "mode": "formal",
+      "out": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra",
+      "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/formal-astra.log",
+      "session": "it-astra-formal",
+      "cmd": "PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model astra --audit 1 --mode formal --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute",
+      "body": "set -o pipefail; PYTHONUNBUFFERED=1 bash '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/runtime-local-launch.sh' --root '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/worktrees/infer-timing-runtime' --model astra --audit 1 --mode formal --out '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra' --budget-ledger '/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/budget-ledger.jsonl' --execute 2>&1 | tee '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/formal-astra.log'; rc=${PIPESTATUS[0]}; printf 'EXIT_CODE=%s\\n' \"$rc\" >> '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/formal-astra.log'; exit \"$rc\"",
+      "source_head": "959e624c852a3bdbe4a47d3f580cfb9714f5805f",
+      "started_at": 1791602592.5428467,
+      "status": "completed",
+      "pane_pid": 447880,
+      "launcher_sha256": "3455d14e65ecccefb1f767c21809d56e4d587e7586d6dab797ceca40c8d57551",
+      "exit_code": 0,
+      "result_path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-formal-astra/rollouts/astra/hard-verify/seed0/raw/VideoUnmask_ep3_xhard0/result.json",
+      "result": {
+        "status": "success",
+        "error": null,
+        "exec_steps": 274,
+        "steps": 274,
+        "task_success": 1,
+        "reset_calls": 2,
+        "action_chunks": 18,
+        "chunks": [
+          {
+            "action_rtt_ms": 11554.56,
+            "decision": 0,
+            "decision_wall_ms": 14514.194,
+            "env_step": 0,
+            "has_planner": true,
+            "has_review": false,
+            "lang_ms": 2945.096,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "first",
+            "server_infer_ms": 11552.263
+          },
+          {
+            "action_rtt_ms": 83.183,
+            "decision": 1,
+            "decision_wall_ms": 1025.096,
+            "env_step": 16,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 938.099,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "second",
+            "server_infer_ms": 81.643
+          },
+          {
+            "action_rtt_ms": 82.107,
+            "decision": 2,
+            "decision_wall_ms": 487.814,
+            "env_step": 32,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 402.362,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "third",
+            "server_infer_ms": 80.887
+          },
+          {
+            "action_rtt_ms": 80.317,
+            "decision": 3,
+            "decision_wall_ms": 481.566,
+            "env_step": 48,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 397.888,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 79.109
+          },
+          {
+            "action_rtt_ms": 76.851,
+            "decision": 4,
+            "decision_wall_ms": 478.844,
+            "env_step": 64,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 398.636,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 75.784
+          },
+          {
+            "action_rtt_ms": 80.623,
+            "decision": 5,
+            "decision_wall_ms": 475.365,
+            "env_step": 80,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 391.41,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 79.404
+          },
+          {
+            "action_rtt_ms": 78.653,
+            "decision": 6,
+            "decision_wall_ms": 495.4,
+            "env_step": 96,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 411.658,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 77.576
+          },
+          {
+            "action_rtt_ms": 83.471,
+            "decision": 7,
+            "decision_wall_ms": 4020.984,
+            "env_step": 112,
+            "has_planner": true,
+            "has_review": false,
+            "lang_ms": 3928.423,
+            "n_lang": 2,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 82.27
+          },
+          {
+            "action_rtt_ms": 80.674,
+            "decision": 8,
+            "decision_wall_ms": 473.134,
+            "env_step": 128,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 389.112,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 79.575
+          },
+          {
+            "action_rtt_ms": 104.163,
+            "decision": 9,
+            "decision_wall_ms": 18021.717,
+            "env_step": 144,
+            "has_planner": true,
+            "has_review": false,
+            "lang_ms": 17905.422,
+            "n_lang": 2,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 102.87
+          },
+          {
+            "action_rtt_ms": 85.584,
+            "decision": 10,
+            "decision_wall_ms": 482.118,
+            "env_step": 160,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 393.209,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 84.503
+          },
+          {
+            "action_rtt_ms": 79.716,
+            "decision": 11,
+            "decision_wall_ms": 472.835,
+            "env_step": 176,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 389.786,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 78.643
+          },
+          {
+            "action_rtt_ms": 80.272,
+            "decision": 12,
+            "decision_wall_ms": 480.446,
+            "env_step": 192,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 396.834,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 79.217
+          },
+          {
+            "action_rtt_ms": 83.982,
+            "decision": 13,
+            "decision_wall_ms": 495.788,
+            "env_step": 208,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 406.739,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 82.974
+          },
+          {
+            "action_rtt_ms": 83.034,
+            "decision": 14,
+            "decision_wall_ms": 488.622,
+            "env_step": 224,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 400.504,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 81.906
+          },
+          {
+            "action_rtt_ms": 80.722,
+            "decision": 15,
+            "decision_wall_ms": 485.518,
+            "env_step": 240,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 399.689,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 79.633
+          },
+          {
+            "action_rtt_ms": 83.44,
+            "decision": 16,
+            "decision_wall_ms": 493.828,
+            "env_step": 256,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 405.33,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 82.296
+          },
+          {
+            "action_rtt_ms": 79.283,
+            "decision": 17,
+            "decision_wall_ms": 501.906,
+            "env_step": 272,
+            "has_planner": false,
+            "has_review": false,
+            "lang_ms": 417.393,
+            "n_lang": 1,
+            "no_lang": false,
+            "phase": "steady",
+            "server_infer_ms": 78.209
+          }
+        ],
+        "lang_calls": [
+          {
+            "book_ms": 9.763311594724655,
+            "env_step": 0,
+            "index": 0,
+            "kind": "planner",
+            "ms": 2945.096,
+            "third_party_s": 2.8689292818307877
+          },
+          {
+            "env_step": 16,
+            "index": 1,
+            "kind": "monitor",
+            "ms": 938.099,
+            "third_party_s": 0.7534850016236305
+          },
+          {
+            "env_step": 32,
+            "index": 2,
+            "kind": "monitor",
+            "ms": 402.362,
+            "third_party_s": 0.2145421765744686
+          },
+          {
+            "env_step": 48,
+            "index": 3,
+            "kind": "monitor",
+            "ms": 397.888,
+            "third_party_s": 0.2104145921766758
+          },
+          {
+            "env_step": 64,
+            "index": 4,
+            "kind": "monitor",
+            "ms": 398.636,
+            "third_party_s": 0.21432797238230705
+          },
+          {
+            "env_step": 80,
+            "index": 5,
+            "kind": "monitor",
+            "ms": 391.41,
+            "third_party_s": 0.2124788463115692
+          },
+          {
+            "env_step": 96,
+            "index": 6,
+            "kind": "monitor",
+            "ms": 411.658,
+            "third_party_s": 0.2136240489780903
+          },
+          {
+            "env_step": 112,
+            "index": 7,
+            "kind": "monitor",
+            "ms": 410.811,
+            "third_party_s": 0.21039466559886932
+          },
+          {
+            "book_ms": 1.9724629819393158,
+            "env_step": 112,
+            "index": 8,
+            "kind": "planner",
+            "ms": 3517.612,
+            "third_party_s": 3.4501332975924015
+          },
+          {
+            "env_step": 128,
+            "index": 9,
+            "kind": "monitor",
+            "ms": 389.112,
+            "third_party_s": 0.20941762253642082
+          },
+          {
+            "env_step": 144,
+            "index": 10,
+            "kind": "monitor",
+            "ms": 413.881,
+            "third_party_s": 0.20935127884149551
+          },
+          {
+            "book_ms": 2.0012706518173218,
+            "env_step": 144,
+            "index": 11,
+            "kind": "planner",
+            "ms": 17491.541,
+            "third_party_s": 17.4248504973948
+          },
+          {
+            "env_step": 160,
+            "index": 12,
+            "kind": "monitor",
+            "ms": 393.209,
+            "third_party_s": 0.2153421975672245
+          },
+          {
+            "env_step": 176,
+            "index": 13,
+            "kind": "monitor",
+            "ms": 389.786,
+            "third_party_s": 0.21027399972081184
+          },
+          {
+            "env_step": 192,
+            "index": 14,
+            "kind": "monitor",
+            "ms": 396.834,
+            "third_party_s": 0.21498467028141022
+          },
+          {
+            "env_step": 208,
+            "index": 15,
+            "kind": "monitor",
+            "ms": 406.739,
+            "third_party_s": 0.2135780155658722
+          },
+          {
+            "env_step": 224,
+            "index": 16,
+            "kind": "monitor",
+            "ms": 400.504,
+            "third_party_s": 0.21061918884515762
+          },
+          {
+            "env_step": 240,
+            "index": 17,
+            "kind": "monitor",
+            "ms": 399.689,
+            "third_party_s": 0.21069152653217316
+          },
+          {
+            "env_step": 256,
+            "index": 18,
+            "kind": "monitor",
+            "ms": 405.33,
+            "third_party_s": 0.2115548700094223
+          },
+          {
+            "env_step": 272,
+            "index": 19,
+            "kind": "monitor",
+            "ms": 417.393,
+            "third_party_s": 0.21379442140460014
+          }
+        ],
+        "conservation": {
+          "checked": 18,
+          "expected": 18,
+          "kind": "serial",
+          "missing_fields": 0,
+          "overhead_pct_p50": 0.007009992326434244,
+          "violations": 0
+        },
+        "gpu_name": "NVIDIA RTX 6000 Ada Generation",
+        "recorder_verify": "PASS",
+        "native_env_steps": 274,
+        "smoke_markers": [],
+        "server_pids": [
+          448045,
+          448047
+        ],
+        "server_clean": true
+      },
+      "finished_at": 1791602807.3314211,
+      "cost_snapshot": {
+        "calls": {
+          "10a3c5117ee04c2ba177f81117297540": {
+            "cached_tokens": 7972,
+            "counted_at": 1791602655.704155,
+            "input_tokens": 7975,
+            "missing": [],
+            "output_tokens": 20,
+            "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/group_0/run-20261009T232317-447881/planner_calls/10a3c5117ee04c2ba177f81117297540/response.json",
+            "reasoning_tokens": 0,
+            "status": "ok",
+            "usd": 0.0090095
+          },
+          "476c9ed2edd649b3ac1394223352c035": {
+            "cached_tokens": 0,
+            "counted_at": 1791602681.733769,
+            "input_tokens": 8020,
+            "missing": [],
+            "output_tokens": 8,
+            "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/group_0/run-20261009T232317-447881/planner_calls/476c9ed2edd649b3ac1394223352c035/response.json",
+            "reasoning_tokens": 0,
+            "status": "ok",
+            "usd": 0.10065
+          },
+          "47d32d14c7a24890865c8c163360009d": {
+            "cached_tokens": 0,
+            "counted_at": 1791602701.761619,
+            "input_tokens": 8042,
+            "missing": [],
+            "output_tokens": 20,
+            "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/group_0/run-20261009T232317-447881/planner_calls/47d32d14c7a24890865c8c163360009d/response.json",
+            "reasoning_tokens": 0,
+            "status": "ok",
+            "usd": 0.101525
+          },
+          "8d875e7f5a524700a972b58750013895": {
+            "cached_tokens": 0,
+            "counted_at": 1791602504.8780887,
+            "input_tokens": 7975,
+            "missing": [],
+            "output_tokens": 20,
+            "path": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/astra-cost/group_0/run-20261009T232044-443421/planner_calls/8d875e7f5a524700a972b58750013895/response.json",
+            "reasoning_tokens": 0,
+            "status": "ok",
+            "usd": 0.1006875
+          }
+        },
+        "prices": {
+          "cached_input": 1.0,
+          "checked_at": "2026-10-04",
+          "conservative_note": "非缓存输入按 cache write 价 12.5 计（上界，守卫公式不区分缓存写入）；272K 加价未计入，预检实测单次输入量后核对",
+          "input": 12.5,
+          "model": "gpt-6-astra",
+          "output": 50.0,
+          "reasoning_billed_separately": false,
+          "source": "https://developers.openai.com/api/docs/models/gpt-6-astra（官方：input $10、cached input $1、cache writes $12.5、output $50 每百万 token；输入超 272K 的请求整次 2x 输入／1.5x 输出）",
+          "unit": "usd_per_1m_tokens"
+        },
+        "schema": "astra-cost-ledger/1"
+      },
+      "chunk_summary": {
+        "action_rtt_ms": {
+          "first": 11554.56,
+          "n": 18,
+          "second": 83.183,
+          "steady_mean": 82.719,
+          "steady_p50": 80.674,
+          "steady_p95": 91.15769999999998,
+          "third": 82.107
+        },
+        "by_planner_review": {
+          "neither": {
+            "action_rtt_ms": {
+              "first": null,
+              "n": 15,
+              "second": 83.183,
+              "steady_mean": 81.01161538461538,
+              "steady_p50": 80.623,
+              "steady_p95": 84.6228,
+              "third": 82.107
+            },
+            "decision_wall_ms": {
+              "first": null,
+              "n": 15,
+              "second": 1025.096,
+              "steady_mean": 485.02846153846156,
+              "steady_p50": 482.118,
+              "steady_p95": 498.2352,
+              "third": 487.814
+            },
+            "lang_ms": {
+              "first": null,
+              "n": 15,
+              "second": 938.099,
+              "steady_mean": 399.8606153846154,
+              "steady_p50": 398.636,
+              "steady_p95": 413.952,
+              "third": 402.362
+            },
+            "n_decisions": 15,
+            "server_infer_ms": {
+              "first": null,
+              "n": 15,
+              "second": 81.643,
+              "steady_mean": 79.90992307692308,
+              "steady_p50": 79.404,
+              "steady_p95": 83.5856,
+              "third": 80.887
+            },
+            "steady_short": false
+          },
+          "no_lang": {
+            "n": 0
+          },
+          "planner+review": {
+            "n": 0
+          },
+          "planner_only": {
+            "action_rtt_ms": {
+              "first": 11554.56,
+              "n": 3,
+              "second": null,
+              "steady_mean": 93.81700000000001,
+              "steady_p50": 93.81700000000001,
+              "steady_p95": 103.1284,
+              "third": null
+            },
+            "decision_wall_ms": {
+              "first": 14514.194,
+              "n": 3,
+              "second": null,
+              "steady_mean": 11021.3505,
+              "steady_p50": 11021.3505,
+              "steady_p95": 17321.68035,
+              "third": null
+            },
+            "lang_ms": {
+              "first": 2945.096,
+              "n": 3,
+              "second": null,
+              "steady_mean": 10916.922499999999,
+              "steady_p50": 10916.9225,
+              "steady_p95": 17206.57205,
+              "third": null
+            },
+            "n_decisions": 3,
+            "server_infer_ms": {
+              "first": 11552.263,
+              "n": 3,
+              "second": null,
+              "steady_mean": 92.57,
+              "steady_p50": 92.57,
+              "steady_p95": 101.84,
+              "third": null
+            },
+            "steady_short": false
+          },
+          "review_only": {
+            "n": 0
+          }
+        },
+        "decision_wall_ms": {
+          "first": 14514.194,
+          "n": 18,
+          "second": 1025.096,
+          "steady_mean": 1889.8714,
+          "steady_p50": 485.518,
+          "steady_p95": 8221.203899999986,
+          "third": 487.814
+        },
+        "lang_ms": {
+          "first": 2945.096,
+          "n": 18,
+          "second": 938.099,
+          "steady_mean": 1802.1355333333333,
+          "steady_p50": 399.689,
+          "steady_p95": 8121.522699999985,
+          "third": 402.362
+        },
+        "n_decisions": 18,
+        "server_infer_ms": {
+          "first": 11552.263,
+          "n": 18,
+          "second": 81.643,
+          "steady_mean": 81.59793333333333,
+          "steady_p50": 79.575,
+          "steady_p95": 90.01309999999998,
+          "third": 80.887
+        },
+        "steady_short": false
+      },
+      "lang_summary": {
+        "monitor": {
+          "first": 938.099,
+          "n": 17,
+          "second": 402.362,
+          "steady_mean": 401.7851428571429,
+          "steady_p50": 400.0965,
+          "steady_p95": 415.11019999999996,
+          "third": 397.888
+        },
+        "n_ask": 0,
+        "planner": {
+          "first": 2945.096,
+          "n": 3,
+          "second": 3517.612,
+          "steady_mean": 7984.749666666667,
+          "steady_p50": 3517.612,
+          "steady_p95": 16094.148099999999,
+          "third": 17491.541
+        },
+        "total_ms_counted": 31317.59
+      },
+      "media_summary": {
+        "RECORDER_VERIFY": "PASS",
+        "bytes": 886089,
+        "decode_mismatch": 0,
+        "discarded_after_writer_error": 0,
+        "dropped": 0,
+        "encode_cpu_s": 76.454,
+        "encoded_frames": 527,
+        "errors": [],
+        "finalize_s": 8.554,
+        "frames": 682,
+        "level": 0,
+        "lossless": false,
+        "queue_wait_s": 14.411,
+        "raw_codec": "av1-yuv444p",
+        "reencoded_streams": 0,
+        "reordered": 0,
+        "streams": {
+          "front": {
+            "decoded": 246,
+            "encoded": 246,
+            "error": null,
+            "frames": 341,
+            "mismatch": 0,
+            "timestamps_ok": true
+          },
+          "wrist": {
+            "decoded": 281,
+            "encoded": 281,
+            "error": null,
+            "frames": 341,
+            "mismatch": 0,
+            "timestamps_ok": true
+          }
+        },
+        "summary": {
+          "cap_hit": false,
+          "exec_steps": 274,
+          "status": "success",
+          "steps": 274
+        },
+        "verify_s": 0.509
+      },
+      "astra_gpu_assignment": {
+        "vla": 1,
+        "monitor": 0
+      },
+      "timings": {
+        "case": "formal",
+        "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/formal-astra.log",
+        "timezone": "America/Detroit (-04:00)",
+        "original_started_at_epoch": 1791602592.5428467,
+        "original_started_at_local": "2026-10-09T23:23:12.542847-04:00",
+        "original_finished_at_observation_epoch": 1791602807.3314211,
+        "original_finished_at_observation_local": "2026-10-09T23:26:47.331421-04:00",
+        "log_birth_raw": "2026-10-09 23:23:12.416596163 -0400",
+        "log_birth_epoch": 1791602592.4165962,
+        "exit_log_mtime_epoch": 1791602774.8554375,
+        "exit_log_mtime_local": "2026-10-09T23:26:14.855438-04:00",
+        "exit_code": 0,
+        "final_exit_marker_present": true,
+        "whole_log_window_s": 182.43884134292603,
+        "recorded_start_to_exit_s": 182.31259083747864,
+        "start_record_lag_from_log_birth_s": 0.1262505054473877,
+        "server_ready_s": {
+          "astra-guard": 0.5,
+          "astra-vla": 41.5
+        },
+        "policy_load_s": null,
+        "policy_load_note": "未单独记录policy.load()耗时；SERVER_READY是各服务启动到健康就绪的计时，不能当整段load/warmup时长",
+        "measurement_note": "整程以本轮tee新建日志的文件birth到末尾EXIT_CODE追加后的mtime计，涵盖加载/预热/环境/媒体/服务清理；不包括tmux创建到tee打开的未记录开销。finished_at是稍后收集完成证据的观察时点，不用作真实退出时刻。",
+        "result_t_start_epoch": 1791602649.766003,
+        "result_t_end_epoch": 1791602771.0321584,
+        "result_window_s": 121.2661554813385,
+        "launch_log_birth_to_result_t_start_s": 57.349406719207764,
+        "astra_model_internal_s": 62.04216933250427,
+        "outer_episode_wall_s": 63.901,
+        "recorder_finalize_s": 8.554,
+        "recorder_encode_cpu_s": 76.454,
+        "recorder_queue_wait_s": 14.411,
+        "recorder_verify_s": 0.509,
+        "result_window_note": "结果t_start/t_end是局内结果窗口，不作为整程起点；encode_cpu_s是编码CPU累计秒，非墙钟阶段，不与wall相加"
+      }
+    }
+  ],
+  "preserved_existing": [
+    "smvla-on",
+    "smvla-off"
+  ],
+  "launcher_sha256": "3455d14e65ecccefb1f767c21809d56e4d587e7586d6dab797ceca40c8d57551",
+  "launcher_sha_verified_at": 1791602441.0380242,
+  "launcher_sha_verification_note": "主会话提供已审本地astra_monitor_base后冻结，运行代理只核验",
+  "budget_snapshot_at": 1791602807.3314228,
+  "budget_snapshot": {
+    "reservations": 20,
+    "actual_reset_claims": 36,
+    "astra_reservations": 3
+  },
+  "launcher_sha256_previous": "5497e2f088b27b927da308a3c42d57eaecda59c750e21750c3f56d419895ad67",
+  "cancelled_local_cases": [
+    "pp-off",
+    "pp-on重跑"
+  ],
+  "final_cost_summary": {
+    "calls": 4,
+    "usd": 0.311872,
+    "input_tokens": 32012,
+    "output_tokens": 68,
+    "cached_tokens": 7972,
+    "reasoning_tokens": 0,
+    "state": {
+      "cap": 5.0,
+      "committed_usd": 0.311872,
+      "counted": [
+        "10a3c5117ee04c2ba177f81117297540",
+        "476c9ed2edd649b3ac1394223352c035",
+        "47d32d14c7a24890865c8c163360009d",
+        "8d875e7f5a524700a972b58750013895"
+      ],
+      "exited": true,
+      "hard_cap": 5.0,
+      "heartbeat": 1791602772.8558702,
+      "max_episodes": 3,
+      "max_output_tokens": 2048,
+      "pid": 448045,
+      "prices": {
+        "cached_input": 1.0,
+        "checked_at": "2026-10-04",
+        "conservative_note": "非缓存输入按 cache write 价 12.5 计（上界，守卫公式不区分缓存写入）；272K 加价未计入，预检实测单次输入量后核对",
+        "input": 12.5,
+        "model": "gpt-6-astra",
+        "output": 50.0,
+        "reasoning_billed_separately": false,
+        "source": "https://developers.openai.com/api/docs/models/gpt-6-astra（官方：input $10、cached input $1、cache writes $12.5、output $50 每百万 token；输入超 272K 的请求整次 2x 输入／1.5x 输出）",
+        "unit": "usd_per_1m_tokens"
+      },
+      "projected_usd": 0.514797,
+      "reason": "astra_cost_cap",
+      "schema": "astra-guard-state/1",
+      "stop": false,
+      "unknown_usage": 0,
+      "usd": 0.311872
+    },
+    "registrations": {
+      "episodes": [
+        "offhard-verify:VideoUnmask:0",
+        "formalhard-verify:VideoUnmask:0"
+      ],
+      "reservations": {
+        "10a3c5117ee04c2ba177f81117297540": {
+          "image_tokens": 14510,
+          "images": 7,
+          "input_tokens": 20105,
+          "max_output_tokens": 2048,
+          "sent_at": 1791602652.3190575,
+          "state": "sent",
+          "text_bytes": 5531,
+          "time": 1791602652.3184729,
+          "usd": 0.3537125
+        },
+        "476c9ed2edd649b3ac1394223352c035": {
+          "image_tokens": 14510,
+          "images": 7,
+          "input_tokens": 20250,
+          "max_output_tokens": 2048,
+          "sent_at": 1791602678.176259,
+          "state": "sent",
+          "text_bytes": 5676,
+          "time": 1791602678.1757102,
+          "usd": 0.355525
+        },
+        "47d32d14c7a24890865c8c163360009d": {
+          "image_tokens": 14510,
+          "images": 7,
+          "input_tokens": 20325,
+          "max_output_tokens": 2048,
+          "sent_at": 1791602698.1769807,
+          "state": "sent",
+          "text_bytes": 5751,
+          "time": 1791602683.3183568,
+          "usd": 0.3564625
+        },
+        "8d875e7f5a524700a972b58750013895": {
+          "image_tokens": 14510,
+          "images": 7,
+          "input_tokens": 20105,
+          "max_output_tokens": 2048,
+          "sent_at": 1791602500.3292549,
+          "state": "sent",
+          "text_bytes": 5531,
+          "time": 1791602500.3287244,
+          "usd": 0.3537125
+        }
+      },
+      "schema": "astra-reservations/1"
+    },
+    "formal_usd": 0.2111845,
+    "off_usd": 0.1006875,
+    "episodes_registered": 2,
+    "shared_astra_attempts": 3,
+    "note": "on在注册与reset前中断但共享预算保留尝试；费用守卫实际登记off/formal两局"
+  },
+  "final_state": "本机范围收尾完成；禁止新增启动，PP后续依用户取消",
+  "astra_timings": {
+    "measured_at": 1791603016.8454044,
+    "cases": [
+      {
+        "case": "on",
+        "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-on.log",
+        "timezone": "America/Detroit (-04:00)",
+        "original_started_at_epoch": 1791601255.4186928,
+        "original_started_at_local": "2026-10-09T23:00:55.418693-04:00",
+        "original_finished_at_observation_epoch": 1791601474.3426986,
+        "original_finished_at_observation_local": "2026-10-09T23:04:34.342699-04:00",
+        "log_birth_raw": "2026-10-09 23:00:55.291791079 -0400",
+        "log_birth_epoch": 1791601255.291791,
+        "exit_log_mtime_epoch": 1791601453.1126065,
+        "exit_log_mtime_local": "2026-10-09T23:04:13.112607-04:00",
+        "exit_code": 143,
+        "final_exit_marker_present": true,
+        "whole_log_window_s": 197.8208155632019,
+        "recorded_start_to_exit_s": 197.6939136981964,
+        "start_record_lag_from_log_birth_s": 0.12690186500549316,
+        "server_ready_s": {
+          "astra-guard": 0.5,
+          "astra-vla": 55.0
+        },
+        "policy_load_s": null,
+        "policy_load_note": "未单独记录policy.load()耗时；SERVER_READY是各服务启动到健康就绪的计时，不能当整段load/warmup时长",
+        "measurement_note": "整程以本轮tee新建日志的文件birth到末尾EXIT_CODE追加后的mtime计，涵盖加载/预热/环境/媒体/服务清理；不包括tmux创建到tee打开的未记录开销。finished_at是稍后收集完成证据的观察时点，不用作真实退出时刻。",
+        "astra_model_internal_s": null,
+        "result_window_s": null,
+        "missing_note": "on在预加载下载阶段被停止，未进入局内计时，无result或模型内部秒"
+      },
+      {
+        "case": "off",
+        "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/astra-off.log",
+        "timezone": "America/Detroit (-04:00)",
+        "original_started_at_epoch": 1791602439.751094,
+        "original_started_at_local": "2026-10-09T23:20:39.751094-04:00",
+        "original_finished_at_observation_epoch": 1791602576.0503588,
+        "original_finished_at_observation_local": "2026-10-09T23:22:56.050359-04:00",
+        "log_birth_raw": "2026-10-09 23:20:39.626729121 -0400",
+        "log_birth_epoch": 1791602439.626729,
+        "exit_log_mtime_epoch": 1791602523.3216562,
+        "exit_log_mtime_local": "2026-10-09T23:22:03.321656-04:00",
+        "exit_code": 0,
+        "final_exit_marker_present": true,
+        "whole_log_window_s": 83.69492721557617,
+        "recorded_start_to_exit_s": 83.57056212425232,
+        "start_record_lag_from_log_birth_s": 0.12436509132385254,
+        "server_ready_s": {
+          "astra-guard": 0.5,
+          "astra-vla": 42.5
+        },
+        "policy_load_s": null,
+        "policy_load_note": "未单独记录policy.load()耗时；SERVER_READY是各服务启动到健康就绪的计时，不能当整段load/warmup时长",
+        "measurement_note": "整程以本轮tee新建日志的文件birth到末尾EXIT_CODE追加后的mtime计，涵盖加载/预热/环境/媒体/服务清理；不包括tmux创建到tee打开的未记录开销。finished_at是稍后收集完成证据的观察时点，不用作真实退出时刻。",
+        "result_t_start_epoch": 1791602497.7682078,
+        "result_t_end_epoch": 1791602520.5352542,
+        "result_window_s": 22.767046451568604,
+        "launch_log_birth_to_result_t_start_s": 58.14147877693176,
+        "astra_model_internal_s": 15.827913045883179,
+        "outer_episode_wall_s": 17.542,
+        "recorder_finalize_s": 1.523,
+        "recorder_encode_cpu_s": 7.99,
+        "recorder_queue_wait_s": 0.0,
+        "recorder_verify_s": 0.189,
+        "result_window_note": "结果t_start/t_end是局内结果窗口，不作为整程起点；encode_cpu_s是编码CPU累计秒，非墙钟阶段，不与wall相加"
+      },
+      {
+        "case": "formal",
+        "log": "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/infer-timing-20261009/logs/formal-astra.log",
+        "timezone": "America/Detroit (-04:00)",
+        "original_started_at_epoch": 1791602592.5428467,
+        "original_started_at_local": "2026-10-09T23:23:12.542847-04:00",
+        "original_finished_at_observation_epoch": 1791602807.3314211,
+        "original_finished_at_observation_local": "2026-10-09T23:26:47.331421-04:00",
+        "log_birth_raw": "2026-10-09 23:23:12.416596163 -0400",
+        "log_birth_epoch": 1791602592.4165962,
+        "exit_log_mtime_epoch": 1791602774.8554375,
+        "exit_log_mtime_local": "2026-10-09T23:26:14.855438-04:00",
+        "exit_code": 0,
+        "final_exit_marker_present": true,
+        "whole_log_window_s": 182.43884134292603,
+        "recorded_start_to_exit_s": 182.31259083747864,
+        "start_record_lag_from_log_birth_s": 0.1262505054473877,
+        "server_ready_s": {
+          "astra-guard": 0.5,
+          "astra-vla": 41.5
+        },
+        "policy_load_s": null,
+        "policy_load_note": "未单独记录policy.load()耗时；SERVER_READY是各服务启动到健康就绪的计时，不能当整段load/warmup时长",
+        "measurement_note": "整程以本轮tee新建日志的文件birth到末尾EXIT_CODE追加后的mtime计，涵盖加载/预热/环境/媒体/服务清理；不包括tmux创建到tee打开的未记录开销。finished_at是稍后收集完成证据的观察时点，不用作真实退出时刻。",
+        "result_t_start_epoch": 1791602649.766003,
+        "result_t_end_epoch": 1791602771.0321584,
+        "result_window_s": 121.2661554813385,
+        "launch_log_birth_to_result_t_start_s": 57.349406719207764,
+        "astra_model_internal_s": 62.04216933250427,
+        "outer_episode_wall_s": 63.901,
+        "recorder_finalize_s": 8.554,
+        "recorder_encode_cpu_s": 76.454,
+        "recorder_queue_wait_s": 14.411,
+        "recorder_verify_s": 0.509,
+        "result_window_note": "结果t_start/t_end是局内结果窗口，不作为整程起点；encode_cpu_s是编码CPU累计秒，非墙钟阶段，不与wall相加"
+      }
+    ],
+    "sum_whole_log_windows_s": 463.9545841217041,
+    "whole_elapsed_earliest_log_to_final_exit_s": 1519.563646554947,
+    "note": "各尝试耗时之和不含两次恢复之间的资产准备/审批等待；全跨度含这些间隔，两种口径单独列出。"
+  }
+}
