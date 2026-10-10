@@ -1,0 +1,20 @@
+Cloning into '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code'...
+done.
+HEAD is now at 656c591 1.107 合并恢复轮独立邮件与跨轮累计预算核验
+Cloning into '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code/third_party/Astra-on-RoboMME'...
+done.
+HEAD is now at 4c3fd6a Link project blog from README
+Cloning into '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code/third_party/PonderPounce'...
+done.
+HEAD is now at 723df35 feat: add inference code
+Cloning into '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code/third_party/SimpleMemVLA'...
+done.
+HEAD is now at c564c17 add robodojo eval
+Cloning into '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code/third_party/mme-vla'...
+done.
+HEAD is now at ecf086c Update README: remove wechat link
+Cloning into '/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code/third_party/robomme_benchmark'...
+done.
+HEAD is now at adf1936 1.10 调整两个OOD任务的执行成功判据并发布v1.2
+EXEC_COPY=PASS commit=656c591f32238703c54967d0f550220cf0cec074 gitlinks=5 files=2185 out=/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code
+EXIT_CODE=0

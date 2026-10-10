@@ -1,0 +1,2 @@
+WORK_BUDGET=PASS {"combined": {"reset_cap": 8002, "reset_claims": 2, "reset_count": 2, "trajectories": 1, "trajectory_cap": 4001}, "current": {"reset_cap": 8000, "reset_claims": 0, "reset_count": 0, "retries": 0, "trajectories": 0, "trajectory_cap": 4000}, "prior": {"reset_claims": 2, "sha256": "fc294d2d4dfe5d3ad00b1cd93afe7d1e3e47989ba457b0241c0695b1b1131d74", "trajectories": 1}}
+EXIT_CODE=0

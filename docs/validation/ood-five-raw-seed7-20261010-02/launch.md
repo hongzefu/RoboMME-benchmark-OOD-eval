@@ -28,6 +28,18 @@ GPU batch 为独立 `sleep infinity`，生命周期守卫只作为额外作业�
 
 工程基线为 `753a8121c64641f3ef54bba37844ced9d3a56c3d`，邮件与跨轮预算由独立实现代理补齐后固定审查、真实 CPU 短测、合并推送，再制作 clean 提交快照。正式执行提交、完整 JSON 配置 SHA256、五 gitlink、实际解释器来源、邮件探针及启动命令将在真正起跑前追加；尚未完成的门禁不能记为通过。
 
+正式执行提交已固定为 `656c591f32238703c54967d0f550220cf0cec074`（1.107），本机／NFS 均使用本轮根下独立 `runtime-code/`，不随主仓文档提交变化。完整配置原字节 SHA256 为 `5cc29c377a607186a6a21b27791b02eec480b2fd7bd2f390ff64043a07f4c9b3`，保存 `records/run-config.json`；所有席位停止新领取的期限保守取 CPU EndTime 前两小时。五 gitlink 与旧轮完全一致，不初始化嵌套 benchmark，不改共享环境 `.pth`。
+
+复制核验 `EXEC_COPY=PASS commit=656c591f32238703c54967d0f550220cf0cec074 gitlinks=5 files=2185`、`INPUTS_LOCK=PASS files=2185 gitlinks=5 identities=800 tokenizer=1 client_origins=3 server_origins=5 gpu_initializations=0`，两者退出 0，原始回执在 `records/`。仅新快照 Git 元数据采用已验证的 `core.filemode=false` 与 SimpleMemVLA 的 LFS cat 过滤配置，逐文件源码字节仍强核。第一次输入检查在 rsync 未结束时过早运行，缺文件退出 1；没有启动模型，保留 `records/check-inputs.log`，同步明确退出零后再核得到上述通过行，不覆盖失败记录。
+
+CPU 内累计预算预检退出 0：`WORK_BUDGET=PASS`，prior 为 1 轨迹／2 reset，current 为 0／0，combined 为 1／2，上限为 4001／8002；完整计数与 SHA 在 `records/work-budget-preflight.log`。邮件探针一次提交退出 0：`NOTIFICATION state=submitted event=probe rc=0 delivery_verified=0`。这只证明计算节点 MTA 提交，实际目标邮箱收到仍待用户确认。探针回执、唯一主题、CPU／版本／配置身份均保存在 `records/notification-probe.json`。
+
+实际探针命令（一次执行，不重发）：
+
+```bash
+timeout 60s ssh greatlakes 'srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/runtime-code/dev-scripts/gl/raw_ood_supervisor.py notification-probe --config /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/run-config.json'
+```
+
 B3 固定提交 `93f1475e37339dae90fae3306674593a87c7174a` 的独立静态审查：`RESTART_CONTROL_REVIEW=PASS`，审查原文在 `records/control-review.txt`。主会话整合后命令如下，退出 0，`118 passed, 2 deselected, 23 warnings in 35.12s`；两个未改的长守卫复现此前已通过，本次不重跑。`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`，完整原始输出在 `records/main-target-tests.log`。
 
 ```bash
@@ -37,3 +49,10 @@ UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 120s uv run --no-sync python -m py
 ## 交接判据
 
 必须先完成 `EXEC_COPY`、`INPUTS_LOCK`、`WORK_BUDGET`、`MAIL_DELIVERY`；随后五个正式首局通过执行与原始媒体核验，再观察首个正式分片真实合法动作一步。仅在 `RAW_SMOKE`、`FIRST_DISPATCH`、`AGENT_HANDOFF` 有原始证据后退出当前代理。任务成功字段独立报告，正常执行但任务失败不重试。
+
+实际邮件确认后，用以下确定命令启动本机搬运并发布就绪。当前仅准备命令，尚未执行；发布器强核同版本／同 CPU 的用户实收确认、无错误／停止标记、有效搬运心跳与主仓 clean 状态，不把等待超时当确认。CPU bootstrap 随后校验就绪文件原始配置 SHA 并在自身 allocation 启动固定监督器。
+
+```bash
+tmux new-session -d -s ev-ood-five-raw-mover-20261010-02 'bash /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/mover-run.sh'
+UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python artifacts/ood-five-raw-seed7-20261010-02/publish_ready.py
+```

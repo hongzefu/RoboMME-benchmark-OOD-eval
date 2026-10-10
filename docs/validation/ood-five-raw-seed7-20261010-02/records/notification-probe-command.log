@@ -1,0 +1,2 @@
+NOTIFICATION state=submitted event=probe rc=0 delivery_verified=0
+EXIT_CODE=0

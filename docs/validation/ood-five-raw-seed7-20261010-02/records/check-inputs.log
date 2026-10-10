@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/check_inputs.py", line 15, in <module>
+    assert f.is_file() and f.stat().st_size == expected['bytes'], rel
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: .github/workflows/dev-gate.yml
+EXIT_CODE=1
