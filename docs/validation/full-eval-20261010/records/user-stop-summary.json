@@ -1,0 +1,114 @@
+{
+  "time": 1791650870.237939,
+  "stage": "A",
+  "models": [
+    {
+      "model": "perceptual-framesamp-modul",
+      "label": "perceptual-framesamp-modul",
+      "planned": 70,
+      "accepted": 42,
+      "task_success": 2,
+      "fail": 37,
+      "timeout": 3,
+      "missing": 28,
+      "trajectory_reserves": 43,
+      "reset_claims": 86,
+      "open_reserves": 1,
+      "infra_commits": 0
+    },
+    {
+      "model": "smvla",
+      "label": "smvla",
+      "planned": 70,
+      "accepted": 55,
+      "task_success": 10,
+      "fail": 37,
+      "timeout": 8,
+      "missing": 15,
+      "trajectory_reserves": 150,
+      "reset_claims": 206,
+      "open_reserves": 1,
+      "infra_commits": 94
+    },
+    {
+      "model": "pp",
+      "label": "pp",
+      "planned": 70,
+      "accepted": 69,
+      "task_success": 12,
+      "fail": 48,
+      "timeout": 9,
+      "missing": 1,
+      "trajectory_reserves": 89,
+      "reset_claims": 178,
+      "open_reserves": 0,
+      "infra_commits": 20
+    },
+    {
+      "model": "oracle",
+      "label": "groundsg-ground-sg-oracle",
+      "planned": 70,
+      "accepted": 23,
+      "task_success": 13,
+      "fail": 7,
+      "timeout": 3,
+      "missing": 47,
+      "trajectory_reserves": 24,
+      "reset_claims": 48,
+      "open_reserves": 1,
+      "infra_commits": 0
+    },
+    {
+      "model": "qwen",
+      "label": "groundsg-ground-sg-qwenvl",
+      "planned": 70,
+      "accepted": 59,
+      "task_success": 12,
+      "fail": 38,
+      "timeout": 9,
+      "missing": 11,
+      "trajectory_reserves": 60,
+      "reset_claims": 120,
+      "open_reserves": 0,
+      "infra_commits": 1
+    },
+    {
+      "model": "memer",
+      "label": "groundsg-ground-sg-memer",
+      "planned": 70,
+      "accepted": 25,
+      "task_success": 1,
+      "fail": 21,
+      "timeout": 3,
+      "missing": 45,
+      "trajectory_reserves": 26,
+      "reset_claims": 52,
+      "open_reserves": 1,
+      "infra_commits": 0
+    }
+  ],
+  "accepted": 273,
+  "task_success": 50,
+  "planned": 420,
+  "stages_BCD_started": false,
+  "pp_context_failure_decision_approved": true,
+  "pp_decision_code_implemented": false,
+  "native_budget": {
+    "trajectories": 392,
+    "resets": 784,
+    "infra_retries": 113,
+    "expired_retries": 0
+  },
+  "stopped_jobs_steps": [
+    "63431430.7",
+    "63431431.24",
+    "63431432.79",
+    "63431433.8"
+  ],
+  "holds_preserved": [
+    "63431430",
+    "63431431",
+    "63431432",
+    "63431433"
+  ]
+}
