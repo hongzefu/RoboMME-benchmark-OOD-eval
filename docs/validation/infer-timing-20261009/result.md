@@ -121,7 +121,7 @@ GL 为 NVIDIA A40，持有作业与节点分别为 `63431430/gl1525`、`63431431
 
 本机已完成的 FrameSamp-off、Oracle-on/off、QwenVL-on/off、MemER-on/off 有一步截断标记且 `error=null`；原 FrameSamp-on 为 `exec_steps=1、steps=2、AttributeError: None.copy`，原 SimpleMemVLA-on 的 `exec_steps=1、steps=0` 同属停止控制缺陷，原三份短测如实保留。PP-on 为启动基础设施失败（CUDA 驱动不兼容 `found version12080`），退出码 3，零实际 reset／步／块，`task_success=null`；不是正常任务失败，也不是任务成功 0/1。
 
-Astra-on 在 959e624 起跑，ModelScope 路径绕过 HF 离线旗标，开始约 8.88 GB 基座下载；不是 HF 下载自行忽略离线配置。运行者只向本次 client 408888、guard 409172、VLA 409192 发送 TERM；`it-astra-on` 退出码 143。中断时 API `calls=[]`、费用 0 美元，真实 reset／动作块均为零，无任务结果，partial cache 保留。用户要求「astra跑完收尾」，只执行 off／正式各 **1 任务 × 1 档 × 1 次**；用户另明确「PP 本机不跑了」，PP-off 取消未启动，PP-on 恢复不执行，GL PonderPounce 正式成功不变。
+Astra-on 在 959e624 起跑，ModelScope 路径绕过 HF 离线旗标，开始约 8.88 GB 基座下载；不是 HF 下载自行忽略离线配置。运行者只向本次 client 408888、guard 409172、VLA 409192 发送 TERM；`it-astra-on` 退出码 143。中断时 API 调用记录为空（0项）、费用 0 美元，真实 reset／动作块均为零，无任务结果，partial cache 保留。用户要求「astra跑完收尾」，只执行 off／正式各 **1 任务 × 1 档 × 1 次**；用户另明确「PP 本机不跑了」，PP-off 取消未启动，PP-on 恢复不执行，GL PonderPounce 正式成功不变。
 
 Astra-off 正常结束：`EXIT_CODE=0`、`error=null`、实际／结果步数均 1、块数 1、reset 2、`task_success=0`、`recorder_verify=PASS`。首规划器 3564.368 毫秒，其中预算账本检查 9.859 毫秒，review 0；动作块 wall 15129.436 毫秒、动作 RTT 11549.222 毫秒，审计关 `server_infer_ms/gpu=null` 原样保存，不补值。守恒 `checked=expected=1、missing_fields=violations=0`；off 时累计一次请求、0.1006875 美元。VLA GPU1／monitor GPU0，guard 443615 与 VLA 443618 已退出。
 
