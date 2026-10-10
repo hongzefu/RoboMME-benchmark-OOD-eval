@@ -192,3 +192,13 @@ exit "$controller_exit"
 ```
 
 主会话流式读取新日志与原 `controller/events.jsonl`。软件测试与实际接手均已验；PP 旧席位尚未结束，真实 `legacy_retry_resume` 事件及其第三次尝试仍待观察，完整 A／B／C／D 结果未验收。
+
+## 清单刷新修订后的真实恢复
+
+r4 于 PP 旧席位结束后自然退出 1，失败原文见结果文档，未清零 `report_failed=1`。2026-10-10 07:54:06 EDT，从 clean 提交 `847fea9b9af7c0214ee62c58d3c44fcbe3a900fd` 的 `runtime-controller-r5` 启动 `fe-full-eval-controller-r5-20261010`。确认旧 r4 会话已消失；没有杀其它会话、重启 MemER／QwenVL 或提交新占位作业。新副本仍只运行控制器，原模型与报告 r3 副本、配置指纹、输出与预算路径均保持。
+
+实际完整主体与上一节相同，只把监督器源码路径替换为 `runtime-controller-r5/dev-scripts/gl/continue_full_eval.py`，日志替换为 NFS 产物根 `logs/fe-full-eval-controller-r5-20261010.log`；配置仍为原 `controller-config.json`，同样使用 `PYTHONUNBUFFERED=1`、`pipefail`、`tee` 与自然 `EXIT_CODE`。启动载体 `controller-r5-start.sh` 的 SHA256 为 `e4c6c3b37ffa2367646fdad32cb0c6535679ba93feeedbe559a906f77bccf9fd`，不独立归档脚本。
+
+真实事件已出现 `legacy_retry_resume`，只核证 PP 的 `VideoPlaceOrder_xhard1_17100000` 原尝试 2。后继 `fe-controller-A-pp-3-45` 在原 63431433／slot 3／端口 20030 起跑：`RUN_INPUTS=PASS`、`CLIENT_READY ... git=0c6f8a3a5528 dirty=False`、`RUN_PLAN total=70 claimable=1 max_attempts=20`、`SERVER_READY ready_s=31.0`。原第二次失败的 12 个文件独占归档，`ATTEMPT_ARCHIVE=PASS ... result_sha256=34f9662f242c70968c3f8e09e10d4dd9f90514626e659df6c1c2c9933283f13e files=12`；队列 `.a3.json` 已核真实第三次领取。69 个已接受身份不重跑。
+
+SimpleMemVLA 同时由原 63431432 续入 `fe-controller-A-smvla-2-44`，身份 `VideoUnmaskSwap_xhard2_18500000`，没有再次空启动已接受的 xhard1 身份。回执见 [实际恢复](records/controller-r5-start.json)：`LEGACY_RETRY_RESUME=PASS claimable=1 attempt=3 max_attempts=20`。该判定只证明预算内接续实际起跑，PP 第三次结果与最终阶段验收仍待观察；验证读回本身零 reset、零轨迹。

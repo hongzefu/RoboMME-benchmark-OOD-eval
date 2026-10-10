@@ -84,3 +84,5 @@ PP 旧席位于 07:46:44 EDT 结束，`RUN_SUMMARY total=70 accepted=69 running_
 主会话重新只读核对当前缺失集合与同一原日志、领取、本地结果和共享预算，守卫通过且账本字节不变：`LEGACY_EVIDENCE_NOW=PASS attempts=2 missing=1 budget_unchanged=1`，见 [真实失败与重核证据](records/controller-r4-failure.json)。源码先读剩余清单、后检查进程结束，推断其间最后一局被接受造成快照过期；停止瞬间的旧集合没有被输出，未宣称观察到其具体内容。使用生产 `_end` 在两步之间接受正常失败局的夹具可复现该问题。
 
 修订只在确认 worker 已结束后，再刷新该模型剩余清单，随后执行原严格核证与调度；不修改日志数字、结果、预算、模型或验收条件。子提交 `3d0a5e0b4319f8599f00845772bd20347bb0a096` 独立静态审查通过；PP 只接续原基础设施身份，SMVLA 已完成身份不再被空启动，真实失败计数保留。主树 `uv run --no-sync python -m pytest -q tests/test_continue_full_eval.py tests/pipeline/eval/test_budget_ledger.py` 退出 0，95 项通过、5.92 秒；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。新监督器接手与真实第三次重试仍另记。
+
+07:54:06 EDT 新 r5 监督器已实际接手；随后真实 `legacy_retry_resume` 核原 PP 两次失败，原队列只领取缺失身份第三次，`RUN_PLAN claimable=1 max_attempts=20`，原第二次的 12 文件归档结果哈希保持。`LEGACY_RETRY_RESUME=PASS claimable=1 attempt=3 max_attempts=20`，见 [恢复回执](records/controller-r5-start.json)。MemER／QwenVL 原 worker 保留，SimpleMemVLA 同步进入下一未接受身份，四席恢复执行；PP 第三次成绩尚未产生，不能将接续通过当作该身份完成。

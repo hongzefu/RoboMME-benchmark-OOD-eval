@@ -1,0 +1,37 @@
+{
+  "controller_commit": "847fea9b9af7c0214ee62c58d3c44fcbe3a900fd",
+  "controller_code": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-controller-r5",
+  "controller_root_clean": true,
+  "model_and_report_code": "0c6f8a3a552876020611d4d654a41adb3accba65",
+  "config_sha256": "12d997b55e7a92c2f9f04ef5c1e837b8b31f32fe2e076f5e225ae8f29bc0b721",
+  "launch_time": "2026-10-10 07:54:06 EDT",
+  "controller_session": "fe-full-eval-controller-r5-20261010",
+  "log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/logs/fe-full-eval-controller-r5-20261010.log",
+  "legacy_retry_event": {
+    "time": 1791633249.377238,
+    "kind": "legacy_retry_resume",
+    "slot": 3,
+    "model": "pp",
+    "stage": "A",
+    "session": "fe-A-pp-63431433",
+    "attempts": {
+      "VideoPlaceOrder_xhard1_17100000": 2
+    },
+    "max_attempts": 20
+  },
+  "pp_session": "fe-controller-A-pp-3-45",
+  "pp_log": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/controller/fe-controller-A-pp-3-45.log",
+  "pp_claim_attempt": 3,
+  "pp_archive_files": 12,
+  "pp_archived_result_sha256": "34f9662f242c70968c3f8e09e10d4dd9f90514626e659df6c1c2c9933283f13e",
+  "report_failed_preserved": 1,
+  "healthy_sessions_preserved": [
+    "fe-A-memer-63431430",
+    "fe-A-qwen-63431431"
+  ],
+  "smvla_next_session": "fe-controller-A-smvla-2-44",
+  "wrapper_sha256": "e4c6c3b37ffa2367646fdad32cb0c6535679ba93feeedbe559a906f77bccf9fd",
+  "verification_reset": 0,
+  "verification_trajectory": 0,
+  "verdict": "LEGACY_RETRY_RESUME=PASS claimable=1 attempt=3 max_attempts=20"
+}
