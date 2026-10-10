@@ -650,6 +650,22 @@ def raw_atomic(path: Path, value: dict) -> None:
     os.replace(temporary, path)
 
 
+def raw_report_error(path: Path, error: dict) -> None:
+    """仅发布搬运器首个错误，不写调度 STOP，也不覆盖已保存首因。"""
+    print(f"RAW_DELIVERY=FAIL error={error['error']} message={error['message']}", flush=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.with_name(f".{path.name}.publish-lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if path.exists():
+                print(f"RAW_ERROR_PRESERVED path={path}", flush=True)
+            else:
+                raw_atomic(path, error)
+    except OSError as exc:
+        # 报告写入失败不取代上面已打印的原始故障。
+        print(f"RAW_ERROR_WRITE_FAILED path={path} error={type(exc).__name__} message={exc}", flush=True)
+
+
 def raw_relative(value: str) -> Path:
     if not isinstance(value, str):
         raise ValueError("相对路径必须是字符串")
@@ -927,7 +943,7 @@ def raw_main(args) -> int:
             if heartbeat_error:
                 raise RuntimeError(f"心跳写入失败：{heartbeat_error[0]}")
             if stop_path.exists():
-                raise RuntimeError("收到全局 STOP")
+                raise RuntimeError("收到人工 STOP，停止搬运")
             published = {p.name: p for p in (stage / "published").glob("*.json")}
             if set(published) - set(expected):
                 raise ValueError("出现非权威发布项")
@@ -989,10 +1005,7 @@ def raw_main(args) -> int:
             done.wait(min(args.interval, 5))
     except Exception as exc:
         error = {"schema": RAW_SCHEMA, **context, "component": "mover", "error": type(exc).__name__, "message": str(exc), "time": time.time()}
-        raw_atomic(error_path, error)
-        if not stop_path.exists():
-            raw_atomic(stop_path, error)
-        print(f"RAW_DELIVERY=FAIL error={type(exc).__name__} message={exc}", flush=True)
+        raw_report_error(error_path, error)
         return 1
     finally:
         done.set()
@@ -1037,11 +1050,7 @@ def main() -> int:
             except Exception:
                 pass
             error = {"schema": RAW_SCHEMA, **context, "component": "mover", "error": type(exc).__name__, "message": str(exc), "time": time.time()}
-            raw_atomic(Path(args.error_file) if args.error_file else Path(args.stage) / "mover/error.json", error)
-            stop = Path(args.stop_file) if args.stop_file else Path(args.stage) / "STOP"
-            if not stop.exists():
-                raw_atomic(stop, error)
-            print(f"RAW_DELIVERY=FAIL error={type(exc).__name__} message={exc}", flush=True)
+            raw_report_error(Path(args.error_file) if args.error_file else Path(args.stage) / "mover/error.json", error)
             return 1
     if args.layout == "sgeval":
         return sgeval_main(args)
