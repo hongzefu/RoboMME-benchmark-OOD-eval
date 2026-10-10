@@ -4,7 +4,7 @@
 Wraps the pinned third-party ``third_party/mme-vla/scripts/serve_policy.py`` (**the third-party source is not
 modified**):
 
-1. Arguments: the wrapper's own ``--sgeval-metadata-out <path>`` (stripped from argv at startup); everything else
+1. Arguments: ``--sgeval-metadata-out <path>`` and ``--sgeval-serve-root <dir>`` are stripped from argv; everything else
    goes unchanged to the third-party ``Args`` (tyro). ``--seed=<policy_seed>`` is the third-party ``Args.seed``
    (passed explicitly by the server command builder, no longer hard-coded to 7).
 2. Server metadata: after the third-party ``create_policy`` returns (weights loaded), write
@@ -15,7 +15,8 @@ modified**):
    its result unchanged, only adding one key to the result dict::
 
        {"channels": [{"channel": "task"|"symbolic", "text", "token_ids", "mask", "tokenizer", "truncated"}, ...],
-        "server_final_text": <raw symbolic-channel text, else the task-channel text>, "pp_generation": null}
+        "server_final_text": <raw symbolic-channel text, else the task-channel text>, "pp_generation": null,
+        "server_timing": {"infer_ms": <whole blocking infer duration>, "gpu": <first device name or null>}}
 
    Channels come from the real calls to the third-party ``PaligemmaTokenizer.tokenize`` during this ``infer``: the
    call without a subgoal is ``task`` (``tokenized_prompt``), the one with a subgoal is ``symbolic``
@@ -32,7 +33,8 @@ modified**):
    starts this wrapper by absolute path), ``sys.path[0]`` becomes ``<mme-vla>/scripts`` and this directory is
    removed; logging matches the third-party ``__main__`` (``basicConfig(INFO, force=True)``), so the
    ``history_config='...'`` log line checked by the launcher still appears. If the third-party script is not found
-   under cwd, fall back to ``$SGEVAL_THIRD_PARTY/mme-vla``.
+    under cwd, fall back to ``$SGEVAL_THIRD_PARTY/mme-vla``. An explicit serving root takes precedence and must
+    contain the serving script.
 """
 from __future__ import annotations
 
@@ -43,6 +45,8 @@ import logging
 import os
 import sys
 import threading
+import time
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +55,7 @@ AUDIT_KEY = "_sgeval_audit"
 ENV_AUDIT = "SGEVAL_AUDIT"
 #: the wrapper's own argument
 METADATA_FLAG = "--sgeval-metadata-out"
+SERVE_ROOT_FLAG = "--sgeval-serve-root"
 #: path of the pinned third-party script relative to the mme-vla root
 SERVE_REL = "scripts/serve_policy.py"
 
@@ -80,8 +85,31 @@ def split_wrapper_args(argv: list[str]) -> tuple[str | None, list[str]]:
     return meta, rest
 
 
-def mme_vla_root() -> Path:
-    """Third-party mme-vla root: cwd if it contains the pinned script, otherwise ``$SGEVAL_THIRD_PARTY/mme-vla``."""
+def split_serve_root(argv: list[str]) -> tuple[str | None, list[str]]:
+    """Strip the optional serving root without changing the metadata parser contract."""
+    root, rest, i = None, [], 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg.startswith(SERVE_ROOT_FLAG + "="):
+            root = arg.split("=", 1)[1]
+        elif arg == SERVE_ROOT_FLAG:
+            if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                raise ValueError(f"{SERVE_ROOT_FLAG} requires a directory")
+            root = argv[i + 1]
+            i += 1
+        else:
+            rest.append(arg)
+        i += 1
+    return root, rest
+
+
+def mme_vla_root(serve_root: str | None = None) -> Path:
+    """Validate an explicit serving root, otherwise use cwd then ``$SGEVAL_THIRD_PARTY/mme-vla``."""
+    if serve_root is not None:
+        root = Path(serve_root)
+        if not root.is_dir() or not (root / SERVE_REL).is_file():
+            raise FileNotFoundError(f"third-party {SERVE_REL} not found in explicit root {root}")
+        return root
     cwd = Path.cwd()
     if (cwd / SERVE_REL).is_file():
         return cwd
@@ -177,6 +205,17 @@ def build_audit(channels: list[dict]) -> dict:
     return {"channels": list(channels), "server_final_text": final, "pp_generation": None}
 
 
+@cache
+def _gpu_name() -> str | None:
+    """Cache the first JAX device name; never synchronize a device for timing."""
+    try:
+        import jax
+
+        return jax.devices()[0].device_kind
+    except Exception:  # noqa: BLE001 optional diagnostic must not affect inference
+        return None
+
+
 class AuditedPolicy:
     """Proxy of the third-party policy: ``infer`` calls the real policy and returns its result unchanged, only adding
     the audit key; ``reset`` / ``add_buffer`` / ``metadata`` etc. go straight to the real policy."""
@@ -191,11 +230,14 @@ class AuditedPolicy:
         sink: list = []
         _ACTIVE.sink = sink
         try:
+            t0 = time.perf_counter()
             out = self._inner.infer(obs)
+            ms = (time.perf_counter() - t0) * 1000.0
         finally:
             _ACTIVE.sink = None
         out = dict(out)
         out[AUDIT_KEY] = build_audit(sink)
+        out[AUDIT_KEY]["server_timing"] = {"infer_ms": ms, "gpu": _gpu_name()}
         return out
 
 
@@ -251,8 +293,9 @@ def run(sp: Any, args: Any, *, meta_path: str | None, argv_full: list[str], toke
 
 def main(argv: list[str] | None = None) -> Any:
     full = list(sys.argv if argv is None else argv)
-    meta, rest = split_wrapper_args(full[1:])
-    root = mme_vla_root()
+    serve_root, rest = split_serve_root(full[1:])
+    meta, rest = split_wrapper_args(rest)
+    root = mme_vla_root(serve_root)
     prepare_sys_path(root)
     sp = load_serve_policy(root)
     import tyro

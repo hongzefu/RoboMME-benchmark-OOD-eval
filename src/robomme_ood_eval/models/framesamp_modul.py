@@ -42,6 +42,8 @@ from typing import Any, Callable, Tuple
 
 import numpy as np
 
+from robomme_ood_eval.timing import ChunkTimer, attach_policy_timing
+
 MAX_STEPS = 1300
 OBS_HORIZON = 16
 #: server wrapper reply audit key (same as trace_writer.AUDIT_KEY)
@@ -178,7 +180,8 @@ class _Progress:
 
 def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progress: _Progress, *,
              max_steps: int = MAX_STEPS, obs_horizon: int = OBS_HORIZON,
-             on_decision: Callable[[int, np.ndarray], None] | None = None) -> str:
+             on_decision: Callable[[int, np.ndarray], None] | None = None,
+             timer: ChunkTimer | None = None) -> str:
     """The ``eval_each_episode`` loop: returns success_flag (exceptions propagate and are mapped by
     ``evaluate_one``).
 
@@ -202,6 +205,8 @@ def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progre
 
     while True:
         if not epstate.action_plan:
+            if timer is not None:
+                timer.start()
             resp = client.add_buffer(pack_buffer(
                 epstate.image_buffer,
                 epstate.state_buffer,
@@ -215,7 +220,15 @@ def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progre
                 "observation/state": robot_state,
                 "prompt": prompt,
             }
-            actions = client.infer(element)["actions"]
+            out = client.infer(element)
+            actions = out["actions"]
+            if timer is not None:
+                rtt = getattr(client, "_last_rtt", {})
+                server_timing = getattr(client, "_last_server_timing", None) or {}
+                timer.close(t=getattr(client, "_last_recv_t", None), decision=progress.decisions,
+                            env_step=epstate.count, action_rtt_ms=rtt.get("infer"),
+                            server_infer_ms=server_timing.get("infer_ms"),
+                            extra={"add_buffer_rtt_ms": rtt.get("add_buffer"), "gpu": server_timing.get("gpu")})
             if on_decision is not None:
                 on_decision(progress.decisions, actions)
             progress.decisions += 1
@@ -257,7 +270,8 @@ def classify_infra(error: str | None, runner: EnvRunnerShim | None) -> str | Non
 
 def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tuple], reset_fn: Callable[[], dict], *,
                  max_steps: int = MAX_STEPS, obs_horizon: int = OBS_HORIZON,
-                 on_decision: Callable[[int, np.ndarray], None] | None = None) -> dict:
+                 on_decision: Callable[[int, np.ndarray], None] | None = None,
+                 timer: ChunkTimer | None = None) -> dict:
     """Copied from the per-episode terminal mapping of ``evaluate_manifest``. The client connection is inside the try
     too (as in the old official code)."""
     progress = _Progress()
@@ -268,7 +282,7 @@ def evaluate_one(client_factory: Callable[[], Any], step_fn: Callable[[Any], tup
     try:
         client = client_factory()
         success_flag = run_loop(client, runner, reset_fn, progress, max_steps=max_steps, obs_horizon=obs_horizon,
-                                on_decision=on_decision)
+                                on_decision=on_decision, timer=timer)
     except Exception as e:  # noqa: BLE001 episode-level catch-all, same as the old official code
         print(f"Error evaluating episode: {e}")
         success_flag, error = "error", f"{type(e).__name__}: {e}"
@@ -343,6 +357,9 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
             # optional raw-byte observer hook raw_hook(obj, sent_bytes, recv_bytes), called after each successful round trip (read-only, exceptions swallowed)
             self._raw_hook = None
             self._last_audit = None  # server wrapper audit block popped from the most recent reply
+            self._last_rtt = {}
+            self._last_recv_t = None
+            self._last_server_timing = None
             super().__init__(host, port)
 
         def _wait_for_server(self):
@@ -367,18 +384,22 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
                 recorder.add_event(ev)
 
         def _roundtrip(self, obj: dict) -> dict:
+            self._last_audit = None
+            self._last_server_timing = None
             t0 = time.perf_counter()
             data = self._packer.pack(obj)
             t1 = time.perf_counter()
             self._ws.send(data)
             response = self._ws.recv()
             t2 = time.perf_counter()
+            self._last_recv_t = t2
             if isinstance(response, str):
                 self._event({"kind": "ws_recv", "seq": self._seq, "msg": "error_text", "sha": sha(response)})
                 raise RuntimeError(f"Error in inference server:\n{response}")
             out = msgpack_numpy.unpackb(response)
             # pop the server wrapper audit key before the reply reaches the official loop (and thus the environment); keep it for the language ledger
             self._last_audit = out.pop(AUDIT_KEY, None) if isinstance(out, dict) else None
+            self._last_server_timing = self._last_audit.get("server_timing") if isinstance(self._last_audit, dict) else None
             t3 = time.perf_counter()
             dig = payload_digest(obj)
             rdig = response_digest(out)
@@ -389,6 +410,7 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
             per = timing.setdefault("per_msg", [])
             per.append({"seq": self._seq, "kind": dig["kind"], "pack_s": t1 - t0, "rtt_s": t2 - t1,
                         "unpack_s": t3 - t2, "server_ms": server_ms, "bytes": len(data)})
+            self._last_rtt[dig["kind"]] = (t2 - t1) * 1000.0
             self._seq += 1
             hook = self._raw_hook
             if hook is not None:
@@ -592,6 +614,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder) -> dict:
     to record per step (C4, C8), the client is wrapped to record requests and replies (C10), and finalization follows
     C2, C3, C8. Without a location none of the three wrappers is applied and behavior is unchanged."""
     timing: dict[str, Any] = {}
+    timer = ChunkTimer()
     max_steps = int(conn_info.get("max_steps", MAX_STEPS))
     sm = _load_sibling("smvla_client")  # the shared PolicyTrace
     trace = sm.PolicyTrace("perceptual-framesamp-modul/new", identity, conn_info, recorder, max_steps=max_steps,
@@ -621,9 +644,11 @@ def run_episode(session, identity: dict, conn_info: dict, recorder) -> dict:
 
     step_fn = traced_step_fn(session, trace) if trace.enabled else session.step
     t0 = time.perf_counter()
-    res = evaluate_one(client_factory, step_fn, reset_fn, max_steps=max_steps, on_decision=on_decision)
+    res = evaluate_one(client_factory, step_fn, reset_fn, max_steps=max_steps, on_decision=on_decision, timer=timer)
     timing["episode_s"] = time.perf_counter() - t0
     res["timing"] = summarize_timing(timing)
+    gpu_name = next((c["gpu"] for c in timer.chunks if c.get("gpu")), None)
+    attach_policy_timing(res["timing"], timer, gpu_name=gpu_name, model_kind="serial")
     if trace.enabled:
         trace.close(res["status"], cap_hit=bool(getattr(session, "cap_hit", False)), decisions=res["decisions"],
                     session_steps=getattr(session, "steps", None))
