@@ -168,8 +168,11 @@ _CACHE = None
 def _records():
     global _CACHE
     if _CACHE is None:
+        env = _child_env()
+        # 子解释器不处理主环境的 editable 安装；显式锁定本树源码，并保留资源守卫与第三方路径。
+        env["PYTHONPATH"] = os.pathsep.join(p for p in (str(TREE / "src"), env.get("PYTHONPATH", "")) if p)
         out = subprocess.run([_pp_python(), str(Path(__file__).resolve()), "--child"], cwd=TREE,
-                             env=_child_env(), capture_output=True, text=True, timeout=180)
+                             env=env, capture_output=True, text=True, timeout=180)
         lines = [line for line in out.stdout.splitlines() if line.startswith("CHILD_RESULT ")]
         assert out.returncode == 0 and lines, f"子进程失败 rc={out.returncode}\n{out.stdout[-2000:]}\n{out.stderr[-4000:]}"
         _CACHE = json.loads(lines[-1].removeprefix("CHILD_RESULT "))
