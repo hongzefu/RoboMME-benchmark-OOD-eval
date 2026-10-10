@@ -605,6 +605,90 @@ def test_legacy_each_shared_budget_guard_refuses(tmp_path, cap):
         c.legacy_retry_settled(seat, Path(seat['log']).read_text(), ['Task_xhard1_1'])
 
 
+def production_pending_normal(controller, queue, ledger_path, model):
+    """先真实领取，返回延迟执行的生产正常结算，模拟检查死活时最后一局完成。"""
+    sm = sys.modules['legacy_fixture_seat']
+    spec = controller.c['stages']['A']
+    identity = {**module.read(spec['identities']), 'key': 'Task_xhard1_2', 'seed': 2,
+                'episode': 1, 'builder_episode': 1, 'candidate': 1}
+    with Path(spec['identities']).open('a') as f:
+        f.write(json.dumps(identity) + '\n')
+    ident = sm.identity_for_queue(identity, 'ood')
+    label = module.MODELS[model]
+    policy = 'groundsg' if label.startswith('groundsg-') else label
+    route = sm.policy_route(SimpleNamespace(policy=policy, policy_seed=7,
+        groundsg_variant=label.removeprefix('groundsg-') if policy == 'groundsg' else None))
+    caps = spec['caps']
+    shared = sm.load_sibling('budget_ledger').BudgetLedger(spec['budget'],
+        trajectory_cap=caps[0], reset_cap=caps[1], shared_infra_cap=caps[2],
+        expired_cap=caps[3], planned_first_tries=caps[4])
+    ledger = sm.AttemptLedger(ledger_path, seat=queue.seat, policy=policy, shared=shared, route=route)
+    token = f'{route}|{identity["key"]}|a1'
+    rid = shared.reserve(resets=2, route=route, key=identity['key'], token=token,
+                         dataset='ood', attempt_no=1, kind_of_try='first')
+    claim_path = queue.create_claim(ident, 1, token=token, rid=rid, route=route)
+    raw = Path(spec['out']) / f'rollouts/{label}/normal-result.json'
+    ledger.attempt_start(key=identity['key'], attempt_id='pending-normal', attempt_no=1, retry=False,
+                         identity=ident, result_path=str(raw), budget_rid=rid,
+                         claim=str(claim_path), token=token)
+    result = {**{k: v for k, v in identity.items() if k != 'builder_episode'},
+              'attempt': 1, 'policy_seed': 7, 'policy_label': label, 'model': policy,
+              'status': 'fail', 'task_success': 0, 'infra': False,
+              'budget_exhausted': False, 'run_blocked': False}
+    raw.write_text(json.dumps(result))
+    runner = sm.SeatRunner.__new__(sm.SeatRunner)
+    runner.ledger, runner.queue, runner._lock = ledger, queue, threading.Lock()
+    runner.args, runner.seat = SimpleNamespace(policy=policy), queue.seat
+    runner.results_path = ledger_path.parent / f'{label}.results.jsonl'
+    def settle():
+        runner._end(sm.Claim(ident, 1, claim_path, token, rid, False), 'pending-normal',
+                    {**result, 'result': str(raw)}, void=False)
+    return identity, settle
+
+
+@pytest.mark.parametrize('model', ['pp', 'smvla'])
+def test_completed_worker_refreshes_serialized_remaining_before_guard_and_launch(tmp_path, model):
+    c, seat, _, local, budget, queue, calls = legacy_fixture(tmp_path, model=model,
+        attempts=1 if model == 'smvla' else 2, final=model == 'smvla')
+    identity, settle = production_pending_normal(c, queue, local, model)
+    normal_key = identity['key']
+    if model == 'pp':
+        log = Path(seat['log'])
+        log.write_text(log.read_text().replace('total=1', 'total=2').replace('accepted=0', 'accepted=1'))
+        expected_first = ['Task_xhard1_1', normal_key]
+    else:
+        seat['onlykey'] = normal_key
+        expected_first = [normal_key]
+    c.state['report_failed'] = 1
+    reads, settled_budget = [], []
+    original_remaining, original_command = c.remaining, c.command
+    def remaining(stage, candidate):
+        result = original_remaining(stage, candidate)
+        if candidate == model:
+            reads.append(result)
+        return result
+    def command(argv, **kwargs):
+        if 'has-session' in argv and not settled_budget:
+            assert reads == [expected_first]
+            settle()
+            settled_budget.append(budget.read_bytes())
+        return original_command(argv, **kwargs)
+    c.remaining, c.command = remaining, command
+    c.tick()
+    assert reads == [expected_first, ['Task_xhard1_1'] if model == 'pp' else []]
+    assert original_remaining('A', model) == (['Task_xhard1_1'] if model == 'pp' else [])
+    assert budget.read_bytes() == settled_budget[0]
+    assert module.read(c.path)['report_failed'] == 1
+    assert module.read(queue.accepted_path(identity))['status'] == 'fail'
+    assert len(list(queue.claims.glob('ood__' + normal_key + '.a*.json'))) == 1
+    launches = [x for x in calls if 'new-session' in x]
+    if model == 'pp':
+        events = [json.loads(line) for line in (c.root / 'events.jsonl').read_text().splitlines()]
+        assert next(e for e in events if e['kind'] == 'legacy_retry_resume')['attempts'] == {'Task_xhard1_1': 2}
+    else:
+        assert not any('fe-controller-A-smvla-' in str(x) for x in launches)
+
+
 @pytest.mark.parametrize('mutation', ['fake_identity', 'no_local_end', 'no_shared_commit', 'live_claim',
     'normal_result', 'lost_accept', 'budget', 'bad_summary', 'running_elsewhere', 'missing_log', 'unknown_exit',
     'bad_reserve', 'budget_config', 'open_reserve', 'no_shared_retry', 'missing_prior_claim'])
