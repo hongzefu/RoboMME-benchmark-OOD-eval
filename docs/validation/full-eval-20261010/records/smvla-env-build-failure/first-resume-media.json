@@ -1,0 +1,74 @@
+{
+  "stage": "A",
+  "policy_seed": 7,
+  "ok": false,
+  "coverage": [
+    {
+      "model": "smvla",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    }
+  ],
+  "errors": [],
+  "success": [
+    {
+      "model": "smvla",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 0,
+      "episode_success_rate": 0.0,
+      "task_macro_success_rate": 0
+    }
+  ],
+  "timing": [
+    {
+      "model": "smvla",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 724.0246512889862,
+      "wall_p95_s": 724.0246512889862,
+      "episode_wall_sum_s": 724.0246512889862,
+      "gpu_seconds_proxy": 724.0246512889862
+    }
+  ],
+  "episode_wall_sum_s": 724.0246512889862,
+  "timing_scope": "仅阶段 accepted 局；GPU 秒为单局墙钟之和代理，不含加载及基础设施失败",
+  "verdicts": [
+    "EVAL_COVERAGE=PASS stage=A model=smvla expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "STAGE_MODELS=FAIL expected=6 actual=1",
+    "EVAL_REPORT=PASS stage=A model=smvla cap_mismatch=0 exec_over_cap=0",
+    "OFFICIAL_MEDIA_INPUTS=PASS stage=A total=1 fail=0",
+    "OFFICIAL_MEDIA=PASS stage=A total=1 fail=0",
+    "STAGE_TIMING=FAIL stage=A models=1 episodes=1 wall_h=0.201118"
+  ],
+  "cap": [
+    {
+      "model": "smvla",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    }
+  ],
+  "media": [
+    {
+      "model": "smvla",
+      "key": "BinFill_xhard1_16400100",
+      "dir": "BinFill_ep1_xhard1",
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/BinFill_ep1_xhard1",
+      "reasons": [],
+      "status_result": "fail",
+      "video_rel": "videos/BinFill_ep1_fail_put one red cube, three blue cubes and two green cubes into the bin, then press the button to stop_xhard1.mp4",
+      "videos": [
+        "BinFill_ep1_fail_put one red cube, three blue cubes and two green cubes into the bin, then press the button to stop_xhard1.mp4"
+      ],
+      "frames_source": "trace",
+      "video": "BinFill_ep1_fail_put one red cube, three blue cubes and two green cubes into the bin, then press the button to stop_xhard1.mp4",
+      "frames_expected": 1651,
+      "frames_decoded": 1651,
+      "video_sha256": "a5405e0bda76bba0aca8a7868d1031b1fea72f4b5f1d7adfbbf425f7ecda7f99",
+      "status": "pass"
+    }
+  ]
+}

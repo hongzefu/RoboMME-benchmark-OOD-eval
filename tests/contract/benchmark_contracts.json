@@ -136,7 +136,9 @@
       "tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_keeps_normal_terminal_results",
       "tests/pipeline/eval/test_seat_runner_e2e.py::test_retry_preserves_previous_raw_bytes_and_history",
       "tests/pipeline/eval/test_seat_runner_e2e.py::test_retry_archive_rejects_unsafe_previous_raw",
-      "tests/pipeline/eval/test_seat_runner_e2e.py::test_archive_exclusive_container_failures_preserve_recovery_evidence"
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_archive_exclusive_container_failures_preserve_recovery_evidence",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_expired_partial_raw_is_archived_without_scoring_old_attempt",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_expired_partial_archive_rejects_unproven_identity_or_termination"
     ],
     "resource": "cpu（不reset、不初始化GPU、不加载权重、不联网）",
     "mutants": [],

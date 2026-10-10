@@ -254,6 +254,140 @@ def test_retry_archive_rejects_unsafe_previous_raw(tmp_path, damage, capsys):
             assert Path(path).read_bytes() == data
 
 
+def _interrupted_fixture(tmp_path, monkeypatch, *, expiry=True):
+    """由真实领取／预约／attempt_start与TraceWriter构造无end的到期半局。"""
+    from robomme_ood_eval.record.trace_writer import TraceWriter
+    ec, E = F.env_client(), F.episode_mod()
+    ident = _ident()
+    stage = tmp_path / "stage"
+    shared = ec.load_sibling("budget_ledger").BudgetLedger(tmp_path / "budget.jsonl")
+    policy = F.fake_seat_policy()
+    policy.model = policy.label = "smvla"  # 实际SMVLA模型标签与路线契约，策略执行仍为CPU替身。
+    first = F.make_runner(stage, "smvla", policy, F.World(), budget_ledger=shared, infra_retries=19)
+    first.ledger._expired_jobs = ["111"] if expiry else []
+    monkeypatch.setenv("SLURM_JOB_ID", "111")
+    claimed = first.claim(ident)
+    spec, resolved = E.make_spec(policy, "ood", ident["task"], ident["builder_episode"], stage)
+    raw = Path(spec.out_dir)
+    raw.mkdir(parents=True)
+    meta = {"identity": spec.identity(), "model": policy.model, "policy_label": E._label(policy),
+            "resolved_identity": resolved}
+    (raw / "meta.json").write_text(json.dumps(meta))
+    traced = {k: spec.identity()[k] for k in ("dataset", "task", "tier", "seed", "source_episode", "builder_episode",
+                                             "key", "attempt", "policy_seed")}
+    writer = TraceWriter(raw / "trace.jsonl", route="smvla/new", identity=traced, max_steps=1800, policy_seed=7)
+    writer._fh.close()  # 模拟TIMEOUT，保留完整header但没有终态end。
+    (raw / "front.mkv").write_bytes(b"incomplete-media\x00\xff")
+    first.ledger.attempt_start(key=ident["key"], attempt_id="expired-first", attempt_no=1, retry=False,
+                               identity=ident, budget_rid=claimed.rid, token=claimed.token, claim=str(claimed.path),
+                               result_path=str(raw / "result.json"))
+    second_policy = F.fake_seat_policy()
+    second_policy.model = second_policy.label = "smvla"
+    runner = F.make_runner(stage, "smvla", second_policy, F.World(), budget_ledger=shared, infra_retries=19)
+    runner._fake_restore = first._fake_restore
+    runner.ledger._expired_jobs = ["111"] if expiry else []
+    return runner, ident, raw, shared
+
+
+def test_expired_partial_raw_is_archived_without_scoring_old_attempt(tmp_path, monkeypatch):
+    runner, ident, raw, shared = _interrupted_fixture(tmp_path, monkeypatch)
+    before = {p.name: p.read_bytes() for p in raw.iterdir()}
+    evidence_bytes = []
+    original_archive = runner._archive_previous_attempt
+    def capture(policy, claim, path):
+        evidence_bytes.append(runner.ledger.path.read_bytes())
+        return original_archive(policy, claim, path)
+    monkeypatch.setattr(runner, "_archive_previous_attempt", capture)
+    assert F.run_rows(runner, [ident]) == 0
+    mapping = json.loads((runner.seat_dir / "attempt-archives.jsonl").read_text().splitlines()[-1])
+    assert mapping["incomplete_expired"] is True and mapping["result_sha256"] is None
+    archived = Path(mapping["archive"])
+    assert {p.name: p.read_bytes() for p in archived.iterdir()} == before
+    assert not (archived / "result.json").exists()
+    assert all(json.loads(line)["kind"] != "end" for line in (archived / "trace.jsonl").read_text().splitlines())
+    assert mapping["expiry_evidence"] == "sacct_timeout job=111"
+    import hashlib
+    assert mapping["previous_ledger_sha256"] == hashlib.sha256(evidence_bytes[0]).hexdigest()
+    assert (mapping["ledger_route"], mapping["trace_route"]) == ("smvla/seed7/new", "smvla/new")
+    assert all(mapping["evidence_sha256"][k] == hashlib.sha256(F.env_client().dumps(v).encode()).hexdigest()
+               for k, v in mapping["evidence_rows"].items())
+    state = shared.state()
+    assert state.retries_of("expired") == 1 and state.retries_of("infra") == 0
+    assert len(state.reserves) == len(state.commits) == 2
+    accepted = json.loads(runner.queue.accepted_path(ident).read_text())
+    assert accepted["attempt"] == 2
+    assert sum(row["kind"] == "accept" for row in F.seat_ledger(tmp_path / "stage", runner.label)) == 1
+
+
+@pytest.mark.parametrize("fault", ["nonexpired", "forged_expired", "meta_identity", "meta_missing", "trace_identity",
+                                   "accepted", "normal_fail", "unaccepted_normal_fail", "missing_budget_retry",
+                                   "end_success", "end_fail", "end_timeout", "route_orig", "route_other", "route_missing",
+                                   "seed_bool", "seed_float", "route_other_seed", "ledger_change"])
+def test_expired_partial_archive_rejects_unproven_identity_or_termination(tmp_path, monkeypatch, fault):
+    ec, E = F.env_client(), F.episode_mod()
+    runner, ident, raw, shared = _interrupted_fixture(tmp_path, monkeypatch, expiry=fault not in ("nonexpired", "forged_expired"))
+    if fault == "meta_missing":
+        (raw / "meta.json").unlink()
+    elif fault == "meta_identity":
+        meta = json.loads((raw / "meta.json").read_text())
+        meta["identity"]["attempt"] = 8
+        (raw / "meta.json").write_text(json.dumps(meta))
+    elif fault == "trace_identity":
+        header = json.loads((raw / "trace.jsonl").read_text())
+        header["identity"]["policy_seed"] = 9
+        (raw / "trace.jsonl").write_text(json.dumps(header))
+    elif fault.startswith("end_"):
+        with (raw / "trace.jsonl").open("a") as fh:
+            fh.write(json.dumps({"kind": "end", "status": fault.removeprefix("end_")}) + "\n")
+    elif fault.startswith("route_") or fault.startswith("seed_"):
+        header = json.loads((raw / "trace.jsonl").read_text())
+        if fault == "route_missing":
+            header.pop("route")
+        elif fault.startswith("route_"):
+            header["route"] = {"route_orig": "smvla/orig", "route_other": "other/new",
+                               "route_other_seed": "smvla/seed8/new"}[fault]
+        else:
+            header["policy_seed"] = True if fault == "seed_bool" else 7.0
+        (raw / "trace.jsonl").write_text(json.dumps(header) + "\n")
+    elif fault == "normal_fail":
+        spec, _ = E.make_spec(runner.fake_policy, "ood", ident["task"], ident["builder_episode"], runner.out)
+        (raw / "result.json").write_text(json.dumps(E.EpisodeResult.from_spec(spec, runner.fake_policy).to_dict()))
+    runner.recover_dangling()
+    if fault == "unaccepted_normal_fail":
+        spec, _ = E.make_spec(runner.fake_policy, "ood", ident["task"], ident["builder_episode"], runner.out)
+        (raw / "result.json").write_text(json.dumps(E.EpisodeResult.from_spec(spec, runner.fake_policy).to_dict()))
+    claim = runner.claim(ident)
+    if fault == "normal_fail":
+        assert claim == "accepted"
+    else:
+        assert isinstance(claim, ec.Claim)
+        if fault == "forged_expired":
+            claim.interrupt = "expired"
+        if fault == "missing_budget_retry":
+            original_state = shared.state
+            def without_retry():
+                state = original_state()
+                state.retries = []
+                return state
+            monkeypatch.setattr(shared, "state", without_retry)
+        if fault == "ledger_change":
+            original_classify = ec.AttemptLedger.classify_interrupt
+            def changing_ledger(ledger, start, **kw):
+                with ledger.path.open("a") as fh:
+                    fh.write("\n")
+                return original_classify(ledger, start, **kw)
+            monkeypatch.setattr(ec.AttemptLedger, "classify_interrupt", changing_ledger)
+        if fault == "accepted":
+            runner.queue.accept(ident, attempt=1, status="fail", result=str(raw / "result.json"))
+        before = {p.name: p.read_bytes() for p in raw.iterdir()}
+        with pytest.raises(ValueError):
+            runner._archive_previous_attempt(runner.fake_policy, claim, raw / "result.json")
+        assert {p.name: p.read_bytes() for p in raw.iterdir()} == before
+    assert not (runner.out / "attempts").exists()
+    E.BUILDER_FACTORY = runner._fake_restore
+    E.clear_builders()
+
+
 def _run(tmp_path, name: str):
     sc = SCENARIOS[name]
     ident = _ident()

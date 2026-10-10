@@ -1235,6 +1235,122 @@ class SeatRunner:
         self._exit(code)
 
     # ── 一局 ────────────────────────────────────────────────────────────
+    def _expired_archive_evidence(self, policy, c: Claim, raw: Path, claim: dict) -> dict:
+        """只读核对真实领取、预算与 Slurm 中断证据，允许保留缺结果的到期半局。"""
+        if not c.retry or c.interrupt != "expired" or self.ledger.shared is None:
+            raise ValueError("缺结果的旧尝试没有共享到期恢复授权")
+        previous_path = self.queue.claim_path(c.ident, c.attempt - 1)
+        if previous_path.is_symlink():
+            raise ValueError("上一领取是符号链接")
+        previous = read_json(previous_path)
+        expected_claim = {"key": c.key, "dataset": c.ident["dataset"], "route": self.route}
+        if not previous or any(previous.get(k) != v or claim.get(k) != v for k, v in expected_claim.items()) \
+                or previous.get("attempt") != c.attempt - 1 or not previous.get("ended") \
+                or claim.get("attempt") != c.attempt or claim.get("rid") != c.rid:
+            raise ValueError("到期恢复的前后领取不匹配")
+        old_seat = previous.get("seat", "")
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", old_seat) or old_seat in (".", ".."):
+            raise ValueError("上一席位名不是安全路径分量")
+        path = self.out / "seats" / self.label / f"seed{self.policy_seed}" / old_seat / f"{self.label}.ledger.jsonl"
+        for parent in [path, *path.parents]:
+            if parent == self.out.parent:
+                break
+            if parent.is_symlink():
+                raise ValueError("上一尝试账本路径含符号链接")
+        ledger_bytes = path.read_bytes()
+        old_ledger = AttemptLedger(path, seat=old_seat, policy=self.args.policy, shared=None,
+                                   route=self.route, expired_jobs=self.ledger._expired_jobs)
+        if path.read_bytes() != ledger_bytes:
+            raise ValueError("读取旧本地账本期间内容变化")
+        starts = [row for row in old_ledger.starts.get(c.key, [])
+                  if row.get("attempt_no") == c.attempt - 1 and row.get("budget_rid") == previous.get("rid")
+                  and row.get("token") == previous.get("token") and row.get("claim") == str(previous_path)]
+        if len(starts) != 1:
+            raise ValueError("上一领取不能唯一绑定原尝试账本")
+        start = starts[0]
+        if start.get("route") != self.route or not isinstance(start.get("identity"), dict) \
+                or self.E.check_identity(start["identity"], c.ident, dataset=c.ident["dataset"]):
+            raise ValueError("上一尝试账本身份或路线不匹配")
+        end = old_ledger.ended.get(start["attempt_id"], {})
+        classified, evidence = old_ledger.classify_interrupt(start, now=self.now())
+        if classified != "expired" or end.get("interrupt") != "expired" or not end.get("interrupt_evidence") \
+                or end.get("infra") is not True or end.get("budget_exhausted") or AttemptLedger.is_final(end):
+            raise ValueError("上一尝试缺少可复核的 Slurm 到期证据")
+        state = self.ledger.shared.state()
+        retry = [row for row in state.retries if row.get("token") == c.token
+                 and row.get("route") == self.route and row.get("key") == c.key and row.get("interrupt") == "expired"]
+        before, after = state.reserves.get(previous.get("rid"), {}), state.reserves.get(c.rid, {})
+        for row, attempt, token in ((before, c.attempt - 1, previous.get("token")), (after, c.attempt, c.token)):
+            if row.get("route") != self.route or row.get("key") != c.key or row.get("attempt_no") != attempt \
+                    or row.get("token") != token or row.get("dataset") != c.ident["dataset"]:
+                raise ValueError("到期恢复的共享预约身份不匹配")
+        commit = state.commits.get(previous.get("rid"), {})
+        if len(retry) != 1 or previous.get("rid") in state.releases or c.rid in state.releases \
+                or commit.get("infra") is not True or c.rid in state.commits:
+            raise ValueError("到期恢复的共享重试或上一结算证据不匹配")
+        spec, _ = self.E.make_spec(policy, c.ident["dataset"], c.ident["task"], int(c.ident["builder_episode"]),
+                                   self.out, attempt=c.attempt - 1)
+        identity = spec.identity()
+        # 账本路线含种子隔离段；真实 trace 路线只标模型／变体与方向，精确移除绑定的种子段。
+        parts = self.route.rsplit("/", 2)
+        if len(parts) != 3 or not parts[0] or parts[1] != f"seed{self.policy_seed}" or parts[2] != "new" \
+                or not _is_int(self.policy_seed):
+            raise ValueError("共享账本路线缺少绑定的种子隔离段")
+        expected_trace_route = f"{parts[0]}/new"
+        meta = read_json(raw / "meta.json")
+        if not meta or meta.get("model") != policy.model or meta.get("policy_label") != self.E._label(policy) \
+                or not isinstance(meta.get("identity"), dict) \
+                or any(k not in meta["identity"] or type(meta["identity"][k]) is not type(v)
+                       or meta["identity"][k] != v for k, v in identity.items()) \
+                or self.E.check_identity(meta["identity"], c.ident, dataset=c.ident["dataset"]):
+            raise ValueError("到期半局缺少完整可识别的同身份元数据")
+        trace = raw / "trace.jsonl"
+        if trace.exists():
+            with trace.open(encoding="utf-8") as fh:
+                try:
+                    header = json.loads(fh.readline())
+                except json.JSONDecodeError as e:
+                    raise ValueError("到期半局 trace header 不完整") from e
+                incomplete_tail = False
+                for line in fh:
+                    if not line.strip():
+                        continue
+                    if incomplete_tail:
+                        raise ValueError("到期 trace 中间有损坏记录")
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        if line.endswith("\n"):
+                            raise ValueError("到期 trace 完整行损坏") from e
+                        incomplete_tail = True
+                        continue
+                    if not isinstance(record, dict) or record.get("kind") == "header":
+                        raise ValueError("到期 trace 非对象记录或重复header")
+                    if record.get("kind") == "end" and record.get("status") in ("success", "fail", "timeout"):
+                        raise ValueError("旧trace已有正常终态，须恢复媒体而非重新执行")
+            if not isinstance(header, dict):
+                raise ValueError("到期 trace header 不是对象")
+            traced = header.get("identity")
+            required = ("dataset", "task", "tier", "seed", "source_episode", "builder_episode", "key", "attempt", "policy_seed")
+            if header.get("kind") != "header" or header.get("route") != expected_trace_route or not isinstance(traced, dict) \
+                    or any(k not in traced or type(traced[k]) is not type(identity[k])
+                           or traced[k] != identity[k] for k in required) \
+                    or any(traced[k] != identity[k] for k in traced.keys() & identity.keys()) \
+                    or not _is_int(header.get("policy_seed")) or header["policy_seed"] != self.policy_seed:
+                raise ValueError("到期半局 trace header 身份冲突")
+        digest = lambda row: hashlib.sha256(dumps(row).encode("utf-8")).hexdigest()
+        rows = {"previous_claim": previous, "attempt_start": start, "attempt_end": end,
+                "previous_reserve": before, "previous_commit": commit, "retry_claim": retry[0], "current_reserve": after}
+        if path.read_bytes() != ledger_bytes:
+            raise ValueError("核证旧本地账本期间内容变化")
+        return {"incomplete_expired": True, "expiry_evidence": evidence,
+                "ledger_route": self.route, "trace_route": expected_trace_route if trace.exists() else None,
+                "previous_claim_path": str(previous_path), "previous_ledger_path": str(path),
+                "previous_ledger_sha256": hashlib.sha256(ledger_bytes).hexdigest(),
+                "previous_claim_sha256": hashlib.sha256(previous_path.read_bytes()).hexdigest(),
+                "meta_sha256": hashlib.sha256((raw / "meta.json").read_bytes()).hexdigest(),
+                "evidence_rows": rows, "evidence_sha256": {k: digest(v) for k, v in rows.items()}}
+
     def _archive_previous_attempt(self, policy, c: Claim, result_path: Path) -> None:
         """在已取得领取的身份锁内保留上一失败尝试；拒绝不完整结果、身份冲突、链接及归档覆盖。"""
         if c.attempt <= 1:
@@ -1307,12 +1423,17 @@ class SeatRunner:
             expected = {"key": c.key, "model": policy.model, "dataset": c.ident["dataset"],
                         "task": c.ident["task"], "episode": int(c.ident["builder_episode"]),
                         "policy_seed": self.policy_seed, "attempt": c.attempt - 1}
-            if not old or any(old.get(k) != v for k, v in expected.items()):
-                raise ValueError("上一尝试结果缺失或身份／尝试号不符")
-            mismatch = self.E.check_identity(old, c.ident, dataset=c.ident["dataset"])
-            if mismatch or old.get("infra") is not True:
-                raise ValueError(f"上一尝试不是同身份基础设施失败：{mismatch}")
-            digest = next(row["sha256"] for row in files if row["path"] == "result.json")
+            expired_evidence = {}
+            if not result_path.exists():
+                expired_evidence = self._expired_archive_evidence(policy, c, raw, claim)
+                digest = None
+            else:
+                if not old or any(old.get(k) != v for k, v in expected.items()):
+                    raise ValueError("上一尝试结果缺失或身份／尝试号不符")
+                mismatch = self.E.check_identity(old, c.ident, dataset=c.ident["dataset"])
+                if mismatch or old.get("infra") is not True:
+                    raise ValueError(f"上一尝试不是同身份基础设施失败：{mismatch}")
+                digest = next(row["sha256"] for row in files if row["path"] == "result.json")
             target.parent.mkdir(parents=True, exist_ok=True)
             # 独占 mkdir 只保证命名空间预约；共享 ACL 不是权限沙箱，唯一写者仍由身份锁约定。
             os.mkdir(target, 0o700)
@@ -1321,7 +1442,7 @@ class SeatRunner:
             mapping = {"key": c.key, "dataset": c.ident["dataset"], "attempt": c.attempt - 1,
                        "next_attempt": c.attempt, "source": str(raw), "archive": str(content),
                        "result_sha256": digest, "files": files, "directories": directories,
-                       "container_mode": oct(stat.S_IMODE(container.st_mode))}
+                       "container_mode": oct(stat.S_IMODE(container.st_mode)), **expired_evidence}
             # 预约记录先落盘；失败或崩溃时容器及原目录均不删除，恢复须人工核对预约与内容。
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
             fd = os.open(target / "reservation.json", flags, 0o600)

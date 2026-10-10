@@ -43,6 +43,10 @@ smoke 的六个身份是 A 清单的子集；完整验收后将相同字节的�
 
 ## 当前状态与下一步
 
+第一原失败身份 `BinFill_xhard1_16400100` 第三次在独立进程中正常完成：`task_success=0 status=fail exec_steps=1650 infra=False`，已接受且不重跑；加载 238.569 秒、执行 297.204 秒、结果起止 724.025 秒，视频错误为空、录像器通过。主会话只读全解码得到 `RESUME_MEDIA=PASS model=smvla identities=1 reset=0 trajectory=0`，1651 帧与 trace 一致；这是 1 任务（BinFill）× 1 档（xhard1）× 1 局的恢复验证，不代表剩余身份完成。原失败 a2 四文件 SHA256 保持，旧模型追加结果日志 96 行、208658 字节前缀保持 SHA256 `f9d324db0f152d53d9f3f0127f33e59245fd80ebb740a3109e7c310e96910cc2`。
+
+私有归档另补真实到期半局的恢复路径：缺失 `result.json` 时，仅领取、旧本地账本、共享重试与预约记录、Slurm 到期证据和完整元数据全部相符才允许独占复制，记录 `incomplete_expired` 与旧账本整体／逐证据行 SHA256；不把半局接受或计分。trace 已有正常 success／fail／timeout 终态则拒绝重跑，保留后处理恢复窗口。账本路线含模型种子，模型 trace 路线无种子，两者按固定模型规范精确绑定，拒绝原侧／其他模型／缺路线。独立审查通过；主树归档、预算及契约定向 88 项测试通过、11.01 秒，资源守卫全部为零。新代码不写入仍在运行的 r2 执行副本。
+
 阶段报表补齐严格步数上限与真实媒体入口，媒体未开启时明确标为未验证；普通视频调用原验收函数，恢复视频绑定原结果、全部原始文件、trace／meta 身份、渲染清单与全解码帧数。真实六局读回发现恢复证明使用 GroundSG 完整策略标签，而结果使用基础模型名；修正为同时核对外层标签、基础模型与变体，不修改任何原结果。最终六模型 × 1 任务（VideoUnmask）× 1 档（xhard1）× 1 局 = 6 局读回退出 0：六条 `EVAL_REPORT=PASS ... cap_mismatch=0 exec_over_cap=0`；`OFFICIAL_MEDIA_INPUTS=PASS stage=A total=6 fail=0`；`OFFICIAL_MEDIA=PASS stage=A total=6 fail=0`。这是冒烟白名单验收，不是完整 A 成绩。报表及契约定向 83 项通过、4.60 秒，独立审查通过；新增检查零 reset、零轨迹请求。
 
 SimpleMemVLA 正式 A 首个新身份正常截断，已接受且不重跑；随后 11 任务 × 各任务不同难度格（逐格见失败记录）× 合计 47 身份 × 每身份 2 次尝试 = 94 次环境创建失败，均为 Vulkan `ErrorInitializationFailed`、零执行步。该席位新增 95 次轨迹尝试、计量 96 次 reset。完整逐格乘式、结果与账本见 [失败快照](records/smvla-env-build-failure/summary.json)。原始账本保留，不把基础设施故障当任务失败成绩。已精确停止本轮 `fe-A-smvla-63431432`，另三个正式席位继续，四个占位作业均保留。
