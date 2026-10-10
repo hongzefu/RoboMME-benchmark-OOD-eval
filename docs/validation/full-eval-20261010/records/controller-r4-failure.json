@@ -1,0 +1,19 @@
+{
+  "controller_commit": "dc63643fc0945e59872e4a2c50e67de42921e9b9",
+  "original_log_path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/logs/fe-full-eval-controller-r4-20261010.log",
+  "original_log_sha256": "4b7deedac8b2d6dc8ce8d04b3d38a3a9fb8b4de5abd06c33d4f7c2346bb20ff5",
+  "original_log_text": "CONTROLLER=FAIL error=旧上限日志与实际缺失集合不符\nEXIT_CODE=1\n",
+  "current_missing": [
+    "VideoPlaceOrder_xhard1_17100000"
+  ],
+  "current_settled": {
+    "VideoPlaceOrder_xhard1_17100000": 2
+  },
+  "current_budget_unchanged": true,
+  "snapshot_at_failure_not_recorded": true,
+  "diagnosis": "旧缺失快照与工作完成的竞态；生产结束夹具可复现",
+  "report_failed_preserved": 1,
+  "reset": 0,
+  "trajectory": 0,
+  "verdict": "LEGACY_EVIDENCE_NOW=PASS attempts=2 missing=1 budget_unchanged=1"
+}

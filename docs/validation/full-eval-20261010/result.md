@@ -76,3 +76,11 @@ PonderPounce 的 1 任务（VideoPlaceOrder）× 1 档（xhard1）× 1 身份 ×
 独立静态审查发现首稿把 GroundSG 队列标签误当预算路线；已修为生产 `policy_route` 的 `groundsg/<variant>/seed<n>/new`，夹具直接调用该生产函数。保留两个子提交 `3f2eb070d52db10f20ea0b9224709ce068890a1b`、`cf3c3962214652f5b24814ba00199b1b4fdf74af`；新固定提交审查 `STATIC_REVIEW=PASS findings=0`。生产队列、结束与预算序列化夹具的 68 项定向测试通过、0.58 秒，资源守卫全零。实际控制器接手与下一次真实重试另记，当前仍未完成阶段 A。
 
 主树整合后的核心短测 `UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q` 退出 0，1644 项通过、6 项跳过、101 项慢测排除，187.69 秒；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6`。这是控制器与核心软件验证，不是新增仿真，也不是阶段成绩验收。
+
+### 首次真实退出与剩余清单竞态
+
+PP 旧席位于 07:46:44 EDT 结束，`RUN_SUMMARY total=70 accepted=69 running_elsewhere=0 missing=1 episodes_run=70`，`RUN_INCOMPLETE first=ood:VideoPlaceOrder_xhard1_17100000`，退出 6。控制器随后记录「旧上限日志与实际缺失集合不符」并退出 1；没有建立 PP 后继。其它活动工作进程继续，原日志及 `report_failed=1` 保留，不能把这次接续写成通过。
+
+主会话重新只读核对当前缺失集合与同一原日志、领取、本地结果和共享预算，守卫通过且账本字节不变：`LEGACY_EVIDENCE_NOW=PASS attempts=2 missing=1 budget_unchanged=1`，见 [真实失败与重核证据](records/controller-r4-failure.json)。源码先读剩余清单、后检查进程结束，推断其间最后一局被接受造成快照过期；停止瞬间的旧集合没有被输出，未宣称观察到其具体内容。使用生产 `_end` 在两步之间接受正常失败局的夹具可复现该问题。
+
+修订只在确认 worker 已结束后，再刷新该模型剩余清单，随后执行原严格核证与调度；不修改日志数字、结果、预算、模型或验收条件。子提交 `3d0a5e0b4319f8599f00845772bd20347bb0a096` 独立静态审查通过；PP 只接续原基础设施身份，SMVLA 已完成身份不再被空启动，真实失败计数保留。主树 `uv run --no-sync python -m pytest -q tests/test_continue_full_eval.py tests/pipeline/eval/test_budget_ledger.py` 退出 0，95 项通过、5.92 秒；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。新监督器接手与真实第三次重试仍另记。

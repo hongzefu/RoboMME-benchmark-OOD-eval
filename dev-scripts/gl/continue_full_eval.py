@@ -468,6 +468,8 @@ class Controller:
                 if self.alive(seat['session']):
                     busy.add(seat['model'])
                     continue
+                # 最后一局可能在本轮快照与死活检查之间刚结算；核证和派发须重新读接受标记。
+                remaining[seat['model']] = self.remaining(stage, seat['model'])
                 log = Path(seat['log']).read_text()
                 codes = re.findall(r'^EXIT_CODE=(\d+)$', log, re.M)
                 if self.job_state(seat) == 'EXPIRED':
