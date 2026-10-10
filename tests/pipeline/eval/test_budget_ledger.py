@@ -288,6 +288,28 @@ def _runner(tmp_path, world, budget_ledger, **kw):
     return F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), world, budget_ledger=budget_ledger, **kw)
 
 
+def test_explicit_retry_limit_preserves_history_and_caps(tmp_path):
+    """旧上限仍拒第三次；显式放行沿用原账本计数，第 21 次与总额度均拒绝。"""
+    bm = bl_mod()
+    path = tmp_path / "budget.jsonl"
+    led = bm.BudgetLedger(path, shared_infra_cap=19)
+    assert led.claim_retry(route="pp/new", key="k", interrupt="infra")
+    before = path.read_bytes()
+    assert not led.claim_retry(route="pp/new", key="k", interrupt="infra")
+    assert path.read_bytes() == before
+    for n in range(2, 20):
+        assert bm.BudgetLedger(path, shared_infra_cap=19).claim_retry(
+            route="pp/new", key="k", interrupt="infra", max_attempts=20, token=f"a{n + 1}")
+    assert not led.claim_retry(route="pp/new", key="k", interrupt="infra", max_attempts=20)
+    assert not led.claim_retry(route="pp/new", key="other", interrupt="infra", max_attempts=20)
+    assert path.read_bytes().startswith(before)
+    assert led.state().retries_of("infra") == 19
+    assert all(r["max_attempts"] == 20 for r in led.state().retries[1:])
+    assert led.report_lines()[0]
+    with pytest.raises(ValueError):
+        led.claim_retry(route="pp/new", key="k", interrupt="infra", max_attempts=21)
+
+
 def test_insufficient_budget_rejected_before_claim(tmp_path, capsys):
     """领取前先预约：名额已满即 RUN_BLOCKED reason=budget、退出 5；不写 attempt_start、不建领取文件、不建环境。"""
     bm = bl_mod()
@@ -406,6 +428,24 @@ def test_second_interrupt_exhausts_identity(tmp_path):
     assert F.run_rows(_runner(tmp_path, world, str(path)), [a]) == 6
     assert len(world.envs) == 2
     assert len(bm.BudgetLedger(path).state().retries) == 1
+
+
+def test_explicit_retry_limit_resumes_third_attempt(tmp_path):
+    """原身份已用两次基础设施尝试，提升后只跑第三次，不抹除旧预约与重试。"""
+    bm = bl_mod()
+    path = tmp_path / "budget.jsonl"
+    a = _ident()
+    world = F.World({(a["task"], a["builder_episode"]): [F.Plan(raise_at=1, raise_exc=lambda: RuntimeError("svulkan2"))]})
+    assert F.run_rows(_runner(tmp_path, world, str(path)), [a]) == 6
+    before = path.read_bytes()
+    resumed = _runner(tmp_path, F.World(), str(path), infra_retries=19)
+    assert F.run_rows(resumed, [a]) == 0
+    assert path.read_bytes().startswith(before)
+    rows = F.seat_results(tmp_path / "stage", LABEL)
+    assert [r["attempt"] for r in rows] == [1, 2, 3]
+    st = bm.BudgetLedger(path).state()
+    assert len(st.reserves) == len(st.commits) == 3
+    assert len(st.retries) == 2 and st.retries[-1]["max_attempts"] == 20
 
 
 def test_zero_retries_never_claims_retry(tmp_path):

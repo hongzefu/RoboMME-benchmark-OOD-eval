@@ -1,0 +1,228 @@
+{
+  "seat_results": 95,
+  "new_accepted": 1,
+  "infra_failures": 94,
+  "reset_meter": 96,
+  "failure_cells": [
+    {
+      "task": "BinFill",
+      "tier": "xhard1",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "BinFill",
+      "tier": "xhard2",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "StopCube",
+      "tier": "xhard1",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "StopCube",
+      "tier": "xhard2",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "StopCube",
+      "tier": "xhard3",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "StopCube",
+      "tier": "xhard4",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "StopCube",
+      "tier": "xhard5",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "PickXtimes",
+      "tier": "xhard1",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "PickXtimes",
+      "tier": "xhard2",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "PickXtimes",
+      "tier": "xhard3",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "SwingXtimes",
+      "tier": "xhard1",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "SwingXtimes",
+      "tier": "xhard2",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "SwingXtimes",
+      "tier": "xhard3",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "SwingXtimes",
+      "tier": "xhard4",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "SwingXtimes",
+      "tier": "xhard5",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "ButtonUnmask",
+      "tier": "xhard1",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "ButtonUnmask",
+      "tier": "xhard2",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "ButtonUnmask",
+      "tier": "xhard3",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "ButtonUnmask",
+      "tier": "xhard4",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "VideoUnmask",
+      "tier": "xhard1",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "VideoUnmask",
+      "tier": "xhard2",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "VideoUnmask",
+      "tier": "xhard3",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "VideoUnmask",
+      "tier": "xhard4",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    },
+    {
+      "task": "VideoUnmaskSwap",
+      "tier": "xhard1",
+      "identities": 3,
+      "attempts_per_identity": 2,
+      "attempts": 6
+    },
+    {
+      "task": "VideoUnmaskSwap",
+      "tier": "xhard2",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "ButtonUnmaskSwap",
+      "tier": "xhard1",
+      "identities": 3,
+      "attempts_per_identity": 2,
+      "attempts": 6
+    },
+    {
+      "task": "ButtonUnmaskSwap",
+      "tier": "xhard2",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "PickHighlight",
+      "tier": "xhard1",
+      "identities": 3,
+      "attempts_per_identity": 2,
+      "attempts": 6
+    },
+    {
+      "task": "PickHighlight",
+      "tier": "xhard2",
+      "identities": 2,
+      "attempts_per_identity": 2,
+      "attempts": 4
+    },
+    {
+      "task": "VideoRepick",
+      "tier": "xhard1",
+      "identities": 3,
+      "attempts_per_identity": 2,
+      "attempts": 6
+    },
+    {
+      "task": "VideoRepick",
+      "tier": "xhard2",
+      "identities": 1,
+      "attempts_per_identity": 2,
+      "attempts": 2
+    }
+  ],
+  "error": "RuntimeError: vk::PhysicalDevice::createDeviceUnique: ErrorInitializationFailed",
+  "source_commit": "a02a4dad039b326530068977f22a04f4a4a287eb",
+  "history_sha256": "f9d324db0f152d53d9f3f0127f33e59245fd80ebb740a3109e7c310e96910cc2"
+}

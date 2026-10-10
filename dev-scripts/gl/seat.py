@@ -58,6 +58,7 @@ import os
 import random
 import re
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -374,6 +375,8 @@ class AttemptLedger:
         if self.shared is None:
             return self.infra_retries_left() > 0
         kw = {"token": token} if token else {}
+        if int(self.infra_retry_budget or 0) > 1:
+            kw["max_attempts"] = 1 + int(self.infra_retry_budget)
         return bool(self.shared.claim_retry(route=self.route, key=key,
                                             interrupt=interrupt or self.retry_interrupt(key),
                                             seat=self.seat, policy=self.policy, **kw))
@@ -654,8 +657,8 @@ def entry_blockers(args) -> tuple[str, str] | None:
     vp = variant_problems(args, check_dirs=True)
     if vp:
         return "variant_pairing", "; ".join(vp)
-    if int(getattr(args, "infra_retries", 0) or 0) < 0:
-        return "args", "--infra-retries 须为非负整数"
+    if not 0 <= int(getattr(args, "infra_retries", 0) or 0) <= 19:
+        return "args", "--infra-retries 须为非负整数且不超过 19（每身份至多 20 次尝试）"
     return None
 
 
@@ -1232,6 +1235,144 @@ class SeatRunner:
         self._exit(code)
 
     # ── 一局 ────────────────────────────────────────────────────────────
+    def _archive_previous_attempt(self, policy, c: Claim, result_path: Path) -> None:
+        """在已取得领取的身份锁内保留上一失败尝试；拒绝不完整结果、身份冲突、链接及归档覆盖。"""
+        if c.attempt <= 1:
+            return
+        with self.queue.lock(c.ident):
+            if self.queue.state(c.ident).accepted is not None:
+                raise ValueError("身份已有 accepted")
+            claim = read_json(c.path)
+            if not claim or claim.get("token") != c.token or claim.get("ended"):
+                raise ValueError("当前领取失效")
+            root = self.out.absolute()
+            raw = result_path.parent.absolute()
+            if any(not re.fullmatch(r"[A-Za-z0-9._-]+", part) or part in (".", "..")
+                   for part in (self.label, c.key)):
+                raise ValueError("归档标签或身份键不是安全路径分量")
+            target = root / "attempts" / self.label / f"seed{self.policy_seed}" / c.key / f"a{c.attempt - 1}"
+            for path in (raw, target):
+                relative = path.relative_to(root)
+                if any(part in ("", ".", "..") for part in relative.parts):
+                    raise ValueError("归档路径越界")
+                cursor = root
+                if cursor.is_symlink():
+                    raise ValueError("产物根是符号链接")
+                for part in relative.parts:
+                    cursor = cursor / part
+                    if cursor.is_symlink():
+                        raise ValueError(f"归档路径含符号链接：{cursor}")
+            if target.exists():
+                raise ValueError(f"归档目标已存在：{target}")
+            if not raw.exists():
+                return
+            if not raw.is_dir():
+                raise ValueError("原始产物不是目录")
+            if raw.stat().st_uid != os.getuid():
+                raise ValueError("原始产物目录归属错误")
+            source_root = raw.stat(follow_symlinks=False)
+            def fingerprint(path):
+                digest = hashlib.sha256()
+                size = 0
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(fd, "rb") as fh:
+                    if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                        raise ValueError(f"归档源不是普通文件：{path}")
+                    for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                        size += len(chunk)
+                return size, digest.hexdigest()
+
+            def inventory():
+                current_root = raw.stat(follow_symlinks=False)
+                if raw.is_symlink() or (current_root.st_dev, current_root.st_ino) != \
+                        (source_root.st_dev, source_root.st_ino):
+                    raise ValueError("原始目录身份发生变化")
+                files, directories = [], []
+                for path in sorted(raw.rglob("*")):
+                    if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                        raise ValueError(f"原始产物含链接或特殊文件：{path}")
+                    if path.stat().st_uid != os.getuid():
+                        raise ValueError(f"原始产物归属错误：{path}")
+                    relative = str(path.relative_to(raw))
+                    if path.is_file():
+                        size, digest = fingerprint(path)
+                        files.append({"path": relative, "bytes": size, "sha256": digest})
+                    else:
+                        directories.append(relative)
+                return files, directories
+
+            files, directories = inventory()
+            old = read_json(result_path)
+            expected = {"key": c.key, "model": policy.model, "dataset": c.ident["dataset"],
+                        "task": c.ident["task"], "episode": int(c.ident["builder_episode"]),
+                        "policy_seed": self.policy_seed, "attempt": c.attempt - 1}
+            if not old or any(old.get(k) != v for k, v in expected.items()):
+                raise ValueError("上一尝试结果缺失或身份／尝试号不符")
+            mismatch = self.E.check_identity(old, c.ident, dataset=c.ident["dataset"])
+            if mismatch or old.get("infra") is not True:
+                raise ValueError(f"上一尝试不是同身份基础设施失败：{mismatch}")
+            digest = next(row["sha256"] for row in files if row["path"] == "result.json")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # 独占 mkdir 只保证命名空间预约；共享 ACL 不是权限沙箱，唯一写者仍由身份锁约定。
+            os.mkdir(target, 0o700)
+            container = target.stat(follow_symlinks=False)
+            content = target / "raw"
+            mapping = {"key": c.key, "dataset": c.ident["dataset"], "attempt": c.attempt - 1,
+                       "next_attempt": c.attempt, "source": str(raw), "archive": str(content),
+                       "result_sha256": digest, "files": files, "directories": directories,
+                       "container_mode": oct(stat.S_IMODE(container.st_mode))}
+            # 预约记录先落盘；失败或崩溃时容器及原目录均不删除，恢复须人工核对预约与内容。
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+            fd = os.open(target / "reservation.json", flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(dumps({**mapping, "state": "reserved", "owner": os.getuid(), "token": c.token}) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            current = target.stat(follow_symlinks=False)
+            if target.is_symlink() or current.st_uid != os.getuid() \
+                    or (current.st_dev, current.st_ino) != (container.st_dev, container.st_ino):
+                raise ValueError("新归档容器归属或身份改变")
+            entries = list(target.iterdir())
+            if len(entries) != 1 or entries[0].name != "reservation.json" or entries[0].is_symlink() \
+                    or content.exists() or content.is_symlink():
+                raise ValueError("新归档容器含非预期内容或内部目标冲突")
+            os.mkdir(content, 0o700)
+            content_root = content.stat(follow_symlinks=False)
+            for relative in directories:
+                os.mkdir(content / relative, 0o700)
+            for row in files:
+                destination = content / row["path"]
+                for parent in [destination.parent, *destination.parent.parents]:
+                    if parent == target.parent:
+                        break
+                    if parent.is_symlink() or not parent.is_dir() or parent.stat().st_uid != os.getuid():
+                        raise ValueError(f"归档目录归属或路径改变：{parent}")
+                src_fd = os.open(raw / row["path"], os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(src_fd, "rb") as source:
+                    if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                        raise ValueError("复制源不是普通文件")
+                    dst_fd = os.open(destination, flags, 0o600)
+                    with os.fdopen(dst_fd, "wb") as output:
+                        if os.fstat(output.fileno()).st_uid != os.getuid():
+                            raise ValueError("复制目标归属错误")
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            output.write(chunk)
+                        output.flush()
+                        os.fsync(output.fileno())
+                if fingerprint(destination) != (row["bytes"], row["sha256"]):
+                    raise ValueError(f"归档副本校验失败：{destination}")
+            if inventory() != (files, directories):
+                raise ValueError("复制期间原始目录清单或字节发生变化")
+            for path, original in ((target, container), (content, content_root)):
+                current = path.stat(follow_symlinks=False)
+                if path.is_symlink() or current.st_uid != os.getuid() or \
+                        (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+                    raise ValueError("复制期间归档目录身份发生变化")
+            append_result(self.seat_dir / "attempt-archives.jsonl", mapping)
+            print(f"ATTEMPT_ARCHIVE=PASS key={c.key} attempt={c.attempt - 1} "
+                  f"archive={content} result_sha256={digest} files={len(files)}", flush=True)
+
     def run_claim(self, policy, c: Claim) -> dict:
         """跑一次领取；返回本席位结果行。运行阻塞／额度不足抛 ``SeatStop``（已记录）。"""
         E = self.E
@@ -1254,6 +1395,14 @@ class SeatRunner:
                 "claim": str(c.path), "result": result_path, "seat": self.seat, "policy": self.args.policy,
                 "policy_seed": self.policy_seed, "host": socket.gethostname()}
         stop: SeatStop | None = None
+        try:
+            self._archive_previous_attempt(policy, c, Path(result_path))
+        except (ValueError, OSError) as e:
+            row = dict(base, status="error", run_blocked=True, infra=False,
+                       error=f"ATTEMPT_ARCHIVE_BLOCKED {type(e).__name__}: {e}"[:800])
+            self._end(c, attempt_id, row, void=True)
+            print(f"RUN_BLOCKED reason=attempt_archive key={c.key} attempt={c.attempt} detail={e}", flush=True)
+            raise SeatStop(EXIT_BLOCKED, "attempt_archive") from e
         try:
             res = E.run_episode(policy, ds, task, ep, self.out, expect=ident, attempt=c.attempt, ledger=meter,
                                 **self._episode_kw())
@@ -1283,9 +1432,18 @@ class SeatRunner:
                    exec_steps=d.get("exec_steps"), cap_hit=d.get("cap_hit"), reset_calls=d.get("reset_calls"),
                    budget_exhausted=bool(d.get("budget_exhausted")), run_blocked=bool(d.get("run_blocked")),
                    video=d.get("video"), video_error=d.get("video_error"), raw_dir=d.get("raw_dir"))
+        if row["budget_exhausted"]:
+            self._end(c, attempt_id, row, void=True)
+            print(f"RESET_BUDGET_EXHAUSTED policy={self.args.policy} seat={self.seat} key={c.key} "
+                  f"detail={row.get('error')}", flush=True)
+            raise SeatStop(EXIT_BUDGET, "reset_budget")
         self._end(c, attempt_id, row, void=False)
         self.episodes_done += 1
         self.progress("done")
+        if infra and d.get("infra_reason") == "env_build" and getattr(self.args, "stop_on_env_build_error", False):
+            print(f"RUN_BLOCKED reason=env_build policy={self.args.policy} seat={self.seat} key={c.key} "
+                  f"attempt={c.attempt} settled=1", flush=True)
+            raise SeatStop(EXIT_BLOCKED, "env_build")
         if stop is not None:  # pragma: no cover - 预留
             raise stop
         return row
@@ -1461,6 +1619,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seat", default=None, help="席位名（缺省 <主机>-<作业号>-gpu<CUDA_VISIBLE_DEVICES>，重起客户端不变）")
     p.add_argument("--infra-retries", type=int, default=DEFAULT_INFRA_RETRIES,
                    help="每身份基础设施重试次数（本轮 0：失败即停交用户）")
+    p.add_argument("--stop-on-env-build-error", action="store_true",
+                   help="环境构建基础设施失败时先完整结算本次尝试，再阻塞退出席位")
     p.add_argument("--reset-budget", type=int, default=None, help="可选：本席位账本的 reset 额度（不给只计量）")
     p.add_argument("--wall-s", type=float, default=None, help="单局墙钟（秒；缺省按模型取）")
     p.add_argument("--heartbeat-s", type=float, default=DEFAULT_HEARTBEAT_S, help="领取文件心跳间隔（秒）")

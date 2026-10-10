@@ -13,7 +13,7 @@
 * ``release``：该局未进入执行（如开局前被拒），轨迹名额退回；已实领的 reset 仍计入；
 * ``reset_claim``：新侧 ``EnvSession._claim`` 每次实际 build／reset 记一行（挂在某个 ``rid`` 下）；
 * ``retry_claim``：基础设施重试名额；``interrupt`` ∈ {``infra``，``expired``}，分别计数——``infra`` 占共享 infra
-  额度，``expired``（有 Slurm 到期证据）占到期续跑额度；同一 ``route``+``key`` 至多 ``V8_MAX_ATTEMPTS-1`` 次重试。
+  额度，``expired``（有 Slurm 到期证据）占到期续跑额度；同一 ``route``+``key`` 默认至多 1 次重试，显式上限至多 19 次。
 
 上限（六节）：轨迹 6366 硬上限；reset 计量 141430；Astra 局数 2 硬上限；共享 infra 重试 50、到期续跑 500（两者都在 6366
 之内，按预约另计轨迹）。
@@ -75,7 +75,7 @@ RESET_SOFT_CAP = RESET_CAP
 ASTRA_CAP = 2
 SHARED_INFRA_CAP = 50
 EXPIRED_CAP = 500
-#: 与 env_client.V8_MAX_ATTEMPTS 相同口径：每身份至多 2 次尝试（首试 + 1 次重试，infra 与 expired 合计）
+#: 默认每身份至多 2 次尝试（首试 + 1 次重试，infra 与 expired 合计）；显式调用可以提高至 20 次。
 V8_MAX_ATTEMPTS = 2
 INTERRUPTS = ("infra", "expired")
 ENV_LEDGER = "SGEVAL_BUDGET_LEDGER"
@@ -469,12 +469,15 @@ class BudgetLedger:
             self._check_resets(st.resets_if_claimed(rid))
             self._append({"kind": "reset_claim", "rid": rid, "what": what, **extra})
 
-    def claim_retry(self, *, route: str, key: str, interrupt: str, token: str | None = None, **extra) -> bool:
+    def claim_retry(self, *, route: str, key: str, interrupt: str, token: str | None = None,
+                    max_attempts: int = V8_MAX_ATTEMPTS, **extra) -> bool:
         """原子领一次基础设施重试名额；``infra`` 占共享 infra 额度、``expired`` 占到期续跑额度，同一 route+key 至多
-        ``V8_MAX_ATTEMPTS-1`` 次；给了 planned_first_tries 时另受首试保留额度与恢复合计约束。成功返回 True，任一不足
+        ``max_attempts-1`` 次（默认 2 次尝试，显式上限 20）；给了 planned_first_tries 时另受首试保留额度与恢复合计约束。成功返回 True，任一不足
         返回 False（不写行）。``token`` 已领过时直接返回 True、不写新行。"""
         if interrupt not in INTERRUPTS:
             raise ValueError(f"interrupt={interrupt!r} 不是 {INTERRUPTS} 之一")
+        if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or not 1 <= max_attempts <= 20:
+            raise ValueError("max_attempts 必须是 1 至 20 的整数")
         cap = self.shared_infra_cap if interrupt == "infra" else self.expired_cap
         with self._locked():
             st = self._load()
@@ -482,11 +485,12 @@ class BudgetLedger:
                 return True
             if st.retries_of(interrupt) >= cap:
                 return False
-            if st.retries_for(route, key) >= V8_MAX_ATTEMPTS - 1:
+            if st.retries_for(route, key) >= max_attempts - 1:
                 return False
             if self._recovery_block(st, recovery_in_use=len(st.retries)):
                 return False
-            row = {"kind": "retry_claim", "route": route, "key": key, "interrupt": interrupt}
+            row = {"kind": "retry_claim", "route": route, "key": key, "interrupt": interrupt,
+                   "max_attempts": max_attempts}
             if token:
                 row["token"] = token
             self._append({**row, **extra})

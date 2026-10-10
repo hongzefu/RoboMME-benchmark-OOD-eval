@@ -1,0 +1,18 @@
+{
+  "host": "gl1512.arc-ts.umich.edu",
+  "source_sha256": "1bcf3a1811f139317acf670a232411ae6ad4a0e522c3c68b526ffbbdfb732556",
+  "container_mode": "0o2770",
+  "files": [
+    {
+      "bytes": 16,
+      "path": "nested/payload.bin",
+      "sha256": "6864f89e94492e9c9817b8086200570026eadd837a624259e28ca355be79cbdb"
+    },
+    {
+      "bytes": 152,
+      "path": "result.json",
+      "sha256": "d4ff29e560eac74088b7ea92126112feea7543fb2f4dbbd6cbde3d7c5a0e5971"
+    }
+  ],
+  "verdict": "ARCHIVE_FS=PASS actual_function=1 copy_verified=1 source_preserved=1 conflict_rejected=1 reset=0 trajectory=0"
+}

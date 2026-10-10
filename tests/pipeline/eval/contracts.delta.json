@@ -1,5 +1,27 @@
 [
   {
+    "id": "C13-INFRA-RECOVERY",
+    "domain": "C13",
+    "source": ["dev-scripts/gl/seat.py", "dev-scripts/gl/budget_ledger.py"],
+    "symbol": "SeatRunner.run_claim／_archive_previous_attempt／BudgetLedger.claim_retry",
+    "oracle": "手写基础设施失败和正常终态的假环境，旧账本与原始文件字节，独立核对计数和归档目标",
+    "positive": "构建失败结算后按开关停止；显式二十次上限允许第三次恢复且保留历史；失败原始目录无覆盖归档",
+    "negative": "缺失或错误身份、尝试、链接、目标冲突均拒绝；正常已接受失败和超时不重跑；总额度不足与第二十一次拒绝",
+    "boundaries": "默认两次不变，显式至多二十；旧账本config/schema不变；归档失败释放预约、不启动仿真；纯CPU",
+    "nodeids": [
+      "tests/pipeline/eval/test_budget_ledger.py::test_explicit_retry_limit_preserves_history_and_caps",
+      "tests/pipeline/eval/test_budget_ledger.py::test_explicit_retry_limit_resumes_third_attempt",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_settles_then_stops",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_env_build_guard_keeps_normal_terminal_results",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_retry_preserves_previous_raw_bytes_and_history",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_retry_archive_rejects_unsafe_previous_raw",
+      "tests/pipeline/eval/test_seat_runner_e2e.py::test_archive_exclusive_container_failures_preserve_recovery_evidence"
+    ],
+    "resource": "cpu（不reset、不初始化GPU、不加载权重、不联网）",
+    "mutants": [],
+    "status": "verified"
+  },
+  {
     "id": "C13-STAGED-EVAL-TOOLS",
     "domain": "C13",
     "source": [
