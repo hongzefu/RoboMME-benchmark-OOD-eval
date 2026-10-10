@@ -1,0 +1,8 @@
+启动代码：673ed79（只新增启动留档，源码等于210183625a5c073eb9d3557f6792d0cb912eb5f3）。
+命令：UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q
+执行位置：/data/hongzefu/RoboMME-benchmark-OOD-eval
+退出状态：0
+以下为工具回执中的汇总原文摘录，不是完整日志：
+TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=6
+1242 passed, 6 skipped, 101 deselected, 30 warnings in 172.23s (0:02:52)
+审查摘要：基线核心短测通过；六项跳过均由资源守卫确认是未验证项。没有真实环境reset、GPU初始化、权重读取或非回环网络。

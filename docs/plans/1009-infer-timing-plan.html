@@ -1562,12 +1562,13 @@
 <h2>四 runbook（合并后主会话）</h2>
 <ol>
 <li><code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code>。</li>
-<li>本机冒烟（链路验证）：每变体 <code>--tasks VideoUnmask --dataset hard-verify --episodes 0:1 --seed 0 --out artifacts/infer-timing-smoke-&lt;model&gt;-&lt;on|off&gt;</code>，审计开 / 关各 1 局（<code>SGEVAL_AUDIT=1|0</code>）；Astra 先按 P2″ 报 2 局与 3 美元上限获批。detached tmux <code>it-&lt;model&gt;-&lt;on|off&gt;</code>，Monitor 过滤 <code>EXIT_CODE=|Traceback|EPISODE_DONE</code>。</li>
+<li>本机冒烟（链路验证）：每变体 <code>--tasks VideoUnmask --dataset hard-verify --episodes 0:1 --seed 0 --out artifacts/infer-timing-smoke-&lt;model&gt;-&lt;on|off&gt;</code>，审计开 / 关各 1 次（<code>SGEVAL_AUDIT=1|0</code>）；<strong>执行期用户纠偏：「本局的冒烟是什么意思？是要跑完吗？不用跑完。」因此每次只取得一个合法 ActionChunk、执行一步后停止，不跑完整局，不用于稳态速度结论。</strong>Astra 两次短冒烟与一次正式局共享已批准的 3 美元上限。detached tmux <code>it-&lt;model&gt;-&lt;on|off&gt;</code>，完成事件覆盖 <code>EXIT_CODE=|Traceback|EPISODE_DONE|EVAL_DONE</code>。完整工作预算已由用户一次性批准为最多 54 次 reset、27 次轨迹尝试：7 变体 × 1 任务 × 1 档 × 2 次冒烟 + 7 变体 × 1 任务 × 1 档 × 1 次正式 + 6 个 GL 变体 × 1 任务 × 1 档 × 至多 1 次基础设施重试；每次构建与 reset 各计一次，Astra 不追加局。</li>
 <li>本机产物经 S5 新增的 <code>eval_report.py --results &lt;out&gt;/rollouts/**/results.jsonl</code> 直读入口生成速度表（显式路径，不依赖 <code>**</code> 递归），填 <code>SPEED_SMOKE</code> 与 <code>SPEED_TABLE</code> 行。</li>
 <li>GL 正式一次：六个 GPU 变体各 1 局 VideoUnmask（<code>xhard0</code>，当前席位 ckpt，运行名 <code>infer-timing-gl-&lt;model&gt;</code>），经 48 h 占位 job 与 <code>dev-scripts/gl/run_eval_gl.sh</code>，产物搬回本机后同样走 <code>--results</code> 入口；Astra 那一局在本机（密钥不出本机），计入 3 美元上限。</li>
 <li>留档 <code>docs/validation/infer-timing-20261009/{launch.md,result.md,records/}</code>，按 A40 / RTX 6000 Ada 分组报数。</li>
 </ol>
 <h2>五 风险</h2>
+<div class="box"><strong>执行期用户更新（优先于本计划原 3 美元口径）</strong>：用户最新原话「astra同意做3次 放宽到5美元」。Astra 两次短冒烟与一次正式合计三次、共用一个累计 5 美元账本。补充子任务 S7：<code>servers/astra_cost_guard.py::build_parser / guard_round / write_state / main</code> 增加显式 <code>--max-episodes</code>，默认仍为 2，本轮传 3，上界为 3；对应测试只用 CPU 夹具。S4 在 <code>models/astra.py::_parse_cfg / guard_argv / CostGate.register_episode / check_episode_cap</code> 接入局数参数与状态校验；本轮 on／off／正式三次分别登记，不能利用相同身份去重绕过局数限制。费用上界 <code>HARD_CAP_USD=5</code> 不变，不改第三方，不重置旧账本；S7 与其它任务独立，独立审查后在 S4 合并前整合。验收 <code>ASTRA_EPISODE_LIMIT=PASS default=2 requested=3 hard_max=3</code>、<code>TEST_RESOURCE=PASS</code>；配置缺失、非法局数或守卫状态与请求不符须拒绝运行。</div>
 <ul>
 <li>PP <code>cursor == 1</code> 依赖第三方私有字段；gitlink 锁死，加断言测试（含 H=1 退化与首个 chunk 前 hold 步为 False 两个用例）。</li>
 <li>PP 非 fresh 步的 S2 归入下一 chunk：局末最后一段 S2 若后面没有 chunk，由 <code>timer.orphan()</code> 收进 <code>orphan_lang_ms</code>，不丢。</li>
