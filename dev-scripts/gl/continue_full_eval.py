@@ -297,10 +297,11 @@ class Controller:
     def blocked_pp_settled(self, seat, log, missing):
         """仅隔离本轮 A 的指定 PP 上下文溢出，原缺失身份与二十次失败都保留。"""
         spec = self.c['stages']['A']
+        codes = re.findall(r'^EXIT_CODE=(\d+)$', log, re.M)
         if (self.state['stage'] != 'A' or seat['stage'] != 'A' or seat['model'] != 'pp'
                 or spec['seed'] != 7 or missing != [PP_BLOCK_KEY]
                 or len(read_rows(spec['identities'])) != 70
-                or re.findall(r'^EXIT_CODE=(\d+)$', log, re.M) != ['6']):
+                or not codes or set(codes) != {'6'}):
             raise ValueError('PP 阻塞隔离不属于固定阶段、身份或退出')
         self._retry_settled(seat, log, missing, exhausted=True)
         out, route = Path(spec['out']), 'pp/seed7/new'

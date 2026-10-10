@@ -724,7 +724,8 @@ def blocked_pp_fixture(tmp_path, *, attempts=20, oracle_missing=True):
     result['error'] = 'RuntimeError: Server error: ' + module.PP_CONTEXT_ERROR
     raw.write_text(json.dumps(result))
     log_path = Path(seat['log'])
-    log_path.write_text(log_path.read_text().replace('total=1 ', 'total=70 ').replace('accepted=0 ', 'accepted=69 '))
+    log_path.write_text(log_path.read_text().replace('total=1 ', 'total=70 ').replace('accepted=0 ', 'accepted=69 ')
+                       + 'EXIT_CODE=6\n')
     sessions = set()
     original_command = c.command
     def command(argv, **kwargs):
@@ -805,7 +806,7 @@ def test_block_reload_allows_other_models_append_settled_budget_without_repeat(t
 
 
 @pytest.mark.parametrize('mutation', ['attempt19', 'wrong_error', 'unsettled_prior', 'wrong_key', 'wrong_stage',
-    'normal_terminal', 'missing_retry', 'extra_retry', 'live_prior', 'fake_identity', 'unknown_exit', 'over_cap'])
+    'normal_terminal', 'missing_retry', 'extra_retry', 'live_prior', 'fake_identity', 'unknown_exit', 'over_cap', 'mixed_exit'])
 def test_pp_block_scope_and_full_twenty_settlement_fail_closed(tmp_path, mutation):
     c, seat, raw, local, budget, queue, calls = blocked_pp_fixture(tmp_path, attempts=19 if mutation == 'attempt19' else 20)
     if mutation in ('wrong_error', 'normal_terminal', 'fake_identity'):
@@ -842,6 +843,9 @@ def test_pp_block_scope_and_full_twenty_settlement_fail_closed(tmp_path, mutatio
     elif mutation == 'unknown_exit':
         log = Path(seat['log'])
         log.write_text(log.read_text().replace('EXIT_CODE=6', 'EXIT_CODE=75'))
+    elif mutation == 'mixed_exit':
+        log = Path(seat['log'])
+        log.write_text(log.read_text().replace('EXIT_CODE=6', 'EXIT_CODE=74\nEXIT_CODE=6', 1))
     elif mutation == 'wrong_stage':
         seat['stage'] = 'B'
     with pytest.raises(ValueError):
