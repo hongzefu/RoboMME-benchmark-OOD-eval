@@ -21,7 +21,10 @@
       "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_unknown_is_error_and_does_not_stop_seat",
       "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_trace_location_fallbacks",
       "tests/pipeline/evalx/groundsg/test_groundsg_websocket.py::test_real_websocket_clients_match",
-      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_orig_side_keeps_official_video_and_counts"
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_orig_side_keeps_official_video_and_counts",
+      "tests/pipeline/evalx/groundsg/test_groundsg_official_adapter.py::test_raw_only_archive_switch_keeps_native_encoding_and_core_values",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context_seat.py::test_no_render_forces_groundsg_archive_off_after_extra_cfg",
+      "tests/pipeline/evalx/groundsg/test_groundsg_context_seat.py::test_groundsg_policy_play_passes_archive_boolean_and_cleans_scratch"
     ],
     "resource": "cpu",
     "mutants": [],

@@ -51,8 +51,9 @@ Per-episode peripheral recording (same code on both sides; the original side ``o
 * Qwen / MemER scratch directory ``<trace_dir>/{qwen,memer}-tmp/<dataset>/<episode_tag>/`` (in a temporary directory
   when there is no ``trace_dir``); at the end of the episode ``ep<id>_{QwenVL,MemER}_log.jsonl`` is archived next to
   the trace and the scratch directory deleted entirely (also on ``unknown`` / early exit on exceptions);
-* the overlay mp4 written by the official loop itself: both sides pass ``keep_official=True``, and after verification
-  it is moved into ``<episode dir>/official/``.
+* the overlay mp4 written by the official loop itself: both sides default to ``keep_official=True``, and after
+  verification it is moved into ``<episode dir>/official/``. New-side raw-only delivery disables this archive,
+  while the native temporary encoding and cleanup remain unchanged.
 
 Terminal status: official ``success`` / ``fail`` / ``timeout`` are kept unchanged; ``unknown`` (and other non-terminal
 values) record ``status="error"``, ``error="success_flag=<value>"`` without stopping the seat; exceptions raised by
@@ -74,7 +75,8 @@ Official overlay video retention (additions only):
   ``official_save_error``, and raw frames are kept. The return value additionally has ``official_videos``,
   ``official_source`` (``official`` / ``official-salvaged`` / ``partial`` / ``none``), ``official_save_error`` and the
   three C8 counts.
-* The new-side ``run_episode`` passes ``keep_official=True``; the trace is finalized per the shared contract: C6
+* The new-side ``run_episode`` passes ``groundsg_keep_official`` (default True); False marks
+  ``official_source=disabled`` and ``official_videos=[]``. The trace is finalized per the shared contract: C6
   identity adds ``attempt``, steps without observation use ``log_missing_step`` (C8), ``end`` writes
   ``steps_attempted`` / ``steps_observed`` / ``frames_recorded`` / ``omitted_timeout_frames``, ``terminal_reason``
   takes the terminal status (C3; the official raw value is recorded separately as ``success_flag``), and frameless
@@ -1257,7 +1259,10 @@ def error_kind_of(exc_name: str | None, status: str, infra: Any) -> str | None:
 
 def run_episode(session, identity: dict, conn_info: dict, recorder) -> dict:
     """Entry point called by the seat runner: one GroundSG (new side) episode. ``session`` is an already built
-    EnvSession."""
+    EnvSession. ``groundsg_keep_official`` defaults to True; False disables archived MP4 delivery only."""
+    keep_official = conn_info.get("groundsg_keep_official", True)
+    if not isinstance(keep_official, bool):
+        raise ValueError("groundsg_keep_official must be a boolean")
     ctx = conn_info.get("policy_context")
     if not isinstance(ctx, dict) or "evaluator" not in ctx:
         raise RuntimeError("groundsg needs the policy_context built by make_policy_context first")
@@ -1292,13 +1297,17 @@ def run_episode(session, identity: dict, conn_info: dict, recorder) -> dict:
     lang_log = open_language_log(tpath)
     try:
         res = run_official_episode(ctx, runner, tap, dataset=dataset, episode_tag=tag, scratch=scratch,
-                                   archive_dir=archive_dir, recorder=recorder, keep_official=True,
+                                   archive_dir=archive_dir, recorder=recorder, keep_official=keep_official,
                                    official_provenance=prov, language_log=lang_log)
     finally:
         if lang_log is not None:
             lang_log.close()
         if own_scratch:
             shutil.rmtree(scratch, ignore_errors=True)
+    if not keep_official:
+        # Keep native evaluation and temporary encoding; only disable archived MP4 delivery.
+        res.update(episode_counts(tap, res["success_flag"], res["exception"], max_steps))
+        res.update(official_source="disabled", official_videos=[], official_save_error=None)
     demo = (getattr(session, "timing", None) or {}).get("demo_frames", tap.demo_frames)
     if res.get("no_frame"):
         demo = 0  # C3: a frameless error episode records demo_frames as 0
@@ -1372,6 +1381,9 @@ class GroundSGPolicy(_servers.ServedPolicy):
         self.ctx: dict | None = None
         self.evaluators: dict[int, tuple[Any, Any]] = {}
         self.current_spec = None
+        self.keep_official = self.cfg.get("groundsg_keep_official", True)
+        if not isinstance(self.keep_official, bool):
+            raise ValueError("groundsg_keep_official must be a boolean")
 
     def load(self) -> None:
         S = _servers
@@ -1421,7 +1433,8 @@ class GroundSGPolicy(_servers.ServedPolicy):
         scratch = Path(tempfile.mkdtemp(prefix="groundsg-", dir=work or None))
         conn = self._conn_info(spec)
         conn.update(groundsg_variant=self.variant, policy_context=ctx, trace_dir=str(scratch),
-                    qwenvl_groundSG_adapter_path=self.qwenvl_adapter, memer_adapter_path=self.memer_adapter)
+                    qwenvl_groundSG_adapter_path=self.qwenvl_adapter, memer_adapter_path=self.memer_adapter,
+                    groundsg_keep_official=self.keep_official)
         try:
             res = run_episode(session, spec.identity(), conn, recorder)
         finally:
