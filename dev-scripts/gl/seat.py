@@ -933,7 +933,7 @@ class SeatRunner:
         self.route = policy_route(args)
         self.seat_dir = self.out / "seats" / self.label / f"seed{self.policy_seed}" / self.seat
         self.seat_dir.mkdir(parents=True, exist_ok=True)
-        self.progress_path = self.seat_dir / "progress.json"
+        self.progress_path = Path(getattr(args, "progress_file", None) or self.seat_dir / "progress.json")
         self.results_path = self.seat_dir / "seat-results.jsonl"
         self.policy_factory = policy_factory
         self.episode_kwargs = dict(episode_kwargs or {})
@@ -1654,6 +1654,9 @@ class SeatRunner:
                     while True:
                         progressed = False
                         for ident in rows:
+                            if self.claims_stopped():
+                                self.progress("finished", drained=True)
+                                return EXIT_INCOMPLETE
                             self.progress("claim")
                             c = self.claim(ident)
                             if isinstance(c, Claim):
@@ -1672,6 +1675,12 @@ class SeatRunner:
             return e.code
         finally:
             self._release_lease()
+
+    def claims_stopped(self) -> bool:
+        """截止只阻止下一次领取，已领取局保持原收尾行为。"""
+        stop = getattr(self.args, "stop_file", None)
+        deadline = getattr(self.args, "claim_deadline", None)
+        return bool((stop and Path(stop).exists()) or (deadline is not None and self.now() >= deadline))
 
     def close(self) -> None:
         self._stop_heartbeat()
@@ -1738,6 +1747,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", required=True, help="产物根（其下 rollouts/、queue/、seats/）")
     p.add_argument("--queue", default=None, help="动态队列目录（缺省 <out>/queue/<标签>/seed<n>/）")
     p.add_argument("--seat", default=None, help="席位名（缺省 <主机>-<作业号>-gpu<CUDA_VISIBLE_DEVICES>，重起客户端不变）")
+    p.add_argument("--claim-deadline", type=float, default=None, help="停止新领取的绝对时间秒")
+    p.add_argument("--stop-file", default=None, help="存在时停止领取，不中断已领取局")
+    p.add_argument("--progress-file", default=None, help="本片专属进度文件，禁止跨席共享")
     p.add_argument("--infra-retries", type=int, default=DEFAULT_INFRA_RETRIES,
                    help="每身份基础设施重试次数（本轮 0：失败即停交用户）")
     p.add_argument("--stop-on-env-build-error", action="store_true",
