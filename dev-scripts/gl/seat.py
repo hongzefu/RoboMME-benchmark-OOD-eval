@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import ctypes
 import fcntl
 import hashlib
 import importlib.util
@@ -1261,12 +1260,12 @@ class SeatRunner:
                     cursor = cursor / part
                     if cursor.is_symlink():
                         raise ValueError(f"归档路径含符号链接：{cursor}")
+            if target.exists():
+                raise ValueError(f"归档目标已存在：{target}")
             if not raw.exists():
                 return
             if not raw.is_dir():
                 raise ValueError("原始产物不是目录")
-            if target.exists():
-                raise ValueError(f"归档目标已存在：{target}")
             files = []
             for path in sorted(raw.rglob("*")):
                 if path.is_symlink() or not (path.is_file() or path.is_dir()):
@@ -1284,21 +1283,31 @@ class SeatRunner:
                 raise ValueError(f"上一尝试不是同身份基础设施失败：{mismatch}")
             digest = hashlib.sha256(result_path.read_bytes()).hexdigest()
             target.parent.mkdir(parents=True, exist_ok=True)
-            # Linux 的 RENAME_NOREPLACE 保证外部并发创建目标时也绝不覆盖。
-            rename = getattr(ctypes.CDLL(None, use_errno=True), "renameat2", None)
-            if rename is None:
-                raise ValueError("系统不支持不覆盖的原子目录归档")
-            rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
-            rename.restype = ctypes.c_int
-            if rename(-100, os.fsencode(raw), -100, os.fsencode(target), 1) != 0:
-                code = ctypes.get_errno()
-                raise OSError(code, os.strerror(code), str(target))
+            # NFS 支持原子的独占 mkdir；新建私有容器归本次持锁写者，拒绝复用半归档容器。
+            os.mkdir(target, 0o700)
+            container = target.stat(follow_symlinks=False)
+            content = target / "raw"
             mapping = {"key": c.key, "dataset": c.ident["dataset"], "attempt": c.attempt - 1,
-                       "next_attempt": c.attempt, "source": str(raw), "archive": str(target),
+                       "next_attempt": c.attempt, "source": str(raw), "archive": str(content),
                        "result_sha256": digest, "files": files}
+            # 预约记录先落盘；失败或崩溃时容器及原目录均不删除，恢复须人工核对预约与内容。
+            with (target / "reservation.json").open("x", encoding="utf-8") as fh:
+                fh.write(dumps({**mapping, "state": "reserved", "owner": os.getuid(), "token": c.token}) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            current = target.stat(follow_symlinks=False)
+            if target.is_symlink() or current.st_uid != os.getuid() or current.st_mode & 0o077 \
+                    or (current.st_dev, current.st_ino) != (container.st_dev, container.st_ino):
+                raise ValueError("新归档容器归属、权限或身份改变")
+            entries = list(target.iterdir())
+            if len(entries) != 1 or entries[0].name != "reservation.json" or entries[0].is_symlink() \
+                    or content.exists() or content.is_symlink():
+                raise ValueError("新归档容器含非预期内容或内部目标冲突")
+            # 同身份锁和独占容器保证唯一写者；rename 只移入这个刚创建且核验过的容器。
+            os.rename(raw, content)
             append_result(self.seat_dir / "attempt-archives.jsonl", mapping)
             print(f"ATTEMPT_ARCHIVE=PASS key={c.key} attempt={c.attempt - 1} "
-                  f"archive={target} result_sha256={digest} files={len(files)}", flush=True)
+                  f"archive={content} result_sha256={digest} files={len(files)}", flush=True)
 
     def run_claim(self, policy, c: Claim) -> dict:
         """跑一次领取；返回本席位结果行。运行阻塞／额度不足抛 ``SeatStop``（已记录）。"""

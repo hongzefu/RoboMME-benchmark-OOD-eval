@@ -101,7 +101,7 @@ def test_env_build_guard_keeps_normal_terminal_results(tmp_path, first):
     assert not (tmp_path / "stage" / "attempts").exists()
 
 
-def test_retry_preserves_previous_raw_bytes_and_history(tmp_path):
+def test_retry_preserves_previous_raw_bytes_and_history(tmp_path, monkeypatch):
     """第三次尝试前完整保留第二次失败字节，原结果账本前缀不变。"""
     ident = _ident()
     world = F.World({(ident["task"], ident["builder_episode"]):
@@ -116,17 +116,73 @@ def test_retry_preserves_previous_raw_bytes_and_history(tmp_path):
     history = first.results_path.read_bytes()
     result_history = raw.parent.parent / "results.jsonl"
     prefix = result_history.read_bytes()
+    # NFS 上 renameat2(RENAME_NOREPLACE) 会 EINVAL；本实现不得再调用该原语。
+    import ctypes
+    monkeypatch.setattr(ctypes, "CDLL", lambda *_a, **_k: (_ for _ in ()).throw(OSError(22, "NFS EINVAL")))
     second = F.make_runner(stage, LABEL, F.fake_seat_policy(), F.World(), infra_retries=19)
     assert F.run_rows(second, [ident]) == 0
-    archived = stage / "attempts" / LABEL / "seed7" / ident["key"] / "a2"
+    mappings = [json.loads(s) for s in (second.seat_dir / "attempt-archives.jsonl").read_text().splitlines()]
+    archived = Path(mappings[-1]["archive"])
     assert {str(p.relative_to(archived)): p.read_bytes() for p in archived.rglob("*") if p.is_file()} == snapshot
     assert second.results_path.read_bytes().startswith(history)
     assert result_history.read_bytes().startswith(prefix)
     assert json.loads((raw / "result.json").read_text())["attempt"] == 3
-    mappings = [json.loads(s) for s in (second.seat_dir / "attempt-archives.jsonl").read_text().splitlines()]
     import hashlib
     assert mappings[-1]["result_sha256"] == hashlib.sha256(snapshot["result.json"]).hexdigest()
     assert mappings[-1]["archive"] == str(archived)
+
+
+@pytest.mark.parametrize("failure", ["reservation_race", "inner_conflict", "move_failure", "mapping_failure"])
+def test_archive_exclusive_container_failures_preserve_recovery_evidence(tmp_path, monkeypatch, failure):
+    """独占预约竞争、内部目标冲突和半归档均保留原字节或移后字节，并明确拒绝自动恢复。"""
+    import os
+    ec = F.env_client()
+    ident = _ident()
+    stage = tmp_path / "stage"
+    world = F.World({(ident["task"], ident["builder_episode"]): [F.Plan(raise_at=1, raise_exc=_svulkan)]})
+    first = F.make_runner(stage, LABEL, F.fake_seat_policy(), world, infra_retries=0)
+    assert F.run_rows(first, [ident]) == 6
+    raw = Path(F.seat_results(stage, LABEL)[0]["result"]).parent
+    before = {str(p.relative_to(raw)): p.read_bytes() for p in raw.rglob("*") if p.is_file()}
+    container = stage / "attempts" / LABEL / "seed7" / ident["key"] / "a1"
+    original_mkdir, original_rename, original_append = os.mkdir, os.rename, ec.append_result
+
+    def mkdir(path, mode=0o777, *, dir_fd=None):
+        if Path(path) == container and failure == "reservation_race":
+            original_mkdir(path, mode)
+            raise FileExistsError("竞争者先占容器")
+        out = original_mkdir(path, mode, dir_fd=dir_fd)
+        if Path(path) == container and failure == "inner_conflict":
+            original_mkdir(container / "raw", 0o700)
+        return out
+
+    def rename(src, dest, **kw):
+        if Path(src) == raw and failure == "move_failure":
+            raise OSError("NFS 临时移动失败")
+        return original_rename(src, dest, **kw)
+
+    def append(path, row):
+        if Path(path).name == "attempt-archives.jsonl" and failure == "mapping_failure":
+            raise OSError("映射日志暂不可写")
+        return original_append(path, row)
+
+    monkeypatch.setattr(os, "mkdir", mkdir)
+    monkeypatch.setattr(os, "rename", rename)
+    monkeypatch.setattr(ec, "append_result", append)
+    second = F.make_runner(stage, LABEL, F.fake_seat_policy(), F.World(), infra_retries=19)
+    assert F.run_rows(second, [ident]) == 3
+    retained = container / "raw" if failure == "mapping_failure" else raw
+    assert {str(p.relative_to(retained)): p.read_bytes() for p in retained.rglob("*") if p.is_file()} == before
+    assert container.is_dir()
+    if failure != "reservation_race":
+        reservation = json.loads((container / "reservation.json").read_text())
+        assert reservation["key"] == ident["key"] and reservation["state"] == "reserved"
+        import hashlib
+        assert reservation["result_sha256"] == hashlib.sha256(before["result.json"]).hexdigest()
+    third_world = F.World()
+    third = F.make_runner(stage, LABEL, F.fake_seat_policy(), third_world, infra_retries=19)
+    assert F.run_rows(third, [ident]) == 3
+    assert third_world.envs == []
 
 
 @pytest.mark.parametrize("damage", ["missing", "identity", "attempt", "conflict", "symlink", "raw_symlink"])
