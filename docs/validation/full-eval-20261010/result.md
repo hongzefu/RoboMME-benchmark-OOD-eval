@@ -98,3 +98,9 @@ Qwen 的 1 任务（VideoPlaceOrder）× 1 档（xhard2）× 1 身份 × 1 次�
 私有控制器新增严格结算恢复与阻塞隔离：Qwen 只在真实 1800 秒退出证据、身份、领取、本地／共享结算及预算都通过且尝试小于 20 时恢复，同一 r3 入口和原时间限制；PP 只隔离本轮 A 的上述二十次耗尽身份，保存原缺失、不接受、不评分，空席可执行其它已批准 A 模型。阶段 A 的完整报告与进入 B 仍要求原全部身份通过，未放宽闸门。独立固定提交审查通过；主树控制器与预算定向 130 项通过、14.05 秒、退出 0，`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。主会话对两个真实 helper 只读重核均通过，预算字节不变，见 [核证快照](records/settled-failures-before-r6.json)。
 
 清单刷新夹具的通过不代表 NFS 上所有空跳过已消除：实跑 `fe-controller-A-smvla-2-47` 再次选到刚接受的 key，但 `RUN_PLAN claimable=0`、`RUN_SUMMARY episodes_run=0` 后退出，未新增 reset 或轨迹，随后进入新身份。具体读可见性原因未证，不宣称刷新已彻底解决此现象。
+
+## 第二批已接受产物的本机复制
+
+再次运行 `UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python artifacts/full-eval-20261010/copy-completed.py`，退出 0：`COMPLETED_COPY=PASS accepted=230 files=3717 reset=0 trajectory=0`。这 230 是原六模型 × 十四任务跨档轮转各五局 = 420 个 A 身份的已接受子集，包含此前已复制的 84 个，不是额外评估或新增 230 局。3717 文件、2007243540 字节覆盖每个已接受回合完整 raw、视频、接受标记和模型结果历史快照，源／目标逐文件 SHA256 与字节数一致，已有目标不同字节则拒绝覆盖，历史只在已核原前缀上追加。
+
+完整逐文件数据见 [第二批复制快照](records/completed-copy-second.json)，第一批快照仍保留。落点为本机 `artifacts/full-eval-20261010/seed7`，共享盘源没有删除。这里只证明已接受子集的完整复制，不代表 A 全部完成、视频全解码验收通过或已复制未接受的 PP／Qwen 故障 raw；脚本仍只筛选 A 白名单，不用于宣称 B／C／D 已搬运。
