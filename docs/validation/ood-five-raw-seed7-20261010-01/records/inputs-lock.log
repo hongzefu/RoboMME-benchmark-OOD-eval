@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/check_inputs.py", line 20, in <module>
+    assert not subprocess.check_output(['git', '-C', str(code), 'status', '--porcelain'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

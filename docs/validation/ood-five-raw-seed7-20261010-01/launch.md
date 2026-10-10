@@ -10,6 +10,10 @@
 
 实施起点 `2d2cc25e195294ebd9f980f1bbc864e894fb7dfe`，`dev` 工作区干净；此提交仅为规划锚点，尚非正式执行版本。正式运行前补记通过验证的冻结提交、配置和解释器指向，未完成冻结前不发布 `launch.ready`。
 
+正式执行副本固定为工程合并提交 `3b8d6be938002d00bf1b40e9b6a771844bdf4a15`（1.103），本机及 NFS 均位于本轮根下 `runtime-code/`，不跟随开发仓后续文档提交。五个子模块在快照中独立固定并逐文件比对 Git blob／LFS 身份；未初始化嵌套 benchmark。实际配置原字节 SHA256 为 `a289e5f3e19c6b6f4d86411155ccf99ea3f393b34b9042025a5f9d4a77c06e2f`，完整序列化配置与输入来源回执在 `records/run-config.json`、`records/inputs-lock.json`，不复制启动脚本或 YAML。所有席位的有效结束期限保守取 CPU 的 `2026-10-15 16:24:28 America/Detroit`，停止新领取为该期限前两小时；各 GPU 的实际 Slurm 时点另保留原回执。
+
+复制后的字节校验与来源核验：`INPUTS_LOCK=PASS files=2157 gitlinks=5 identities=800 tokenizer=1 client_origins=3 server_origins=5 gpu_initializations=0`，退出 0。SimpleMemVLA 锁定树中的普通文本被其 LFS 属性误转换成指针，先经逐文件 Git blob 比较证明原字节相等且无 LFS 指针对象，再仅给新快照设置 `filter.lfs.clean=cat` 等局部过滤配置；没有修改任何模型源码。NFS 将普通文件呈现为可执行模式，首次 Git 状态检查因模式位报脏；各新快照设 `core.filemode=false` 后仍逐文件核字节、固定提交与实际导入路径，未修改共享环境 `.pth` 或原工作副本。失败前置检查日志与复核通过日志均保留。
+
 环境核实：`sled-vail`，两张 RTX 6000 Ada，NFS、`/data/hongzefu` 与 SSH 配置存在；Great Lakes 主连接可用。当前五个 gitlink 与计划一致：benchmark `adf19363d4347af77f3fb6746c3a6b685991aba0`；mme-vla `ecf086c3be7c2223167d9bb2f6ef1f0a6e24353b`；SimpleMemVLA `c564c17d276d7294200122b286c21901a3bfb99f`；PonderPounce `723df35762bb641e1d520e4fa9359b98644adc21`；Astra `4c3fd6a8667e7a219e547fe1a533a4b9726fc6db`（不调用）。
 
 ## 身份与预算
@@ -29,6 +33,12 @@ UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python dev-scripts/gl/exp
 启动快照由独立控制实现工作树制作，经 `bash -n` 与 `git diff --check` 检查后以 rsync 同步；CPU 脚本 SHA256 `cbbae1d037e7abc6da693ee673d241481291797d1ea834fc95fcc9970fcfb1db`，GPU 守卫 SHA256 `81d1f448d260a170f2d5c67e44a59e1f011b08a7aca1f069c64765321ef3a10a`。提交后快照字节冻结；正式代码以最终 `launch.ready` 指定的验证提交与配置哈希为准。外部邮件是否实际投递尚未核实。
 
 本机根：`/data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01`；NFS 根：`/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01`。本轮尚未启动任何 tmux 会话。
+
+本机搬运采用唯一会话 `ev-ood-five-raw-mover-20261010-01`，载体仅放本轮 `artifacts/mover-run.sh`，通过 `pipefail`、`PYTHONUNBUFFERED`、`tee` 和 `EXIT_CODE` 保留退出证据；以下为确定命令，启动成功另记运行回执，不把本段当成已经启动：
+
+```bash
+/data/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/runtime-code/dev-scripts/gl/eval_video_mover.py --layout raw-ood --stage /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/gl --dest /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/gl --manifest /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/control/run-config.json --interval 30 --min-free-gib 50 --heartbeat-file /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/control/mover-heartbeat.json --error-file /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/control/mover-error.json --stop-file /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/control/STOP
+```
 
 ## 实施中补强与环境核对
 

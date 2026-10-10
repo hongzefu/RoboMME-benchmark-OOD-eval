@@ -30,6 +30,10 @@ UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python dev-scripts/gl/raw
 
 ## 真实运行与未验证项
 
+执行代码固定为 `3b8d6be938002d00bf1b40e9b6a771844bdf4a15`，本机及 NFS 独立快照不跟随开发仓文档更新。`EXEC_COPY=PASS commit=3b8d6be938002d00bf1b40e9b6a771844bdf4a15 gitlinks=5 files=2157`；NFS 逐文件字节、固定提交、身份 SHA、tokenizer 和真实包来源复核退出 0：`INPUTS_LOCK=PASS files=2157 gitlinks=5 identities=800 tokenizer=1 client_origins=3 server_origins=5 gpu_initializations=0`。配置原字节 SHA 为 `a289e5f3e19c6b6f4d86411155ccf99ea3f393b34b9042025a5f9d4a77c06e2f`，恢复配置用本目录 `records/run-config.json`。
+
+第一次 NFS 前置核验没有放行：复制字节已相等，但文件呈现为可执行模式，Git 状态检查报脏。仅在各新快照配置 `core.filemode=false`，继续保留逐文件 SHA 和固定提交检查；复核通过日志与失败日志都留在 records。SimpleMemVLA 的非指针文本触发 LFS 过滤伪差异同样经 Git blob 比较后只调整新副本 Git 配置，模型源码未变。
+
 资源登记为 `GL_ALLOCATION=PASS gpu_jobs=4 cpu_jobs=1 hours_each=120 resubmits=0`，原始 `scontrol` 记录和五份提交行在本轮 `control/allocation.txt`。这只证明资源申请被接纳，不证明五模型已经运行。
 
 真实冒烟为 5 模型 × 1 任务 VideoUnmask × 1 档 xhard1 × 1 局，包含于 5 模型 × 800 身份 = 4000 次首试；目前尚未启动。`RAW_SMOKE`、`FIRST_DISPATCH`、`AGENT_HANDOFF`、`RUN_BUDGET`、`OOD_RESULTS`、`RAW_DELIVERY` 与 `RUN_CLEANUP` 均待真实运行证据，禁止提前填入通过。
@@ -38,3 +42,7 @@ UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python dev-scripts/gl/raw
 
 1. 初始指令：「/data/hongzefu/RoboMME-benchmark-OOD-eval/docs/plans/1010-five-models-ood-raw-only-plan.html 开始实现 有问题问用户」。
 2. 守卫查询挂起的补强选择：「采用，同一批作业内追加独立守卫」。
+
+## 记录维护说明
+
+1.103 归档的 Slurm 文本末尾带一个空行，差异检查未正确阻断该次提交；本次仅去掉归档末尾空行，重新检查通过，原始 `artifacts/control/allocation.txt` 字节保留。工程测试结果与冻结执行源码不受此文档修正影响。
