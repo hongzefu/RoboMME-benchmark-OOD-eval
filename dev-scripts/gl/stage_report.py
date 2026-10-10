@@ -94,7 +94,15 @@ def verify_recovery(raw, root, row, ff, checker):
     recovery = raw / 'recovered-video'
     proof = object_json(recovery / 'recovery.json')
     render = object_json(recovery / 'render.json')
-    if proof['render'] != render or proof['model'] != row['model'] or proof['task_success'] != row['task_success']:
+    label = row['policy_label']
+    if label not in MODELS or proof['model'] != label:
+        raise ValueError('恢复目录模型标签不符')
+    if label.startswith('groundsg-'):
+        if row['model'] != 'groundsg' or row.get('policy_variant') != label.removeprefix('groundsg-'):
+            raise ValueError('恢复基础模型或变体不符')
+    elif row['model'] != label or row.get('policy_variant') not in (None, ''):
+        raise ValueError('恢复基础模型或变体不符')
+    if proof['render'] != render or proof['task_success'] != row['task_success']:
         raise ValueError('恢复模型、成功字段或渲染清单不符')
     if proof['result_sha256'] != checker.sha256_file(raw / 'result.json'):
         raise ValueError('恢复 result 指纹不符')

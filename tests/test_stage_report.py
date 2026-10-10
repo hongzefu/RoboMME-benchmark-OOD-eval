@@ -169,7 +169,7 @@ def recovery_fixture(root):
     raw = root / 'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'
     raw.mkdir(parents=True)
     row = {k: v for k, v in ident.items() if k != 'builder_episode'}
-    row.update(model='pp', policy_seed=7, attempt=1, status='success', task_success=1, max_steps=1800, strict_cap=True)
+    row.update(model='pp', policy_label='pp', policy_seed=7, attempt=1, status='success', task_success=1, max_steps=1800, strict_cap=True)
     (raw / 'result.json').write_text(json.dumps(row))
     trace_ident = {**ident, 'attempt': 1, 'policy_seed': 7}
     (raw / 'trace.jsonl').write_text(json.dumps({'kind': 'header', 'identity': trace_ident, 'policy_seed': 7}) + '\n' +
@@ -359,3 +359,30 @@ def test_legacy_trace_without_spec_uses_recorded_meta(tmp_path):
     del rows[0]['identity']['spec_sha256']
     (raw / 'trace.jsonl').write_text(''.join(json.dumps(v) + '\n' for v in rows))
     assert report.bind_trace(raw, row, checker)[2] == 'success'
+
+
+@pytest.mark.parametrize('variant', ['ground-sg-qwenvl', 'ground-sg-memer'])
+@pytest.mark.parametrize('damage', ['none', 'proof', 'base', 'variant'])
+def test_recovery_groundsg_label_binding(tmp_path, monkeypatch, variant, damage):
+    raw, row, checker, _ = recovery_fixture(tmp_path)
+    monkeypatch.setattr(checker, 'decoded_frames', lambda ff, path: 2)
+    row.update(model='groundsg', policy_label=f'groundsg-{variant}', policy_variant=variant)
+    (raw / 'result.json').write_text(json.dumps(row))
+    proof = report.object_json(raw / 'recovered-video/recovery.json')
+    proof.update(model=row['policy_label'], result_sha256=checker.sha256_file(raw / 'result.json'))
+    for stored in proof['original_files']:
+        if stored.endswith('/result.json'):
+            proof['original_files'][stored] = {'bytes': (raw / 'result.json').stat().st_size,
+                                               'sha256': proof['result_sha256']}
+    if damage == 'proof':
+        proof['model'] = 'groundsg-ground-sg-oracle'
+    elif damage == 'base':
+        row['model'] = 'pp'
+    elif damage == 'variant':
+        row['policy_variant'] = 'ground-sg-oracle'
+    (raw / 'recovered-video/recovery.json').write_text(json.dumps(proof))
+    if damage == 'none':
+        assert report.verify_recovery(raw, tmp_path, row, 'fake', checker)['status'] == 'pass'
+    else:
+        with pytest.raises(ValueError):
+            report.verify_recovery(raw, tmp_path, row, 'fake', checker)
