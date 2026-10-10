@@ -295,6 +295,84 @@ tmux new-session -d -s fe-A-memer-63431430 "set -o pipefail; cd $GLREPO && \
 <li><strong>预算与重试</strong>：领局前向阶段账本 <code>reserve</code>（超额 <code>RUN_BLOCKED</code> 退出 5、不建领取文件）；正常失败不重试；基础设施故障每身份最多 1 次重试名额；席位死亡留下的领取文件心跳超过 2 倍单局墙钟后可被回收，回收计一次尝试。</li>
 <li><strong>到期接替</strong>：job 到期四席同时被杀；主会话在 <code>squeue</code> 不再显示该 job 后提交接替 job，排到后同命令、同 <code>--seat</code>、只换 <code>--jobid</code> 重起，<code>recover_dangling</code> 先结算悬空尝试再领局。</li>
 </ol>
+<h3>空转分析（阶段 A 竖轴时间线）</h3>
+<p>队列<strong>不是</strong>预先固定的分片：席位逐局领取，所以同一队列内不会出现「某片先跑完、别的片还剩一堆」的空转。空转只剩三种来源，图中用颜色标出：① 换模型的加载间隙（关旧服务端、起新服务端、预热，每次约 5～15 min）；② 队列尾部不均衡（队列只剩最后几局时，先领完的席位要等；MemER 单局 15～50 min，最坏每席等约 1 局）；③ 主会话从看到 <code>GL_SEAT_DONE</code> 到起下一条 <code>srun</code> 的反应延迟（分钟级）。阶段边界不空转：某策略的 A 队列清空后席位直接进 B 队列（图底部）。占位 job 到期等待是另一类空转，与阶段无关，见 §四「到期接替」。</p>
+<figure>
+<svg viewBox="0 0 1000 640" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="阶段 A 四席位竖轴时间线">
+  <defs>
+    <pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#b4541a" stroke-width="2"/></pattern>
+  </defs>
+  <!-- 时间轴：y = 60 + h*52 (0..10 h) -->
+  <line x1="90" y1="60" x2="90" y2="590" stroke="#1b1b1b" stroke-width="2"/>
+  <g font-size="12" fill="#5a5a5a">
+    <text x="20" y="40" font-size="13" font-weight="700" fill="#1b1b1b">时间（小时，估）</text>
+    <text x="60" y="64" text-anchor="end">0</text><line x1="86" y1="60" x2="94" y2="60" stroke="#1b1b1b"/>
+    <text x="60" y="168" text-anchor="end">2</text><line x1="86" y1="164" x2="94" y2="164" stroke="#1b1b1b"/>
+    <text x="60" y="272" text-anchor="end">4</text><line x1="86" y1="268" x2="94" y2="268" stroke="#1b1b1b"/>
+    <text x="60" y="376" text-anchor="end">6</text><line x1="86" y1="372" x2="94" y2="372" stroke="#1b1b1b"/>
+    <text x="60" y="480" text-anchor="end">8</text><line x1="86" y1="476" x2="94" y2="476" stroke="#1b1b1b"/>
+    <text x="60" y="584" text-anchor="end">10</text><line x1="86" y1="580" x2="94" y2="580" stroke="#1b1b1b"/>
+  </g>
+  <!-- 列标题 -->
+  <g font-size="13" font-weight="700" text-anchor="middle">
+    <text x="210" y="40">席 1 · 63431430</text><text x="420" y="40">席 2 · 63431431</text><text x="630" y="40">席 3 · 63431432</text><text x="840" y="40">席 4 · 63431433</text>
+  </g>
+  <!-- 席 1：MemER 0→8.5 -->
+  <rect x="140" y="60" width="140" height="442" fill="#d9c2f0" stroke="#8a2be2"/>
+  <text x="210" y="280" font-size="13" text-anchor="middle">MemER 队列（70 局）</text>
+  <text x="210" y="298" font-size="11" text-anchor="middle">独占 0～4.6 h，之后四席共领</text>
+  <!-- 席 2：QwenVL 0→4.55，间隙，MemER 4.75→8.5 -->
+  <rect x="350" y="60" width="140" height="237" fill="#bcd4f3" stroke="#1f5fbf"/>
+  <text x="420" y="175" font-size="13" text-anchor="middle">QwenVL 队列（70 局）</text>
+  <text x="420" y="193" font-size="11" text-anchor="middle">独占 0～3.5 h，之后三席共领</text>
+  <rect x="350" y="297" width="140" height="10" fill="#f2b27a"/>
+  <rect x="350" y="307" width="140" height="195" fill="#d9c2f0" stroke="#8a2be2"/>
+  <text x="420" y="410" font-size="12" text-anchor="middle">并入 MemER 队列</text>
+  <!-- 席 3：SMVLA 0→2.6，间隙，FrameSamp 2.7→3.5，间隙，QwenVL 3.6→4.55，间隙，MemER 4.75→8.5 -->
+  <rect x="560" y="60" width="140" height="135" fill="#c6e3c6" stroke="#2a7a3b"/>
+  <text x="630" y="132" font-size="13" text-anchor="middle">SimpleMemVLA（70）</text>
+  <rect x="560" y="195" width="140" height="8" fill="#f2b27a"/>
+  <rect x="560" y="203" width="140" height="40" fill="#e3efd8" stroke="#2a7a3b"/>
+  <text x="630" y="228" font-size="12" text-anchor="middle">FrameSamp（70）</text>
+  <rect x="560" y="243" width="140" height="8" fill="#f2b27a"/>
+  <rect x="560" y="251" width="140" height="46" fill="#bcd4f3" stroke="#1f5fbf"/>
+  <text x="630" y="279" font-size="12" text-anchor="middle">并入 QwenVL</text>
+  <rect x="560" y="297" width="140" height="10" fill="#f2b27a"/>
+  <rect x="560" y="307" width="140" height="195" fill="#d9c2f0" stroke="#8a2be2"/>
+  <text x="630" y="410" font-size="12" text-anchor="middle">并入 MemER 队列</text>
+  <!-- 席 4：PP 0→2.4，间隙，Oracle 2.5→3.7，间隙，QwenVL 3.8→4.55，间隙，MemER -->
+  <rect x="770" y="60" width="140" height="125" fill="#f6e3b4" stroke="#b08900"/>
+  <text x="840" y="127" font-size="13" text-anchor="middle">PonderPounce（70）</text>
+  <rect x="770" y="185" width="140" height="8" fill="#f2b27a"/>
+  <rect x="770" y="193" width="140" height="62" fill="#fdf1cf" stroke="#b08900"/>
+  <text x="840" y="229" font-size="12" text-anchor="middle">Oracle（70）</text>
+  <rect x="770" y="255" width="140" height="8" fill="#f2b27a"/>
+  <rect x="770" y="263" width="140" height="34" fill="#bcd4f3" stroke="#1f5fbf"/>
+  <text x="840" y="285" font-size="12" text-anchor="middle">并入 QwenVL</text>
+  <rect x="770" y="297" width="140" height="10" fill="#f2b27a"/>
+  <rect x="770" y="307" width="140" height="195" fill="#d9c2f0" stroke="#8a2be2"/>
+  <text x="840" y="410" font-size="12" text-anchor="middle">并入 MemER 队列</text>
+  <!-- 尾部不均衡：8.5→9.0 三席斜线 -->
+  <rect x="350" y="502" width="140" height="26" fill="url(#hatch)" stroke="#b4541a"/>
+  <rect x="560" y="502" width="140" height="26" fill="url(#hatch)" stroke="#b4541a"/>
+  <rect x="770" y="502" width="140" height="26" fill="url(#hatch)" stroke="#b4541a"/>
+  <rect x="140" y="502" width="140" height="26" fill="#d9c2f0" stroke="#8a2be2"/>
+  <text x="210" y="519" font-size="11" text-anchor="middle">最后一局</text>
+  <!-- B 滚动起跑 -->
+  <line x1="120" y1="528" x2="930" y2="528" stroke="#2a7a3b" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="930" y="545" font-size="12" text-anchor="end" fill="#2a7a3b">≈ 9 h：A 的 MemER 清空 → 报告 A；席位已滚动进 B 队列（不等报告）</text>
+  <rect x="140" y="552" width="770" height="30" fill="#eaf1fb" stroke="#1f5fbf" stroke-dasharray="4 3"/>
+  <text x="525" y="572" font-size="12" text-anchor="middle">阶段 B：按同样顺序，MemER／QwenVL 先占席，短模型串在后，空席并入长队列</text>
+  <!-- 图例 -->
+  <g font-size="12">
+    <rect x="140" y="604" width="16" height="12" fill="#f2b27a"/><text x="162" y="615">换模型加载间隙（空转 ① ，每次 5～15 min）</text>
+    <rect x="470" y="604" width="16" height="12" fill="url(#hatch)" stroke="#b4541a"/><text x="492" y="615">队列尾部等待（空转 ②，≤ 1 局）</text>
+    <text x="760" y="615" fill="#5a5a5a">③ 起下一条 srun 的反应延迟并入 ①</text>
+  </g>
+</svg>
+<figcaption>图 2：阶段 A 四席位的竖轴时间线（按 1006-03 轮每局估时推算，MemER 取 17 min／局）。有颜色的大块都是在跑局；真正空转只有橙色间隙与斜线尾部，合计每席约 0.5～1.5 h。QwenVL 独占阶段只用一席，是因为其余三席当时在跑自己的短模型，并非闲置。</figcaption>
+</figure>
+<p>按此时间线，阶段 A 约 9 h（此前表里的 10～13 h 含更保守的 MemER 估时）；空转占比估 5～15%。想再压空转，可以让席 2 一开始就 <code>--order reverse</code> 跟席 1 同领 MemER、把 QwenVL 排到后面，但这样 QwenVL 会在尾部成为新的长尾，总墙钟差别不大，本计划不改。</p>
 <h3>Monitor</h3>
 <pre>
 ssh greatlakes "tail -n +1 -F $ROOT/logs/fe-A-memer-63431430.log" | stdbuf -oL tr '\r' '\n' \
