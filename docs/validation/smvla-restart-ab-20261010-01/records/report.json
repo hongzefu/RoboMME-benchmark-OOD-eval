@@ -1,0 +1,81 @@
+{
+  "code": "0c6f8a3a552876020611d4d654a41adb3accba65",
+  "task": "VideoRepick",
+  "tier": "xhard1",
+  "policy_seed": 7,
+  "groups": {
+    "persistent": {
+      "client_pids": [
+        "4003351"
+      ],
+      "server_pids": [
+        "4003370"
+      ],
+      "loads": 1,
+      "duration_s": 661.0,
+      "rows": [
+        {
+          "key": "VideoRepick_xhard1_16900101",
+          "task_success": 1,
+          "status": "success",
+          "exec_steps": 374,
+          "infra": false,
+          "reset_calls": 2,
+          "video_error": null
+        },
+        {
+          "key": "VideoRepick_xhard1_16900200",
+          "task_success": 0,
+          "status": "fail",
+          "exec_steps": 105,
+          "infra": false,
+          "reset_calls": 2,
+          "video_error": null
+        }
+      ],
+      "trajectory": 2,
+      "reset": 4,
+      "exit_code": 0
+    },
+    "restart": {
+      "client_pids": [
+        "3490673",
+        "3498007"
+      ],
+      "server_pids": [
+        "3490685",
+        "3498017"
+      ],
+      "loads": 2,
+      "duration_s": 1002.0,
+      "rows": [
+        {
+          "key": "VideoRepick_xhard1_16900101",
+          "task_success": 1,
+          "status": "success",
+          "exec_steps": 374,
+          "infra": false,
+          "reset_calls": 2,
+          "video_error": null
+        },
+        {
+          "key": "VideoRepick_xhard1_16900200",
+          "task_success": 0,
+          "status": "fail",
+          "exec_steps": 105,
+          "infra": false,
+          "reset_calls": 2,
+          "video_error": null
+        }
+      ],
+      "trajectory": 2,
+      "reset": 4,
+      "exit_code": 0
+    }
+  },
+  "verdicts": [
+    "SMVLA_PERSISTENT=PASS episodes=2 loads=1 infra=0",
+    "SMVLA_RESTART=PASS episodes=2 loads=2 infra=0",
+    "DIAG_BUDGET=PASS trajectory=4 reset=8 retry=0"
+  ]
+}
