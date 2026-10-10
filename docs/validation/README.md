@@ -4,7 +4,7 @@
 
 | 档案 | 目的 | 状态 |
 | --- | --- | --- |
-| [smvla-no-official-video-20261010-01](smvla-no-official-video-20261010-01/launch.md) | GL 常驻两局、跳过官方视频、保留原始记录的计时 | 已批准最小实测；2 次轨迹／4 次 reset、零重试 |
+| [smvla-no-official-video-20261010-01](smvla-no-official-video-20261010-01/result.md) | GL 常驻两局、跳过官方视频、保留原始记录的计时 | 两局93.9／56.0秒，收尾均值8.5秒；2 次轨迹／4 次 reset、零重试；四卡全量估算约4.65天 |
 | [ood-chunk-time-20261010](ood-chunk-time-20261010/result.md) | OOD 动作块、录像与单局占用时间拆分 | 只读 267 局、10706 块；无新增评估；一个 seed 常驻估算约 660.5 GPU·小时 |
 | [smvla-restart-ab-20261010-01](smvla-restart-ab-20261010-01/result.md) | GL 常驻与逐局启动各两局的最小对照 | 两组都通过：4 轨迹／8 reset／零 infra；常驻同 PID 一次加载，当前两局不需逐局重启 |
 | [full-eval-20261010](full-eval-20261010/result.md) | 六变体、十四任务、三模型种子的分阶段全量 OOD 评估 | 六变体 smoke／媒体／数组／预算核验通过，阶段 A 四席已起跑；正式阶段成绩待验证 |

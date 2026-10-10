@@ -1,0 +1,153 @@
+{
+  "code": "0c6f8a3a552876020611d4d654a41adb3accba65",
+  "job": 63431432,
+  "node": "gl1512",
+  "client_pids": [
+    "4097558"
+  ],
+  "server_pids": [
+    "4097568"
+  ],
+  "rows": [
+    {
+      "episode": 1,
+      "key": "VideoRepick_xhard1_16900101",
+      "steps": 374,
+      "chunks": 24,
+      "task_success": 1,
+      "status": "success",
+      "infra": false,
+      "reset_calls": 2,
+      "total_s": 93.87105941772461,
+      "episode_wall_s": 89.022,
+      "finalize_s": 4.64,
+      "steady_chunk_s": 2.1447629523809524,
+      "decision_total_s": 54.721385,
+      "baseline_total_s": 253.35385012626648,
+      "baseline_predicted_no_render_s": 93.667,
+      "baseline_steps": 374,
+      "baseline_task_success": 1,
+      "raw_codec": "av1-yuv444p",
+      "raw_videos": [
+        "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/smvla-no-official-video-20261010-01/output/rollouts/smvla/ood/seed7/raw/VideoRepick_ep1_xhard1/wrist.mkv",
+        "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/smvla-no-official-video-20261010-01/output/rollouts/smvla/ood/seed7/raw/VideoRepick_ep1_xhard1/front.mkv"
+      ]
+    },
+    {
+      "episode": 2,
+      "key": "VideoRepick_xhard1_16900200",
+      "steps": 105,
+      "chunks": 7,
+      "task_success": 0,
+      "status": "fail",
+      "infra": false,
+      "reset_calls": 2,
+      "total_s": 56.044496297836304,
+      "episode_wall_s": 43.468,
+      "finalize_s": 12.398,
+      "steady_chunk_s": 2.2452875,
+      "decision_total_s": 18.723736000000006,
+      "baseline_total_s": 150.5077087879181,
+      "baseline_predicted_no_render_s": 55.994,
+      "baseline_steps": 105,
+      "baseline_task_success": 0,
+      "raw_codec": "av1-yuv444p",
+      "raw_videos": [
+        "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/smvla-no-official-video-20261010-01/output/rollouts/smvla/ood/seed7/raw/VideoRepick_ep2_xhard1/wrist.mkv",
+        "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/smvla-no-official-video-20261010-01/output/rollouts/smvla/ood/seed7/raw/VideoRepick_ep2_xhard1/front.mkv"
+      ]
+    }
+  ],
+  "mean_total_s": 74.95777785778046,
+  "mean_finalize_s": 8.519,
+  "server_meta": {
+    "args": {
+      "attn_implementation": "sdpa",
+      "compute_dtype": "bfloat16",
+      "dataset_split": "test",
+      "episodes_per_task": 50,
+      "eval_temperature": 1.0,
+      "execute_horizon": 16,
+      "group_size": 1,
+      "log_file": null,
+      "max_steps": 1300,
+      "max_subtask_tokens": 64,
+      "num_denoising_steps": 10,
+      "num_gpus": 1,
+      "pipelined": false,
+      "pretrained_checkpoint": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/SimpleMemVLA/checkpoints/simplememvla_robomme",
+      "reset_timeout": 3600.0,
+      "step_timeout": 300.0,
+      "tasks": null,
+      "video_dir": null,
+      "video_max_per_task": 1,
+      "worker_timeout": 14400.0
+    },
+    "argv": [
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/full-eval-20261010/runtime-code-r3/src/robomme_ood_eval/servers/smvla_server.py",
+      "serve",
+      "--port",
+      "20820",
+      "--ckpt",
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/SimpleMemVLA/checkpoints/simplememvla_robomme",
+      "--warmup",
+      "--policy-seed",
+      "7",
+      "--metadata_out",
+      "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/smvla-no-official-video-20261010-01/servers/no-official-two/server-wrap-metadata-20820.json"
+    ],
+    "audit": true,
+    "ckpt": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/SimpleMemVLA/checkpoints/simplememvla_robomme",
+    "ckpt_config_sha256": "5c5c1506cd7b6120c2e82a456b509e0ff92ab02862f188b22317b5aa8719bc5d",
+    "ckpt_stats_sha256": "73563430bc89cb03836ccfedc159902b0fb603564bd6fd1b553940ce8badbae5",
+    "cublas_workspace_config": null,
+    "cuda_visible_devices": "0",
+    "det": false,
+    "episode_seed": 7,
+    "execute_horizon": 16,
+    "fixed_env": {
+      "OMP_NUM_THREADS": "1",
+      "PYTHONUTF8": "1",
+      "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+      "TOKENIZERS_PARALLELISM": "false"
+    },
+    "gpu_name": "NVIDIA A40",
+    "load_s": 227.073,
+    "pid": 4097568,
+    "policy": "smvla",
+    "policy_seed": 7,
+    "port": 20820,
+    "rng_ref": {
+      "numpy": "409638b8a8a852ca63583e652361691748028749b0160b53f3aec3cb754f95e0",
+      "torch_cpu": "daf9268b18e87b0267a6ad240c6093eb98fe6f03872986bd31a497ba5ea2371a",
+      "torch_cuda": "76108f84396dc2d72ce275fdb0e0ef37b229b2898bf5a31d576fea11a766a42b"
+    },
+    "startup_s": 236.974,
+    "submodule_commit": "c564c17d276d7294200122b286c21901a3bfb99f",
+    "versions": {
+      "numpy": "1.26.4",
+      "python": "3.10.19",
+      "torch": "2.4.1+cu121",
+      "torch_cuda": "12.1",
+      "transformers": "5.13.1"
+    },
+    "warmup": {
+      "infer_ms": 3152.15,
+      "rng": {
+        "numpy": "409638b8a8a852ca63583e652361691748028749b0160b53f3aec3cb754f95e0",
+        "torch_cpu": "daf9268b18e87b0267a6ad240c6093eb98fe6f03872986bd31a497ba5ea2371a",
+        "torch_cuda": "76108f84396dc2d72ce275fdb0e0ef37b229b2898bf5a31d576fea11a766a42b"
+      },
+      "rng_consumed_by_warmup": true,
+      "rng_restored": true,
+      "warmup_s": 3.154
+    }
+  },
+  "budget_counts": {
+    "config": 1,
+    "reserve": 2,
+    "reset_claim": 4,
+    "commit": 2
+  },
+  "verdict": "NO_OFFICIAL_DIAG=PASS episodes=2 loads=1 trajectory=2 reset=4 infra=0 retry=0 official_videos=0 raw_videos=4"
+}
