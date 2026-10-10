@@ -184,3 +184,15 @@ def test_guardian_step_does_not_hide_worker_first_step(tmp_path,monkeypatch):
     ack=C.read(tmp_path/'control/first_dispatch.json')
     assert ack['step_id']=='101.2' and ack['first_step']==1 and ack['identity_key']==C.identity('qwenvl',row)
     a['log'].close()
+
+
+def test_controller_exception_keeps_existing_step_process_alive(tmp_path,monkeypatch):
+    controller=C.Controller(config(tmp_path))
+    child=C.subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],start_new_session=True)
+    controller.active={'fixture':{'process':child}}
+    def broken(): raise RuntimeError('fixture controller failure')
+    monkeypatch.setattr(controller,'scan',broken)
+    try:
+        with pytest.raises(RuntimeError,match='fixture'): controller.run()
+        assert child.poll() is None and not (tmp_path/'control/STOP').exists()
+    finally: child.terminate(); child.wait(timeout=5)
