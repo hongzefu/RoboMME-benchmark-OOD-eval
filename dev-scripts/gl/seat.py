@@ -281,6 +281,8 @@ class AttemptLedger:
         self.ended: dict[str, dict] = {}
         self.accepted: dict[str, str] = {}
         self._lock = threading.Lock()
+        self._progress_lock = threading.Lock()
+        self._last_progress: dict | None = None
         for row in read_results(self.path):
             self._apply(row)
 
@@ -968,13 +970,15 @@ class SeatRunner:
     def progress(self, phase: str, **extra) -> None:
         if phase not in PHASES:
             raise ValueError(f"phase={phase!r} 不是 {PHASES} 之一")
-        cur = self._current
-        doc = {"pid": os.getpid(), "host": socket.gethostname(), "seat": self.seat, "policy": self.args.policy,
-               "label": self.label, "policy_seed": self.policy_seed, "phase": phase,
-               "key": cur.key if cur else None, "dataset": cur.ident["dataset"] if cur else None,
-               "attempt_no": cur.attempt if cur else None, "episodes_done": self.episodes_done, "t": time.time(),
-               **extra}
-        write_json_atomic(self.progress_path, doc)
+        with self._progress_lock:
+            cur = self._current
+            doc = {"pid": os.getpid(), "host": socket.gethostname(), "seat": self.seat, "policy": self.args.policy,
+                   "label": self.label, "policy_seed": self.policy_seed, "phase": phase,
+                   "key": cur.key if cur else None, "dataset": cur.ident["dataset"] if cur else None,
+                   "attempt_no": cur.attempt if cur else None, "episodes_done": self.episodes_done, "t": time.time(),
+                   **extra}
+            self._last_progress = doc
+            write_json_atomic(self.progress_path, doc)
 
     # ── 模型 ────────────────────────────────────────────────────────────
     def policy_cfg(self) -> dict:
@@ -1197,6 +1201,12 @@ class SeatRunner:
             if cur is not None:
                 with contextlib.suppress(Exception):
                     self.queue.heartbeat(cur.path)
+        if getattr(self.args, "progress_file", None):
+            # 阶段更新与心跳同锁：心跳只能刷新当前版本，不能把旧phase/key覆盖回去。
+            with self._progress_lock:
+                if self._last_progress is not None:
+                    self._last_progress = {**self._last_progress, "t": time.time()}
+                    write_json_atomic(self.progress_path, self._last_progress)
 
     def _start_heartbeat(self) -> None:
         if self._hb_thread is None:

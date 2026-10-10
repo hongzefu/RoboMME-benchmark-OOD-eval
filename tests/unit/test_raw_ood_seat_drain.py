@@ -29,3 +29,22 @@ def test_watchdog_explicit_path_ignores_other_seat(tmp_path):
     cmd=f'PROGRESS_FILE={explicit}; OUT={tmp_path}; POLICY_SEED=7\n'+func+'\nnewest_progress same\n'
     p=subprocess.run(['bash','-c',cmd],capture_output=True,text=True)
     assert p.returncode==0 and p.stdout.strip()=='100'
+
+
+def test_exclusive_heartbeat_keeps_latest_phase_and_identity(tmp_path):
+    import sys, threading, json
+    spec=importlib.util.spec_from_file_location('raw_progress_seat',HERE/'seat.py')
+    seat=importlib.util.module_from_spec(spec); sys.modules[spec.name]=seat; spec.loader.exec_module(seat)
+    runner=seat.SeatRunner.__new__(seat.SeatRunner)
+    runner.args=types.SimpleNamespace(progress_file=str(tmp_path/'progress.json'),policy='smvla')
+    runner._lock=threading.Lock(); runner._progress_lock=threading.Lock(); runner._last_progress=None
+    runner._current=None; runner.progress_path=tmp_path/'progress.json'
+    runner.seat='s'; runner.label='smvla'; runner.policy_seed=7; runner.episodes_done=0
+    runner.progress('context_load'); runner.heartbeat_once()
+    runner._current=types.SimpleNamespace(key='real-key',ident={'dataset':'ood'},attempt=1)
+    runner.queue=types.SimpleNamespace(heartbeat=lambda _:None); runner._current.path=tmp_path/'claim'
+    runner.progress('episode'); runner.heartbeat_once()
+    doc=json.loads(runner.progress_path.read_text())
+    assert doc['phase']=='episode' and doc['key']=='real-key' and doc['pid']>0
+    runner._current=None; runner.progress('done'); runner.heartbeat_once()
+    assert json.loads(runner.progress_path.read_text())['phase']=='done'
