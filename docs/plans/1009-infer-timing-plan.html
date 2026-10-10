@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<div class="meta">RoboMME-benchmark-OOD-eval · 2026-10-09 第三稿（两端都测、每 ActionChunk 一条；七面板时序图由 fable 绘制并修订九版；六段代码改动方案由 opus 子代理各写一份并经十二轮逐模型 sonnet 审查收敛） · 代码锚点 <code>dev @ d22e323</code>（1.45）· 只规划不实施：本文件入库 = 计划获批；代码改动另需用户在完整计划呈现后不加修改地说「开工」</div>
+<div class="meta">RoboMME-benchmark-OOD-eval · 2026-10-09 第四稿（纳入 Codex 静态审计 12 条与用户裁决：本机冒烟验链路、GL 正式各跑一次 VideoUnmask、Astra 本机 ≤3 美元、timing.py 进公开清单；流程图按七子代理三波派发重画） · 代码锚点 <code>dev @ d22e323</code>（1.45）· 只规划不实施：本文件入库 = 计划获批；代码改动另需用户在完整计划呈现后不加修改地说「开工」</div>
 <div class="box">
 <p><strong>引言块</strong>。本计划只规划不实施；<code>ExitPlanMode</code> 批准 = 批准计划内容并授权把它渲染成 <code>docs/plans/1009-infer-timing-plan.html</code>（含两张 opus 画的内联 SVG：时序图、流程图）并提交；<strong>代码改动另需用户在完整计划呈现后不加修改地说「开工」</strong>（AGENTS.md 第 2 条）。代码锚点 <code>dev @ d22e323</code>（1.45），工作副本 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>，commit 体例 <code>1.46 …</code> 起递增（当前 HEAD <code>1.45</code>），<code>sub/&lt;编号&gt;:</code> 为子代理前缀。第三方依赖锚点：五个子模块 gitlink 不动（第 24 条），<strong>本计划零第三方改动</strong>。用户原话（2026-10-09）：「出一份测速改造计划 进 plan mode html 能否只在 simulation 的这一侧去计时一次就是每次收到一个 ActionChunk 的时间 以此为准？」「然后服务器这里和客户端是否都可以测速。评估一下改动的到底有多大」「画出时序图来。然后画出流程图来这个让我可视化用 HTML」。</p>
 </div>
@@ -688,6 +688,8 @@
 <li>Astra：每个 chunk 顺序是监视器（有 subgoal 且非 continue_last）→ 可选 <code>review_second_button</code> → 规划器（仅 subgoal 为空或 replan 信号；远程 API，含 <code>SEND_INTERVAL_S=20</code> 发送间隔与退避）→ <code>client.infer</code>（每个 chunk）。三者由本仓代理用 <code>perf_counter</code> 自计 ms 归入该 chunk 的 <code>lang_ms</code>（第三方 <code>seconds</code> 只作交叉核对，它不含拼图与 prompt 构造、系统性偏小）；报表按 <code>has_planner</code> / <code>has_review</code> 分层统计，避免双峰混报。</li>
 <li>统计分「首次 / 第 2、3 次 / 稳态」报 mean、p50、p95，按 GPU 型号分组，A40 与 RTX 6000 Ada 不混比。<code>chunks[]</code> 条数 = 该局 decision 数（FrameSamp / GroundSG / Astra 为 <code>ceil(steps/16)</code>，SimpleMemVLA 为 infer 成功次数（step 出错局比 <code>ceil(steps/16)</code> 多 1），PP 为 <code>n_s1_fires</code>；GroundSG memer 无历史抛错的 <code>status=error</code> 局、以及 Astra 被第三方 <code>episode</code> 吞异常而提前结束的局，均不参与该等式），验收 <code>CHUNK_TIMING</code> 的 <code>decisions=</code> 必须等于它。</li>
 <li><code>trace.jsonl</code> 行 schema 冻结；新字段只进 <code>result.json</code> / <code>results.jsonl</code>（<code>events.jsonl</code> 不加事件）；<code>SGEVAL_AUDIT=0</code> 时服务端回复与第三方逐字节相同（新字段只进审计块）；零第三方、零受保护目录、零 <code>pyproject</code> 改动。用户原话（2026-10-09）：「两个都要测」「HTML第一部分只分两节这个图加上和要改动的内容总览」「使用SubAgent来再次检查不要自己查」。</li>
+<li><strong>实跑安排（用户 2026-10-09 裁决：「timing.py 进公开清单同意 在gl上所有模型都测一次VideoUnmask astra也是 限制3美元 本机冒烟测试」）</strong>：本机冒烟只验证测速链路（每变体 1 任务 × 1 档 × 2 局：审计开 / 关各 1）；正式速度数字在 GL 上每个变体跑 VideoUnmask 一次（1 任务 × 1 档 × 1 局，档 <code>xhard0</code>，权重沿用各模型当前 GL 席位 ckpt，运行名 <code>infer-timing-gl-&lt;model&gt;</code>，基础设施失败重试 1 次）；Astra 密钥只在本机（P2″），其正式一次在本机跑，美元上限 <strong>3</strong>；A40 与 RTX 6000 Ada 分组报数不混比。<code>timing.py</code> 进公开清单由 S1 一并做。</li>
+<li><strong>样本与异常口径（主会话代定）</strong>：所有局都记 <code>chunks[]</code>；报表稳态只纳入 <code>status ∈ {success, failure}</code> 的正常终局，<code>infra</code> 失败与超时局单列；同一身份取 <code>results.jsonl</code> 最新；PP 重连局整局排除；Astra 新增 <code>action_decisions</code> 作 chunk 数、不改历史 <code>decisions</code>；S6 的协议错误记 <code>infra=True, infra_reason=server_protocol</code>，可按既有规则重试一次，非 dict 回复同样抛；<code>SPEED_TABLE=FAIL</code> 只打印不非零退出；未知 GPU 单独成组，无原始 chunks 时分位数标 <code>approx</code>；守恒与报表 PASS 必须同时满足 <code>violations==0、missing_fields==0、checked==expected</code>。</li>
 </ol>
 <h2>二、要改什么（总览）</h2>
 <table>
@@ -745,7 +747,7 @@
 </tr>
 <tr>
 <td>Astra（VLA 服务端经 S2 包装器 <code>--sgeval-serve-root</code> 启动，<code>server_infer_ms</code> 取审计块）</td>
-<td><code>models/astra.py::run_one</code> 已有的 <code>TracedMonitor / TracedPlanner / TracedClient</code> 上加打点，共用 <code>TraceContext.timer</code>：该 chunk 内任一代理首次调用 <code>begin_chunk</code>（首个 chunk 是规划器、常规 chunk 是监视器、无语言调用的 chunk 是 <code>client.infer</code>），<code>TracedClient.infer</code> 返回 <code>close</code>，异常 <code>abort_chunk</code> 清桶（约 +78 行；含 <code>SEND_INTERVAL_S=20</code> 发送间隔，报表按 <code>has_planner / has_review</code> 分层）；<code>TracedClient.infer</code> 只包内层 infer 得 <code>action_rtt_ms</code></td>
+<td><code>models/astra.py::run_one</code> 已有的 <code>TracedMonitor / TracedPlanner / TracedClient</code> 上加打点，共用 <code>TraceContext.timer</code>：该 chunk 内任一代理首次调用 <code>begin_chunk</code>（首个 chunk 是规划器、常规 chunk 是监视器、无语言调用的 chunk 是 <code>client.infer</code>），<code>TracedClient.infer</code> 返回 <code>close</code>，异常 <code>abort_chunk</code> 清桶（约 +84 行；含 <code>SEND_INTERVAL_S=20</code> 发送间隔，报表按 <code>has_planner / has_review</code> 分层）；<code>TracedClient.infer</code> 只包内层 infer 得 <code>action_rtt_ms</code></td>
 <td>同 FrameSamp（同一包装器）</td>
 <td>代理用 <code>perf_counter</code> 自计 planner / monitor / review 的 ms（kind 同名）归入 <code>lang_ms</code>；第三方 <code>runner.py</code> 的 <code>seconds</code> 由 <code>_finish_one</code> 读 <code>decisions.jsonl</code> 作交叉核对（只检代理 ms ≥ 第三方 seconds）</td>
 <td>评估端新增、其余汇总</td>
@@ -773,7 +775,7 @@
 </tr>
 </tbody>
 </table>
-<p>规模：约 580 行（助手 120、SimpleMemVLA 两端 60、FrameSamp 与 mme-vla 包装器 45、GroundSG 约 90、PonderPounce 两端 105、Astra 78、报表约 80，合计 578，以上为各方案子代理估算）加 8 个测试文件（含 S6）；S6 / S1 / S2 / S2b / S3 / S4 / S5 七个 opus worktree 子代理按 S6→S1→S2→S2b→S3→S4→S5 顺序 <code>--no-ff</code> 合并，每次合并前 sonnet 审查；验收判定行 <code>TIMING_HELPER</code>、<code>SPEED_TABLE_TEST</code>、<code>CHUNK_TIMING×7</code>（含 GroundSG 三变体）、<code>LANG_SPLIT×5</code>（framesamp 与 groundsg-oracle 无语言段）、<code>WALL_DECOMP×7</code>、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code>、<code>TRACE_SCHEMA</code>、<code>ADD_BUFFER_GUARD</code>、核心短测、<code>SPEED_TABLE</code>（报表产出）、本机 <code>SPEED_SMOKE×7</code>（每模型变体 1 任务 × 1 档 × 1 局；Astra 先批局数与费用）。逐模型的代码层面改动方案由五个 opus 子代理各自写出（用户原话 2026-10-09：「对于每个模型的代码层面的修改使用一个opus来改」），共享助手与报表另一个 opus，全文原样收录在第二部分；分配表、闸门、runbook 同在第二部分。写方案时顺带发现 FrameSamp 客户端等 <code>add_buffer</code> 完成的循环从不重读回复、存在静默死循环风险，已在第二部分「八 附带发现」单独成节并列为独立子任务 S6，不混进测速改动。</p>
+<p>规模：约 585 行（助手 120、SimpleMemVLA 两端 60、FrameSamp 与 mme-vla 包装器 45、GroundSG 约 90、PonderPounce 两端 105、Astra 84、报表约 80，合计 584，以上为各方案子代理估算）加 8 个测试文件（含 S6）；S6 / S1 / S2 / S2b / S3 / S4 / S5 七个 opus worktree 子代理按 S6→S1→S2→S2b→S3→S4→S5 顺序 <code>--no-ff</code> 合并，每次合并前 sonnet 审查；验收判定行 <code>TIMING_HELPER</code>、<code>SPEED_TABLE_TEST</code>、<code>CHUNK_TIMING×7</code>（含 GroundSG 三变体）、<code>LANG_SPLIT×5</code>（framesamp 与 groundsg-oracle 无语言段）、<code>WALL_DECOMP×7</code>、<code>PP_CHUNK_FRESH</code>、<code>OBS_EQ</code>、<code>TRACE_SCHEMA</code>、<code>ADD_BUFFER_GUARD</code>、核心短测、<code>SPEED_TABLE</code>（报表产出）、本机 <code>SPEED_SMOKE×7</code>（每模型变体 1 任务 × 1 档 × 1 局；Astra 先批局数与费用）。逐模型的代码层面改动方案由五个 opus 子代理各自写出（用户原话 2026-10-09：「对于每个模型的代码层面的修改使用一个opus来改」），共享助手与报表另一个 opus，全文原样收录在第二部分；分配表、闸门、runbook 同在第二部分。写方案时顺带发现 FrameSamp 客户端等 <code>add_buffer</code> 完成的循环从不重读回复、存在静默死循环风险，已在第二部分「八 附带发现」单独成节并列为独立子任务 S6，不混进测速改动。</p>
 <h1>第二部分（技术细节，供 agent 追踪）</h1>
 <h2>〇 红线</h2>
 <p>R1 不改 <code>third_party/**</code>；R2 不改 <code>third_party/robomme_benchmark/src/robomme/**</code>；R3 <code>trace.jsonl</code> 各行键集合不变（contract 测试守）；R4 <code>SGEVAL_AUDIT=0</code> 时服务端回复逐字节同第三方；R5 不改 <code>pyproject.toml</code>／<code>uv.lock</code>；R6 不动 <code>scripts/evaluate.py</code> 以外的 <code>scripts/</code>；R7 Astra 任何真机局先批局数与美元（P2″）；R8 计时只用 <code>time.perf_counter</code> 或 <code>time.monotonic</code>（服务端与既有 <code>infer_ms</code> 同钟），不用 <code>time.time</code>。</p>
@@ -795,8 +797,10 @@
 - 新增导出 merge_summaries(summaries: list[dict]) -&gt; dict，报表共用
 - 守恒比较统一加 1 ms 噪声容差；smvla 的 chunk 缺 observe_rtt_ms / server_infer_ms 任一即记违例（local_overhead_ms 已裁决删除，不作字段也不作守恒项）
 - 报表 schema：v8-eval-report/2、robomme-ood-eval-log/2
-- extra 保留键（撞上即 ValueError）：decision_wall_ms / action_rtt_ms / server_infer_ms / lang_ms / decision / env_step / n_lang；局末未归属计数字段名为 orphan_n
+- extra 保留键（撞上即 ValueError）：decision_wall_ms / action_rtt_ms / server_infer_ms / lang_ms / decision / env_step / n_lang / phase；局末未归属计数字段名为 orphan_n
 - 新增 absorb_orphan(ms: float, n: int) -&gt; None：外部回收的未归属语言耗时并入局末 orphan_lang_ms / orphan_n（Astra abort_chunk 用）
+- close(..., t: float | None = None)：显式终点时刻（perf_counter），不传取当下；各客户端在收到回复的瞬间捕获 t、校验通过后再提交 close，回包后的校验与账本写盘不进 decision_wall_ms
+- conservation 增加 expected / checked；WALL_DECOMP 与 SPEED_TABLE 的 PASS 条件 = violations==0 且 missing_fields==0 且 checked==expected
 </code></pre>
 <h2>一 共享助手与报表（opus 方案，原样收录）</h2>
 <h3>共享助手 timing.py 规格</h3>
@@ -810,60 +814,64 @@
 - 状态：<code>chunks: list[dict]</code>、<code>lang_calls: list[dict]</code>、<code>_t_obs: float | None</code>、<code>_bucket_ms: float</code>、<code>_bucket_n: int</code>、<code>_clock = time.perf_counter</code>（构造参数 <code>clock=</code> 可注入，测试用假时钟）。
 - <code>start(t=None)</code>：<code>_t_obs = clock() if t is None else float(t)</code>。<strong>重复 start 覆盖</strong>（取最后一次；PP 的非 fresh 步、Astra 首个代理调用后再触发都不应拉长）；不清桶——start 之前已 add_lang 的条目仍归入下一次 close（Astra 监视器先于 t_obs？不会，代理首次调用即 start；PP 的 S2 在 fresh 步之前发生，正是要并入）。
 - <code>add_lang(ms, *, kind, env_step, **extra)</code>：校验 <code>ms</code> 为有限非负数（否则 <code>ValueError</code>）；追加 <code>{"index": len(lang_calls), "env_step": int, "ms": round(ms,3), "kind": kind, **extra}</code>（<code>retry/reuse/s2_fired</code> 等走 extra，<code>None</code> 值剔除）；<code>kind in LANG_KINDS</code> 时 <code>_bucket_ms += ms; _bucket_n += 1</code>。允许在任何时刻调用（start 前、close 之间）。
-- <code>close(*, decision, env_step, action_rtt_ms: float | None, server_infer_ms: float | None, extra=None) -&gt; dict</code>：<code>action_rtt_ms</code> 与 <code>server_infer_ms</code> 均允许 None（客户端替身缺属性时记 None，由各客户端自行计数 <code>timing_missing</code>，助手不计）；
+- <code>close(*, decision, env_step, action_rtt_ms: float | None, server_infer_ms: float | None, extra=None, t: float | None = None) -&gt; dict</code>：<code>t</code> 为显式终点时刻（<code>perf_counter</code> 刻度，不传取 <code>clock()</code>），与 <code>start(t=)</code> 对称；<code>action_rtt_ms</code> 与 <code>server_infer_ms</code> 均允许 None（客户端替身缺属性时记 None，由各客户端自行计数 <code>timing_missing</code>，助手不计）；
   - 未 start 就 close → <code>RuntimeError("ChunkTimer.close without start")</code>（客户端漏打 t_obs 是 bug，不兜底成 0）。
-  - <code>decision_wall_ms = (clock() - _t_obs) * 1000</code>；<code>lang_ms = _bucket_ms</code>（close 前没有 add_lang 时为 <code>0.0</code>，显式写零，不省略键——P4 序列化教训）。
-  - 记录 <code>{"decision", "env_step", "decision_wall_ms", "action_rtt_ms"(可 None), "server_infer_ms"(可 None), "lang_ms", "n_lang": _bucket_n, **extra}</code>；<code>extra</code> 与保留键冲突 → <code>ValueError</code>；保留键清单 <code>RESERVED_KEYS = {decision_wall_ms, action_rtt_ms, server_infer_ms, lang_ms, decision, env_step, n_lang}</code>。<code>has_planner</code>、<code>reuse</code>、smvla 的 <code>observe_rtt_ms</code> 都经 extra 传入。
+  - <code>decision_wall_ms = ((clock() if t is None else t) - _t_obs) * 1000</code>；<code>lang_ms = _bucket_ms</code>（close 前没有 add_lang 时为 <code>0.0</code>，显式写零，不省略键——P4 序列化教训）。
+  - 记录 <code>{"decision", "env_step", "decision_wall_ms", "action_rtt_ms"(可 None), "server_infer_ms"(可 None), "lang_ms", "n_lang": _bucket_n, **extra}</code>；<code>extra</code> 与保留键冲突 → <code>ValueError</code>；保留键清单 <code>RESERVED_KEYS = {decision_wall_ms, action_rtt_ms, server_infer_ms, lang_ms, decision, env_step, n_lang, phase}</code>。<code>phase</code> 在 close 时按本条在 <code>chunks</code> 中的原始序号标定：0→<code>first</code>、1→<code>second</code>、2→<code>third</code>、≥3→<code>steady</code>；之后任何缺失过滤或分层都只读 <code>phase</code>，不重新按位置切。<code>has_planner</code>、<code>reuse</code>、smvla 的 <code>observe_rtt_ms</code> 都经 extra 传入。
   - 浮点统一 <code>round(...,3)</code>；之后 <code>_t_obs=None</code>、清桶；追加进 <code>chunks</code> 并返回同一 dict（<code>chunks[]</code> 只落 <code>result.json</code> / <code>results.jsonl</code>，不写 <code>events.jsonl</code>）。
   - PP 特例：PP 的 <code>decision_wall_ms</code> 不是墙钟差而是「fresh 步往返 + 桶」，故 <code>close</code> 增可选参数 <code>decision_wall_ms: float | None = None</code>——给出时直接采用且不要求先 start（接口签名里的唯一扩展，S3 按此调用；〇′ 共享接口同步补一句）。
 - <code>absorb_orphan(ms: float, n: int) -&gt; None</code>：把外部回收的未归属语言耗时（如 Astra 的 abort_chunk）累加进内部 <code>_orphan_ms / _orphan_n</code>，局末与桶一起输出；<code>ms</code> 非有限或为负、<code>n</code> 为负 → <code>ValueError</code>。取代一切临时属性写法。
 - <code>orphan() -&gt; dict</code>：返回 <code>{"orphan_lang_ms": _bucket_ms + _orphan_ms, "n": _bucket_n + _orphan_n}</code> 后清桶并清零 absorb 累计；全空返回 <code>{"orphan_lang_ms": 0.0, "n": 0}</code>。不动 <code>_t_obs</code>（局末悬空的 start 由 attach 记 <code>dangling_start=True</code>）。</p>
 <p><strong><code>summarize_chunks(chunks, fields=CHUNK_FIELDS) -&gt; dict</code></strong>
-- 每个字段取非 None 值序列 <code>v</code>（按 chunks 顺序），输出 <code>{field: {"n", "first", "second", "third", "steady_mean", "steady_p50", "steady_p95"}}</code>；<code>n=0</code> 时整段为 <code>{"n": 0}</code>；<code>second/third</code> 不存在时 <code>None</code>。
-- <code>steady = v[3:]</code>；<code>len(v) &lt; 4</code> 时 <code>steady = v</code> 且顶层 <code>steady_short=True</code>（顶层只看 <code>decision_wall_ms</code> 的 n）。顶层另给 <code>n_decisions = len(chunks)</code>。
+- 每个字段先按 chunk 的 <code>phase</code> 归段，再剔除该字段为 None 的条目（顺序：标 phase → 缺失过滤 → Astra 分层；分层子集不得重新按位置切前三条，例如某层第一条若 phase=steady 就只进稳态），输出 <code>{field: {"n", "first", "second", "third", "steady_mean", "steady_p50", "steady_p95"}}</code>；<code>n=0</code> 时整段为 <code>{"n": 0}</code>；<code>second/third</code> 不存在时 <code>None</code>。
+- <code>first/second/third</code> 取对应 phase 的值（该 phase 的条目被过滤或不在本层时为 None）；<code>steady</code> = phase 为 <code>steady</code> 的值；局内 chunks 不足 4 条（无 steady phase）时 steady 统计退回该层全部值并标顶层 <code>steady_short=True</code>（顶层只看 <code>decision_wall_ms</code>）。顶层另给 <code>n_decisions = len(chunks)</code>。
 - 字段名一律 <code>_ms</code> 语义、值为毫秒；不再沿用 framesamp 的 <code>_s</code> 秒制。
 - <code>lang_summary</code>：对 <code>lang_calls</code> 按 kind 分组（含 <code>ask</code>），每组同样三段统计（字段 <code>ms</code>），外加 <code>{"total_ms_counted": Σ LANG_KINDS, "n_ask": k}</code>。</p>
 <p><strong><code>attach_policy_timing(timing, timer, *, gpu_name, model_kind) -&gt; dict</code></strong>
 - <code>model_kind not in MODEL_KINDS</code> → <code>ValueError</code>。原地写并返回 <code>timing</code>：<code>chunks</code>、<code>chunk_summary</code>、<code>lang_calls</code>、<code>lang_summary</code>、<code>gpu_name</code>（原样接收，可 None；助手不探测 GPU，口径 e）、<code>orphan_lang_ms</code>（调 <code>timer.orphan()</code> 的值，<code>n</code> 写 <code>orphan_n</code>）、<code>dangling_start</code>（bool）、<code>conservation</code>。
 - 对 Astra，<code>chunk_summary</code> 额外加 <code>by_planner_review = {"planner+review", "planner_only", "review_only", "neither", "no_lang"}</code>：前四格按 <code>has_planner × has_review</code>（<code>has_review</code> = 该 chunk 的 lang 明细含 kind <code>review</code>，由 S4 经 extra 写入）划分且要求 <code>lang_ms &gt; 0</code>，<code>no_lang</code> 收 <code>lang_ms == 0</code> 的 chunk（continue_last 后直接 <code>client.infer</code>）；每层各一份三段统计，空层写 <code>{"n": 0}</code>；无任何 chunk 带 <code>has_planner</code> 键时不写。
-- <code>conservation = {"kind": model_kind, "violations": int, "overhead_pct_p50": float | None, "checked": n, "missing_fields": int}</code>；三种 kind 统一：<code>action_rtt_ms is None</code> 的 chunk 跳过比较、不算违例，计入 <code>missing_fields</code>（除此之外 serial / pp 的 <code>missing_fields</code> 为 0，smvla 另按下文计数），逐 chunk：
+- <code>conservation = {"kind": model_kind, "expected": len(chunks), "checked": 实际完成比较的条数, "violations": int, "missing_fields": int, "overhead_pct_p50": float | None}</code>（smvla 另加 <code>lang_split_available: bool</code>）；三种 kind 统一：<code>action_rtt_ms is None</code> 的 chunk 跳过比较、不算违例、不计入 checked，计入 <code>missing_fields</code>（除此之外 serial / pp 的 <code>missing_fields</code> 为 0，smvla 另按下文计数），逐 chunk：
   - <strong>serial</strong>（FrameSamp / GroundSG / Astra）：<code>base = action_rtt_ms + lang_ms</code>；违例 ⇔ <code>decision_wall_ms &lt; base - 1.0</code>（1 ms 计时噪声）；<code>overhead_pct = (decision_wall_ms - base) / decision_wall_ms</code>；<code>overhead_pct_p50</code> 只报数，不判 FAIL；超过 20%（<code>SERIAL_TOL</code>）交用户裁决。
   - <strong>pp</strong>：违例 ⇔ <code>|decision_wall_ms - (action_rtt_ms + lang_ms)| &gt; 1.0</code>；<code>overhead_pct_p50</code> 同式（应≈0）。
   - <strong>smvla</strong>：两类不等式，任一不成立计 1 次违例：①<code>decision_wall_ms ≥ observe_rtt_ms + action_rtt_ms − 1.0</code>；②<code>lang_ms ≤ server_infer_ms + 1.0</code> 且 <code>server_infer_ms ≤ action_rtt_ms + 1.0</code>。<code>overhead_pct = slack_ms / decision_wall_ms</code>（<code>slack_ms</code> 只报数不判）。<code>missing_fields</code> 只检 <code>observe_rtt_ms</code>、<code>server_infer_ms</code>，缺任一的 chunk 计 1 违例并计数（不当作通过）。
-  - 分母为 0 的 chunk 跳过百分比、仍做违例判定；全空 → <code>overhead_pct_p50=None, violations=0, checked=0, missing_fields=0</code>。
-- 幂等：重复调用覆盖上述键，结果相同（orphan 第二次为 0，故 <code>orphan_lang_ms</code> 取 <code>max(旧, 新)</code> 不回退）。</p>
-<p><strong>判定行格式</strong>：各模型守恒验收统一最小键集 <code>WALL_DECOMP=PASS model=&lt;m&gt; kind=&lt;serial|pp|smvla&gt; chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x|na&gt;</code>，各模型可在其后追加键（如 smvla 的 <code>missing_fields=0</code>）；值取自 <code>timing["conservation"]</code>。</p>
+  - 分母为 0 的 chunk 跳过百分比、仍做违例判定；全空 → <code>expected=0, checked=0, violations=0, missing_fields=0, overhead_pct_p50=None</code>。
+  - smvla 语言拆分：<code>lang_split_available = True</code> 当且仅当每个 chunk 都有至少一条 kind <code>lang_in_forward</code> 的 lang 明细（服务端回复带 <code>lang_ms</code>）；否则为 False，该局 <code>LANG_SPLIT</code> 不出 PASS（客户端判定行写 <code>LANG_SPLIT=FAIL reason=unavailable</code>）。
+  - <strong>PASS 条件</strong>（<code>WALL_DECOMP</code> 与 <code>SPEED_TABLE</code> 共用）：<code>violations == 0 且 missing_fields == 0 且 checked == expected</code>；缺必要字段不得视为通过。
+- 幂等：首次调用把写入的全部键（含 <code>orphan_lang_ms</code>、<code>orphan_n</code>、<code>conservation</code>）深拷贝成快照存在 <code>timer._attached</code>；第二次及以后调用不再读 <code>orphan()</code>、不再重算，直接把同一快照的深拷贝写回 <code>timing</code> 并返回，结果与第一次逐键相等。</p>
+<p><strong>判定行格式</strong>：各模型守恒验收统一最小键集 <code>WALL_DECOMP=PASS model=&lt;m&gt; kind=&lt;serial|pp|smvla&gt; chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x|na&gt;</code>，各模型可在其后追加键（如 <code>missing_fields=0 checked=&lt;n&gt; expected=&lt;n&gt;</code>）；值取自 <code>timing["conservation"]</code>；PASS 按上文 PASS 条件，否则写 FAIL。</p>
 <p><strong>异常一览</strong>：未 start 就 close → <code>RuntimeError</code>；非法 kind / 负数或 NaN ms / extra 撞保留键 / 非法 model_kind → <code>ValueError</code>；重复 start → 覆盖不报；close 前无 add_lang → <code>lang_ms=0.0, n_lang=0</code>；局末有未归属 lang → 进 <code>orphan_lang_ms</code>，不并入任何 chunk。</p>
 <h3>报表逐文件改动</h3>
 <p><strong><code>dev-scripts/gl/eval_report.py</code></strong>
 - 新 <code>speed_of(row) -&gt; dict | None</code>：取 <code>row["timing"]["policy"]</code>，缺 <code>chunk_summary</code> 返回 None（旧数据跳过、计入 <code>speed_missing</code>）。
-- 新 <code>speed_table(rows_by_policy: dict[str, list[dict]]) -&gt; list[dict]</code>：分组键 <code>(policy_label/模型变体, gpu_name or "未知")</code>；Astra 行再按 <code>by_planner_review</code> 五层拆行（<code>astra·规划+复核</code> / <code>astra·仅规划</code> / <code>astra·仅复核</code> / <code>astra·仅监视</code> / <code>astra·无语言</code>），<code>n=0</code> 的空层不出行。每行：<code>decisions</code>（Σ n_decisions）、<code>mult</code>（<code>任务数 × 档数 × 局数</code> 字符串，由该组行的 distinct task/tier 与每格局数算，每格局数不齐时写 <code>不齐(min～max)</code>，P5）、<code>wall_first_ms</code>（各局 first 的均值）、<code>wall_steady_mean/p50/p95_ms</code>（steady_mean 按各局稳态条数加权；p50/p95 不能由局级合成——改为汇总各局 <code>chunks[]</code> 的稳态段原值再算，chunks 不在时退回加权并标 <code>approx=True</code>）、<code>action_rtt_steady_mean_ms</code>、<code>lang_steady_mean_ms</code>、<code>server_infer_steady_mean_ms</code>、<code>violations</code>（Σ conservation.violations）、<code>steady_short_eps</code>。
+- <strong>样本范围</strong>：所有局都记 <code>chunks[]</code>；速度统计只纳入正常终局（<code>not infra</code> 且 <code>status ∈ {success, failure}</code>；本仓 <code>report.py::summarize_rows</code> 里非 success/timeout 即失败）；<code>infra</code> 与 <code>timeout</code> 局单列计数 <code>excluded_infra / excluded_timeout</code>、不进统计；同一身份多份结果取 <code>results.jsonl</code> 最新一条（复用 <code>report.py::_latest_by_key</code> 口径）；PP 局 <code>timing.policy.reconnected is True</code> 整局排除，计 <code>excluded_reconnected</code>。
+- 新 <code>speed_table_from_results(paths: list[Path]) -&gt; dict</code> 与 CLI <code>--results &lt;results.jsonl&gt;...</code>：直读本机 <code>scripts/evaluate.py</code> 产物（<code>&lt;out&gt;/rollouts/.../results.jsonl</code>），不经 <code>sNN/</code> 席位树；本机 smoke 走此入口，只出速度表与 <code>SPEED_TABLE</code> 判定行。
+- 新 <code>speed_table(rows_by_policy: dict[str, list[dict]]) -&gt; list[dict]</code>：分组键 <code>(policy_label/模型变体, gpu_name)</code>，<code>gpu_name</code> 为 None 单独成组「未知」、不与任何型号合组，混卡不出均值；Astra 行再按 <code>by_planner_review</code> 五层拆行（<code>astra·规划+复核</code> / <code>astra·仅规划</code> / <code>astra·仅复核</code> / <code>astra·仅监视</code> / <code>astra·无语言</code>），<code>n=0</code> 的空层不出行。每行：<code>decisions</code>（Σ n_decisions）、<code>mult</code>（按去重后的 <code>(task, tier, episode)</code> 三元组集合计算：集合大小恰等于 任务数 × 档数 × 局数 时写 <code>a 任务 × b 档 × c 局 = N</code>；稀疏时写 <code>N 局（a 任务、b 档、局号 c 种，非满格）</code>，不得用三者相乘虚增，P5）、<code>wall_first_ms</code>（各局 first 的均值）、<code>wall_steady_mean/p50/p95_ms</code>（steady_mean 按各局稳态条数加权；p50/p95 不能由局级合成——改为汇总各局 <code>chunks[]</code> 的稳态段原值再算，chunks 不在时退回加权并标 <code>approx=True</code>）、<code>action_rtt_steady_mean_ms</code>、<code>lang_steady_mean_ms</code>、<code>server_infer_steady_mean_ms</code>、<code>violations</code>（Σ conservation.violations）、<code>steady_short_eps</code>。
 - <code>build_report</code> 返回体加 <code>"speed": {"rows": [...], "missing": n}</code>；schema 串 <code>"v8-eval-report/1"</code> → <code>"v8-eval-report/2"</code>（规则：新增顶层节即升次版本；消费方 <code>lines_of</code>/<code>render_md</code> 对 <code>/1</code> 报告仍可渲染，缺 <code>speed</code> 节时不出表）。
-- <code>render_md</code> 在成功率表之后加 <code>## 推理速度</code>：列 <code>模型 | GPU | decision 数（乘式） | 首次 | 稳态 mean | p50 | p95 | 动作往返 | 语言 | 服务端推理 | 守恒违例</code>，毫秒用新 <code>_fmt_ms</code>（<code>{:.0f} ms</code>，None → <code>—</code>；<code>_fmt_s</code> 是时分格式，不复用）。表下注：GL A40 与本机 RTX 6000 Ada 不混比；Astra 含规划行含 <code>SEND_INTERVAL_S=20</code>。
-- 新判定行 <code>SPEED_TABLE=PASS rows=&lt;n&gt; decisions=&lt;Σ&gt; violations=&lt;Σ&gt; missing=&lt;n&gt;</code>，violations&gt;0 → FAIL（只报，不改其他判定）。<code>wall_of</code> 不改。</p>
+- <code>render_md</code> 在成功率表之后加 <code>## 推理速度</code>：列 <code>模型 | GPU | decision 数（乘式） | 首次 | 稳态 mean | p50 | p95 | 动作往返 | 语言 | 服务端推理 | 守恒违例</code>，毫秒用新 <code>_fmt_ms</code>（<code>{:.0f} ms</code>，None → <code>—</code>；<code>_fmt_s</code> 是时分格式，不复用）。表下注：GL A40 与本机 RTX 6000 Ada 不混比；PP 行的 <code>decision_wall_ms</code> 是合成值（fresh 步往返 + 桶内 S2），不等同其他模型的连续墙钟；Astra 含规划行含 <code>SEND_INTERVAL_S=20</code>。
+- 新判定行 <code>SPEED_TABLE=PASS rows=&lt;n&gt; decisions=&lt;Σ&gt; violations=&lt;Σ&gt; missing=&lt;n&gt; checked=&lt;Σ&gt; expected=&lt;Σ&gt;</code>：PASS 条件同守恒（Σviolations==0 且 Σmissing_fields==0 且 Σchecked==Σexpected），否则 FAIL；<code>SPEED_TABLE=FAIL</code> 只打印判定行，不改进程退出码、不改其他判定。<code>wall_of</code> 不改。</p>
 <p><strong><code>src/robomme_ood_eval/report.py</code></strong>
-- <code>summarize_rows</code> 加 <code>"speed"</code>：<code>{"decisions", "gpu_name"(唯一值或列表), "decision_wall_ms": {"first_mean", "steady_mean"}, "action_rtt_steady_mean_ms", "lang_steady_mean_ms", "server_infer_steady_mean_ms", "violations", "episodes_with_timing"}</code>；Astra 再给 <code>by_planner_review</code>。无任何局带 <code>chunk_summary</code> 时 <code>speed=None</code>（键在、值 None）。计算放 <code>timing.py</code> 新函数 <code>merge_summaries(list_of_policy_timing) -&gt; dict</code>（S1 写），两个报表共用（逐层合并 <code>by_planner_review</code>，某局缺层按 <code>n=0</code> 处理），避免两份聚合逻辑分叉——<strong>需在分配表里把 <code>merge_summaries</code> 列入 S1 导出</strong>。
+- <code>summarize_rows</code> 加 <code>"speed"</code>，样本范围与分组规则与 <code>eval_report.speed_table</code> 完全相同（同一 <code>merge_summaries</code> 实现）：<code>gpu_name</code> 多型号时按型号拆成 <code>speed.groups[]</code>，不输出混卡均值；None 单独成「未知」组；无原始 chunks 时 p50/p95 标 <code>approx=True</code>。每组字段：<code>{"decisions", "gpu_name", "decision_wall_ms": {"first_mean", "steady_mean"}, "action_rtt_steady_mean_ms", "lang_steady_mean_ms", "server_infer_steady_mean_ms", "violations", "missing_fields", "checked", "expected", "episodes_with_timing", "excluded_infra", "excluded_timeout", "excluded_reconnected"}</code>；Astra 再给 <code>by_planner_review</code>。无任何局带 <code>chunk_summary</code> 时 <code>speed=None</code>（键在、值 None）。计算放 <code>timing.py</code> 新函数 <code>merge_summaries(list_of_policy_timing) -&gt; dict</code>（S1 写），两个报表共用（逐层合并 <code>by_planner_review</code>，某局缺层按 <code>n=0</code> 处理），避免两份聚合逻辑分叉——<strong>需在分配表里把 <code>merge_summaries</code> 列入 S1 导出</strong>。
 - <code>SCHEMA</code> <code>"robomme-ood-eval-log/1"</code> → <code>/2</code>。</p>
 <h3>测试</h3>
 <p><code>tests/unit_eval/test_timing.py</code>（S1）——假时钟注入、手工构造 chunks，守恒式独立重算（测试内自写期望值，不调助手内部函数）：
 1. start→add_lang(subgoal 30)→add_lang(ask 50)→close：<code>lang_ms==30</code>、<code>n_lang==1</code>、ask 在明细里。
-2. 重复 start 取后者：wall 以第二次为起点。
+2. 重复 start 取后者：wall 以第二次为起点；<code>close(t=)</code> 传入早于当下的终点 → <code>decision_wall_ms</code> 按该 t 计（假时钟已前进也不影响）。
 3. 未 start 就 close → RuntimeError。
 4. close 前无 add_lang → <code>lang_ms==0.0</code> 键存在；JSON 往返后仍在。
 5. 非法 kind / 负 ms / NaN → ValueError；extra 撞保留键 → ValueError。
 6. orphan：局末两条 s2 + <code>absorb_orphan(40, 1)</code> → <code>{"orphan_lang_ms": x+40, "n": 3}</code>，再调为 0；<code>absorb_orphan(-1, 1)</code> → ValueError。
-7. summarize：n=3 → steady_short=True 且 steady=全部；n=10 → steady=索引 3～9，p50/p95 与手算线性插值一致。
+7. summarize：n=3 → steady_short=True 且 steady=全部；phase 在缺失过滤和 Astra 分层后不重排（构造第 0 条 action_rtt 为 None → 该字段 first 为 None、steady 不含第 3 条以前的值）；n=10 → steady=索引 3～9，p50/p95 与手算线性插值一致。
 8. serial 守恒：构造 5 条，其中 1 条 wall&lt;rtt+lang → violations=1、missing_fields=0；overhead_pct_p50 手算一致。
 9. pp 守恒：差 0.5 ms 不违例、差 2 ms 违例，missing_fields=0；PP <code>decision_wall_ms=</code> 直给且未 start 不报错。
 10. smvla 守恒：全成立 / wall &lt; observe+action−1 / lang&gt;server_infer / server_infer&gt;action_rtt / 缺 observe_rtt_ms 各一条 → <code>conservation</code> 五键齐全、violations=4、missing_fields=1；<code>slack_ms</code> 统计与手算一致。
 11. Astra <code>by_planner_review</code>：构造覆盖四格 + no_lang 的 chunks，各层条数与三段统计正确；空层为 <code>{"n": 0}</code>；<code>merge_summaries</code> 跨两局逐层合并正确。
-12. attach 幂等、保留 <code>policy_load</code> 等既有键。
+12. attach 幂等：两次调用返回的完整 dict 深比较相等（含 <code>orphan_lang_ms</code>、<code>orphan_n</code>、<code>conservation</code>）；保留 <code>policy_load</code> 等既有键。
 13. <code>merge_summaries</code> 加权均值与 chunks 原值 p95。
 14. 源码 grep：<code>timing.py</code> 不含 <code>chunk_rtt_ms</code>。
-15. None 容忍：serial / pp / smvla 各构造 1 条 <code>action_rtt_ms=None</code> 的 chunk → close 不报错、记录值为 None；三种 kind 的 <code>missing_fields</code> 各 +1 且 violations 不变；<code>summarize_chunks</code> 该字段 n 少 1。
+15. None 容忍与 PASS 条件：<code>checked &lt; expected</code> 或 <code>missing_fields &gt; 0</code> 时 PASS 条件为假；smvla 缺 <code>lang_in_forward</code> → <code>lang_split_available=False</code>；serial / pp / smvla 各构造 1 条 <code>action_rtt_ms=None</code> 的 chunk → close 不报错、记录值为 None；三种 kind 的 <code>missing_fields</code> 各 +1 且 violations 不变；<code>summarize_chunks</code> 该字段 n 少 1。
 末行判定 <code>TIMING_HELPER=PASS cases=15 kinds=serial,pp,smvla</code>。</p>
 <p><code>tests/unit_eval/test_speed_table.py</code>（S5）——夹具为手写 <code>results.jsonl</code> 行（含 <code>timing.policy</code>），不依赖 S2～S4 产物：
-1. 两模型 × 两 GPU → 4 行；2. Astra 按 <code>by_planner_review</code> 拆行、空层不出行（夹具 3 个非空层 → 3 行）；3. 乘式 <code>2 任务 × 1 档 × 3 局</code>、局数不齐写 <code>不齐</code>；4. 稳态 mean 加权与手算一致；5. 旧行无 chunk_summary 计 missing、不崩；6. violations&gt;0 → <code>SPEED_TABLE=FAIL</code>；7. render_md 含 <code>## 推理速度</code> 且不含 <code>chunk_rtt_ms</code>；8. schema <code>v8-eval-report/2</code>、旧 <code>/1</code> 报告渲染不出表；9. <code>report.py</code> log.json 的 <code>speed</code> 节与 <code>SCHEMA=/2</code>，全无 timing 时 <code>speed is None</code>。
+1. 两模型 × 两 GPU（另含一局 gpu_name=None）→ 5 行（「未知」单独一行）；样本范围：infra / timeout / PP reconnected / 同身份旧结果均被排除并计数；稀疏三元组乘式写「非满格」；<code>--results</code> 入口直读夹具 results.jsonl 出同样的表；2. Astra 按 <code>by_planner_review</code> 拆行、空层不出行（夹具 3 个非空层 → 3 行）；3. 乘式 <code>2 任务 × 1 档 × 3 局</code>、局数不齐写 <code>不齐</code>；4. 稳态 mean 加权与手算一致；5. 旧行无 chunk_summary 计 missing、不崩；6. violations&gt;0 → <code>SPEED_TABLE=FAIL</code>；7. render_md 含 <code>## 推理速度</code> 且不含 <code>chunk_rtt_ms</code>；8. schema <code>v8-eval-report/2</code>、旧 <code>/1</code> 报告渲染不出表；9. <code>report.py</code> log.json 的 <code>speed</code> 节与 <code>SCHEMA=/2</code>，全无 timing 时 <code>speed is None</code>。
 末行 <code>SPEED_TABLE_TEST=PASS rows=&lt;夹具行数&gt; cases=9</code>（报表自身产出的 <code>SPEED_TABLE=PASS rows= decisions= violations= missing=</code> 是另一行，见上）。</p>
 <h3>分配表行</h3>
 <table>
@@ -924,9 +932,9 @@
 - 开头 <code>timing: dict[str, Any] = {...}</code> 旁新建 <code>timer = ChunkTimer()</code>；现有 <code>infer_ms / rtt_ms / observe_ms</code> 三个列表不动；新增的 <code>action_rtt_ms</code> 取自同一次 <code>rtt</code>（即 <code>rtt_ms</code> 的同值），不改任何既有字段名。
 - <code>call()</code> 内现有 <code>rtt = (time.monotonic() - t0) * 1000.0</code> 保持；为让 <code>action_rtt_ms</code> 与 <code>ChunkTimer</code> 同钟，<code>call</code> 额外按 kind 存闭包变量：<code>kind == "infer"</code> 存 <code>last_rtt[0] = rtt</code>；<code>kind == "observe"</code> 存 <code>last_observe_rtt[0] = rtt</code>。<code>timer.start()</code> 时把 <code>last_observe_rtt[0]</code> 置 0，所以本 decision 没有 observe（<code>observe()</code> 内 <code>if not frames: return</code>）时记 0（<code>ChunkTimer</code> 用 <code>perf_counter</code>，<code>action_rtt_ms</code> 只是差值，钟不同不影响）。
 - <strong><code>timer.start()</code> 打点位置（审查点 a）</strong>：首个 decision 在 reset 分支 <code>observe(r["frames"], "reset")</code> 这句<strong>之前</strong>；其后每个 decision 在 <code>step_chunk</code> 返回、<code>if "error" in res:</code> 判完之后、<code>observe(res["frames"], "step")</code> 这句<strong>之前</strong>。即起点 = 本 decision 第一条出站请求（observe 帧上传）。<code>observe()</code> 内 <code>if not frames: return</code> 时起点仍已打，等于从下一条 infer 起算，符合「第一条出站请求」。
-- <strong><code>timer.close()</code> 位置</strong>：<code>reply = call("infer", ...)</code> 返回且 <code>recv_state_sha</code>/<code>recv_instruction_sha</code> 校验通过后立即 <code>close</code>（回复到手即 close，不含账本写入），即在 <code>trace.lang_audit</code> / <code>trace.lang_msg</code> / <code>trace.lang_close</code> / <code>trace.begin_chunk</code> 四次账本写入之前：<code>tm = (last_audit[0] or {}).get("timing") or {}</code>；若有 <code>lang_ms</code> 则先 <code>timer.add_lang(tm["lang_ms"], kind="lang_in_forward", env_step=steps, action_ms=tm.get("action_ms"))</code>；再 <code>timer.close(decision=decisions-1, env_step=steps, action_rtt_ms=last_rtt[0], server_infer_ms=float(reply["infer_ms"]), extra={"observe_rtt_ms": last_observe_rtt[0], "action_ms": tm.get("action_ms"), "n_frames": ...})</code>。不记 <code>local_overhead_ms</code>，助手也不反推。<code>chunks[]</code> 只落 <code>result.json</code> / <code>results.jsonl</code>，不发 <code>events.jsonl</code> 事件。注意 <code>last_audit[0]</code> 在 <code>call</code> 内已 <code>reply.pop(AUDIT_KEY)</code>，不进动作与后续校验。
+- <strong>停表与 <code>timer.close()</code> 位置</strong>：<code>t_chunk</code> 在 <code>call()</code> 内部捕获——<code>kind == "infer"</code> 时，现有 <code>reply, raw, rep_raw = conn.call(msg)</code> 返回的瞬间记 <code>last_t_chunk[0] = time.perf_counter()</code>，在 <code>AUDIT_KEY</code> 弹出、<code>req_sha</code> 校验之前；因此回包后的本地校验（<code>req_sha</code>、<code>recv_state_sha</code> / <code>recv_instruction_sha</code>、<code>actions</code> 与 <code>actions_full[:16]</code> 一致性）和四次账本写入（<code>trace.lang_audit</code> / <code>trace.lang_msg</code> / <code>trace.lang_close</code> / <code>trace.begin_chunk</code>）都不进 <code>decision_wall_ms</code>。<strong>提交</strong>放在全部协议校验通过之后，即现有 <code>if not np.array_equal(chunk, actions_full[:execute_horizon]): raise ProtocolError(...)</code> 之后：<code>tm = (last_audit[0] or {}).get("timing") or {}</code>；若有 <code>lang_ms</code> 先 <code>timer.add_lang(tm["lang_ms"], kind="lang_in_forward", env_step=steps, action_ms=tm.get("action_ms"))</code>；再以捕获的 <code>last_t_chunk[0]</code> 作终点提交 <code>timer.close(decision=decisions-1, env_step=steps, action_rtt_ms=last_rtt[0], server_infer_ms=float(reply["infer_ms"]), extra={"observe_rtt_ms": last_observe_rtt[0], "action_ms": tm.get("action_ms"), "n_frames": ...})</code>（终点时刻的传法按第二部分〇′ 共享接口；若接口尚无显式终点参数，由 S1 在 <code>close</code> 上补与 <code>start(t=...)</code> 对称的可选终点参数）。任何校验失败（<code>ProtocolError</code>，含 sha 不符、缺 <code>actions</code>、<code>actions</code> 与 <code>actions_full</code> 不一致）都在提交前抛出，不写 chunk 记录。不记 <code>local_overhead_ms</code>，助手也不反推。<code>chunks[]</code> 只落 <code>result.json</code> / <code>results.jsonl</code>，不发 <code>events.jsonl</code> 事件。<code>last_audit[0]</code> 在 <code>call</code> 内已 <code>reply.pop(AUDIT_KEY)</code>，不进动作与后续校验。
 - <strong>守恒式（<code>model_kind="smvla"</code>，单列）</strong>：只检两类不等式：① <code>decision_wall_ms ≥ observe_rtt_ms + action_rtt_ms − 1ms</code>（1ms 容差吸收打点间隙）；② <code>lang_ms ≤ server_infer_ms + 1ms</code> 且 <code>server_infer_ms ≤ action_rtt_ms + 1ms</code>（与助手一致的 1ms 容差）。另报 <code>lang_ms + action_ms</code> 与 <code>server_infer_ms</code> 的差（预期 &lt; 1%，待实测，只报不判）。<code>lang_ms</code> 与 <code>infer_ms</code> 由服务端同一个 <code>t0</code>、同一次 <code>infer</code> 构造，<code>lang_ms ≤ infer_ms</code> 在构造上成立；它是 <code>server_infer_ms</code> 的子段，不与 <code>action_rtt_ms</code> 叠加。
-- <strong>异常路径</strong>：infer 抛错（<code>except BaseException: trace.lang_close(cid, status="error"); raise</code>）时不 <code>close</code>，该 decision 无 chunk、不计入；<code>step_chunk</code> 出错 <code>break</code> 时尚未 <code>start</code> 下一个，无残留。局末（<code>finally</code> 之后、<code>timing["episode_s"] = ...</code> 旁）调 <code>attach_policy_timing(timing, timer, gpu_name=(out["server_meta"] or {}).get("gpu_name"), model_kind="smvla")</code>；其内 <code>orphan()</code> 应为 0（本模型 lang 只随 close 进来）。异常局也调用，<code>chunks</code> 为已完成部分。
+- <strong>异常路径</strong>：infer 抛错（<code>except BaseException: trace.lang_close(cid, status="error"); raise</code>）时不 <code>close</code>，该 decision 无 chunk、不计入；这次失败调用的耗时（<code>start</code> 到抛错时刻）写进 <code>lang_calls</code> 之外的 <code>failed_calls[]</code>，每条 <code>{ms, kind: "infer", error}</code>，只披露、不进任何统计。正常终局（<code>done</code> 或 <code>success</code> 退出）时最后一次 <code>start</code> 之后没有 infer，这个悬空起点标 <code>dangling_start=True</code>，不计入 <code>missing</code>。空帧时 <code>observe()</code> 直接返回，起点仍在 <code>observe()</code> 调用前，规则不变。<code>step_chunk</code> 出错 <code>break</code> 时尚未 <code>start</code> 下一个，无残留。局末（<code>finally</code> 之后、<code>timing["episode_s"] = ...</code> 旁）调 <code>attach_policy_timing(timing, timer, gpu_name=(out["server_meta"] or {}).get("gpu_name"), model_kind="smvla")</code>；其内 <code>orphan()</code> 应为 0（本模型 lang 只随 close 进来）。异常局也调用，<code>chunks</code> 为已完成部分。
 - <strong><code>SGEVAL_AUDIT=0</code></strong>：服务端审计块不存在 → 无 <code>lang_ms/action_ms</code>，客户端照常记 <code>decision_wall_ms / action_rtt_ms / server_infer_ms / observe_rtt_ms</code>，<code>lang_calls</code> 为空、<code>lang_ms=0</code>；在 <code>chunk_summary</code> 之外记 <code>lang_split_available=False</code>。
 - <code>chunks</code> 条数 = <code>out["decisions"]</code> 中真正拿到 chunk 的数（<code>while</code> 头 <code>if success: break</code> 那一轮 <code>decisions += 1</code> 已加但不 infer，验收按「infer 成功次数」而非 <code>out["decisions"]</code> 字面值比对——写进测试）。</p>
 <p>估算：<code>smvla_server.py</code> ~30 行，<code>smvla.py</code> ~30 行，<code>timing.py</code>（S1 共享）~120 行。</p>
@@ -941,6 +949,8 @@
 <li><code>test_infer_error_no_chunk</code>：第 3 次 infer 抛 <code>ServerError</code>，断言 <code>len(chunks)=2</code>、<code>orphan_lang_ms=0</code>、局 <code>status=="error"</code> 时 <code>timing["chunks"]</code> 仍写出。</li>
 <li><code>test_legacy_lists_kept</code>：<code>timing</code> 仍含 <code>infer_ms / rtt_ms / observe_ms</code> 且长度与改前一致。</li>
 <li><code>test_step_error_episode</code>：假 session 第 3 次 <code>step_chunk</code> 抛错（<code>res = {"error": ...}</code> 后 <code>break</code>），断言 <code>len(chunks)==infer 成功次数</code>（=3，比 <code>ceil(steps/16)</code> 多 1），并入 <code>CHUNK_TIMING</code> 的 <code>expected=&lt;infer 成功次数&gt;</code> 判据。</li>
+<li><code>test_protocol_failure_no_chunk</code>：假 conn 第 2 次 infer 回复分别构造两种反例——缺 <code>actions</code> 键；<code>actions</code> 与 <code>actions_full[:16]</code> 不一致。各断言局 <code>status=="error"</code>、<code>proto["broken"]</code> 为真、<code>len(chunks)==1</code>（失败那次不增）。另断言 <code>call()</code> 捕获 <code>t_chunk</code> 后的校验与账本耗时不进 <code>decision_wall_ms</code>：假 <code>trace.lang_audit</code> 睡 100ms，<code>decision_wall_ms</code> 不增 ≥100ms。</li>
+<li><code>test_failed_calls_and_dangling</code>：沿用用例 6，断言 <code>failed_calls</code> 恰 1 条、<code>kind=="infer"</code>、含 <code>error</code>，且不进 <code>chunk_summary</code>；正常终局断言 <code>dangling_start=True</code> 且 <code>missing=0</code>。</li>
 </ol>
 <h3>分配表行</h3>
 <table>
@@ -984,12 +994,12 @@
 <p>（锚点全部在 dev <code>d22e323</code> 上打开代码核实；不改第三方源码。）</p>
 <p><strong><code>src/robomme_ood_eval/models/framesamp_modul.py::run_loop</code></strong>：签名新增仅限关键字参数 <code>timer: "ChunkTimer | None" = None</code>，<strong><code>on_decision</code> 回调签名 <code>(int, np.ndarray) -&gt; None</code> 不改</strong>（定死这一方案：现有调用方 <code>evaluate_one</code>、<code>run_episode::on_decision</code>、<code>tests/pipeline/eval/test_policy_clients.py</code> 的 <code>_framesamp_modul_run</code> 等全部不受影响）。打点：
 - 起点：在 <code>pack_buffer</code> 打包之前；<code>add_buffer</code> 往返之后的 <code>element</code> 组装也在区间内——即 <code>if not epstate.action_plan:</code> 分支第一句、<code>resp = client.add_buffer(pack_buffer(</code> 之前调 <code>timer.start()</code>。<code>pack_buffer</code> 打包、<code>add_buffer</code> 往返、<code>while not resp.get("add_buffer_finished", False): time.sleep(0.1)</code> 轮询、<code>element = {...}</code> 组装都有意计入 <code>decision_wall_ms</code>（口径第 1 条：起点 = 第一条出站请求的准备时刻）（S6 合入后该轮询不存在，区间仍含 add_buffer 往返）。
-- 终点：<code>actions = client.infer(element)["actions"]</code> 返回后、<code>on_decision(...)</code> 之前调 <code>timer.close(decision=progress.decisions, env_step=epstate.count, action_rtt_ms=..., server_infer_ms=..., extra={"add_buffer_rtt_ms": ..., "gpu": server_timing.get("gpu")})</code>（<code>server_timing = getattr(client, "_last_server_timing", None) or {}</code>）。录像回调不进区间。
+- 终点：<code>t_chunk</code> 在 <code>_roundtrip</code> 里 <code>response = self._ws.recv()</code> 返回的瞬间捕获（即现有 <code>t2 = time.perf_counter()</code>，另存 <code>self._last_recv_t = t2</code>）。<code>run_loop</code> 把 <code>actions = client.infer(element)["actions"]</code> 拆成 <code>out = client.infer(element)</code> + <code>actions = out["actions"]</code>，确认 <code>actions</code> 取到后再调 <code>timer.close(t=getattr(client, "_last_recv_t", None), decision=progress.decisions, env_step=epstate.count, action_rtt_ms=..., server_infer_ms=..., extra={"add_buffer_rtt_ms": ..., "gpu": server_timing.get("gpu")})</code>（<code>server_timing = getattr(client, "_last_server_timing", None) or {}</code>）。因此回包后的 msgpack unpack、审计键弹出、<code>TracedClient</code> 写语言账本、<code>on_decision</code> 录像都<strong>不进</strong> <code>decision_wall_ms</code>。<code>_last_recv_t</code> 缺失（测试替身）时 <code>t=None</code> 退回 <code>close</code> 当下时刻。非法回复（字典里无 <code>actions</code>）：<code>out["actions"]</code> 照旧抛 <code>KeyError</code>（现有行为不变），在 <code>close</code> 之前，所以不增 <code>chunks[]</code>、<code>progress.decisions</code> 不加一。<code>close(t=...)</code> 为共享接口既有参数（第二部分〇′）。
 - 分量取法：<code>action_rtt_ms</code> 与 <code>add_buffer_rtt_ms</code> 不在 <code>run_loop</code> 内另计，而是读客户端的 <code>self._last_rtt</code>（见下条 <code>_roundtrip</code>），用 <code>getattr(client, "_last_rtt", {})</code>——<code>TracedClient.__getattr__</code> 会转发到内层；测试替身没有该属性时取 <code>None</code>。<code>server_infer_ms</code> = <code>(getattr(client, "_last_server_timing", None) or {}).get("infer_ms")</code>（<code>_last_server_timing</code> 由 <code>_roundtrip</code> 每次回包重设，见下条；审计关时为 <code>None</code>）。
 - <code>lang_ms=0</code>：本模型不调 <code>timer.add_lang</code>。
-- 异常路径：<code>add_buffer</code>／<code>infer</code> 抛错（含 <code>_roundtrip</code> 的 <code>RuntimeError("Error in inference server…")</code>）时不 <code>close</code>，该 decision 不产生 chunk 记录，<code>progress.decisions</code> 也不加一（与现有计数一致）；异常仍原样上抛给 <code>evaluate_one</code>。<code>timer is None</code> 时整段零开销、行为逐字节同现状。约 12 行。</p>
+- 异常路径：<code>add_buffer</code>／<code>infer</code> 抛错（含 <code>_roundtrip</code> 的 <code>RuntimeError("Error in inference server…")</code>）时不 <code>close</code>，该 decision 不产生 chunk 记录，<code>progress.decisions</code> 也不加一（与现有计数一致）；异常仍原样上抛给 <code>evaluate_one</code>。<code>timer is None</code> 时整段零开销、行为逐字节同现状。约 14 行。</p>
 <p><strong><code>models/framesamp_modul.py::evaluate_one</code></strong>：透传 <code>timer=None</code> 关键字给 <code>run_loop</code>；约 3 行。</p>
-<p><strong><code>models/framesamp_modul.py::make_recording_client._roundtrip</code></strong>：在已有 <code>per.append({... "rtt_s": t2 - t1 ...})</code> 之后加一行 <code>self._last_rtt[dig["kind"]] = (t2 - t1) * 1000.0</code>（<code>__init__</code> 里 <code>self._last_rtt = {}</code>）；并在现有 <code>self._last_audit = out.pop(AUDIT_KEY, None) ...</code> 之后加 <code>self._last_server_timing = self._last_audit.get("server_timing") if isinstance(self._last_audit, dict) else None</code>（<code>__init__</code> 初值 <code>None</code>；审计关时恒为 <code>None</code>）。这两个属性是对 S2b 的契约。<code>action_rtt_ms</code> = <code>kind == "infer"</code> 的 <code>rtt_s</code>（只包 <code>self._ws.send(data)</code> → <code>self._ws.recv()</code>，不含 pack／unpack），<code>add_buffer_rtt_ms</code> = <code>kind == "add_buffer"</code> 的 <code>rtt_s</code>。<code>per_msg</code>、<code>response_digest</code>、<code>payload_digest</code>、事件记录全部不改；<code>server_ms = rdig.get("server_ms", rdig.get("infer_time_ms", 0.0))</code> 保留（第三方 <code>infer_time_ms</code> 弃用为权威、保留作对照）。约 5 行。</p>
+<p><strong><code>models/framesamp_modul.py::make_recording_client._roundtrip</code></strong>：在已有 <code>per.append({... "rtt_s": t2 - t1 ...})</code> 之后加一行 <code>self._last_rtt[dig["kind"]] = (t2 - t1) * 1000.0</code>，并在 <code>t2 = time.perf_counter()</code> 之后立即 <code>self._last_recv_t = t2</code>（<code>__init__</code> 里 <code>self._last_rtt = {}</code>）；并在现有 <code>self._last_audit = out.pop(AUDIT_KEY, None) ...</code> 之后加 <code>self._last_server_timing = self._last_audit.get("server_timing") if isinstance(self._last_audit, dict) else None</code>（<code>__init__</code> 初值 <code>None</code>；审计关时恒为 <code>None</code>）。这两个属性是对 S2b 的契约。<code>action_rtt_ms</code> = <code>kind == "infer"</code> 的 <code>rtt_s</code>（只包 <code>self._ws.send(data)</code> → <code>self._ws.recv()</code>，不含 pack／unpack），<code>add_buffer_rtt_ms</code> = <code>kind == "add_buffer"</code> 的 <code>rtt_s</code>。<code>per_msg</code>、<code>response_digest</code>、<code>payload_digest</code>、事件记录全部不改；<code>server_ms = rdig.get("server_ms", rdig.get("infer_time_ms", 0.0))</code> 保留（第三方 <code>infer_time_ms</code> 弃用为权威、保留作对照）。约 5 行。</p>
 <p><strong><code>models/framesamp_modul.py::run_episode</code></strong>：<code>timing</code> 建好后 <code>timer = ChunkTimer()</code>，传 <code>evaluate_one(..., timer=timer)</code>；<code>res["timing"] = summarize_timing(timing)</code> 之后调 <code>attach_policy_timing(res["timing"], timer, gpu_name=&lt;首个审计块 server_timing.gpu，无则 None&gt;, model_kind="serial")</code>。gpu 名取法：<code>run_loop</code> 每次 <code>close</code> 时把 <code>server_timing.get("gpu")</code> 放进 <code>extra["gpu"]</code>，<code>run_episode</code> 取 <code>timer.chunks</code> 中第一个非空值。约 6 行。</p>
 <p><strong><code>models/framesamp_modul.py::summarize_timing</code></strong>：不改（旧摘要 <code>infer.server_*</code> 等字段原样保留作对照；新数据全部由 <code>attach_policy_timing</code> 写入 <code>chunks / chunk_summary / conservation</code>）。旧字段名 <code>chunk_rtt_ms</code> 不出现。</p>
 <p><strong><code>src/robomme_ood_eval/servers/policy_server_wrap.py::AuditedPolicy.infer</code></strong>：在现有 <code>out = self._inner.infer(obs)</code> 前后加 <code>t0 = time.perf_counter()</code> / <code>ms = (time.perf_counter() - t0) * 1000.0</code>（<code>import time</code> 新增），并在 <code>out[AUDIT_KEY] = build_audit(sink)</code> 之后写 <code>out[AUDIT_KEY]["server_timing"] = {"infer_ms": ms, "gpu": _gpu_name()}</code>。区间真实性：第三方 <code>policy.py::infer</code> 在 <code>return outputs</code> 前已 <code>outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)</code>，阻塞到结果回主机，故 <code>infer_ms</code> = 输入变换 + 前向 + 回主机 + 输出变换；第三方 <code>infer_time_ms</code> 只包 <code>self._sample_actions(...)</code> 的异步派发（<code>model_time</code> 在 <code>np.asarray</code> 之前停表），偏小。<code>_gpu_name()</code> 新增小函数：<code>jax.devices()[0].device_kind</code>，失败返回 <code>None</code>，进程内缓存一次。<code>build_audit</code> 签名不改（<code>server_timing</code> 在其外追加，避免动 <code>build_audit</code> 的现有测试）。
@@ -1005,6 +1015,8 @@
 2. <strong><code>test_framesamp_on_decision_signature_unchanged</code></strong>：<code>timer=None</code> 跑 <code>test_policy_clients</code> 同款替身，断言 <code>on_decision</code> 收到 <code>(int, ndarray)</code>、结果 dict 与改前键集合相同。
 3. <strong><code>test_framesamp_error_no_chunk</code></strong>：假服务端第 2 次 infer 回字符串错误 → <code>status=="error"</code>、<code>len(chunks)==1</code>、无半截记录。
 4. <strong><code>test_audited_policy_server_timing</code></strong>：假内层 policy（sleep 20 ms、返回 numpy）包 <code>AuditedPolicy</code>：<code>server_timing.infer_ms ≥ 20</code>、<code>gpu</code> 键存在；除 <code>_sgeval_audit</code> 外回包与内层逐字节相同。
+7. <strong><code>test_framesamp_chunk_end_at_recv</code></strong>：假服务端回包体积大（如额外 2 MB 字段）且替身 <code>on_decision</code> sleep 30 ms；断言每条 <code>decision_wall_ms</code> 的终点 = <code>_last_recv_t</code>（<code>decision_wall_ms ≤ add_buffer 区间 + action_rtt_ms + 10 ms</code>），即 unpack 与 <code>on_decision</code> 不计入。
+8. <strong><code>test_framesamp_invalid_reply_no_chunk</code>（反例）</strong>：假服务端第 2 次 infer 回一个合法 msgpack 字典但无 <code>actions</code> 键 → <code>status=="error"</code>、<code>error</code> 含 <code>KeyError</code>、<code>len(chunks)==1</code>、<code>decisions==1</code>。
 6. <strong><code>test_serve_root_override</code></strong>：<code>tmp_path/fake/scripts/serve_policy.py</code> 写一个最小模块；断言 <code>split_serve_root(["--sgeval-serve-root", str(fake), "--seed=7"])</code> 返回 <code>(str(fake), ["--seed=7"])</code>，<code>mme_vla_root(str(fake)) == fake</code>，<code>load_serve_policy(fake).__file__</code> 落在该目录下的 <code>scripts/serve_policy.py</code>；不传时 <code>mme_vla_root()</code> 结果同现状；目录缺脚本时抛 <code>FileNotFoundError</code>。
 5. <strong><code>test_obs_eq_audit_off</code></strong>：<code>SGEVAL_AUDIT=0</code> 下调 <code>policy_server_wrap.run()</code> 的 <code>create_policy</code> 替身，断言返回的就是原对象（非 <code>AuditedPolicy</code>）、msgpack 回包与第三方原 policy 逐字节相同、无 <code>server_timing</code>。判定行：
    <code>OBS_EQ=PASS route=policy_server_wrap audit_off_bytes_equal=1 audit_off_extra_keys=0 audit_on_action_bytes_equal=1</code>
@@ -1031,7 +1043,7 @@
 <td>FrameSamp 客户端 <code>decision_wall_ms</code> + mme-vla 服务端 <code>server_timing</code></td>
 <td><code>src/robomme_ood_eval/models/framesamp_modul.py</code>、<code>src/robomme_ood_eval/servers/policy_server_wrap.py</code>、<code>tests/pipeline/eval/test_mmevla_chunk_timing.py</code></td>
 <td><code>src/robomme_ood_eval/timing.py</code>（S1）、<code>models/groundsg.py</code>（S2b）、<code>third_party/**</code>、其余模型文件</td>
-<td>依赖 S1 <code>ChunkTimer.start/close</code>、<code>attach_policy_timing(model_kind="serial")</code>；<strong>对 S2b 的契约</strong>：审计块键 <code>_sgeval_audit.server_timing = {"infer_ms": float, "gpu": str|None}</code>（审计关时整块不存在）；<code>RecordingClient._last_rtt: dict[kind → ms]</code>（kind ∈ <code>reset/add_buffer/infer</code>）与 <code>RecordingClient._last_server_timing: dict|None</code>；S2b 读 <code>_last_rtt["infer"]</code> 与 <code>_last_server_timing</code>；向 S4 提供 <code>--sgeval-serve-root &lt;dir&gt;</code></td>
+<td>依赖 S1 <code>ChunkTimer.start/close</code>、<code>attach_policy_timing(model_kind="serial")</code>；<strong>对 S2b 的契约</strong>：审计块键 <code>_sgeval_audit.server_timing = {"infer_ms": float, "gpu": str|None}</code>（审计关时整块不存在）；<code>RecordingClient._last_rtt: dict[kind → ms]</code>（kind ∈ <code>reset/add_buffer/infer</code>）与 <code>RecordingClient._last_server_timing: dict|None</code>；S2b 读 <code>_last_rtt["infer"]</code> 与 <code>_last_server_timing</code>；<code>_roundtrip</code> 每次往返后设 <code>_last_recv_t</code>（ws.recv 返回瞬间的 perf_counter），供 S2b 作终点；向 S4 提供 <code>--sgeval-serve-root &lt;dir&gt;</code></td>
 <td>S1 之后，S2b 之前</td>
 <td>worktree 内 <code>UV_PROJECT_ENVIRONMENT=&lt;主 .venv&gt; PYTHONPATH=&lt;wt&gt;/src:&lt;主&gt;/third_party/robomme_benchmark/src uv run --no-sync python -m pytest tests/pipeline/eval/test_mmevla_chunk_timing.py tests/pipeline/eval/test_policy_clients.py tests/pipeline/eval/test_framesamp_modul_transport.py -q</code> → <code>CHUNK_TIMING=PASS model=framesamp …</code>、<code>WALL_DECOMP=PASS model=framesamp kind=serial chunks=3 violations=0 overhead_pct_p50=&lt;x&gt; …</code>、<code>OBS_EQ=PASS route=policy_server_wrap …</code></td>
 <td>CPU，假服务端随机空闲端口</td>
@@ -1053,7 +1065,7 @@
 <h3>二·3 GroundSG（oracle / qwenvl / memer）</h3>
 <h3>GroundSG 逐文件改动</h3>
 <p>锚点以本节为准：起点 <code>run_official_episode</code> 内 <code>_TimedPredictor.get_subgoal</code> 入口，终点 <code>TracingClient.infer</code>。</p>
-<p>锚点均已对照代码核实（dev @ d22e323）：官方循环 <code>third_party/mme-vla/examples/robomme/eval.py::EpisodeEvaluator.eval_each_episode</code> 在 <code>if not epstate.action_plan:</code> 分支里先 <code>subgoal_predictor.get_subgoal(epstate.count, subgoal, last_subgoal)</code>（外层条件 <code>epstate.count % self.args.subgoal_keep_period == 0 or last_subgoal is None</code>，<code>Args.subgoal_keep_period = 1</code>，本仓 <code>make_args</code> 不覆盖 → 每个 decision 都调），再 <code>self.get_action_chunk(...)</code>；后者在 <code>use_history</code> 时先 <code>client.add_buffer(...)</code>（GroundSG 默认不开，开了也只是区间内的一段），最后 <code>client.infer(element)["actions"]</code>。<code>client</code> 是本仓 <code>groundsg.py::TracingClient</code>，内层是 <code>framesamp_modul.py::make_recording_client</code> 造的 <code>RecordingClient</code>，其 <code>_roundtrip</code> 已有 <code>t1→t2</code>（<code>ws.send → ws.recv</code>）计时对。</p>
+<p>锚点均已对照代码核实（dev @ d22e323）：官方循环 <code>third_party/mme-vla/examples/robomme/eval.py::EpisodeEvaluator.eval_each_episode</code> 在 <code>if not epstate.action_plan:</code> 分支里先 <code>subgoal_predictor.get_subgoal(epstate.count, subgoal, last_subgoal)</code>（外层条件 <code>epstate.count % self.args.subgoal_keep_period == 0 or last_subgoal is None</code>，<code>Args.subgoal_keep_period = 1</code>，本仓 <code>make_args</code> 不覆盖 → 每个 decision 都调），再 <code>self.get_action_chunk(...)</code>；后者在 <code>if self.args.use_history:</code> 时先 <code>client.add_buffer(pack_buffer(...))</code> 并 <code>while not resp.get("add_buffer_finished", False): time.sleep(0.1)</code>，最后 <code>client.infer(element)["actions"]</code>。锁定的第三方 <code>eval.py::Args</code> 默认 <code>use_history: bool = True</code>，本仓 <code>make_args</code> 与 <code>groundsg.py</code> 都不覆盖，<strong>所以默认每个 decision 都走一次 <code>add_buffer</code> 往返</strong>，它落在 <code>decision_wall_ms</code> 区间内（<code>get_subgoal</code> 之后、<code>infer</code> 之前），不进 <code>action_rtt_ms</code>（只取 <code>_last_rtt["infer"]</code>），也不进 <code>lang_ms</code>。<code>client</code> 是本仓 <code>groundsg.py::TracingClient</code>，内层是 <code>framesamp_modul.py::make_recording_client</code> 造的 <code>RecordingClient</code>，其 <code>_roundtrip</code> 已有 <code>t1→t2</code>（<code>ws.send → ws.recv</code>）计时对。</p>
 <h4>一、三变体共用：<code>src/robomme_ood_eval/models/groundsg.py</code></h4>
 <ol>
 <li><strong>计时器挂载点（数据通路写死）</strong>：<code>run_official_episode</code> 建 <code>ctx["episode"]</code> 时多放一个键 <code>"chunk_timer": timing.ChunkTimer()</code>（<code>from robomme_ood_eval import timing as chunk_timing</code>，S1 接口）。起点、<code>lang_calls</code>、终点三方都只通过 <code>ctx["episode"]["chunk_timer"]</code> 这一个对象交汇，不另建通道：</li>
@@ -1061,8 +1073,9 @@
 <li>语言段：<code>_TimedPredictor</code> 与 <code>LangTap</code> 调 <code>timer.add_lang(...)</code>；</li>
 <li>终点：<code>TracingClient.infer</code> 在内层 <code>infer</code> 返回后调 <code>timer.close(...)</code>。
    <code>TracingClient</code> 构造时已拿到 <code>ep["tap"]</code>，签名改为 <code>TracingClient(inner, tap, timer=None, timing=None)</code>，两个新参数都可选，<code>timer is None</code> 时 <code>infer</code> 内整段计时与 <code>close</code> 跳过。<strong>两处 <code>ws_factory</code> 都改为传 <code>timer=ep["chunk_timer"], timing=ep["timing"]</code></strong>：新侧是 <code>groundsg.py::make_policy_context</code> 内的 <code>ws_factory</code>；原侧是 <code>dev-scripts/orig/official_hard_runner.py::make_context</code> 内自己的 <code>ws_factory</code>（构造 <code>groundsg.TracingClient(ctx["client_factory"](h, p, ep), ep["tap"])</code> 那一行）。注意后者不在 <code>groundsg.py</code> 里，需把 <code>dev-scripts/orig/official_hard_runner.py</code> 加进 S2b 可写集合（只改这一行，见分配表）。<code>tests/pipeline/evalx/groundsg/test_groundsg_stage3_wiring.py</code> 的两处两参调用不改，走 <code>timer=None</code> 路径。原侧经 <code>groundsg.run_official_episode</code> 运行，<code>chunk_timer</code>、<code>_TimedPredictor</code>、<code>LangTap(timer=...)</code> 都在该函数内建好，所以原侧同样产出计时字段：原侧 <code>res["timing"]</code> 只多出新键（<code>chunks</code> / <code>chunk_summary</code> / <code>lang_calls</code> / <code>lang_summary</code> / <code>orphan_lang_ms</code> / <code>conservation</code> / <code>gpu_name</code> / <code>timing_missing</code>），既有键值不变；原侧对拍脚本若比较 timing，需忽略这些新键（见盲区）。<code>LangTap.__init__</code> 新增可选关键字 <code>timer=None</code>，<code>run_official_episode</code> 构造 <code>LangTap</code> 时传 <code>timer=ep["chunk_timer"]</code>。<code>default_client_factory</code> 照旧把 <code>episode.setdefault("timing", {})</code> 传给 <code>make_recording_client</code>，<code>per_msg</code> 汇总不变。</li>
-<li><strong>终点放在 <code>TracingClient.infer</code> 而不放进 <code>_roundtrip</code></strong>：<code>_roundtrip</code> 同时服务 <code>reset</code> / <code>add_buffer</code> / <code>infer</code>，只有 <code>infer</code> 回来的是 chunk。<code>TracingClient.infer</code> 在 <code>out = self._inner.infer(obs)</code> 成功后、<code>lang.action_close</code> 之前调：
-   <code>timer.close(decision=self._tap.decisions - 1, env_step=self._tap.steps, action_rtt_ms=self._inner._last_rtt["infer"], server_infer_ms=(self._inner._last_server_timing or {}).get("infer_ms"))</code>
+<li><strong>终点放在 <code>TracingClient.infer</code> 而不放进 <code>_roundtrip</code></strong>：<code>_roundtrip</code> 同时服务 <code>reset</code> / <code>add_buffer</code> / <code>infer</code>，只有 <code>infer</code> 回来的是 chunk。终点时刻在内层 <code>infer</code> 返回瞬间捕获：<code>t_chunk = getattr(self._inner, "_last_recv_t", None)</code>（S2 契约：<code>_roundtrip</code> 在 <code>ws.recv</code> 返回后记 <code>perf_counter</code> 时刻为 <code>_last_recv_t</code>，优先读它），没有则用 <code>out = self._inner.infer(obs)</code> 下一行自记的 <code>t_ret = time.perf_counter()</code>。<strong><code>close</code> 推迟到确认回复合法之后</strong>：<code>isinstance(out, dict) and "actions" in out</code> 才调
+   <code>timer.close(t=t_chunk or t_ret, decision=self._tap.decisions - 1, env_step=self._tap.steps, action_rtt_ms=self._inner._last_rtt["infer"], server_infer_ms=(self._inner._last_server_timing or {}).get("infer_ms"))</code>
+   （位置在审计键 pop 之后、<code>lang.action_close</code> 之前；<code>t=</code> 为共享接口 <code>close(..., t: float | None = None)</code> 的参数，<code>extra</code> 不放 <code>t_chunk</code>）。回复非法（不是 dict、缺 <code>actions</code>）时不调 <code>close</code>、不增 <code>chunks[]</code>，计时器桶留到下一次 <code>start</code> 覆盖或局末 <code>orphan()</code>，随后既有 <code>out["actions"]</code> 照旧抛错，局记 error。
    （<code>tap.decisions</code> 已在 <code>on_request("infer")</code> 里 +1，故减 1 得 0 起编号；<code>_last_rtt: dict[kind→ms]</code> / <code>_last_server_timing: dict|None</code> 是 S2 在 <code>_roundtrip</code> 上加的实例属性，契约见分配表行）。<strong>缺失不抛错</strong>：内层缺 <code>_last_rtt</code> 或 <code>_last_server_timing</code> 属性、或 <code>_last_rtt</code> 无 <code>"infer"</code> 键时，记 <code>action_rtt_ms=None</code>、<code>server_infer_ms=None</code>，并在构造时传入的 <code>timing</code> 字典里累加 <code>timing["timing_missing"] += 1</code>（<code>ws_factory</code> 传的是 <code>ep["timing"]</code>，局末随 <code>res["timing"]</code> 输出；<code>timing is None</code> 时不计）；<code>_last_server_timing</code> 属性存在但值为 None 时只记 <code>server_infer_ms=None</code>、不计 missing。现有替身（<code>groundsg_fakes.py</code>、<code>groundsg_fakes_dev.py</code>、<code>test_groundsg_context_seat.py</code>、<code>test_stage3_seven_routes.py</code>、<code>test_models_policies.py</code> 的 <code>FakeMMEVLAWebsocketClient</code>）不改，合并后照常通过。<code>infer</code> 抛异常走既有 <code>except BaseException</code> 分支，不调 <code>close</code>。<code>TracingClient.infer</code> 开头已有的 <code>self._inner._last_audit = None</code> 旁边同样先清 <code>_last_rtt = {}</code>、<code>_last_server_timing = None</code>（仅当属性存在时清），防复用上一次。</li>
 <li><strong><code>_TimedPredictor</code>（新增类）</strong>：<code>__init__(inner, timer, *, variant, counter=None)</code>：qwenvl / memer 由 <code>run_official_episode</code> 在 <code>install_language</code> 之后取 <code>predictor.api.engine</code> 建 <code>_CountingEngine(engine)</code>，装回 <code>predictor.api.engine</code> 后作为 <code>counter</code> 传入；oracle 没有 <code>api</code>，<code>counter=None</code>。<code>get_subgoal(count, current_subgoal, last_subgoal)</code>：
    <code>python
@@ -1107,18 +1120,19 @@
 <h3>测试</h3>
 <p>新文件 <code>tests/pipeline/eval/test_groundsg_chunk_timing.py</code>（纯 CPU，无 swift、无 GPU、无仿真）：沿用 <code>tests/pipeline/evalx/groundsg/groundsg_fakes.py</code> 已有的 <code>make_policy_context(..., client_factory=, qwen_extra=)</code> 注入口（同一用法另见 <code>tests/pipeline/evalx/groundsg/test_groundsg_context_seat.py</code>、<code>tests/pipeline/eval/test_stage3_seven_routes.py</code>）。替身：
 - 假 engine：<code>infer</code> 内 <code>time.sleep(d_ask)</code> 后返回 <code>choices[0].message.content</code>，按脚本序列给合法 / 非法回复（memer 校验失败用非法回复触发）；
-- 假 action client：带 <code>_roundtrip</code> 语义的替身，<code>infer</code> 内 <code>sleep(d_rtt)</code>，设 <code>_last_rtt={"infer": d_rtt_measured}</code>、<code>_last_server_timing={"infer_ms": d_srv}</code>；另备一个缺 <code>_last_rtt</code> 的坏替身，返回 16 步 <code>actions</code>；
-- 假 runner：固定 <code>steps</code> 后返回 <code>success</code>。延迟取 <code>d_ask=30ms</code>、<code>d_rtt=20ms</code>、<code>d_srv=10ms</code>，容差 ±5 ms（<code>perf_counter</code> + <code>sleep</code> 抖动）。</p>
+- 假 action client：带 <code>_roundtrip</code> 语义的替身，<code>add_buffer</code> 内 <code>sleep(d_buf)</code> 并返回 <code>{"add_buffer_finished": True}</code>（默认 <code>use_history=True</code>，返回 False 会让官方轮询死循环，因为 <code>resp</code> 不刷新），<code>infer</code> 内 <code>sleep(d_rtt)</code>，设 <code>_last_rtt={"infer": d_rtt_measured}</code>、<code>_last_server_timing={"infer_ms": d_srv}</code>；另备一个缺 <code>_last_rtt</code> 的坏替身，返回 16 步 <code>actions</code>；
+- 假 runner：固定 <code>steps</code> 后返回 <code>success</code>。延迟取 <code>d_ask=30ms</code>、<code>d_buf=15ms</code>、<code>d_rtt=20ms</code>、<code>d_srv=10ms</code>，容差 ±5 ms（<code>perf_counter</code> + <code>sleep</code> 抖动）。</p>
 <p>用例与判定行：
 1. oracle，3 个 decision：<code>CHUNK_TIMING=PASS model=groundsg-oracle chunks=3 decisions=3 missing=0 rtt_ok=3 wall_ge_rtt=3 lang_calls=0</code>。
 2. qwenvl，<code>env_name=ButtonUnmask</code>（keep_period=90），4 个 decision、<code>count</code> 0/16/32/48：首次真问、其后复用 → <code>LANG_SPLIT=PASS model=groundsg-qwenvl calls=4 delta_pct=&lt;x&gt; asks=1 reuse=3 subgoal_ms_first≈30 reuse_ms_max&lt;5 lang_ms_eq_subgoal=4</code>；另一任务（keep_period=0）<code>LANG_SPLIT=PASS model=groundsg-qwenvl calls=4 delta_pct=&lt;x&gt; asks=4 reuse=0</code>。<code>CHUNK_TIMING=PASS model=groundsg-qwenvl chunks=4 decisions=4 missing=0 rtt_ok=4 wall_ge_rtt=4</code>。
 3. memer 重问（开账本，假 <code>LanguageLog</code>）：回复序列「坏、好」→ <code>LANG_SPLIT=PASS model=groundsg-memer calls=1 delta_pct=&lt;x&gt; asks=2 retry=0,1 ask_ms≈30,30 subgoal_ms≈60 lang_ms=subgoal_ms</code>（断言 ask 未叠加进 <code>lang_ms</code>）。
-4. memer 路径 A（开账本）：先一次好回复建历史，再「坏×3」→ <code>fallback=last_valid tries=3 subgoal_ms≈90 asks=3</code>，该 decision 有 chunk。判定行：<code>CHUNK_TIMING=PASS model=groundsg-memer decisions=2 missing=0 chunks=2 rtt_ok=2 wall_ge_rtt=2 lang_calls_subgoal=2 lang_calls_ask=4</code>；<code>WALL_DECOMP=PASS model=groundsg-memer kind=serial chunks=2 violations=0 overhead_pct_p50=&lt;x|na&gt; min_gap_ms=&lt;x&gt; max_gap_ms=&lt;y&gt; lang_ms=30,90</code>，判据要求 y&lt;5。
+4. memer 路径 A（开账本）：先一次好回复建历史，再「坏×3」→ <code>fallback=last_valid tries=3 subgoal_ms≈90 asks=3</code>，该 decision 有 chunk。判定行：<code>CHUNK_TIMING=PASS model=groundsg-memer decisions=2 missing=0 chunks=2 rtt_ok=2 wall_ge_rtt=2 lang_calls_subgoal=2 lang_calls_ask=4</code>；<code>WALL_DECOMP=PASS model=groundsg-memer kind=serial chunks=2 violations=0 overhead_pct_p50=&lt;x|na&gt; min_gap_ms=&lt;x&gt; max_gap_ms=&lt;y&gt; lang_ms=30,90</code>；gap 与 FrameSamp 同口径只报数，不设上限判据（gap 含 <code>add_buffer</code> 往返，夹具下约 <code>d_buf</code>）。
 5. memer 路径 B（开账本）：首个 decision 「坏×3」→ 抛 <code>MemERResponseError</code>，<code>status=error error_kind=model_response_error chunks=0 lang_calls(subgoal)=1 orphan_lang_ms≈90</code>。
 6. 账本开 / 关两种：<code>language_log</code> 为 None 与假 <code>LanguageLog</code> 各跑一遍，<code>subgoal_ms</code> 条数一致；账本开时断言 <code>LangTap.summary()</code> 的 <code>subgoal_calls</code> / <code>reuses</code> 与 <code>lang_calls</code> 对上（证明代理未使 <code>install_language</code> 失效）。</p>
 <p><code>LANG_SPLIT</code> 通用键：<code>delta_pct = |lang_ms − Σsubgoal_ms| / Σsubgoal_ms × 100</code>（按局汇总，要求 &lt; 1；Σ为 0 的全复用局记 <code>na</code>），oracle 不出此行。
 7. 计时字段缺失（宽松路径）：坏替身（缺 <code>_last_rtt</code> 属性）跑 qwenvl 1 个 decision → 断言局不报错（<code>status=success</code>）、该 chunk <code>action_rtt_ms=None</code>、<code>server_infer_ms=None</code>、<code>timing["timing_missing"]&gt;0</code>；<code>decision_wall_ms</code> 照常有值。真实客户端路径由前述 <code>CHUNK_TIMING ... missing=0</code> 断言不缺。
-8. 守恒：每个 chunk <code>decision_wall_ms ≥ action_rtt_ms + lang_ms − 1</code>，差值 &lt; 5 ms → <code>WALL_DECOMP=PASS model=groundsg-&lt;variant&gt; kind=serial chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x|na&gt; min_gap_ms=&lt;x&gt; max_gap_ms=&lt;y&gt; lang_ms=&lt;逐 chunk 列表&gt;</code>；正常终止局 <code>decisions == ceil(steps/16)</code>，路径 B 局跳过。</p>
+8. 守恒：每个 chunk <code>decision_wall_ms ≥ action_rtt_ms + lang_ms − 1</code>（<code>violations</code> 只数违反此不等式的 chunk）；差值含默认开启的 <code>add_buffer</code> 往返，与 FrameSamp 同口径只报 <code>min_gap_ms</code> / <code>max_gap_ms</code> / <code>overhead_pct_p50</code>，不设上限 → <code>WALL_DECOMP=PASS model=groundsg-&lt;variant&gt; kind=serial chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x|na&gt; min_gap_ms=&lt;x&gt; max_gap_ms=&lt;y&gt; lang_ms=&lt;逐 chunk 列表&gt;</code>；正常终止局 <code>decisions == ceil(steps/16)</code>，路径 B 局跳过。
+9. 非法回复反例：假 action client 第 2 个 decision 的 <code>infer</code> 返回 <code>{"foo": 1}</code>（缺 <code>actions</code>）→ 断言 <code>chunks</code> 只有 1 条、局 <code>status=error</code>、<code>timing_missing</code> 不变；另测返回非 dict。判定行附 <code>bad_reply_chunks=0</code>。</p>
 <h3>分配表行</h3>
 <table>
 <thead>
@@ -1139,7 +1153,7 @@
 <td>GroundSG 三变体 <code>decision_wall_ms</code> / <code>subgoal_ms</code> / <code>ask_ms</code></td>
 <td><code>src/robomme_ood_eval/models/groundsg.py</code>、<code>tests/pipeline/eval/test_groundsg_chunk_timing.py</code>、<code>dev-scripts/orig/official_hard_runner.py</code>（只改 <code>make_context::ws_factory</code> 那一行）</td>
 <td><code>framesamp_modul.py</code>、<code>servers/policy_server_wrap.py</code>、<code>timing.py</code>、<code>_official_defs.py</code>、<code>third_party/**</code></td>
-<td>依赖 S1 <code>timing.ChunkTimer</code> / <code>attach_policy_timing</code> 签名；依赖 S2：① <code>RecordingClient._roundtrip</code> 每次往返后设实例属性 <code>_last_rtt: dict[kind→ms]</code>（<code>_last_rtt["infer"] = (t2-t1)*1e3</code>，即 <code>ws.send→ws.recv</code>）与 <code>_last_server_timing: dict|None</code>（在 pop 审计键时取 <code>out[AUDIT_KEY]["server_timing"]</code>，键 <code>infer_ms</code>、<code>gpu</code>）；<code>_last_server_timing</code> 属性存在但值为 None 时允许，记 <code>server_infer_ms=None</code>；属性缺失或 <code>_last_rtt</code> 无 <code>"infer"</code> 键时记 None 并累加 <code>timing_missing</code>，不抛错；② <code>_last_audit</code> 语义不变；③ <code>make_recording_client(host, port, recorder, timing)</code> 签名不变。S2b 不改 <code>_roundtrip</code>，只读这两个属性</td>
+<td>依赖 S1 <code>timing.ChunkTimer</code> / <code>attach_policy_timing</code> 签名；依赖 S2：① <code>RecordingClient._roundtrip</code> 每次往返后设实例属性 <code>_last_rtt: dict[kind→ms]</code>（<code>_last_rtt["infer"] = (t2-t1)*1e3</code>，即 <code>ws.send→ws.recv</code>）、<code>_last_recv_t: float</code>（<code>ws.recv</code> 返回后的 <code>perf_counter</code>）与 <code>_last_server_timing: dict|None</code>（在 pop 审计键时取 <code>out[AUDIT_KEY]["server_timing"]</code>，键 <code>infer_ms</code>、<code>gpu</code>）；<code>_last_server_timing</code> 属性存在但值为 None 时允许，记 <code>server_infer_ms=None</code>；属性缺失或 <code>_last_rtt</code> 无 <code>"infer"</code> 键时记 None 并累加 <code>timing_missing</code>，不抛错；② <code>_last_audit</code> 语义不变；③ <code>make_recording_client(host, port, recorder, timing)</code> 签名不变。S2b 不改 <code>_roundtrip</code>，只读这两个属性</td>
 <td>S1 → S2 → <strong>S2b</strong> → …</td>
 <td>worktree 内 <code>pytest tests/pipeline/eval/test_groundsg_chunk_timing.py tests/pipeline/evalx/groundsg -q</code> → <code>CHUNK_TIMING=PASS model=groundsg-{oracle,qwenvl,memer} decisions=&lt;n&gt; missing=0 ...</code>、<code>LANG_SPLIT=PASS model=groundsg-{qwenvl,memer} calls=&lt;n&gt; delta_pct=&lt;x&gt; ...</code>、<code>WALL_DECOMP=PASS model=groundsg-*</code></td>
 <td>CPU</td>
@@ -1155,7 +1169,7 @@
 <li>qwenvl 复用局的 <code>subgoal_ms≈0</code> 只在 3 个任务出现，SPEED_SMOKE 若选其他任务则看不到 reuse 行。</li>
 <li>原侧 <code>res["timing"]</code> 多出计时新键（<code>chunks</code> / <code>chunk_summary</code> / <code>lang_calls</code> / <code>lang_summary</code> / <code>orphan_lang_ms</code> / <code>conservation</code> / <code>gpu_name</code> / <code>timing_missing</code>），既有键值不变；原侧对拍脚本若比较 timing，需忽略这些新键，否则新侧与原侧计时值天然不同会误报。</li>
 <li>原侧默认客户端没有 <code>_last_rtt</code> / <code>_last_server_timing</code>，所以原侧每个 chunk 都是 <code>action_rtt_ms=None</code>，并累加 <code>timing_missing</code>；<code>CHUNK_TIMING</code> 的 <code>missing=0</code> 只对新侧有效。</li>
-<li><code>use_history=True</code> 时 <code>add_buffer</code> 往返与轮询落在 <code>decision_wall_ms − action_rtt_ms − lang_ms</code> 差值内，GroundSG 默认关，未单列。</li>
+<li><code>use_history=True</code>（第三方默认、本仓不覆盖）下每个 decision 的 <code>add_buffer</code> 往返与轮询落在 <code>decision_wall_ms − action_rtt_ms − lang_ms</code> 差值内，本计划不单列；需要时可从 <code>per_msg</code> 里 kind=<code>add_buffer</code> 的 <code>rtt_s</code> 对照。</li>
 <li>路径 B 的 <code>orphan_lang_ms</code> 不进任何 chunk，<code>chunk_summary</code> 看不到该次 90 ms 级等待，只在 <code>lang_summary</code> / <code>orphan_lang_ms</code> 可见。</li>
 </ul>
 <p>未改仓库文件、未派子代理。</p>
@@ -1199,7 +1213,7 @@
    - hold 步（<code>ep.chunk is None</code>）判为 False。
    - H=1 时第一次发放后 cursor 被 min 截成 1，之后保持 1。旧 chunk 耗尽后重复发最后一行时 cursor 也停在 1，会被误判为 fresh。所以 H=1 退化为「每步都 fresh」只在 s1 周期等于步长时成立，测试用断言钉住这一点（见下文），客户端最终以 <code>n_s1_fires</code> 是否递增来判定 fresh。
    - 竞态分析：同一请求内父类 <code>on_observation</code> 的调用顺序固定为 <code>_fire_s2 → _fire_s1 → _dispense</code>（第三方 <code>on_observation</code> 原文），并且是同一个协程内的同步调用，所以不存在竞态。
-5. 审计关（<code>SGEVAL_AUDIT=0</code>）时：不计时、不 sync、不 setattr、不加 <code>pp_timing</code>，回复逐字节不变。审计开时，<code>torch.cuda.synchronize()</code> 只影响墙钟，不改动作、RNG 和 cursor，现有的 <code>test_wrapper_actions_rng_cursor_counts_identical_to_parent</code> 继续守住这一点。</p>
+5. 审计关（<code>SGEVAL_AUDIT=0</code>）时：不计时、不 sync、不 setattr、不加 <code>pp_timing</code>。此时回复与<strong>改动前的本仓包装器</strong>（含既有的 <code>subgoal</code> 键）逐字节相同；比较基准不是第三方父类，父类的回复只有 <code>actions</code>。审计开时，<code>torch.cuda.synchronize()</code> 只影响墙钟，不改动作、RNG 和 cursor，现有的 <code>test_wrapper_actions_rng_cursor_counts_identical_to_parent</code> 继续守住这一点。</p>
 <p><strong><code>src/robomme_ood_eval/models/pp.py</code>（约 60 行）</strong></p>
 <ol>
 <li><code>TracedConnection.__init__</code> 新增以下属性：<code>self.timer = ChunkTimer()</code>、<code>self.step_rtt_ms: list[float] = []</code>、<code>self._bucket_ms = 0.0</code>、<code>self._n_fresh = 0</code>、<code>self._last_n_s1 = 0</code>、<code>self.gpu_name = None</code>、<code>self.timing_missing = 0</code>、<code>self.fresh_mismatch = 0</code>、<code>self.reconnect_steps: list[int] = []</code>。</li>
@@ -1219,10 +1233,10 @@
 </li>
 <li>因为非 fresh 步和当步的 S2 都在 close 之前 <code>add_lang</code>，<code>close</code> 时计时器算出的 <code>lang_ms</code> 自然等于 <code>B + s</code>，不需要另传。</li>
 <li>悬空 <code>start</code> 的口径：末步非 fresh 时，最后一次 <code>start</code> 之后没有 <code>close</code>，共享助手标 <code>dangling_start=True</code>；末步恰为 fresh 时标 <code>False</code>。两种都正常，不算异常。</li>
-<li><code>_act_with_reconnect</code>：失败的那次尝试没有 RTT；重连成功后重发同一观测，以重发那次的 RTT 为准。在 <code>result["reconnects"] += 1</code> 旁边执行 <code>tconn.reconnect_steps.append(tconn.actions_received)</code>。它记的是 env_step 编号，<code>step_rtt_ms[k]</code> 就对应 env_step k（每个成功步追加一条），两者按 env_step 索引对齐；报表据此在稳态统计里剔除这些步。桶和 fresh 判定只认成功回复里的 <code>pp_timing</code>。</li>
+<li><code>_act_with_reconnect</code>：失败的那次尝试没有 RTT；重连成功后重发同一观测，以重发那次的 RTT 为准。在 <code>result["reconnects"] += 1</code> 旁边执行 <code>tconn.reconnect_steps.append(tconn.actions_received)</code>。它记的是 env_step 编号，<code>step_rtt_ms[k]</code> 就对应 env_step k（每个成功步追加一条），两者按 env_step 索引对齐；只要发生过重连，<code>_run_episode_async</code> 就在 <code>timing</code> 里写 <code>reconnected=True</code>，报表排除<strong>整局</strong>；<code>reconnect_steps</code> 只留作证据。桶和 fresh 判定只认成功回复里的 <code>pp_timing</code>。</li>
 <li><code>_run_episode_async</code>：在 <code>timing["episode_s"] = ...</code> 之后、<code>result.update(...)</code> 之前执行：</li>
 <li><code>attach_policy_timing(timing, tconn.timer, gpu_name=tconn.gpu_name, model_kind="pp")</code>；</li>
-<li><code>timing.update(step_rtt_ms=tconn.step_rtt_ms, pp_timing_missing=tconn.timing_missing, reconnect_steps=tconn.reconnect_steps, fresh_mismatch=tconn.fresh_mismatch)</code>。</li>
+<li><code>timing.update(step_rtt_ms=tconn.step_rtt_ms, pp_timing_missing=tconn.timing_missing, reconnect_steps=tconn.reconnect_steps, reconnected=bool(tconn.reconnect_steps), fresh_mismatch=tconn.fresh_mismatch)</code>。</li>
 </ol>
 <p><code>orphan()</code> 由 <code>attach_policy_timing</code> 内部调用，结果写进 <code>timing["orphan_lang_ms"]</code>。异常路径也会走到这里（这段在 try/except/finally 之后），已收齐的 chunk 照样落盘。</p>
 <h3>测试</h3>
@@ -1294,7 +1308,7 @@
 <tr>
 <td>守恒</td>
 <td>每条 chunk 满足 <code>abs(decision_wall − action_rtt − lang) ≤ 3e-3</code>（各值经 round 到 3 位）</td>
-<td><code>WALL_DECOMP=PASS model=pp kind=pp chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x&gt; max_resid_ms=&lt;x&gt;</code>（<code>overhead_pct_p50</code> 按共享助手同式计算，预期 ≈0，断言 |x| ≤ 1e-3）</td>
+<td><code>WALL_DECOMP=PASS model=pp kind=pp chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x&gt; max_resid_ms=&lt;x&gt;</code>（注：PP 的 <code>decision_wall_ms</code> 是合成值 <code>R_f + B</code>，不是一次墙钟测量，所以守恒恒成立，这一行只验算术与字段接线；<code>overhead_pct_p50</code> 按共享助手同式计算，预期 ≈0，断言 |x| ≤ 1e-3）</td>
 </tr>
 <tr>
 <td>条数</td>
@@ -1308,19 +1322,19 @@
 </tr>
 <tr>
 <td>审计关</td>
-<td><code>SGEVAL_AUDIT=0</code>：父类、包装审计开、包装审计关三者的动作字节、RNG、cursor、<code>n_s1/n_s2</code> 一致；审计关的回复帧与父类回复帧 <code>pickle</code> 后逐字节相同、不含 <code>_sgeval_audit</code>；客户端 <code>chunks=[]</code>、<code>step_rtt_ms</code> 长度 = 步数</td>
+<td><code>SGEVAL_AUDIT=0</code>：父类、包装审计开、包装审计关三者的动作字节、RNG、cursor、<code>n_s1/n_s2</code> 一致；审计关的回复帧与<strong>改动前包装器</strong>的回复帧 <code>pickle</code> 后逐字节相同（含 <code>subgoal</code> 键，不含 <code>_sgeval_audit</code>）。基准帧由只读夹具快照 <code>tests/pipeline/evalx/pp/fixtures/pp_server_wrap_pre_timing.py</code> 在子进程桩里生成，不依赖 git 历史。这份快照是改动前 <code>pp_server_wrap.py</code> 的原样拷贝，文件头注明来源 sha <code>d22e323</code> 和用途：仅作 OBS_EQ 审计关基准，禁止修改；客户端 <code>chunks=[]</code>、<code>step_rtt_ms</code> 长度 = 步数</td>
 <td><code>OBS_EQ=PASS schedules=&lt;k&gt; audit_on_off_mismatch=0 off_bytes_equal=&lt;k&gt;</code></td>
 </tr>
 <tr>
 <td>重连</td>
-<td><code>FakeConn(closed_at={3})</code> 的客户端路径：<code>step_rtt_ms</code> 长度 = 步数，<code>reconnect_steps == [3]</code>，按 env_step 索引对齐</td>
+<td><code>FakeConn(closed_at={3})</code> 的客户端路径：<code>step_rtt_ms</code> 长度 = 步数，<code>reconnect_steps == [3]</code>，<code>timing["reconnected"] is True</code>（报表排除整局）</td>
 <td>并入 <code>CHUNK_TIMING</code></td>
 </tr>
 </tbody>
 </table>
 <p>运行命令：<code>pytest tests/pipeline/evalx/pp -q</code>。现有的 <code>test_pp_server_wrap.py</code>（含 <code>PP_AUDIT_OBS_EQ</code>）必须照旧通过。</p>
 <h3>分配表行</h3>
-<p>| S3 | PP 两端每步往返、fresh 归 chunk、S1/S2 服务端计时 | <code>src/robomme_ood_eval/models/pp.py</code>、<code>src/robomme_ood_eval/servers/pp_server_wrap.py</code>、<code>tests/pipeline/evalx/pp/test_pp_chunk_timing.py</code> | S1 文件（<code>timing.py</code>）、<code>pp_fakes.py</code> 与 <code>test_pp_server_wrap.py</code>（只读复用）、<code>third_party/**</code> | 依赖 S1 的 <code>ChunkTimer.start/add_lang/close/orphan</code>、<code>attach_policy_timing(model_kind="pp")</code>；<code>ChunkTimer.close</code> 签名中的 <code>decision_wall_ms=</code> 关键字参数（按共享接口定稿） | 4 | worktree 内 <code>UV_PROJECT_ENVIRONMENT=&lt;主&gt;/.venv PYTHONPATH=&lt;wt&gt;/src:&lt;主&gt;/third_party/robomme_benchmark/src:&lt;主&gt;/third_party/PonderPounce uv run --no-sync python -m pytest tests/pipeline/evalx/pp -q</code> → <code>PP_CHUNK_FRESH=PASS period=5 fires=8</code>、<code>CHUNK_TIMING=PASS model=pp decisions=&lt;n&gt; missing=0</code>、<code>LANG_SPLIT=PASS model=pp …</code>、<code>WALL_DECOMP=PASS model=pp kind=pp chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x&gt; …</code>、<code>OBS_EQ=PASS</code> | CPU，单测含 sleep，约 30 s，无 GPU、无端口 |</p>
+<p>| S3 | PP 两端每步往返、fresh 归 chunk、S1/S2 服务端计时 | <code>src/robomme_ood_eval/models/pp.py</code>、<code>src/robomme_ood_eval/servers/pp_server_wrap.py</code>、<code>tests/pipeline/evalx/pp/test_pp_chunk_timing.py</code>、<code>tests/pipeline/evalx/pp/fixtures/pp_server_wrap_pre_timing.py</code>（只读快照，取自 <code>d22e323</code>） | S1 文件（<code>timing.py</code>）、<code>pp_fakes.py</code> 与 <code>test_pp_server_wrap.py</code>（只读复用）、<code>third_party/**</code> | 依赖 S1 的 <code>ChunkTimer.start/add_lang/close/orphan</code>、<code>attach_policy_timing(model_kind="pp")</code>；<code>ChunkTimer.close</code> 签名中的 <code>decision_wall_ms=</code> 关键字参数（按共享接口定稿） | 4 | worktree 内 <code>UV_PROJECT_ENVIRONMENT=&lt;主&gt;/.venv PYTHONPATH=&lt;wt&gt;/src:&lt;主&gt;/third_party/robomme_benchmark/src:&lt;主&gt;/third_party/PonderPounce uv run --no-sync python -m pytest tests/pipeline/evalx/pp -q</code> → <code>PP_CHUNK_FRESH=PASS period=5 fires=8</code>、<code>CHUNK_TIMING=PASS model=pp decisions=&lt;n&gt; missing=0</code>、<code>LANG_SPLIT=PASS model=pp …</code>、<code>WALL_DECOMP=PASS model=pp kind=pp chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x&gt; …</code>、<code>OBS_EQ=PASS</code> | CPU，单测含 sleep，约 30 s，无 GPU、无端口 |</p>
 <p>注意：worktree 里 <code>third_party/PonderPounce</code> 子模块是空的，所以验收命令的 <code>PYTHONPATH</code> 已经带上主检出的这个目录。现有 <code>test_pp_server_wrap.py</code> 的子进程怎么取路径，子代理要先照它核实。</p>
 <h3>盲区与待实测</h3>
 <ul>
@@ -1388,22 +1402,27 @@
 </ul>
 <h4>2. <code>TracedMonitor.predict</code>（约 +8 行）</h4>
 <ul>
-<li>入口第一句（在 <code>call_id = self._open_lang(...)</code> 之前）<code>self._ctx.begin_chunk(); t0 = time.perf_counter()</code> —— 常规 chunk 的起点。</li>
+<li>入口第一句（在 <code>call_id = self._open_lang(...)</code> 之前）<code>self._ctx.begin_chunk()</code> —— 常规 chunk 的 decision 起点（decision 区间含 <code>_open_lang</code>）。语言区间起点 <code>t0 = time.perf_counter()</code> 放在 <code>_open_lang(...)</code> <strong>之后</strong>、<code>self._inner.predict(...)</code> 之前，终点在内层返回瞬间。</li>
 <li><code>result = self._inner.predict(task, goal, subgoal, frames, command_start, wrist, out)</code> 之后：<code>ctx.timer.add_lang((perf_counter()-t0)*1000, kind="monitor", env_step=ctx.t, third_party_s=result[2]); ctx.chunk_n_lang += 1</code>。</li>
 <li><code>except BaseException:</code> 分支在现有 <code>_close_lang(..., failed=True)</code> 之后加 <code>ctx.abort_chunk("monitor_error")</code> 再 <code>raise</code>。</li>
-<li>计时区间只包 <code>self._inner.predict</code>，不含 <code>_open_lang</code> / <code>log_request</code> 写盘；写盘落入 <code>decision_wall_ms − action_rtt_ms − lang_ms</code> 的差值。</li>
+<li>语言区间只包 <code>self._inner.predict</code>，明确排除 <code>_open_lang</code>（<code>input_contract</code> 构造、图像哈希、账本写入）与返回后的 <code>_close_lang</code> / <code>log_request</code> 写盘；写盘落入 <code>decision_wall_ms − action_rtt_ms − lang_ms</code> 的差值。</li>
 </ul>
 <h4>3. <code>TracedPlanner._call</code>（约 +12 行，<code>predict</code> 与 <code>review_second_button</code> 共用）</h4>
 <ul>
-<li><code>kind = "planner" if method == "predict" else "review"</code>；入口 <code>ctx.begin_chunk(); t0 = time.perf_counter()</code>，<strong>放在 <code>if ctx.lang is None or responder is None: return fn(*a, **k)</code> 早返回之前</strong>，两条路径共用计时（早返回分支同样包 <code>try/except BaseException</code>：异常时 <code>ctx.abort_chunk(f"{kind}_error")</code> 再 <code>raise</code>；正常时先取 <code>result = fn(*a, **k)</code>、add_lang 后返回。测试 4 用 <code>lang=None</code> 的 ctx，走的正是这条早返回路径，所以这层 try/except 是用例 4 成立的前提）。</li>
+<li><code>kind = "planner" if method == "predict" else "review"</code>；入口 <code>ctx.begin_chunk()</code>（decision 起点）；语言区间起点 <code>t0 = time.perf_counter()</code> 紧贴内层 <code>fn(*a, **k)</code> 之前（即 <code>PlannerLanguageCall(...)</code> 构造与 <code>self._inner.responder = call.wrap(responder)</code> 之后），终点在 <code>fn</code> 返回瞬间，<strong>两者都放在 <code>if ctx.lang is None or responder is None: return fn(*a, **k)</code> 早返回之前</strong>，两条路径共用计时（早返回分支同样包 <code>try/except BaseException</code>：异常时 <code>ctx.abort_chunk(f"{kind}_error")</code> 再 <code>raise</code>；正常时先取 <code>result = fn(*a, **k)</code>、add_lang 后返回。测试 4 用 <code>lang=None</code> 的 ctx，走的正是这条早返回路径，所以这层 try/except 是用例 4 成立的前提）。</li>
 <li><code>fn(*a, **k)</code> 返回后、<code>call.finish(...)</code> 之前：<code>ctx.timer.add_lang(ms, kind=kind, env_step=ctx.t, third_party_s=result[2]); ctx.chunk_n_lang += 1</code>；<code>kind=="planner"</code> 置 <code>ctx.chunk_has_planner=True</code>，<code>kind=="review"</code> 置 <code>ctx.chunk_has_review=True</code>。</li>
 <li><code>except BaseException:</code> 分支在 <code>call.finish(failed=True)</code> 之后加 <code>ctx.abort_chunk(f"{kind}_error")</code>。</li>
-<li>区间含 <code>guarded_client_class._send</code> 里 <code>self.next_request_at = self._monotonic() + SEND_INTERVAL_S</code> 带来的 20 s 发送间隔等待与 <code>for attempt in range(9):</code> 的退避，以及 sheets 拼图、prompt 构造、<code>request.json</code> 落盘——口径第 5 条要求它们全部计入 <code>lang_ms</code>。</li>
+<li>
+<p>区间含 <code>guarded_client_class._send</code> 里 <code>self.next_request_at = self._monotonic() + SEND_INTERVAL_S</code> 带来的 20 s 发送间隔等待与 <code>for attempt in range(9):</code> 的退避，以及 sheets 拼图、prompt 构造、<code>request.json</code> 落盘——口径第 5 条要求它们全部计入 <code>lang_ms</code>。</p>
+</li>
+<li>
+<p>规划器的账本写入有一部分发生在 <code>fn</code> <strong>内部</strong>：<code>PlannerLanguageCall.wrap</code> 的 responder 与 <code>transport</code> 钩子在每次传输尝试前落盘输入与图像引用（<code>planner_images</code> 做图像哈希）。为排除这部分，<code>PlannerLanguageCall</code> 加一个累计字段 <code>book_ms</code>（在 <code>_open</code> / <code>transport</code> / responder 包装里各自 <code>perf_counter</code> 计时累加），<code>_call</code> 记 <code>ms = (t1 - t0)*1000 - call.book_ms</code>；早返回路径（<code>lang is None</code>）无账本，<code>book_ms=0</code>。被扣除的 <code>book_ms</code> 落入 <code>decision_wall_ms − action_rtt_ms − lang_ms</code> 差值，并作为 extra <code>book_ms</code> 记在该条 lang_calls 里便于复核。</p>
+</li>
 </ul>
 <h4>4. <code>TracedClient.infer</code>（约 +14 行）</h4>
 <ul>
 <li>入口第一句 <code>ctx.begin_chunk()</code> —— 无语言调用的 chunk（continue_last 之后、或监视器未跑）起点即此处。</li>
-<li>现有 <code>out = self._inner.infer(element)</code> 改为 <code>t0=perf_counter(); out=self._inner.infer(element); rtt_ms=(perf_counter()-t0)*1000</code>，只包 websocket 往返。</li>
+<li>现有 <code>out = self._inner.infer(element)</code> 改为 <code>t0=perf_counter(); out=self._inner.infer(element); rtt_ms=(perf_counter()-t0)*1000</code>，终点在内层返回瞬间，之后的 <code>close_call</code> / <code>log_response</code> trace 写盘不计；只包 websocket 往返。</li>
 <li><code>server_infer_ms = ((out.get(AUDIT_KEY) or {}).get("server_timing") or {}).get("infer_ms")</code>，<code>AUDIT_KEY</code> 从 S2 合入的 mme-vla 包装器常量导入（值 <code>_sgeval_audit</code>），本文件不重复定义；无审计块即 <code>None</code>。同一审计块的 <code>server_timing.gpu</code>（型号名，即 <code>self.vla_gpu</code> 那块卡）在首次读到时存 <code>ctx.gpu_name</code>（<code>TraceContext.__init__</code> 初值 <code>None</code>），读不到保持 <code>None</code>。</li>
 <li>返回前 <code>ctx.timer.close(decision=len(ctx.timer.chunks), env_step=ctx.t, action_rtt_ms=rtt_ms, server_infer_ms=server_infer_ms, extra={"has_planner": ctx.chunk_has_planner, "has_review": ctx.chunk_has_review, "no_lang": ctx.chunk_n_lang == 0})</code>，再 <code>ctx._reset_chunk_flags()</code>。</li>
 <li><code>except BaseException:</code> 分支（现有 <code>close_call(status="error")</code> 之后）加 <code>ctx.abort_chunk("infer_error")</code>。</li>
@@ -1416,6 +1435,10 @@
 <li>改法：现有 <code>[str(self.vla_python), "scripts/serve_policy.py", f"--port={port}", f"--seed={self.policy_seed}", "policy:checkpoint", "--policy.config=mme_vla_suite", f"--policy.dir={self.vla_checkpoint}"]</code> 改为 <code>[str(self.vla_python), str(REPO_ROOT / "src/robomme_ood_eval/servers/policy_server_wrap.py"), f"--sgeval-serve-root={self.root}", &lt;其余参数原样&gt;]</code>。<code>--sgeval-serve-root</code> 由 S2 在包装器里新增并从 argv 剥离，S4 只消费；<code>--sgeval-metadata-out={self.server_dir}/server-wrap-metadata-{port}.json</code>（<code>server_dir</code> 即传给 <code>ServerProcess</code> 的 <code>metadata_dir</code>）由 S4 在 <code>vla_argv</code> 里传（与 FrameSamp 同名约定；不与 <code>ServerProcess</code> 写的 <code>server-metadata-&lt;port&gt;.json</code> 冲突，<code>_vla_port</code> 不受影响）。</li>
 <li>cwd / sys.path：<code>vla_server_cls(..., cwd=str(self.root))</code> 不变（cwd = Astra 根）；包装器以绝对路径启动，<code>prepare_sys_path(&lt;serve-root&gt;)</code> 把 <code>&lt;Astra 根&gt;/scripts</code> 置于 <code>sys.path[0]</code> 并剔除包装器自身目录，与 <code>python scripts/serve_policy.py</code> 等价；<code>vla_env()</code> 的 <code>PYTHONPATH</code>（<code>examples/champ</code>、<code>src</code>、<code>packages/openpi-client/src</code>、benchmark <code>src</code>）不变，所以导入的 <code>mme_vla_suite</code> / <code>openpi</code> 仍是 Astra 根下那份。即使 S2 未加参数，包装器 <code>mme_vla_root()</code> 的「cwd 含 <code>scripts/serve_policy.py</code> 即取 cwd」也会落到 Astra 根；显式参数用于防误取。</li>
 <li><code>SGEVAL_AUDIT</code> 默认开（<code>vla_env()</code> 不设该变量 = 开）；<code>SGEVAL_AUDIT=0</code> 时回复逐字节同第三方（R4）。审计开启后回复多一个 <code>_sgeval_audit</code> 键，第三方 <code>runner.py</code> 只读 <code>['actions']</code>，不受影响；<code>server_infer_ms</code> 从审计块 <code>server_timing.infer_ms</code> 取。</li>
+</ul>
+<h4>4c. decision 分母（约 +2 行）</h4>
+<ul>
+<li>不改历史字段 <code>"decisions": int(result.get("planner_calls") or 0)</code>（= 规划调用数，保持向后兼容）；<code>play</code> 返回字典新增 <code>"action_decisions": len(timer.chunks)</code>（= 动作 chunk 数，即 <code>client.infer</code> 成功返回次数）。<code>CHUNK_TIMING model=astra</code> 的 <code>action_decisions=</code> 用它，<code>missing = action_decisions − len(chunks)</code> 由第三方 <code>decisions.jsonl</code> 的 <code>vla</code> 行数交叉给出（<code>vla</code> 行数应等于 <code>action_decisions</code>）。</li>
 </ul>
 <h4>5. <code>run_one</code> / <code>_finish_one</code>（约 +20 行）</h4>
 <ul>
@@ -1430,7 +1453,7 @@
 <li>返回字典 <code>"timing": {"astra_seconds": result.get("seconds")}</code> 改为先建 <code>timing</code>，再 <code>attach_policy_timing(timing, timer, gpu_name=result.get("vla_gpu_name"), model_kind="serial")</code>；orphan 的合并走共享接口：<code>_finish_one</code> 末尾调 <code>ctx.timer.absorb_orphan(ctx.orphan_ms, ctx.orphan_n)</code>（S1 新增），<code>orphan_lang_ms</code> 与 <code>orphan_n</code> 由 <code>attach_policy_timing</code> 统一写出，<code>play</code> 里不做手工合并。另 <code>timing["lang_calls_mismatch"] = result.get("lang_calls_mismatch", [])</code>、<code>timing["lang_diff_ms"] = result.get("lang_diff_ms")</code>。<code>astra_seconds</code> 保留。<code>gpu_name</code> 不用 <code>pin_visible_gpu</code> 的返回值（那是序号字符串），取 VLA 服务端审计块的型号名（见 §4）；<code>ctx</code> 在 <code>run_one</code> 内、<code>play</code> 拿不到，所以由 <code>_finish_one</code> 写 <code>result["vla_gpu_name"] = ctx.gpu_name</code>（字符串或 None，可序列化），<code>play</code> 以 <code>gpu_name=result.get("vla_gpu_name")</code> 传入。</li>
 <li>驱动异常路径（<code>except Exception as exc:</code> → <code>_after_episode(...)</code> → <code>raise</code>）不产出 timing，与现状一致。</li>
 </ul>
-<p>合计约 +78 行，全部在 <code>src/robomme_ood_eval/models/astra.py</code>；不碰 <code>CostGate</code>、<code>guarded_client_class</code>、守卫账本（P2″）。</p>
+<p>合计约 +84 行，全部在 <code>src/robomme_ood_eval/models/astra.py</code>；不碰 <code>CostGate</code>、<code>guarded_client_class</code>、守卫账本（P2″）。</p>
 <h3>测试</h3>
 <p>新文件 <code>tests/pipeline/evalx/astra/test_astra_chunk_timing.py</code>，纯 CPU、不起 VLA 服务端、不实例化 <code>GuardedResponsesClient</code>、<strong>不发任何 API 请求</strong>。直接构造 <code>TraceContext</code>（临时目录、<code>lang=None</code>），monkeypatch <code>perf_counter</code> 为假时钟，三个假对象推进假时钟：
 - <code>FakeMonitor.predict</code> 推进 300 ms，返回 <code>(pred, ids, 0.250)</code>；
@@ -1445,7 +1468,7 @@
 5. <strong>交叉核对</strong>：假 <code>decisions.jsonl</code> 正常时 <code>lang_calls_mismatch=[]</code>、<code>lang_diff_ms["planner"]</code> 中位 100；把一条 <code>seconds</code> 改成大于代理值 → 恰 1 条 mismatch；<code>continue_last_subgoal</code> 行按 <code>planner</code> 配对成功；同一 t 同时伪造 <code>planner</code> 与 <code>continue_last_subgoal</code> 两行时取 <code>planner</code> 行、另一行被忽略且不计入 <code>unpaired</code>（仍 <code>unpaired=0</code>）；<code>result is None</code> 不抛。
 6. <strong>server 值与序列化</strong>：有审计块 <code>server_infer_ms=80.0</code>、无则 <code>None</code>；<code>json.dumps(result)</code> 成功（无不可序列化对象）。</p>
 <p>判定行：
-- <code>CHUNK_TIMING=PASS model=astra decisions=&lt;n&gt; missing=0 first_start=planner steady_start=monitor nolang_start=infer</code>
+- <code>CHUNK_TIMING=PASS model=astra action_decisions=&lt;n&gt; missing=0 planner_decisions=&lt;p&gt; first_start=planner steady_start=monitor nolang_start=infer</code>
 - <code>LANG_SPLIT=PASS model=astra calls=&lt;k&gt; delta_pct=&lt;x&gt; kinds=monitor,planner,review has_planner=&lt;a&gt;/&lt;n&gt; has_review=&lt;b&gt;/&lt;n&gt; no_lang=&lt;c&gt;/&lt;n&gt; proxy_ge_third_party=&lt;k&gt;/&lt;k&gt; unpaired=0</code>（通用键集在前；<code>delta_pct = |Σchunk.lang_ms + orphan_lang_ms − Σlang_calls.ms| / Σlang_calls.ms</code>）
 - <code>WALL_DECOMP=PASS model=astra kind=serial chunks=&lt;n&gt; violations=0 overhead_pct_p50=&lt;x&gt; min_gap_ms=&lt;g&gt; orphan_lang_ms=300 orphan_n=1</code>（最小键集在前；<code>overhead_pct = gap / decision_wall_ms</code>）（<code>gap = decision_wall_ms − action_rtt_ms − lang_ms ≥ 0</code>；<code>lang_ms</code> 不含已清桶的 orphan，orphan 单列）</p>
 <h3>分配表行</h3>
@@ -1455,6 +1478,8 @@
 <li><strong>第三方 seconds 与代理区间口径不同（写死）</strong>：规划器 <code>seconds</code> 不含 sheets 拼图、prompt 构造、<code>request.json</code> 落盘；监视器 <code>seconds</code> 只含 started 之后的推理。本仓代理区间系统性更长，所以只核对「代理 ms ≥ 第三方 seconds」并记录差值，不设百分比阈值；差值大小本身是信息，不判失败。</li>
 <li><strong>复核被拒</strong>：<code>approved=False</code> 时 <code>signal=False</code>，规划器不跑，该 chunk 记 <code>has_planner=False, has_review=True</code>；S5 报表按 <code>has_planner × has_review</code> 四格分层、<code>no_lang</code> 另成一层，此格与纯监视器 chunk 分开统计，否则「不含规划」层会被 review 的 API 耗时（含 20 s 间隔）拉高。</li>
 <li><strong>起点不是「拿到观测」的精确时刻</strong>：上一 chunk 最后一次 <code>env.step</code> 返回到本 chunk 第一个调用之间的第三方簿记（<code>frames.append</code>、<code>video(obs)</code>、<code>call_out.mkdir</code>、构造 <code>element</code>）不计入，量级预计毫秒，未实测。</li>
+<li><strong>decision 分母两套并存</strong>：现有夹具「规划一次、动作三次」下 <code>decisions=1</code>（历史字段，规划调用数），新字段 <code>action_decisions=3</code>、<code>chunks</code> 3 条；测速报表与 <code>CHUNK_TIMING</code> 一律以 <code>action_decisions</code> 为分母，历史 <code>decisions</code> 只保留不改义，现有断言 <code>decisions=1</code> 不动。</li>
+<li><strong>账本扣除是近似</strong>：规划器内部账本写入靠 <code>book_ms</code> 扣除，若第三方 <code>Planner.predict</code> 内还有本仓未计到的落盘（如 spool <code>request.json</code>），这部分仍在 <code>lang_ms</code> 内；监视器与 <code>infer</code> 的账本完全在内层调用之外，排除是精确的。</li>
 <li><strong><code>no_lang</code> 是推断</strong>：用「本 chunk 无 add_lang」代替第三方的 <code>continue_last</code> 变量；它同时覆盖 continue_last 与任何监视器未跑的 chunk，不等同第三方语义。</li>
 <li><strong>异常路径</strong>：第三方吞异常后结束本局，未完成 chunk 只进 <code>orphan_lang_ms</code>；<code>BaseException</code>（<code>AstraStop</code>、<code>StepCapReached</code>）走 <code>run_one</code> 的 <code>finally</code> → <code>_finish_one</code> 清桶。</li>
 <li><strong><code>server_infer_ms</code> 依赖 S2</strong>：两份 <code>serve_policy.py</code> 逐字节相同已静态核实，包装可行；实际回复是否带 <code>server_timing</code> 待 S2 提供 <code>--sgeval-serve-root</code> 根目录参数后真机 smoke 核对。</li>
@@ -1476,7 +1501,7 @@
 <tr>
 <td>S1</td>
 <td><code>timing.py</code> + SimpleMemVLA 两端</td>
-<td><code>src/robomme_ood_eval/timing.py</code>、<code>models/smvla.py</code>、<code>servers/smvla_server.py</code>、<code>tests/unit_eval/test_timing.py</code>、<code>tests/pipeline/eval/test_smvla_chunk_timing.py</code></td>
+<td><code>src/robomme_ood_eval/timing.py</code>、<code>models/smvla.py</code>、<code>servers/smvla_server.py</code>、<code>tests/unit_eval/test_timing.py</code>、<code>tests/pipeline/eval/test_smvla_chunk_timing.py</code>、<code>dev-scripts/release/public-manifest.txt</code>（加 <code>timing.py</code>）、<code>tests/static/contracts.delta.json</code>（新文件分类）</td>
 <td>—</td>
 <td>1</td>
 </tr>
@@ -1497,7 +1522,7 @@
 <tr>
 <td>S3</td>
 <td>PonderPounce 两端</td>
-<td><code>models/pp.py</code>、<code>servers/pp_server_wrap.py</code>、<code>tests/pipeline/evalx/pp/test_pp_chunk_timing.py</code></td>
+<td><code>models/pp.py</code>、<code>servers/pp_server_wrap.py</code>、<code>tests/pipeline/evalx/pp/test_pp_chunk_timing.py</code>、<code>tests/pipeline/evalx/pp/fixtures/pp_server_wrap_pre_timing.py</code>（改动前包装器只读快照，OBS_EQ 基准）</td>
 <td>S1 签名（含 <code>close(decision_wall_ms=)</code>）</td>
 <td>4</td>
 </tr>
@@ -1537,9 +1562,10 @@
 <h2>四 runbook（合并后主会话）</h2>
 <ol>
 <li><code>timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code>。</li>
-<li>本机 smoke，每模型 <code>--tasks VideoUnmask --episodes 0:1 --seed 0 --out artifacts/infer-timing-smoke-&lt;model&gt;</code>（1 任务 × 1 档 × 1 局；Astra 先申请 1 局与美元上限）。detached tmux <code>it-&lt;model&gt;</code>，Monitor 过滤 <code>EXIT_CODE=|Traceback|EPISODE_DONE</code>。</li>
-<li><code>jq .timing.policy.chunk_summary artifacts/infer-timing-smoke-&lt;model&gt;/**/result.json</code> → 填 <code>SPEED_SMOKE</code> 行。</li>
-<li>留档 <code>docs/validation/infer-timing-20261009/{launch.md,result.md,records/}</code>。</li>
+<li>本机冒烟（链路验证）：每变体 <code>--tasks VideoUnmask --dataset hard-verify --episodes 0:1 --seed 0 --out artifacts/infer-timing-smoke-&lt;model&gt;-&lt;on|off&gt;</code>，审计开 / 关各 1 局（<code>SGEVAL_AUDIT=1|0</code>）；Astra 先按 P2″ 报 2 局与 3 美元上限获批。detached tmux <code>it-&lt;model&gt;-&lt;on|off&gt;</code>，Monitor 过滤 <code>EXIT_CODE=|Traceback|EPISODE_DONE</code>。</li>
+<li>本机产物经 S5 新增的 <code>eval_report.py --results &lt;out&gt;/rollouts/**/results.jsonl</code> 直读入口生成速度表（显式路径，不依赖 <code>**</code> 递归），填 <code>SPEED_SMOKE</code> 与 <code>SPEED_TABLE</code> 行。</li>
+<li>GL 正式一次：六个 GPU 变体各 1 局 VideoUnmask（<code>xhard0</code>，当前席位 ckpt，运行名 <code>infer-timing-gl-&lt;model&gt;</code>），经 48 h 占位 job 与 <code>dev-scripts/gl/run_eval_gl.sh</code>，产物搬回本机后同样走 <code>--results</code> 入口；Astra 那一局在本机（密钥不出本机），计入 3 美元上限。</li>
+<li>留档 <code>docs/validation/infer-timing-20261009/{launch.md,result.md,records/}</code>，按 A40 / RTX 6000 Ada 分组报数。</li>
 </ol>
 <h2>五 风险</h2>
 <ul>
@@ -1660,8 +1686,8 @@ while not resp.get(&quot;add_buffer_finished&quot;, False):
 <td><code>ADD_BUFFER_GUARD=PASS raised=1 normal=1</code></td>
 </tr>
 <tr>
-<td>真机一次</td>
-<td>本机 RTX 6000 Ada，每模型变体 1 任务 × 1 档 × 1 局 smoke（Astra 需先批局数与费用，P2″）</td>
+<td>真机</td>
+<td>本机冒烟每变体 1 任务 × 1 档 × 2 局（审计开/关），GL 正式每 GPU 变体 1 任务 × 1 档 × 1 局 VideoUnmask，Astra 正式 1 局在本机、上限 3 美元</td>
 <td><code>SPEED_SMOKE=PASS model=&lt;m&gt; wall_p50_ms=&lt;w&gt; action_p50_ms=&lt;x&gt; lang_p50_ms=&lt;l&gt; server_mean_ms=&lt;y&gt; overhead_pct_p50=&lt;o&gt;</code> 且守恒按 kind 判：serial 类 <code>decision_wall − action_rtt − lang ≥ −1 ms</code>，smvla 看 <code>slack_ms ≥ −1 ms</code>，PP 为恒等式不设此项</td>
 </tr>
 </tbody>
@@ -1725,114 +1751,153 @@ while not resp.get(&quot;add_buffer_finished&quot;, False):
 </table>
 <h2>附·八、子代理分工与合并（简述）</h2>
 <p>拆成 S6、S1、S2、S2b、S3、S4、S5 七个写入型子代理（opus，worktree 隔离），可写集合互不重叠（唯一例外：S6 与 S2 先后写 <code>framesamp_modul.py</code>，S6 先合、S2 后派）：S1 共享助手与 SimpleMemVLA 两端；S2 FrameSamp 客户端与 mme-vla 包装器；S2b GroundSG；S3 PP 两端；S4 Astra；S5 报表；S6 FrameSamp add_buffer 守卫。派发分三波：第一波 S6 与 S1 并行（文件不相交）；第二波在 S1 合入（且 S6 合入）后派 S2、S3、S5（worktree 验收要真用 <code>timing.py</code>）；第三波在 S2 合入后派 S2b 与 S4（S2b 依赖 <code>_roundtrip</code> 新属性与审计块，S4 依赖审计块常量与 <code>--sgeval-serve-root</code>）。合并顺序不变：S6→S1→S2→S2b→S3→S4→S5。合并顺序 S6→S1→S2→S2b→S3→S4→S5（S6 最先，S2 基于其后 HEAD 派发），每次合并前一个 sonnet 审查者审 diff 范围、前缀、协议字节；合并后主会话跑核心短测。HTML 计划与两张 SVG 由主会话在阶段 0 派两个 opus 画图子代理（只读代码、只写 scratchpad SVG）后拼装。</p>
-<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900" font-family="sans-serif">
-<defs>
-<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#555"/></marker>
-<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#2f855a"/></marker>
-</defs>
-<rect width="1200" height="900" fill="#fff"/>
-<text x="600" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#222">推理测速改造：实施流程与子代理合并顺序</text>
-<text x="20" y="62" font-size="15" font-weight="bold" fill="#2b6cb0">一、阶段流</text>
-<g font-size="12" text-anchor="middle">
-<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
-<rect x="20" y="75" width="150" height="70" rx="8"/><rect x="188" y="75" width="150" height="70" rx="8"/><rect x="356" y="75" width="150" height="70" rx="8"/><rect x="524" y="75" width="150" height="70" rx="8"/><rect x="692" y="75" width="150" height="70" rx="8"/><rect x="860" y="75" width="150" height="70" rx="8"/><rect x="1028" y="75" width="152" height="70" rx="8"/>
-</g>
-<g fill="#1a365d">
-<text x="95" y="100" font-weight="bold">0 渲染 HTML 计划</text><text x="95" y="118">（本图）</text>
-<text x="263" y="98" font-weight="bold">1 S1 共享助手</text><text x="263" y="115">timing.py +</text><text x="263" y="131">SimpleMemVLA 两端</text>
-<text x="431" y="100" font-weight="bold">2 S2 mme-vla 两端</text><text x="431" y="118">FrameSamp/GroundSG</text>
-<text x="599" y="100" font-weight="bold">3 S3 PonderPounce</text><text x="599" y="118">两端</text>
-<text x="767" y="100" font-weight="bold">4 S4 Astra</text><text x="767" y="118">客户端</text>
-<text x="935" y="100" font-weight="bold">5 S5 报表</text><text x="935" y="118">eval_report/report</text>
-<text x="1104" y="95" font-weight="bold">6 主会话合并后</text><text x="1104" y="111">核心短测 + 本机 smoke</text><text x="1104" y="125" font-size="10">每模型1任务×1档×1局</text><text x="1104" y="139">+ 留档</text>
-</g>
-<g stroke="#555" stroke-width="1.5" marker-end="url(#ar)">
-<line x1="170" y1="110" x2="186" y2="110"/><line x1="338" y1="110" x2="354" y2="110"/><line x1="506" y1="110" x2="522" y2="110"/><line x1="674" y1="110" x2="690" y2="110"/><line x1="842" y1="110" x2="858" y2="110"/><line x1="1010" y1="110" x2="1026" y2="110"/>
-</g>
-<g font-size="10" fill="#444" font-family="monospace">
-<text x="95" y="162">判定：无</text>
-<text x="263" y="162">TIMING_HELPER</text><text x="263" y="176">CHUNK_TIMING(smvla)</text><text x="263" y="190">LANG_SPLIT(smvla)</text>
-<text x="431" y="162">CHUNK_TIMING(</text><text x="431" y="176">framesamp,groundsg)</text><text x="431" y="190">LANG_SPLIT(groundsg)</text><text x="431" y="204">OBS_EQ</text>
-<text x="599" y="162">CHUNK_TIMING(pp)</text><text x="599" y="176">PP_CHUNK_FRESH</text><text x="599" y="190">LANG_SPLIT(pp)</text><text x="599" y="204">OBS_EQ</text>
-<text x="767" y="162">CHUNK_TIMING(astra)</text>
-<text x="935" y="162">速度表单测</text>
-<text x="1104" y="162">TEST_RESOURCE</text><text x="1104" y="176">SPEED_SMOKE×5</text>
-</g>
-</g>
-<line x1="20" y1="225" x2="1180" y2="225" stroke="#ccc" stroke-dasharray="4 4"/>
-<text x="20" y="252" font-size="15" font-weight="bold" fill="#2b6cb0">二、S1～S5 五个 opus worktree 子代理：并行开发 → 顺序合并</text>
-<rect x="20" y="420" width="130" height="50" rx="8" fill="#f0fff4" stroke="#2f855a" stroke-width="2"/>
-<text x="85" y="442" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f855a">dev @BASE</text>
-<text x="85" y="459" text-anchor="middle" font-size="10" fill="#2f855a">同时分出 5 个分支</text>
-<g font-size="11">
-<g fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5">
-<rect x="220" y="270" width="300" height="62" rx="6"/><rect x="220" y="345" width="300" height="62" rx="6"/><rect x="220" y="420" width="300" height="62" rx="6"/><rect x="220" y="495" width="300" height="62" rx="6"/><rect x="220" y="570" width="300" height="62" rx="6"/>
-</g>
-<g fill="#1a365d">
-<text x="230" y="290" font-weight="bold">S1（opus · worktree）共享助手 + SimpleMemVLA</text><text x="230" y="310" font-family="monospace" font-size="10">timing.py, models/smvla.py,</text><text x="230" y="323" font-family="monospace" font-size="10">servers/smvla_server.py</text>
-<text x="230" y="365" font-weight="bold">S2（opus · worktree）mme-vla 两端</text><text x="230" y="385" font-family="monospace" font-size="10">models/framesamp_modul.py, models/groundsg.py,</text><text x="230" y="398" font-family="monospace" font-size="10">servers/policy_server_wrap.py</text>
-<text x="230" y="440" font-weight="bold">S3（opus · worktree）PonderPounce 两端</text><text x="230" y="460" font-family="monospace" font-size="10">models/pp.py, servers/pp_server_wrap.py</text>
-<text x="230" y="515" font-weight="bold">S4（opus · worktree）Astra 客户端</text><text x="230" y="535" font-family="monospace" font-size="10">models/astra.py</text>
-<text x="230" y="590" font-weight="bold">S5（opus · worktree）报表</text><text x="230" y="610" font-family="monospace" font-size="10">dev-scripts/gl/eval_report.py, report.py</text>
-</g>
-</g>
-<g stroke="#555" stroke-width="1.3" fill="none" marker-end="url(#ar)">
-<path d="M150,445 C185,445 185,301 218,301"/><path d="M150,445 C185,445 185,376 218,376"/><path d="M150,445 L218,451"/><path d="M150,445 C185,445 185,526 218,526"/><path d="M150,445 C185,445 185,601 218,601"/>
-</g>
-<g stroke="#2b6cb0" stroke-width="1.3" stroke-dasharray="5 4" fill="none" marker-end="url(#ar)">
-<path d="M520,301 C560,301 560,376 522,376"/><path d="M520,301 C585,301 585,451 522,451"/><path d="M520,301 C610,301 610,526 522,526"/>
-</g>
-<text x="615" y="420" font-size="11" fill="#2b6cb0" transform="rotate(90 615 420)" text-anchor="middle">S2～S4 依赖 timing.py 签名：按签名写，不等合入</text>
-<text x="860" y="268" text-anchor="middle" font-size="12" font-weight="bold" fill="#2f855a">逐个 --no-ff 合回 dev（S1→S2→S3→S4→S5）</text>
-<g font-size="10" text-anchor="middle">
-<g id="rows">
-</g>
-</g>
-<g font-size="10" text-anchor="middle">
-<!-- 每行：审查菱形 -> 合并框 -> POST 菱形 -->
-<g fill="#fffaf0" stroke="#555" stroke-width="1.3">
-<path d="M720,281 L770,301 L720,321 L670,301z"/><path d="M720,356 L770,376 L720,396 L670,376z"/><path d="M720,431 L770,451 L720,471 L670,451z"/><path d="M720,506 L770,526 L720,546 L670,526z"/><path d="M720,581 L770,601 L720,621 L670,601z"/>
-</g>
-<g fill="#333"><text x="720" y="299">sonnet 审查</text><text x="720" y="310" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="374">sonnet 审查</text><text x="720" y="385" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="449">sonnet 审查</text><text x="720" y="460" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="524">sonnet 审查</text><text x="720" y="535" font-size="8">PRE_MERGE_REVIEW</text>
-<text x="720" y="599">sonnet 审查</text><text x="720" y="610" font-size="8">PRE_MERGE_REVIEW</text></g>
-<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.5">
-<rect x="800" y="286" width="110" height="30" rx="5"/><rect x="800" y="361" width="110" height="30" rx="5"/><rect x="800" y="436" width="110" height="30" rx="5"/><rect x="800" y="511" width="110" height="30" rx="5"/><rect x="800" y="586" width="110" height="30" rx="5"/>
-</g>
-<g fill="#2f855a" font-size="11"><text x="855" y="305">① 合并 S1 --no-ff</text><text x="855" y="380">② 合并 S2 --no-ff</text><text x="855" y="455">③ 合并 S3 --no-ff</text><text x="855" y="530">④ 合并 S4 --no-ff</text><text x="855" y="605">⑤ 合并 S5 --no-ff</text></g>
-<g fill="#f0fff4" stroke="#2f855a" stroke-width="1.3">
-<path d="M1000,279 L1062,301 L1000,323 L938,301z"/><path d="M1000,354 L1062,376 L1000,398 L938,376z"/><path d="M1000,429 L1062,451 L1000,473 L938,451z"/><path d="M1000,504 L1062,526 L1000,548 L938,526z"/><path d="M1000,579 L1062,601 L1000,623 L938,601z"/>
-</g>
-<g fill="#2f855a" font-size="8"><text x="1000" y="299">POST_MERGE_REVIEW</text><text x="1000" y="310">+ push</text>
-<text x="1000" y="374">POST_MERGE_REVIEW</text><text x="1000" y="385">+ push</text>
-<text x="1000" y="449">POST_MERGE_REVIEW</text><text x="1000" y="460">+ push</text>
-<text x="1000" y="524">POST_MERGE_REVIEW</text><text x="1000" y="535">+ push</text>
-<text x="1000" y="599">POST_MERGE_REVIEW</text><text x="1000" y="610">+ push</text></g>
-</g>
-<g stroke="#555" stroke-width="1.3" marker-end="url(#ar)">
-<line x1="625" y1="301" x2="668" y2="301"/><line x1="625" y1="376" x2="668" y2="376"/><line x1="625" y1="451" x2="668" y2="451"/><line x1="625" y1="526" x2="668" y2="526"/><line x1="625" y1="601" x2="668" y2="601"/>
-<line x1="770" y1="301" x2="798" y2="301"/><line x1="770" y1="376" x2="798" y2="376"/><line x1="770" y1="451" x2="798" y2="451"/><line x1="770" y1="526" x2="798" y2="526"/><line x1="770" y1="601" x2="798" y2="601"/>
-<line x1="910" y1="301" x2="936" y2="301"/><line x1="910" y1="376" x2="936" y2="376"/><line x1="910" y1="451" x2="936" y2="451"/><line x1="910" y1="526" x2="936" y2="526"/><line x1="910" y1="601" x2="936" y2="601"/>
-</g>
-<g stroke="#555" stroke-width="1" fill="none" stroke-dasharray="2 3">
-<line x1="520" y1="301" x2="625" y2="301"/><line x1="520" y1="376" x2="625" y2="376"/><line x1="520" y1="451" x2="625" y2="451"/><line x1="520" y1="526" x2="625" y2="526"/><line x1="520" y1="601" x2="625" y2="601"/>
-</g>
-<g stroke="#2f855a" stroke-width="1.5" fill="none" marker-end="url(#ag)">
-<path d="M1062,301 C1110,301 1110,340 720,340 L720,354"/><path d="M1062,376 C1110,376 1110,415 720,415 L720,429"/><path d="M1062,451 C1110,451 1110,490 720,490 L720,504"/><path d="M1062,526 C1110,526 1110,565 720,565 L720,579"/>
-<path d="M1000,623 L1000,665"/>
-</g>
-<text x="1115" y="345" font-size="9" fill="#2f855a">下一个</text>
-<rect x="880" y="667" width="240" height="48" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
-<text x="1000" y="687" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a365d">阶段 6：主会话核心短测 + smoke</text>
-<text x="1000" y="704" text-anchor="middle" font-size="10" font-family="monospace" fill="#444">TEST_RESOURCE / SPEED_SMOKE×5</text>
-<text x="20" y="680" font-size="11" fill="#555">图例：实线箭头 = 流程；蓝虚线 = 接口签名依赖（不等合入）；绿 = 合并与合并后审查；</text>
-<text x="20" y="697" font-size="11" fill="#555">合并对象是审查钉死的 TIP sha；FAIL 不合并，findings 用 SendMessage 交回原子代理续改。</text>
-<rect x="20" y="760" width="560" height="110" rx="8" fill="#fff5f5" stroke="#c0392b" stroke-width="2.5"/>
-<text x="40" y="788" font-size="15" font-weight="bold" fill="#c0392b">红线</text>
-<g font-size="13" fill="#c0392b"><text x="40" y="812">· 零 third_party 改动</text><text x="40" y="834">· trace.jsonl schema 不变</text><text x="40" y="856">· SGEVAL_AUDIT=0 时协议逐字节不变</text></g>
-</svg>
-<figcaption>图 2 实施阶段 0～6 与 S1～S5 worktree 子代理的并行、审查与合并顺序</figcaption></figure>
+<figure class="flow"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1008" width="1200" height="1008" font-family="Noto Sans CJK SC, PingFang SC, Microsoft YaHei, sans-serif">
+<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,4 L0,8 z" fill="#555"/></marker></defs>
+<rect width="1200" height="1008" fill="#fff"/>
+<text x="600.0" y="30.0" font-size="20" fill="#222" text-anchor="middle" font-weight="bold">推理测速改造：实施流程与子代理合并顺序（第二稿，S6 守卫前置）</text>
+<text x="20.0" y="62.0" font-size="15" fill="#2b6cb0" text-anchor="start" font-weight="bold">一、阶段流（每节点下方为该阶段的判定行；括号内为合并后的 dev 版本号）</text>
+<rect x="12" y="78" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="119.5" y="114.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">0 渲染 HTML 计划</text>
+<text x="119.5" y="129.0" font-size="12" fill="#1a365d" text-anchor="middle">（1.46）</text>
+<line x1="227" y1="120.0" x2="250" y2="120.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="252" y="78" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="359.5" y="106.5" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">0′ S6 add_buffer /</text>
+<text x="359.5" y="121.5" font-size="12" fill="#1a365d" text-anchor="middle">reset_finished 等待守卫</text>
+<text x="359.5" y="136.5" font-size="12" fill="#1a365d" text-anchor="middle">（1.47）</text>
+<text x="359.5" y="177.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">ADD_BUFFER_GUARD</text>
+<line x1="467" y1="120.0" x2="490" y2="120.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="492" y="78" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="599.5" y="106.5" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">1 S1 timing.py +</text>
+<text x="599.5" y="121.5" font-size="12" fill="#1a365d" text-anchor="middle">SimpleMemVLA 两端</text>
+<text x="599.5" y="136.5" font-size="12" fill="#1a365d" text-anchor="middle">（1.48）</text>
+<text x="599.5" y="177.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">TIMING_HELPER cases=15 / CHUNK_TIMING</text>
+<text x="599.5" y="190.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">LANG_SPLIT / WALL_DECOMP / OBS_EQ(smvla)</text>
+<line x1="707" y1="120.0" x2="730" y2="120.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="732" y="78" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="839.5" y="106.5" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">2 S2 FrameSamp +</text>
+<text x="839.5" y="121.5" font-size="12" fill="#1a365d" text-anchor="middle">policy_server_wrap</text>
+<text x="839.5" y="136.5" font-size="12" fill="#1a365d" text-anchor="middle">（含 --sgeval-serve-root）（1.49）</text>
+<text x="839.5" y="177.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">CHUNK_TIMING / WALL_DECOMP</text>
+<text x="839.5" y="190.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">OBS_EQ(policy_server_wrap)</text>
+<line x1="947" y1="120.0" x2="970" y2="120.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="972" y="78" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="1079.5" y="114.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">2′ S2b GroundSG 三变体</text>
+<text x="1079.5" y="129.0" font-size="12" fill="#1a365d" text-anchor="middle">（1.50）</text>
+<text x="1079.5" y="177.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">CHUNK_TIMING×3 / LANG_SPLIT×2</text>
+<text x="1079.5" y="190.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">WALL_DECOMP×3</text>
+<path d="M1079.5,202 V208 H127.5 V224" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="12" y="226" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="119.5" y="262.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">3 S3 PonderPounce 两端</text>
+<text x="119.5" y="277.0" font-size="12" fill="#1a365d" text-anchor="middle">（1.51）</text>
+<text x="119.5" y="325.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">CHUNK_TIMING / LANG_SPLIT / WALL_DECOMP</text>
+<text x="119.5" y="338.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">PP_CHUNK_FRESH / OBS_EQ</text>
+<line x1="227" y1="268.0" x2="250" y2="268.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="252" y="226" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="359.5" y="254.5" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">4 S4 Astra</text>
+<text x="359.5" y="269.5" font-size="12" fill="#1a365d" text-anchor="middle">（VLA 服务端经包装器）</text>
+<text x="359.5" y="284.5" font-size="12" fill="#1a365d" text-anchor="middle">（1.52）</text>
+<text x="359.5" y="325.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">CHUNK_TIMING / LANG_SPLIT / WALL_DECOMP</text>
+<line x1="467" y1="268.0" x2="490" y2="268.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="492" y="226" width="215" height="84" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="599.5" y="254.5" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">5 S5 报表</text>
+<text x="599.5" y="269.5" font-size="12" fill="#1a365d" text-anchor="middle">eval_report --results 入口</text>
+<text x="599.5" y="284.5" font-size="12" fill="#1a365d" text-anchor="middle">+ report.py（1.53）</text>
+<text x="599.5" y="325.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">SPEED_TABLE_TEST / SPEED_TABLE</text>
+<line x1="707" y1="268.0" x2="730" y2="268.0" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="732" y="226" width="456" height="94" rx="8" fill="#ebf4ff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="960.0" y="252.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">6 主会话（1.54）：核心短测 + TRACE_SCHEMA + 本机冒烟</text>
+<text x="960.0" y="267.0" font-size="12" fill="#1a365d" text-anchor="middle">（7 变体 × 1 任务 × 1 档 × 2 局，审计开/关）</text>
+<text x="960.0" y="282.0" font-size="12" fill="#1a365d" text-anchor="middle">+ GL 正式（6 个 GPU 变体 × 1 局 VideoUnmask）</text>
+<text x="960.0" y="297.0" font-size="12" fill="#1a365d" text-anchor="middle">+ Astra 正式 1 局在本机（≤3 美元）+ 留档</text>
+<text x="960.0" y="335.0" font-size="10.5" fill="#2f855a" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">TEST_RESOURCE / TRACE_SCHEMA / SPEED_SMOKE×7</text>
+<text x="20.0" y="376.0" font-size="15" fill="#2b6cb0" text-anchor="start" font-weight="bold">二、三波派发与合并（写入型子代理一律 opus + worktree 隔离；主检出唯一写者是主会话）</text>
+<rect x="520" y="390" width="160" height="24" rx="12" fill="#fff" stroke="#2f855a" stroke-width="1.5"/>
+<text x="600.0" y="406.0" font-size="12" fill="#2f855a" text-anchor="middle" font-weight="bold">dev @BASE（1.46）</text>
+<text x="20.0" y="432.0" font-size="12" fill="#555" text-anchor="start" font-weight="bold">第一波：从 dev @BASE 分出 S6、S1（并行）</text>
+<rect x="200" y="440" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="380.0" y="458.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S6 add_buffer / reset_finished 等待守卫</text>
+<text x="380.0" y="475.0" font-size="11" fill="#333" text-anchor="middle">framesamp_modul.py（四处等待）</text>
+<text x="380.0" y="489.0" font-size="11" fill="#333" text-anchor="middle">tests/test_framesamp_add_buffer_guard.py</text>
+<rect x="640" y="440" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="820.0" y="458.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S1 timing.py + SimpleMemVLA 两端</text>
+<text x="820.0" y="475.0" font-size="11" fill="#333" text-anchor="middle">timing.py, models/smvla.py, servers/smvla_server.py,</text>
+<text x="820.0" y="489.0" font-size="11" fill="#333" text-anchor="middle">public-manifest.txt, contracts.delta.json + 两测试</text>
+<line x1="600" y1="414" x2="380" y2="438" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="600" y1="414" x2="820" y2="438" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<text x="20.0" y="552.0" font-size="12" fill="#555" text-anchor="start" font-weight="bold">第二波：S6、S1 合入后派发 S2、S3、S5（并行）</text>
+<line x1="820" y1="510" x2="820" y2="558" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="20" y="560" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="200.0" y="578.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S2 FrameSamp + policy_server_wrap</text>
+<text x="200.0" y="595.0" font-size="11" fill="#333" text-anchor="middle">framesamp_modul.py, policy_server_wrap.py</text>
+<text x="200.0" y="609.0" font-size="11" fill="#333" text-anchor="middle">+ 测试（含 --sgeval-serve-root）</text>
+<rect x="410" y="560" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="590.0" y="578.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S3 PonderPounce 两端</text>
+<text x="590.0" y="595.0" font-size="11" fill="#333" text-anchor="middle">pp.py, pp_server_wrap.py + 测试</text>
+<rect x="800" y="560" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="980.0" y="578.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S5 报表</text>
+<text x="980.0" y="595.0" font-size="11" fill="#333" text-anchor="middle">eval_report.py, report.py + 三测试</text>
+<text x="20.0" y="672.0" font-size="12" fill="#555" text-anchor="start" font-weight="bold">第三波：S2 合入后派发 S2b、S4（并行）</text>
+<line x1="360" y1="630" x2="360" y2="678" stroke="#555" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="20" y="680" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="200.0" y="698.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S2b GroundSG 三变体</text>
+<text x="200.0" y="715.0" font-size="11" fill="#333" text-anchor="middle">groundsg.py, official_hard_runner.py（一行）</text>
+<text x="200.0" y="729.0" font-size="11" fill="#333" text-anchor="middle">+ 测试</text>
+<rect x="410" y="680" width="360" height="70" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="1.5"/>
+<text x="590.0" y="698.0" font-size="12" fill="#1a365d" text-anchor="middle" font-weight="bold">S4 Astra</text>
+<text x="590.0" y="715.0" font-size="11" fill="#333" text-anchor="middle">astra.py + 测试</text>
+<text x="20.0" y="794.0" font-size="12" fill="#555" text-anchor="start" font-weight="bold">合并序（合一个、审一个、push 一个）：</text>
+<line x1="40" y1="830" x2="1150" y2="830" stroke="#555" stroke-width="2" marker-end="url(#ah)"/>
+<text x="40.0" y="808.0" font-size="11" fill="#2f855a" text-anchor="start" font-weight="bold">dev @BASE</text>
+<text x="1150.0" y="808.0" font-size="11" fill="#2f855a" text-anchor="end" font-weight="bold">dev 1.53 → 1.54</text>
+<path d="M98,819 L109,830 L98,841 L87,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="98.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="140" cy="830" r="13" fill="#2f855a"/>
+<text x="140.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S6</text>
+<path d="M182,819 L193,830 L182,841 L171,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="182.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<path d="M243,819 L254,830 L243,841 L232,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="243.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="285" cy="830" r="13" fill="#2f855a"/>
+<text x="285.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S1</text>
+<path d="M327,819 L338,830 L327,841 L316,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="327.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<path d="M388,819 L399,830 L388,841 L377,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="388.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="430" cy="830" r="13" fill="#2f855a"/>
+<text x="430.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S2</text>
+<path d="M472,819 L483,830 L472,841 L461,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="472.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<path d="M533,819 L544,830 L533,841 L522,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="533.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="575" cy="830" r="13" fill="#2f855a"/>
+<text x="575.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S2b</text>
+<path d="M617,819 L628,830 L617,841 L606,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="617.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<path d="M678,819 L689,830 L678,841 L667,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="678.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="720" cy="830" r="13" fill="#2f855a"/>
+<text x="720.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S3</text>
+<path d="M762,819 L773,830 L762,841 L751,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="762.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<path d="M823,819 L834,830 L823,841 L812,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="823.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="865" cy="830" r="13" fill="#2f855a"/>
+<text x="865.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S4</text>
+<path d="M907,819 L918,830 L907,841 L896,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="907.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<path d="M968,819 L979,830 L968,841 L957,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="968.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">前</text>
+<circle cx="1010" cy="830" r="13" fill="#2f855a"/>
+<text x="1010.0" y="810.0" font-size="11" fill="#2f855a" text-anchor="middle" font-weight="bold">S5</text>
+<path d="M1052,819 L1063,830 L1052,841 L1041,830 Z" fill="#fff" stroke="#555" stroke-width="1.5"/>
+<text x="1052.0" y="833.5" font-size="9" fill="#555" text-anchor="middle">后</text>
+<text x="40.0" y="860.0" font-size="11" fill="#333" text-anchor="start">◇前：sonnet 只读审查，钉 BASE / TIP sha，PRE_MERGE_REVIEW=PASS 才 git merge --no-ff &lt;TIP sha&gt;（●，主会话执行）；</text>
+<text x="40.0" y="876.0" font-size="11" fill="#333" text-anchor="start">◇后：核心短测 + 受保护目录零 diff + 分配表核对，POST_MERGE_REVIEW=PASS 即 push；任一 FAIL：停、不 push、证据交用户。</text>
+<rect x="20" y="896" width="1160" height="92" rx="6" fill="#fff5f5" stroke="#c0392b" stroke-width="2"/>
+<text x="36.0" y="916.0" font-size="13" fill="#c0392b" text-anchor="middle" font-weight="bold">红线</text>
+<text x="36.0" y="938.0" font-size="12" fill="#7b1c1c" text-anchor="start">① 零 third_party 改动（git diff --quiet HEAD -- third_party）；② trace.jsonl schema 不变（TRACE_SCHEMA=PASS）；</text>
+<text x="36.0" y="956.0" font-size="12" fill="#7b1c1c" text-anchor="start">③ SGEVAL_AUDIT=0 时协议与改动前包装器逐字节一致（OBS_EQ=PASS）；</text>
+<text x="36.0" y="974.0" font-size="12" fill="#7b1c1c" text-anchor="start">④ 唯一同文件例外：framesamp_modul.py 由 S6 先合（1.47）、S2 后派（第二波基于 1.48），其余可写集合互不重叠。</text>
+</svg><figcaption>图 2 实施阶段 0～6 与 S1～S5 worktree 子代理的并行、审查与合并顺序</figcaption></figure>
 </body>
 </html>
