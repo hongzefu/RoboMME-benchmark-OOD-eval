@@ -147,3 +147,16 @@ env PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_
 恢复载体对四模型依次调用固定库的 `render_episode`，参数为 `official_root=CODE, ffmpeg=<media-tools>/ffmpeg-7.0.2-amd64-static/ffmpeg, source='raw', overwrite=False, max_memory_mib=6144, output=<raw>/recovered-video/<safe_filename>, sidecar=<raw>/recovered-video/render.json, episode_id=0, terminal=<原status>`；每局执行前后核对原 raw 全部文件、results.jsonl 与 accepted 标记的 SHA256／字节数相同，独立写 recovery.json，原 result.json 不回写。完整输出归档于 records/media-recovery-summary.json。
 
 汇总验收在 GL 63431431 上用同一主解释器运行 `check-smoke.py`，完整解码六模型的原始两路与官方视频、核 identity/cap/accepted/result、核恢复证明，再执行固定 `dev-scripts/checks/trace_arrays_check.py <NFS产物根>/smoke/rollouts --json <NFS产物根>/smoke/trace-arrays-report.json`；退出 0，SMOKE 与 TRACE_ARRAYS 通过，账本 open=0。六个 smoke 身份与 A 相同，逐字节拷贝126文件至seed7输出，复用其accepted，不重复执行或新建账本。
+
+## 正式阶段 A 起跑
+
+2026-10-10 EDT，四席使用 `run-model-r1.sh A <模型> <job> <seat> formal <slot>`，代码仍固定 a02a4da；70 行 A 身份清单中每模型已完成1个 smoke 身份，`RUN_PLAN total=70 claimable=69 max_attempts=2`，不会重复执行已接受身份。其余 FrameSamp／Oracle 在短模型 A 清空后使用同一既有作业依次运行，空闲席再并入长模型队列。
+
+| 模型 | JobID | tmux／日志基名 | seat／slot | 启动时间 |
+|---|---|---|---|---|
+| MemER | 63431430 | fe-A-memer-63431430 | fe-A-memer-01／0 | 01:06:05 |
+| QwenVL | 63431431 | fe-A-qwen-63431431 | fe-A-qwen-01／1 | 01:06:15 |
+| SimpleMemVLA | 63431432 | fe-A-smvla-63431432 | fe-A-smvla-01／2 | 01:06:17 |
+| PonderPounce | 63431433 | fe-A-pp-63431433 | fe-A-pp-01／3 | 01:06:28 |
+
+日志均在 NFS 产物根 `logs/<tmux>.log`；四项 `MEDIA_ASSETS=PASS level=cheap assets=2 mismatches=0`、`RUN_INPUTS=PASS`、`CLIENT_READY ... git=a02a4dad039b dirty=False` 已核对。MemER／QwenVL／PP 已见 `SERVER_READY ready_s=26.5`，SimpleMemVLA 正在加载；首个新 accepted 与阶段终态继续流式观察，不据启动状态宣称阶段通过。阶段A为六模型 ×（七任务两档3/2局 + 两任务四档2/1/1/1局 + 三任务三档2/2/1局 + 两任务五档每档1局）=420个身份，已复用6，余414。
