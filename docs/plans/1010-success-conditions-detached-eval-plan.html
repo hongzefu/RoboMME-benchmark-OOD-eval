@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>成功判据调整与评估交接后退出方案</title>
+<style>
+:root{color-scheme:light;--ink:#182b3a;--muted:#526575;--line:#d9e3ea;--blue:#136594;--paper:#fff;--bg:#eef3f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.8 system-ui,"Noto Sans CJK SC",sans-serif}main{max-width:1160px;margin:32px auto;padding:40px 52px;background:var(--paper);border-radius:16px}header{border-bottom:3px solid var(--blue);padding-bottom:24px}.eyebrow{color:var(--blue);font-weight:700}h1{font-size:28px;margin:54px 0 18px}h2{font-size:22px;margin:34px 0 12px}h3{font-size:18px}p{margin:12px 0}a{color:var(--blue)}code{font:14px/1.6 ui-monospace,monospace;overflow-wrap:anywhere;background:#edf3f7;padding:2px 4px;border-radius:3px}pre{overflow:auto;background:#edf3f7;padding:18px;border-radius:8px}pre code{padding:0}table{border-collapse:collapse;width:100%;font-size:14px;margin:18px 0}th,td{border:1px solid var(--line);text-align:left;vertical-align:top;padding:10px 12px}th{background:#eaf2f7}ul,ol{padding-left:24px}.note,.warn{padding:15px 20px;border-radius:8px;margin:18px 0}.note{background:#eaf4fb;border-left:4px solid var(--blue)}.warn{background:#fff4df;border-left:4px solid #c78512}.muted,figcaption{color:var(--muted);font-size:14px}figure{margin:20px 0;padding:16px;background:#f6f9fb;border:1px solid var(--line);border-radius:10px}svg{display:block;width:100%;height:auto}nav{display:flex;gap:20px;flex-wrap:wrap;margin-top:18px}.scroll{overflow:auto}blockquote{margin:18px 0;padding:12px 18px;background:#f6f9fb;border-left:3px solid #91a7b7}footer{margin-top:36px;border-top:1px solid var(--line);padding-top:16px}@media(max-width:760px){main{margin:0;padding:24px 18px;border-radius:0}table{font-size:13px}h1{font-size:24px}}@media print{body{background:white}main{margin:0;max-width:none;padding:0}h1,h2,h3{break-after:avoid}tr,figure{break-inside:avoid}a{color:inherit}}
+</style>
+</head>
+<body><main>
+<header>
+<div class="eyebrow">2026-10-10 · 待批准实施 · 本轮只交付计划</div>
+<p style="font-size:34px;font-weight:750;line-height:1.35">成功判据调整<br>与评估交接后退出方案</p>
+<p>调整 StopCube 的停止距离；仅取消 MoveCube 执行阶段杆推、夹爪推的张开检查；把人工盯盘与收尾交给确定性的普通程序，让 Codex 交接成功后结束回合。</p>
+<nav><a href="#human">第一部分</a><a href="#changes">判据改动</a><a href="#detached">评估交接</a><a href="#acceptance">验收</a><a href="#technical">第二部分</a><a href="#runbook">执行手册</a></nav>
+</header>
+<div class="note">
+<strong>权威与授权边界。</strong>以本次用户指令和补充答复为准。评估代码锚点：<code>0e855eeecbec2511e46a3c82db4fd61b36b7c65f</code>；benchmark gitlink：<code>a5efb992e769b7011281a1d31739b76d8868602a</code>。工作副本为 <code>/data/hongzefu/RoboMME-benchmark-OOD-eval</code>，开发分支 <code>dev</code>，提交编号接续 <code>1.85</code>。模型 gitlink 不升级。本轮只读核实、编写并提交本计划；不修改判据、不恢复旧评估、不提交作业。实施须在完整方案呈现后另获无修改的认可；正式运行另须明确范围、新运行名与资源预算。
+</div>
+<p class="muted">本机已核实为 sled-vail，指定仓库根、NFS、SSH 配置符合约定，两张 RTX 6000 Ada，micromamba 与 uv 可用。工作区已有 <code>m third_party/SimpleMemVLA</code>，属于在途改动，绕开、不清理、不提交。本文描述现有机制与拟新增机制；未来判定行均为验收目标，并非已跑出的结果。</p>
+<h1 id="human">第一部分（给人看）</h1>
+<h2>一、要做什么与已定口径</h2>
+<p>判据修改落在 benchmark 的专用分支，再由评估仓升级锁定的 gitlink；评估自动化复用现有 <code>continue_full_eval.py</code>，补独立监督、停止入口、状态交付和完整复制。代理只负责准备、测试、首次启动及交接验证；交接后调度不再依赖持续的模型推理。</p>
+<table>
+<tr><th>编号</th><th>已定口径与依据</th></tr>
+<tr><td>1</td><td>用户确认倍率是 <code>2.5</code>。实际半边长是 <code>0.02 m</code>，故 StopCube 从 <code>0.06 m</code> 改为 <code>0.05 m</code>，见第二节。此前提问中的“0.5 米”有误，不能据此把方块尺寸改成 0.2 米。</td></tr>
+<tr><td>2</td><td>用户补充原话：“我只要执行期间的那一次，然后感推和夹爪开都改为 false，就是 demo 视频中的不要改。”按对话上下文落实为 MoveCube 的 <code>peg_push</code>、<code>gripper_push</code> 各一处执行谓词；两处演示谓词继续为 <code>True</code>，抓取放置不改，见第三节。</td></tr>
+<tr><td>3</td><td>取消 <code>must_gripper_open</code> 表示不再查两指张开程度，并不要求闭合。距离、搬运方式、错误抓取和任务顺序保持各自约束，见第三节。</td></tr>
+<tr><td>4</td><td>“一次性发完”指一次提交完整运行合同与任务清单。普通监督程序和评估进程持续运行，Codex 代理交接后可以停止工作；无需持续付费推理，见第四节。</td></tr>
+<tr><td>5</td><td>旧评估已明确叫停，保留四个占位作业。本文不改变停止状态，不恢复 A～D、不清空旧账本；“占位任务不要停”的既有决定继续有效，见第四节与执行手册。</td></tr>
+<tr><td>6</td><td>原计划只评估十四任务，排除了 MoveCube、InsertPeg；本次判据修改不把 MoveCube 自动加入正式队列。后续正式规模必须按新运行合同确定，见第五节。</td></tr>
+</table>
+<h2 id="changes">二、StopCube：收紧一厘米，保持停止和时机判定</h2>
+<p><code>src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py::is_obj_stopped_onto</code> 连续赋值 <code>cube_half_size * 2.5</code>、<code>cube_half_size * 3</code>，后者覆盖前者。<code>StopCube.__init__</code> 读取 <code>PICK_CUBE_CONFIGS["panda"]</code>，本机安装的 ManiSkill 配置为 <code>cube_half_size=0.02</code>；第三方测试的 <code>official_thresholds.CUBE_HALF</code> 也钉同一数值。</p>
+<pre><code>旧：d_xy = sqrt((cube_x-target_x)^2 + (cube_y-target_y)^2)
+    到位 = (d_xy &lt;= 0.02 * 3) and stop
+新：到位 = (d_xy &lt;= 0.02 * 2.5) and stop
+    有效阈值只赋值一次；stop_timestep 仍只记录首次满足判据的步号。</code></pre>
+<figure>
+<svg viewBox="0 0 980 150" role="img" aria-label="StopCube 阈值从六厘米收紧到五厘米">
+<line x1="60" y1="90" x2="910" y2="90" stroke="#6d8494" stroke-width="3"/>
+<rect x="60" y="64" width="550" height="26" fill="#d7ebdf"/><rect x="610" y="64" width="110" height="26" fill="#ffdbad"/>
+<line x1="610" y1="50" x2="610" y2="105" stroke="#267146" stroke-width="3"/><line x1="720" y1="50" x2="720" y2="105" stroke="#b87513" stroke-width="3"/>
+<g fill="#182b3a" font-size="17"><text x="60" y="125">0</text><text x="470" y="35">新阈值：0.05 米</text><text x="730" y="35">旧阈值：0.06 米</text><text x="125" y="58">距离条件仍满足，等号保留</text><text x="610" y="135">这 1 厘米区间将由到位变为未到位</text></g>
+</svg><figcaption>仅讨论距离条件：方块没停止、按错经过次数或过了截止步，仍不算任务成功。距离阈值下降 16.67%；成功率变化尚未实测。</figcaption></figure>
+<p>函数被 <code>StopCube._initialize_episode</code> 构造的任务谓词和 <code>StopCube.evaluate::press_before</code> 同时读取。改同一 helper 可避免“子任务到位阈值已变、提前按键检查仍用旧值”的分裂。保持 <code>correct_timestep</code>、<code>_task_failed_persistent</code>、运动路线及输入规格不变。</p>
+<div class="warn">不能只删掉前面的 <code>*2.5</code>，那不会改变成功条件；也不能把这里的水平距离误写成三维距离。改的是 hard 环境执行语义，官方 <code>src/robomme/</code> 及历史产物不改。本轮不生成任何新演示视频。</div>
+<h2>三、MoveCube：执行两处改 False，演示两处留 True</h2>
+<p><code>src/robomme_hard/robomme_env/MoveCube.py::evaluate</code> 每种方式都有标记为 <code>demonstration=True</code> 和 <code>demonstration=False</code> 的任务项。定位必须按“方式＋标记＋子任务名字”逐项匹配，不能对文件做全局替换。</p>
+<table>
+<tr><th>方式与阶段</th><th>当前</th><th>拟改</th><th>必须保留</th></tr>
+<tr><td><code>peg_push</code> 演示：“Hook the cube to the target with the peg”</td><td><code>must_gripper_open=True</code></td><td>原样保持</td><td>演示阶段任务项及规划器不动</td></tr>
+<tr><td><code>peg_push</code> 执行：同名、<code>demonstration=False</code></td><td><code>True</code></td><td><code>False</code></td><td>先拿杆、杆推方式及先到目标等错误条件</td></tr>
+<tr><td><code>gripper_push</code> 演示：“Close the gripper and push the cube to the target”</td><td><code>True</code></td><td>原样保持</td><td>不顺手修演示文字和谓词之间的矛盾</td></tr>
+<tr><td><code>gripper_push</code> 执行：同名、<code>demonstration=False</code></td><td><code>True</code></td><td><code>False</code></td><td>拿起方块／杆的失败条件</td></tr>
+<tr><td><code>grasp_putdown</code> 演示与执行</td><td><code>is_obj_dropped_onto</code>，没有此参数</td><td>原样保持</td><td>先抓起再放下、未抓持等既有判定</td></tr>
+</table>
+<pre><code># 仅替换两个 demonstration=False 任务项中的调用参数
+is_obj_pushed_onto(self, self.cube, self.goal_site,
+                   distance_threshold=self.cube_half_size * 2 * 1.2,
+                   must_gripper_open=False)</code></pre>
+<p><code>is_obj_pushed_onto</code> 只在参数为 <code>True</code> 时检查 <code>qpos[-2:]</code> 两个值均严格大于 <code>0.02</code>。新执行态跳过此检查，仍要求 <code>d_xy ≤ 0.048 m</code>。闭合和张开都可以通过距离谓词；整局是否成功仍由真实任务序列决定。<code>is_obj_dropped_onto</code> 的 <code>0.05 m</code> 与 <code>is_obj_dropped</code> 不改。</p>
+<h2>四、真正评估链路及前后对照</h2>
+<p><a href="../../src/robomme_ood_eval/episode.py">episode.py</a> 的 <code>builder_for</code> 和 <code>session.py::EnvSession.builder</code> 使用 hard builder：<code>hard-verify</code> 是 xhard0，<code>ood</code> 是新档规格，两者均进入 <code>robomme_hard</code>。下图只展示成功状态链路，三处判据改动均有意改变部分状态值；模型输入接口和动作维度不改。</p>
+<figure>
+<svg viewBox="0 0 1050 250" role="img" aria-label="成功状态链路改动前后对照">
+<defs><marker id="arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#647b8a"/></marker></defs>
+<g fill="#eaf2f7" stroke="#b8cbd8"><rect x="15" y="50" width="225" height="140" rx="10"/><rect x="275" y="50" width="245" height="140" rx="10"/><rect x="555" y="50" width="215" height="140" rx="10"/><rect x="805" y="50" width="230" height="140" rx="10"/></g>
+<g stroke="#647b8a" stroke-width="2" marker-end="url(#arrow)"><path d="M240 120H270"/><path d="M520 120H550"/><path d="M770 120H800"/></g>
+<g fill="#182b3a" font-size="16"><text x="30" y="85">规格 → hard builder</text><text x="30" y="116">JSON 身份及布局不变</text><text x="30" y="146">不重采样、不改资产</text><text x="290" y="85">环境 evaluate()</text><text x="290" y="116">旧：×3／执行 True</text><text x="290" y="146">新：×2.5／执行 False</text><text x="290" y="176">success/fail：bool，[1]</text><text x="570" y="85">DemonstrationWrapper</text><text x="570" y="116">info["status"] 字符串</text><text x="570" y="146">序列和失败规则保留</text><text x="820" y="85">Policy.play → result</text><text x="820" y="116">task_success：整数 0/1</text><text x="820" y="146">JSON／视频／原始记录</text></g>
+<text x="20" y="225" fill="#526575" font-size="15">bool[1] 的逻辑载荷为 1 字节；JSON 字符串及文件字节数按序列化变化，不能承诺产物逐位一致。</text>
+</svg><figcaption>状态与子目标可能提前或推迟改变；依赖在线子目标的策略后续动作也可能变化。这是成功语义变更，不以新旧动作逐位一致作为验收。</figcaption></figure>
+<h2 id="detached">五、代理能退出：交给普通监督程序</h2>
+<p><strong>可以做到。</strong>已有 <a href="../../dev-scripts/gl/continue_full_eval.py">continue_full_eval.py</a> 的 <code>Controller.tick/report/replace_expired</code> 能持续调度四席、核报告、仅在明确 <code>TIMEOUT</code> 后补交 48 小时作业；<code>seat.py</code> 已有领取、心跳与共享预算，<code>run_eval_gl.sh</code> 已有无进展看门狗。缺口是控制器自身异常后无人接管、停止和最终复制仍需主会话，以及没有已建立的聊天推送。</p>
+<figure>
+<svg viewBox="0 0 1040 355" role="img" aria-label="代理交接后由独立程序运行评估">
+<g fill="#eaf2f7" stroke="#b8cbd8"><rect x="20" y="40" width="225" height="95" rx="10"/><rect x="290" y="40" width="290" height="95" rx="10"/><rect x="630" y="40" width="385" height="95" rx="10"/><rect x="290" y="190" width="290" height="125" rx="10"/><rect x="630" y="190" width="385" height="125" rx="10"/></g>
+<g stroke="#647b8a" stroke-width="2" marker-end="url(#arrow)"><path d="M245 85H282"/><path d="M580 85H622"/><path d="M435 135V182"/><path d="M822 135V182"/><path d="M630 250H588"/></g>
+<g fill="#182b3a" font-size="16"><text x="35" y="75">Codex：准备、验证、交接</text><text x="35" y="108">HANDOFF=PASS 后退出</text><text x="305" y="75">本机 detached tmux</text><text x="305" y="108">外层守护 → supervisor</text><text x="645" y="75">GL detached tmux → Controller</text><text x="645" y="108">四个占位作业 → srun → 评估席位</text><text x="305" y="225">独立监督：PID／心跳／退出码</text><text x="305" y="257">状态文件、停止信号、失败报告</text><text x="305" y="288">复制与最终汇总、保留占位作业</text><text x="645" y="225">阶段接续、预算、有限基础设施重试</text><text x="645" y="257">正常失败记 0，不挑成功回合重跑</text><text x="645" y="288">未知故障停止受影响调度、保存证据</text></g>
+</svg><figcaption>常驻的是执行程序、监督程序及模型服务进程；没有需要持续推理的代理。当前控制器采用每 15 秒检查，拟监督器每 30 秒检查一次，均是程序内部计时，主代理不做睡眠忙轮询。</figcaption></figure>
+<table>
+<tr><th>环节</th><th>拟新增保证与交接条件</th></tr>
+<tr><td>一次提交</td><td>新 <code>launch_detached_eval.sh</code> 读取钉死代码、身份清单、预算和作业白名单的运行合同；取全局运行锁，只创建自己的确定命名会话，重复启动接手或明确拒绝。配置／载体指纹不符即拒绝。</td></tr>
+<tr><td>接续</td><td>复用现有控制器，不写第二套调度队列。为 <code>state.json</code> 增加心跳、终态、明确错误类型和停止请求；控制器失败独立于席位活着与否。确定性校验失败不自动重启。</td></tr>
+<tr><td>监督器自身</td><td>本机 shell 守护监督 Python 子进程；异常退出最多重启 2 次，间隔 30 秒。控制器意外死亡最多自动恢复 2 次，先核提交／启动意图和运行锁；身份重试仍由原账本约束，不重新领取已接受回合。</td></tr>
+<tr><td>停止</td><td>本机 <code>STOP_REQUEST.json</code> → 可见共享停止文件 → 控制器不派新工作 → 精确停止清单内工作会话／数字 step → 保存中断现场。占位作业保留；未知资源归属不操作。SIGKILL／失联不伪造成功退出码。</td></tr>
+<tr><td>48 小时到期</td><td>仅 <code>sacct</code> 明确 TIMEOUT 后机械申请对应一席；最多四席并存，不提前申请，不把查询失败当到期。新合同必须写最大接替轮数及总运行截止时间；未批准的值为 0／禁启动，不能无限续费。</td></tr>
+<tr><td>最终收尾</td><td>阶段报告通过后按 accepted 白名单复制完整三类产物，逐文件字节数与 SHA256 校验，再写全量报告。复制冲突保留两端并报错，原始错误尝试和停止现场保留；本方案不自动删除 NFS 源、不取消占位作业。</td></tr>
+<tr><td>交接后交付</td><td>原子输出本机 <code>status.json/status.html</code>、阶段报告、最终 <code>result.md</code>、<code>alert.json</code>；无变化只更新机器心跳。代理退出前核实成功、异常和监督器故障三条链路，不以 tmux 活着替代交接。</td></tr>
+</table>
+<div class="warn"><strong>通知边界：</strong>文件状态与失败报告可以由普通程序生成；它们不等于用户已收到主动通知。当前工具列表没有通用 <code>automation_update</code>，本轮不建立聊天推送或代理自动唤醒。若未来提供受支持的通知接口，可增设只在阶段完成、失败或需人工处理时触发的一次短回合；不让通知回合调度工作、不反复报告无变化。本方案基础执行链不依赖该能力。</div>
+<p class="muted">OpenAI 官方文档说明桌面定时任务能后台运行，但访问本地项目需机器开机、应用运行；不据此推断此会话具备创建接口。来源：<a href="https://learn.chatgpt.com/docs/automations">官方定时任务文档</a>。本方案选择普通程序管理评估，不创建定时代理任务。</p>
+<h2>六、旧产物、正式规模与本轮预算</h2>
+<p>停止档案记载 A 为六模型 × 十四任务 × 跨档轮转各五局 = 420 个身份，已接受 273 个，成功 50 个；B／C／D 未启动。本机已核复制 230 个回合，四个开放预算预约未结算。这是历史停止快照，不能当作此刻作业仍存活的证明；真正恢复前另做只读资源盘点。</p>
+<table>
+<tr><th>范围</th><th>本方案口径</th></tr>
+<tr><td>当前写计划</td><td>reset = 0；轨迹生成 = 0；模型请求 = 0；Astra 局数及美元费用 = 0。未申请／取消任何作业。</td></tr>
+<tr><td>代码夹具验证</td><td>调用真实生产的任务列表与序列检查、控制器／监督／复制函数，使用轻量替身和临时文件；reset = 0、轨迹 = 0、GPU／网络／权重 = 0。不使用会扫 seed 的原生仿真测试代替预算盘点。</td></tr>
+<tr><td>未来最小真实冒烟候选</td><td>dummy：2 任务（StopCube、MoveCube）× 1 档（ood 各第 0 局，MoveCube 为 xhard4）× 1 局 × 1 worker = 2 次轨迹；按现有两次 reset／局计上限 4 次 reset，重试 0。只是拟议验证；通过计划实施认可后才可运行，若超 5 分钟按长任务留档。</td></tr>
+<tr><td>真实四席交接</td><td>由后续正式运行合同确定模型、任务、档位、局数、种子、最多尝试数、共用账本与费用。先 1 任务 × 1 档 × 1 局 × 1 worker 验交接，再依已批准总规模扩展；不擅自给六模型各新增冒烟。</td></tr>
+<tr><td>旧结果复用</td><td>StopCube 在旧判据下接受的身份不能直接充当新判据成绩；不改其 success、accepted 或视频。新运行与旧运行分目录标注判据版本。其他任务仅在新合同明确允许且输入／策略／代码差异核对后复用，不为重新接续覆盖报告。</td></tr>
+</table>
+<p>原预算与二十次基础设施尝试上限不自动延续到新运行，也不重建账本绕开已消耗额度。若最终选择恢复旧运行，先处理四个开放预约与 StopCube 的版本边界；不得把它们直接释放后重复消耗。PP 上下文耗尽的新裁决“模型失败 0”尚未落地，本方案不顺带改分类代码；包含 PP 的无人值守正式运行须先具备该已定分类，或按合同在该故障处终止受影响策略并报告。</p>
+<h2 id="acceptance">七、验收：各项独立，未来必须实测</h2>
+<table>
+<tr><th>查什么／怎么查</th><th>通过说明什么</th><th>目标判定行</th></tr>
+<tr><td>StopCube 真实 helper 与序列检查：0.049／0.050／0.051 米，stop 两态、首次停止步、按键失败与截止步</td><td>收紧至 5 厘米且保留停止、时机、持久失败</td><td><code>STOPCUBE_RULE=PASS factor=2.5 xy_m=0.05 timing_unchanged=1</code></td></tr>
+<tr><td>真实 MoveCube.evaluate 构造六类任务项，捕获演示／执行调用参数，再调用真实 helper 测距离与夹爪</td><td>仅执行两处取消张开条件；演示及抓取放置保留</td><td><code>MOVECUBE_RULE=PASS execution_false=2 demo_true=2 grasp_unchanged=1</code></td></tr>
+<tr><td>固定源码锚点比对演示任务项、官方目录和录像器</td><td>没有把文件级替换扩散到演示或受保护源码</td><td><code>DEMO_PRESERVED=PASS movecube_demo=2 official_changes=0 recorder_changes=0</code></td></tr>
+<tr><td>新旧输入资产与身份清单、指纹、字段契约核对</td><td>输入字节／结构保留；不声称输出数值等价</td><td><code>INPUT_CONTRACT=PASS identities_changed=0 assets_changed=0</code></td></tr>
+<tr><td>真实汇总→写 JSON→读取→阶段接续，覆盖零计数、缺字段、模型失败 0、报告崩溃及超时</td><td>正常结果会接续，未知／损坏报告不会当成功</td><td><code>CONTINUATION=PASS success=1 failure=1 serialized=1</code></td></tr>
+<tr><td>停止启动端、退出当前启动进程后，独立查看 tmux 内 PID／心跳；控制器与 supervisor 分别注入崩溃</td><td>执行脱离代理，监督器自身有独立故障处理</td><td><code>DETACHED_EXEC=PASS launcher_exited=1 worker_alive=1</code><br><code>SUPERVISION=PASS controller_crash=1 supervisor_crash=1 bounded_restart=1</code></td></tr>
+<tr><td>重复启动、四席 TIMEOUT、未知 sbatch 回执、STOP 请求、预算不足的无 Slurm 夹具</td><td>不会重复占卡、超预算或越权清理</td><td><code>RESOURCE_LIFECYCLE=PASS duplicate_launch=0 unknown_submit_blocked=1 holds_preserved=1</code></td></tr>
+<tr><td>原始产物清单→rsync→逐文件读回→最终报告；冲突、篡改、活动文件反例</td><td>最终产物完整而非只搬了视频或一个子集</td><td><code>FINAL_COPY=PASS missing=0 sha_mismatch=0 source_preserved=1</code></td></tr>
+<tr><td>状态、失败及最终报告实际落盘，主动通知能力单列</td><td>交接契约成立且不冒充聊天通知</td><td><code>STATUS_DELIVERY=PASS success_file=1 failure_file=1</code><br><code>CHAT_NOTIFY=NOT_CONFIGURED</code></td></tr>
+<tr><td>全部必要判据通过、合同有效、准确 JobID／tmux／版本／输出路径已登记</td><td>主代理可以结束回合，程序继续；未知故障会停并留证据</td><td><code>HANDOFF=PASS agent_required=0 scope_locked=1</code></td></tr>
+</table>
+<p>这些验收不代表任务成功率为 100%。每局独立报告 <code>task_success=0/1</code>；正常失败与正常步数截断不重试。软件夹具通过不代表真实 GL 交接通过，两类证据分开留档。</p>
+<h2>八、实施步骤与子代理分工、合并</h2>
+<table>
+<tr><th>阶段</th><th>内容</th><th>判据／边界</th></tr>
+<tr><td>P：本轮</td><td>只写本 HTML，检查结构、链接、范围，逐路径提交并 push dev</td><td><code>PLAN_DOC=PASS</code>；尚未实施</td></tr>
+<tr><td>S1：获准后</td><td>benchmark 从锁定提交建专用分支，独立 worktree 改三处有效判据，补真实函数夹具</td><td>STOPCUBE_RULE／MOVECUBE_RULE／DEMO_PRESERVED</td></tr>
+<tr><td>S2：并行实现</td><td>评估控制器补心跳与终态；本机监督、停止、复制、状态文件各按文件唯一写者交付</td><td>CONTINUATION／SUPERVISION／RESOURCE_LIFECYCLE／FINAL_COPY</td></tr>
+<tr><td>S3：审查整合</td><td>固定 BASE／TIP 独立审查；benchmark 专用分支先 push，再更新 eval gitlink；评估子提交 --no-ff 合入 dev、跑核心短测、push</td><td>范围与测试通过；不合 main、不碰模型 gitlink</td></tr>
+<tr><td>S4：运行合同</td><td>汇总全部正式规模、复用、剩余预算、新运行名、截止和接替上限，取得启动认可；原叫停状态此前不变</td><td>合同完整；不会在原停止命令后偷偷复跑</td></tr>
+<tr><td>S5：一次交接</td><td>最小真实启动、核独立存活／接续／停止／状态交付与资源清单，随后代理结束回合</td><td>DETACHED_EXEC／STATUS_DELIVERY／HANDOFF</td></tr>
+</table>
+<p><strong>子代理分工与合并（简述）：</strong>一个代码代理负责 benchmark 判据，另一个负责控制器，第三个负责监督和复制，分别使用 Sol 与独立 worktree。只读定位用 Luna，审查用 Sol；运行由单独 Sol 运行代理按确定命令执行，不能改代码。先审查 benchmark，再合评估控制器、监督与复制，最后主会话统一核查 gitlink、预算契约和交接。当前只读探索已经结束；本文不派任何实施或运行任务。</p>
+<p class="muted">逐文件写集、依赖、资源和执行命令详见第二部分；实施后的实测结果另追加在步骤表后，保留原计划。</p>
+<h1 id="technical">第二部分（技术细节，供 agent 追踪）</h1>
+<h2>〇、红线与版本契约</h2>
+<ol>
+<li>本轮仅计划。正式运行未获准，旧评估停止状态不变，四个已保留占位作业不取消。</li>
+<li>评估仓唯一开发分支 dev；第三方在 <code>/data/hongzefu/RoboMME-benchmark-OOD</code> 的独立专用分支修改，不能直接写当前 eval 子模块或第三方默认分支。实施前重核该权威副本规则、HEAD、工作区及专用分支基线。</li>
+<li>官方 <code>src/robomme/</code>、两侧 <code>RecordWrapper.py</code>、模型源码、第三方其他 gitlink 禁触；hard 判据变更按本方案列出的三个锚点解冻，任何额外改动重新列明。</li>
+<li>模型服务、评估输出、编译缓存统一在 artifacts；旧资产 symlink 不穿透写。所有工作树及临时夹具在对应仓库的 artifacts 下；不安装正式新依赖。</li>
+<li>正式代码及依赖冻结，运行从 clean HEAD 的确定副本启动；当前 SimpleMemVLA 在途改动不处理，需干净执行副本时使用原锁定 gitlink另建隔离副本，不声称脏子模块 clean。</li>
+<li>全部 Python 命令使用 uv 或该仓 uv 管理解释器；显式 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>，NFS 设 <code>UV_LINK_MODE=copy</code>，计算节点 frozen/no-sync，不升级依赖。</li>
+<li>运行合同同时约束 reset、轨迹、尝试、美元、四席数量、接替次数和截止时间；未获授权的不执行。Astra 不运行，不读取或传递密钥。</li>
+<li>资源清理只对清单内精确会话／数字 step，不用 kill-server、模糊前缀、全用户 scancel。STOP 与完成都保留占位作业，延续既有用户决定。</li>
+</ol>
+<h2>一、逐文件改动清单</h2>
+<p>下表 <code>BM</code> 指 benchmark 权威仓专用 worktree；<code>EV</code> 指 eval 仓专用 worktree。新增文件路径是实施提议，当前不存在；绝对工作树、分支、BASE/TIP 在派发前登记。</p>
+<table>
+<tr><th>文件／锚点</th><th>为什么及精确改什么</th><th>保留行为与验证</th></tr>
+<tr><td>BM：<code>src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py::is_obj_stopped_onto</code></td><td>去掉重复覆盖赋值，只保留 <code>distance_threshold=self.cube_half_size*2.5</code>，注释说明实际 0.05 米。</td><td>签名、XY、stop、首次 stop_timestep 保留；不改 is_obj_pushed_onto／is_obj_dropped。</td></tr>
+<tr><td>BM：<code>src/robomme_hard/robomme_env/MoveCube.py::evaluate</code></td><td>只改 peg_push、gripper_push 的 <code>demonstration=False</code> “推到目标”任务项，参数 True→False，各一处。</td><td>演示 True 两处、抓取放置、失败谓词、规划器不改；变更计数必须恰为 2。</td></tr>
+<tr><td>BM：<code>tests/robomme_hard/unit/robomme/official_thresholds.py</code>、<code>test_sequential_check.py</code>、<code>tasks/test_official_movecube.py</code>、新 <code>test_eval_success_rules.py</code></td><td>旧 STOP_ONTO_XY=0.06 已不代表 hard 修改后语义；明确保留官方旧值命名、增加 hard 新期望，更新直接验证 hard 的边界；把原执行闭合失败断言改为新期望，增加演示仍拒绝闭合的反例。</td><td>轻量对象执行真实 helper、真实 evaluate 任务项与序列检查；不复制生产公式自证，不扫描 seed、不真实 reset。新增文件负责直接验调用参数与错误抓取。</td></tr>
+<tr><td>EV：<code>dev-scripts/gl/continue_full_eval.py::Controller.save/tick/report/main</code>、<code>tests/test_continue_full_eval.py</code></td><td>增加 versioned 心跳、终态、停止请求与明确退出分类；保存提交意图和资源清单。对停止信号、异常、缺字段提供确定终态；将硬编码旧 ROOT／固定失败身份的恢复约束显式限定为 legacy 模式，新合同不继承旧特例。</td><td>现有阶段报告、预算、TIMEOUT 闸门不放宽；未知提交意图停止，不绕预算。</td></tr>
+<tr><td>EV：新 <code>dev-scripts/gl/supervise_full_eval.py</code>、<code>tests/test_supervise_full_eval.py</code></td><td>本机监督状态、启动控制器、受限重启、终止请求、状态报告、最终复制调用。命令参数数组，不拼未校验 shell 字符串；新进程环境清 SLURM_*。</td><td>配置指纹／锁与版本契约不符即拒绝；未知异常进入 NEEDS_ATTENTION，不修代码或调参。</td></tr>
+<tr><td>EV：新 <code>dev-scripts/gl/launch_detached_eval.sh</code>、<code>tests/test_detached_eval_launcher.py</code></td><td>shell 外层看守 supervisor，有限恢复自身异常；detached tmux 搭日志三件套，启动端确认就返回。trap 写故障记录并按清单收工作 step。</td><td>守护退出码、信号、重启耗尽均可观测；不靠 nohup 或 Codex 工具子进程长期运行。</td></tr>
+<tr><td>EV：新 <code>dev-scripts/gl/copy_accepted_eval.py</code>、<code>tests/test_copy_accepted_eval.py</code></td><td>把 artifacts 中 copy-completed.py 的白名单思路落为正式源码，支持新合同全部种子／阶段。rsync 到本轮 .incoming 后读回哈希，验证原始帧、动作／trace、官方视频或明确允许的无帧证明、accepted 与 result。</td><td>现有 eval_video_mover 是旧 V8 rec 布局且会删除源，不直接套到当前 rollouts；新复制不删源、不改原始追加记录。</td></tr>
+<tr><td>EV：<code>third_party/robomme_benchmark</code> gitlink、<code>docs/validation/README.md</code> 及新运行档案</td><td>第三方专用分支验证并 push 后锁新 40 位 SHA；运行启动才建立 launch.md，终态补 result.md 与 records。方案自身先独立提交。</td><td>只 commit 自己文件；公开清单文件须英文，清单外文档及新增私有脚本中文。不运行 sync_to_main.sh。</td></tr>
+</table>
+<h2>二、子代理分配表</h2>
+<div class="scroll"><table>
+<tr><th>任务／模型</th><th>目标与可写集合</th><th>禁触／契约／依赖</th><th>合并与验收位置</th><th>资源与共享归属</th></tr>
+<tr><td>EX：Luna，只读</td><td>本轮两块源码和控制器探索已完成；后续按需分片只读</td><td>不执行、不写、不递归扩权</td><td>主会话打开原文核实发现</td><td>无 GPU、端口、正式运行名</td></tr>
+<tr><td>B1：Sol，代码</td><td>BM 上表两个 hard 源文件及四个测试文件</td><td>从 a5efb992… 建专用分支；不写官方目录、录像器、模型、不改 eval 子模块</td><td>独立 Sol 审固定 BASE/TIP；BM uv 环境定向短测，最先整合／推专用分支</td><td>独立 BM worktree；GPU=0；三处判据唯一写者</td></tr>
+<tr><td>E1：Sol，代码</td><td>EV continue_full_eval.py、test_continue_full_eval.py</td><td>冻结接口：schema、heartbeat、terminal、stop_request、error_kind、managed_resources；不写 supervisor／carrier</td><td>B1 可并行；先合控制器，CONTINUATION／RESOURCE_LIFECYCLE</td><td>独立 EV worktree；GPU=0；控制器状态契约归 E1</td></tr>
+<tr><td>E2：Sol，代码</td><td>EV supervisor、launcher、copy 三个新模块及其三个测试</td><td>依 E1 接口，不改控制器、预算模块；代码库还有他人在途工作，不回滚</td><td>E1 后合；SUPERVISION／DETACHED_EXEC 夹具／FINAL_COPY</td><td>独立 EV worktree；GPU=0；复制和本机状态唯一写者</td></tr>
+<tr><td>R：Sol，只读审查</td><td>只审已冻结且干净的 BASE/TIP；列出排除的在途内容</td><td>不修代码、不执行仓库脚本；报告锚点 SHA</td><td>各代码任务先审后合，FAIL 交原 owner 新提交重审</td><td>无计算资源；不把文件存在当运行通过</td></tr>
+<tr><td>RUN：Sol，仅运行</td><td>后续合同完整、批准后，执行主会话给定的启动命令，写规定日志与结果</td><td>禁止改代码、依赖、参数、修脚本或自行清理 job；命令与版本不完整不派</td><td>先最小运行，再按已批准规模；回报 JobID、tmux、节点、起跑证据</td><td>四席上限；具体新运行名、预算、端口、期限、作业清单由合同填写</td></tr>
+<tr><td>主会话自做</td><td>计划、版本与规则核对、gitlink、跨仓整合、授权、运行合同及最终验收</td><td>共享资源权限不能分给多个代理；运行中冻结执行版本</td><td>--no-ff 保留子提交，核心短测后 push dev</td><td>预算与清理授权唯一负责人；交接后程序只机械执行合同</td></tr>
+</table></div>
+<p>探索用 <code>gpt-6-luna</code>；代码、规划、审查与运行用 <code>gpt-6.1-sol</code>，显式指定并使用自含委派。写入代理各自独立 worktree，先核仓库根与分支；全部子代理不 push、不合主分支。RUN 的完整命令、资源、最长等待和失败处置在合同完成前没有默认值，因此当前不派运行代理。</p>
+<h2>三、运行合同与退出状态</h2>
+<p>拟 <code>detached-eval/1</code> 合同放在 <code>artifacts/&lt;新运行名&gt;/contract.json</code>，配置来源文件和默认值钉在启动提交，launch.md 逐项记录覆盖。必填：两个仓 SHA、carrier／配置指纹、每阶段身份清单 SHA、models／seeds／任务档位范围、原 accepted 复用映射、全部预算、精确作业 ID、每席资源／端口、最长报告等待、无进展阈值、自动接替次数上限、总截止时间、保留占位作业及通知模式。</p>
+<pre><code>终态：RUNNING → COMPLETED | STOPPED | NEEDS_ATTENTION
+成功：所有阶段完整性通过 → COPY_VERIFIED → COMPLETED
+错误：契约／预算／提交状态不明 → NEEDS_ATTENTION，不自行改判据
+停止：STOP_REQUEST → 不派新局 → 精确收工作 step → STOPPED
+进程故障：无未决提交／启动意图且合同有效 → 最多 2 次恢复
+监督器退出：shell 守护最多 2 次恢复；耗尽写 alert.json
+未知 SIGKILL／主机失联：心跳过期，不能当成正常完成。</code></pre>
+<p>每个状态必须带时间、运行名、版本、事件编号、错误类别、最后进展、受影响席位、输出路径和退出状态。控制器每 15 秒原子心跳；监督器每 30 秒检查，连续 180 秒未更新进入故障核证；报告超时采用合同值，不能用心跳替代真实任务进展。提交／启动意图不明只报错，不以进程消失推断“没提交成功”。</p>
+<p>首次启动通过 <code>flock</code> 保证运行唯一 owner；外层和控制器各保留独立锁。一次采集原始进程 PID 与启动时间，禁止用裸 pgrep -f。模型服务器健康检查与首次推理分别验收，沿用每局预算和原无进展看门狗，不加入高频 nvidia-smi。</p>
+<h2>四、闸门与一致性层级</h2>
+<table>
+<tr><th>闸门</th><th>正例与必须失败的反例</th><th>证据层级</th></tr>
+<tr><td>成功语义</td><td>StopCube 0.05 等号与 stop；MoveCube 两执行项 False、两演示项 True；距离超限、方式错误、按错次数仍失败</td><td>新行为符合约定；不声称与旧成功状态一致</td></tr>
+<tr><td>演示保留</td><td>真实 evaluate 中演示任务参数、规划器与任务名按旧固定提交核；执行项差异恰好 2 个</td><td>指定演示任务项结构／参数一致；未生成新 demo，不能声称重新生成的视频逐位一致</td></tr>
+<tr><td>序列化接续</td><td>真实 stage_report.build_report 输出经文件再读取；零值显式存在、缺字段拒绝，不用 get(key,0) 把未知当成功</td><td>契约与行为一致，不只测内部 dict</td></tr>
+<tr><td>独立存活</td><td>退出启动端后后台夹具继续；控制器／监督器各崩溃；无 EXIT_CODE／重复 intent／重启耗尽都必须报告</td><td>本机夹具行为；GL 实际交接另验</td></tr>
+<tr><td>最终复制</td><td>完整 accepted 清单、真实 rsync 和读回 SHA；篡改、不同目标、活动目录拒绝；记录失败尝试，不删除源</td><td>逐文件字节级一致；不等于所有回合均成功</td></tr>
+</table>
+<h2 id="runbook">五、执行手册：以下命令均待实施授权</h2>
+<h3>1. 定向轻量验证与核心短测</h3>
+<pre><code># 在 benchmark 独立实施 worktree，先查 uv 与该仓测试规则
+UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest \
+  tests/robomme_hard/unit/robomme/test_sequential_check.py \
+  tests/robomme_hard/unit/robomme/test_eval_success_rules.py -q
+
+# 在 eval 实施 worktree，新测试实施后才存在
+UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest \
+  tests/test_continue_full_eval.py tests/test_supervise_full_eval.py \
+  tests/test_detached_eval_launcher.py tests/test_copy_accepted_eval.py -q
+
+# eval 整合后核心短测，五分钟内
+UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q</code></pre>
+<p>benchmark 的两个轻量入口必须先核实它们不会 native reset；现有 <code>tasks/test_official_movecube.py</code> 使用轻量 OfficialWorld，也必须核明 find_seed 的离线行为再选择子集。超预算不以“测试”名义偷偷采样。真实冒烟由 main 的两任务预算管，未获正式执行范围前不跑。</p>
+<h3>2. 准备后一次启动</h3>
+<pre><code># 新接口示意：实施后，合同获准且正式副本 clean 才能执行
+UV_CACHE_DIR=/home/hongzefu/.cache/uv bash dev-scripts/gl/launch_detached_eval.sh \
+  --contract artifacts/&lt;新运行名&gt;/contract.json
+
+# 用户主动停止的文件入口；具体写入命令由启动端输出并记录
+# artifacts/&lt;新运行名&gt;/STOP_REQUEST.json
+
+# 交接输出必须包含：
+HANDOFF=PASS agent_required=0 scope_locked=1
+CHAT_NOTIFY=NOT_CONFIGURED
+# 另列：本机／GL tmux 精确名、四席 JobID、合同指纹和状态文件绝对路径。</code></pre>
+<p>启动端采用 <code>tmux new-session -d -s fe-supervisor-&lt;新运行名&gt;</code>，复杂命令先落受版本管理的运行器。日志使用 <code>set -o pipefail</code>、<code>PYTHONUNBUFFERED=1</code>、<code>tee</code>，结束写 <code>EXIT_CODE=</code>。只启动本轮唯一会话；起跑前探端口、核权重 cheap/full 与 editable 指向、核 carrier 固定版本。GL workload 仍经占位 job 的 <code>srun --overlap --exact --ntasks=1 --gpu_cmode=shared</code>；沿用既有评估规格 4 CPU／64G 时写入合同并说明，不悄悄改成默认规格。</p>
+<p>首次交接最长等待建议 60 分钟，届时未能得到最小一局完整产物与交接判定则保留证据、停止受影响部分；不无限等待或自动降低渲染配置。任何超过五分钟的验证独立 tmux 并按运行留档。整个正式范围未确定前，本段只是接口设计，不构成提交作业授权。</p>
+<h3>3. 完成与叫停</h3>
+<p>先确认清单内工作进程与报告进程结束，核账本无未知开放预约；再逐文件复制并核完整性，写最终报告。任何开放预约都必须结合真实 claim／结果结算，不因停止清空。仅有 accepted 子集就标部分结果。NFS 源删除和占位作业释放不在本方案内；若后续用户改变保留决定，逐项清单办理。自动程序不做 git commit/push；下次用户要求收尾入库时主会话核实后提交，运行数据留在 artifacts。</p>
+<h2>六、风险登记</h2>
+<table>
+<tr><th>风险</th><th>处置与限制</th></tr>
+<tr><td>子模块已冻结／权威仓脏</td><td>本方案只提精确解冻；从原 pin 起专用分支，不把 fork 最新 HEAD 当基线，不触在途修改。</td></tr>
+<tr><td>StopCube 门槛收紧影响成绩与在线子目标</td><td>明确新判据版本，旧成绩保留；不能只改结果文件宣称复评，不预估成功率改善。</td></tr>
+<tr><td>演示与执行故意不同</td><td>MoveCube 演示 True、执行 False；以阶段标签定位，不能用全局替换。演示录像字节不重写。</td></tr>
+<tr><td>当前 controller 硬编码旧运行与 PP 特例</td><td>新合同显式限定 legacy mode，未知旧现场不接手；PP 分类缺口不得用无限重试掩盖。</td></tr>
+<tr><td>登录节点／本机重启、SSH 认证到期</td><td>普通 tmux 不保证机器重启存活；状态标 NEEDS_ATTENTION，禁止修改 SSH 配置或复制凭据绕过。新启动核来源后接手；未注册外部监控不承诺离线推送。</td></tr>
+<tr><td>监督与运行锁／资源清单失真</td><td>使用精确 PID、启动时间、版本与事件编号核证；未知提交／活工作者不重复提交、不模糊清理。</td></tr>
+<tr><td>源复制冲突、NFS ACL／半归档</td><td>不依赖 renameat2 NOREPLACE 或权限模式充当隔离；独占本轮容器、逐文件读回、源保持，冲突报错。</td></tr>
+<tr><td>保留作业带来的空闲占卡</td><td>遵守“占位任务不要停”，合同和完成报告写明仍保留的 JobID，不以节省费用擅自取消。</td></tr>
+</table>
+<h2>七、盲区诚实清单</h2>
+<ul>
+<li>尚未修改、运行任何新判据；没有新成功率、真实 GL 交接或监督进程抗故障结果。</li>
+<li>没有注册自动聊天通知或自动唤醒；文件提示只证明证据落盘，不证明人已收到。</li>
+<li>机器或整台登录节点重启后，tmux 会丢失；不引入系统服务或私自改应用数据库来冒充保证。</li>
+<li>尚未确定正式模型／任务／局数、运行名、运行截止和接替次数，故新正式运行禁启动。</li>
+<li>旧评估停止时尚有未结算和未接受身份；恢复与复用须逐身份核，不把旧快照当实时状态。</li>
+</ul>
+<h2>八、留档与提交纪律</h2>
+<p>本计划是本轮唯一新增文件，纯文档验证用 <code>git diff --check</code>、HTML 解析、两个一级标题、内部锚点及相对链接核对；无外部字体或脚本，内联 SVG，不写动态脚本。计划提交 subject 接续为 <code>1.86 制定成功判据调整与评估交接方案</code>（若并发已有新提交，按最新编号顺延），body 保留用户原话、两次澄清、源码核实、文档验证与未实施边界。只暂存此文件，立即裸 <code>git push</code> 到 origin/dev；被拒立即停，不重试、不 force。</p>
+<p>未来实施各子提交 <code>sub/&lt;任务编号&gt;: 中文描述</code>；主会话固定审查、--no-ff 整合并统一 push。正式运行启动时写 <code>docs/validation/&lt;新运行名&gt;/launch.md</code>，记录 clean commit、合同覆盖、输入、命令、资源和精确 tmux／JobID；结束写 result.md、具名判定与 records 并更新总索引。不在 docs 放 sh／yaml 副本，不在规则文件追加进度。</p>
+<h2>九、用户原话与证据索引</h2>
+<blockquote>① “给出方案 写html<br>把stopcube 现在成功条件是cube_half_size*3=0.6m 设置改为2，5<br>movecube gripper open三个成功条件全部改为false<br>另外现在评估的过程中一直要一个 agent 常驻，能不能让它不常驻，就是一次性发完了，然后 agent 就可以停止工作了。<br>写html”</blockquote>
+<blockquote>② 针对倍率澄清答复：“是，改为 2.5（0.5 米）”。这里保留原话；源码数值为 0.02 米半边长，本文据此纠正单位为 0.05 米，不改用户明确确认的倍率。</blockquote>
+<blockquote>③ “我只要执行期间的那一次，然后感推和夹爪开都改为 false，就是 demo 视频中的不要改。”</blockquote>
+<p>评估锚点与子模块锁定见引言；源码证据：<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/utils/subgoal_evaluate_func.py">判据 helper</a>、<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/MoveCube.py">MoveCube</a>、<a href="../../third_party/robomme_benchmark/src/robomme_hard/robomme_env/StopCube.py">StopCube</a>、<a href="../../dev-scripts/gl/continue_full_eval.py">控制器</a>。历史停止状态：<a href="../validation/full-eval-20261010/result.md">结果档案</a>的“用户停止后的最终快照”、<a href="../validation/full-eval-20261010/records/user-stop-summary.json">停止快照</a>；资源规约：<a href="../../greatlakes.md">greatlakes.md</a>。全部使用稳定函数、字段与标题锚点，未用代码行号作长期引用。</p>
+<h2>十、本轮文档核验结果</h2>
+<p>已执行 <code>git diff --check</code> 与 <code>git diff --no-index --check /dev/null docs/plans/1010-success-conditions-detached-eval-plan.html</code>，退出 0；标题 grep 结果为 2。使用 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python</code> 的标准库 HTMLParser 检查两个标题、唯一 id、相对文件链接、页内锚点与外部资源，退出 0，原始判定：<code>PLAN_DOC=PASS headings=2 links=16 ids=7 external_resources=0</code>。输出为本 HTML；核对范围仅新增计划，既有 SimpleMemVLA 在途内容未处理。本文无浏览器动态交互，没有用文档检查替代未来运行验收。</p>
+<footer class="muted">当前交付状态：计划已形成，等待完整方案获准后实施。判据修改、程序交接、正式评估和聊天通知均未在本轮执行。</footer>
+</main></body></html>
