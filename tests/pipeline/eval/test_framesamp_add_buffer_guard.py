@@ -140,3 +140,32 @@ def test_normal_episode_has_no_infra_failure():
     assert result["steps"] == 1 and result["decisions"] == 1
     assert result["infra"] is False and result["infra_reason"] is None and result["error"] is None
     assert client.calls == ["reset", "add_buffer", "infer"] and client.closed == 1
+
+
+def test_mixed_key_diagnostics_preserve_protocol_errors():
+    """不可比较的键不得让诊断排序盖掉四处协议异常及正式局的基础设施分类。"""
+    raised = infra = 0
+    for mixed_key in (b"other", 7, ("other",), None):
+        for flag in ("reset_finished", "add_buffer_finished"):
+            reply = {flag: False, mixed_key: "invalid"}
+            details = f"key_types={sorted([type(mixed_key).__name__, 'str'])}"
+            for route in ("run_loop", "warmup_server"):
+                client = _Client(flag, reply)
+                with pytest.raises(FM.ProtocolError) as exc:
+                    _invoke(route, client)
+                assert flag in str(exc.value) and details in str(exc.value)
+                assert client.calls == (["reset"] if flag == "reset_finished" else ["reset", "add_buffer"])
+                assert client.closed == int(route == "warmup_server")
+                raised += 1
+
+            client = _Client(flag, reply)
+            result = FM.evaluate_one(lambda: client, _step, _pre_traj)
+            assert result["status"] == "error" and result["task_success"] is False
+            assert result["infra"] is True and result["infra_reason"] == "server_protocol"
+            assert result["steps"] == 0 and result["decisions"] == 0
+            assert result["error"].startswith("ProtocolError:") and details in result["error"]
+            assert client.closed == 1
+            assert client.calls == (["reset"] if flag == "reset_finished" else ["reset", "add_buffer"])
+            infra += 1
+    assert raised == 16 and infra == 8
+    print(f"ADD_BUFFER_GUARD_MIXED_KEYS=PASS sites=4 raised={raised} infra={infra}")

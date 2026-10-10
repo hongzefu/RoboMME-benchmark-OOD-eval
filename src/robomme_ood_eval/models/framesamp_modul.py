@@ -55,8 +55,14 @@ class ProtocolError(RuntimeError):
     """A synchronous server reply did not acknowledge the requested operation."""
 
     def __init__(self, flag: str, response: Any):
-        details = (f"keys={sorted(response.keys())}" if isinstance(response, dict)
-                   else f"reply_type={type(response).__name__}; expected dict")
+        if isinstance(response, dict):
+            try:
+                details = f"keys={sorted(response.keys())}"
+            except TypeError:
+                # Malformed mixed key types must not mask the protocol failure.
+                details = f"key_types={sorted(type(key).__name__ for key in response)}; keys are not orderable"
+        else:
+            details = f"reply_type={type(response).__name__}; expected dict"
         super().__init__(f"Server reply requires {flag}=True; {details}")
 
 
