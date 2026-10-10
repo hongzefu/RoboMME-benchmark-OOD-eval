@@ -479,7 +479,8 @@ def test_report_entry_must_be_r3(tmp_path):
         module.Controller(c.c)
 
 
-def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='A', model='pp'):
+def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='A', model='pp', identity_override=None,
+                   defer_last=False):
     """真实队列、尝试账本和共享账本落盘；只伪造命令执行，不导入环境。"""
     calls = []
     def command(argv, **kwargs):
@@ -493,6 +494,8 @@ def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='
     sys.modules[seat_spec.name] = sm
     seat_spec.loader.exec_module(sm)
     stage_spec = c.c['stages'][stage]
+    if identity_override is not None:
+        Path(stage_spec['identities']).write_text(json.dumps(identity_override) + '\n')
     identity = module.read(stage_spec['identities'])
     queue_ident = sm.identity_for_queue(identity, 'ood')
     label = module.MODELS[model]
@@ -531,8 +534,9 @@ def legacy_fixture(tmp_path, *, attempts=2, max_attempts=2, final=False, stage='
                   'model': policy, 'status': 'fail', 'task_success': 0, 'infra': not final,
                   'infra_reason': 'pp_server_error', 'budget_exhausted': False, 'run_blocked': False}
         raw.write_text(json.dumps(result))
-        runner._end(sm.Claim(queue_ident, n, claim_path, token, rid, n > 1), aid,
-                    {**result, 'result': str(raw)}, void=False)
+        if not defer_last or n != attempts:
+            runner._end(sm.Claim(queue_ident, n, claim_path, token, rid, n > 1), aid,
+                        {**result, 'result': str(raw)}, void=False)
     log = c.root / 'legacy.log'
     missing, accepted = (0, 1) if final else (1, 0)
     log.write_text(f'RUN_PLAN policy={policy} label={label} seat={seat_name} total=1 claimable=1 '
@@ -687,6 +691,306 @@ def test_completed_worker_refreshes_serialized_remaining_before_guard_and_launch
         assert next(e for e in events if e['kind'] == 'legacy_retry_resume')['attempts'] == {'Task_xhard1_1': 2}
     else:
         assert not any('fe-controller-A-smvla-' in str(x) for x in launches)
+
+
+def blocked_pp_fixture(tmp_path, *, attempts=20, oracle_missing=True):
+    """二十次生产基础设施结算、七十身份覆盖与指定溢出；不启动环境。"""
+    identity = {'key': module.PP_BLOCK_KEY, 'dataset': 'ood', 'task': 'VideoPlaceOrder',
+                'episode': 0, 'builder_episode': 0, 'tier': 'xhard1', 'seed': 17100000,
+                'candidate': 0, 'source_episode': None, 'spec_sha256': 'a' * 64}
+    c, seat, raw, local, budget, queue, calls = legacy_fixture(tmp_path, attempts=attempts,
+        max_attempts=20, identity_override=identity)
+    sm = sys.modules['legacy_fixture_seat']
+    rows = [identity] + [{**identity, 'key': f'VideoPlaceOrder_xhard1_{17100000 + n}',
+                        'seed': 17100000 + n, 'episode': n, 'builder_episode': n, 'candidate': n}
+                       for n in range(1, 70)]
+    stage_spec = c.c['stages']['A']
+    Path(stage_spec['identities']).write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    for model, label in module.MODELS.items():
+        target_queue = sm.DynamicQueue(Path(stage_spec['out']) / f'queue/{label}/seed7',
+                                        seat='completed', wall_s=60, max_attempts=20)
+        for row in rows:
+            if row['key'] == module.PP_BLOCK_KEY and (model == 'pp' or model == 'oracle' and oracle_missing):
+                continue
+            result = {**row, 'attempt': 1, 'policy_seed': 7, 'policy_label': label,
+                      'model': 'groundsg' if label.startswith('groundsg-') else label,
+                      'policy_variant': label.removeprefix('groundsg-'), 'status': 'fail',
+                      'task_success': 0, 'infra': False, 'run_blocked': False, 'budget_exhausted': False}
+            result_path = Path(stage_spec['out']) / f'rollouts/{label}/{row["key"]}/result.json'
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(json.dumps(result))
+            assert target_queue.accept(sm.identity_for_queue(row, 'ood'), attempt=1, status='fail', result=str(result_path))
+    result = module.read(raw)
+    result['error'] = 'RuntimeError: Server error: ' + module.PP_CONTEXT_ERROR
+    raw.write_text(json.dumps(result))
+    log_path = Path(seat['log'])
+    log_path.write_text(log_path.read_text().replace('total=1 ', 'total=70 ').replace('accepted=0 ', 'accepted=69 ')
+                       + 'EXIT_CODE=6\n')
+    sessions = set()
+    original_command = c.command
+    def command(argv, **kwargs):
+        if 'new-session' in argv:
+            sessions.add(argv[argv.index('-s') + 1])
+        if 'has-session' in argv and argv[-1].removeprefix('=') in sessions:
+            return SimpleNamespace(stdout='', returncode=0)
+        return original_command(argv, **kwargs)
+    c.command = command
+    return c, seat, raw, local, budget, queue, calls
+
+
+def test_exact_exhausted_pp_isolated_oracle_takes_seat_reload_no_repeat(tmp_path):
+    c, _, raw, _, budget, queue, calls = blocked_pp_fixture(tmp_path)
+    c.state['report_failed'] = 1
+    before = budget.read_bytes()
+    c.tick()
+    saved = module.read(c.path)
+    evidence = saved['blocked_models']['A']['pp']
+    assert evidence['key'] == module.PP_BLOCK_KEY and evidence['attempt'] == 20
+    assert evidence['result'] == str(raw) and len(evidence['claims']) == 20
+    assert len(evidence['result_sha256']) == len(evidence['log_sha256']) == 64
+    assert c.remaining('A', 'pp') == [module.PP_BLOCK_KEY]
+    assert not queue.accepted_path({'key': module.PP_BLOCK_KEY, 'dataset': 'ood'}).exists()
+    launches = [x for x in calls if 'new-session' in x]
+    assert any('fe-controller-A-oracle-' in str(x) for x in launches)
+    assert not any('fe-controller-A-pp-' in str(x) for x in launches)
+    resumed = module.Controller(c.c, c.command)
+    resumed.tick()
+    events = [json.loads(line) for line in (c.root / 'events.jsonl').read_text().splitlines()]
+    assert sum(e['kind'] == 'model_blocked' for e in events) == 1
+    assert not any(e['kind'] == 'stage_done' for e in events)
+    assert module.read(c.path)['stage'] == 'A' and module.read(c.path)['report_failed'] == 1
+    assert budget.read_bytes() == before
+    assert len(list(queue.claims.glob('*.json'))) == 20
+
+
+def test_blocked_pp_missing_prevents_report_even_when_other_five_complete(tmp_path):
+    c, _, _, _, budget, _, calls = blocked_pp_fixture(tmp_path, oracle_missing=False)
+    before = budget.read_bytes()
+    c.tick()
+    c.tick()
+    assert c.state['stage'] == 'A' and c.state['done'] is False
+    assert c.remaining('A', 'pp') == [module.PP_BLOCK_KEY]
+    assert not c.state.get('report_task')
+    assert not any('new-session' in argv for argv in calls)
+    assert budget.read_bytes() == before
+
+
+def test_pp_block_is_not_a_retry_and_needs_no_spare_infra_budget(tmp_path):
+    c, _, _, _, budget, _, _ = blocked_pp_fixture(tmp_path, oracle_missing=False)
+    rows = [json.loads(line) for line in budget.read_text().splitlines()]
+    rows += [{'kind': 'retry_claim', 'route': 'other', 'key': str(i), 'interrupt': 'infra'}
+             for i in range(module.CAPS['A'][2] - 19)]
+    budget.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    before = budget.read_bytes()
+    c.tick()
+    assert c.state['blocked_models']['A']['pp']['attempt'] == 20
+    assert budget.read_bytes() == before
+
+
+def test_block_reload_allows_other_models_append_settled_budget_without_repeat(tmp_path):
+    c, _, _, _, budget, _, _ = blocked_pp_fixture(tmp_path, oracle_missing=False)
+    c.tick()
+    original_snapshot = c.state['blocked_models']['A']['pp']['shared_sha256']
+    caps = module.CAPS['A']
+    shared = module.BudgetLedger(budget, trajectory_cap=caps[0], reset_cap=caps[1],
+        shared_infra_cap=caps[2], expired_cap=caps[3], planned_first_tries=caps[4])
+    rid = shared.reserve(resets=2, route='smvla/seed7/new', key='other', token='other', kind_of_try='first')
+    shared.commit(rid, status='fail', infra=False)
+    before = budget.read_bytes()
+    loaded = module.Controller(c.c, c.command)
+    loaded.tick()
+    assert loaded.state['blocked_models']['A']['pp']['shared_sha256'] == original_snapshot
+    assert budget.read_bytes() == before
+    events = [json.loads(line) for line in (c.root / 'events.jsonl').read_text().splitlines()]
+    assert sum(e['kind'] == 'model_blocked' for e in events) == 1
+
+
+@pytest.mark.parametrize('mutation', ['attempt19', 'wrong_error', 'unsettled_prior', 'wrong_key', 'wrong_stage',
+    'normal_terminal', 'missing_retry', 'extra_retry', 'live_prior', 'fake_identity', 'unknown_exit', 'over_cap', 'mixed_exit'])
+def test_pp_block_scope_and_full_twenty_settlement_fail_closed(tmp_path, mutation):
+    c, seat, raw, local, budget, queue, calls = blocked_pp_fixture(tmp_path, attempts=19 if mutation == 'attempt19' else 20)
+    if mutation in ('wrong_error', 'normal_terminal', 'fake_identity'):
+        doc = module.read(raw)
+        if mutation == 'wrong_error':
+            doc['error'] = 'other infrastructure error'
+        elif mutation == 'normal_terminal':
+            doc['infra'] = False
+        else:
+            doc['spec_sha256'] = 'b' * 64
+        raw.write_text(json.dumps(doc))
+    elif mutation == 'unsettled_prior':
+        rows = [json.loads(line) for line in local.read_text().splitlines()]
+        local.write_text(''.join(json.dumps(r) + '\n' for r in rows
+                                if not (r['kind'] == 'attempt_end' and r.get('attempt_no') == 3)))
+    elif mutation in ('missing_retry', 'extra_retry', 'over_cap'):
+        rows = [json.loads(line) for line in budget.read_text().splitlines()]
+        if mutation == 'missing_retry':
+            rows = [r for r in rows if not (r['kind'] == 'retry_claim' and r.get('token', '').endswith('|a3'))]
+        elif mutation == 'extra_retry':
+            rows.append({'kind': 'retry_claim', 'route': 'pp/seed7/new', 'key': module.PP_BLOCK_KEY,
+                         'token': 'extra', 'interrupt': 'infra'})
+        else:
+            next(r for r in rows if r['kind'] == 'reserve')['resets'] = module.CAPS['A'][1]
+        budget.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    elif mutation == 'live_prior':
+        claim_path = queue.claims / f'ood__{module.PP_BLOCK_KEY}.a3.json'
+        doc = module.read(claim_path)
+        doc['ended'] = False
+        claim_path.write_text(json.dumps(doc))
+    elif mutation == 'wrong_key':
+        log = Path(seat['log'])
+        log.write_text(log.read_text().replace(module.PP_BLOCK_KEY, 'VideoPlaceOrder_xhard1_17100001'))
+    elif mutation == 'unknown_exit':
+        log = Path(seat['log'])
+        log.write_text(log.read_text().replace('EXIT_CODE=6', 'EXIT_CODE=75'))
+    elif mutation == 'mixed_exit':
+        log = Path(seat['log'])
+        log.write_text(log.read_text().replace('EXIT_CODE=6', 'EXIT_CODE=74\nEXIT_CODE=6', 1))
+    elif mutation == 'wrong_stage':
+        seat['stage'] = 'B'
+    with pytest.raises(ValueError):
+        c.tick()
+    assert not any('new-session' in argv for argv in calls)
+    assert not c.state.get('blocked_models')
+
+
+@pytest.mark.parametrize('mutation', ['unknown_model', 'unknown_stage', 'altered_evidence', 'normal_now'])
+def test_reloaded_block_state_must_revalidate_fixed_evidence(tmp_path, mutation):
+    c, _, raw, _, _, _, _ = blocked_pp_fixture(tmp_path, oracle_missing=False)
+    c.tick()
+    state = module.read(c.path)
+    if mutation == 'unknown_model':
+        state['blocked_models']['A']['oracle'] = state['blocked_models']['A'].pop('pp')
+    elif mutation == 'unknown_stage':
+        state['blocked_models']['B'] = state['blocked_models'].pop('A')
+    elif mutation == 'altered_evidence':
+        state['blocked_models']['A']['pp']['result_sha256'] = 'b' * 64
+    else:
+        doc = module.read(raw)
+        doc['infra'] = False
+        raw.write_text(json.dumps(doc))
+    c.path.write_text(json.dumps(state))
+    with pytest.raises(ValueError):
+        module.Controller(c.c, c.command)
+
+
+def watchdog_fixture(tmp_path, capsys, *, attempt=1, max_attempts=2):
+    """调用真实 _hard_exit 结算并捕获其日志；对象注入 _exit，绝不退出测试进程。"""
+    c, seat, raw, local, budget, queue, calls = legacy_fixture(tmp_path, model='qwen',
+        attempts=attempt, max_attempts=max_attempts, defer_last=True)
+    sm = sys.modules['legacy_fixture_seat']
+    spec = c.c['stages']['A']
+    identity = module.read(spec['identities'])
+    route, label = 'groundsg/ground-sg-qwenvl/seed7/new', module.MODELS['qwen']
+    caps = spec['caps']
+    shared = sm.load_sibling('budget_ledger').BudgetLedger(spec['budget'],
+        trajectory_cap=caps[0], reset_cap=caps[1], shared_infra_cap=caps[2],
+        expired_cap=caps[3], planned_first_tries=caps[4])
+    ledger = sm.AttemptLedger(local, seat=queue.seat, policy='groundsg', shared=shared, route=route)
+    claim_path = queue.claims / f'ood__{identity["key"]}.a{attempt}.json'
+    doc = module.read(claim_path)
+    result = module.read(raw)
+    result.update(infra_reason='episode_wall', reset_calls=2,
+                  error='INFRA_TIMEOUT phase=episode_wall limit_s=1800', steps=0, exec_steps=1056)
+    raw.write_text(json.dumps(result))
+    runner = sm.SeatRunner.__new__(sm.SeatRunner)
+    runner.ledger, runner.queue, runner._lock = ledger, queue, threading.Lock()
+    runner.results_path = local.parent / f'{label}.results.jsonl'
+    runner._current = sm.Claim(sm.identity_for_queue(identity, 'ood'), attempt, claim_path, doc['token'], doc['rid'], attempt > 1)
+    runner._current_attempt_id = f'aid-{attempt}'
+    class FixtureExit(Exception):
+        pass
+    def exit_process(code):
+        assert code == 75
+        raise FixtureExit()
+    runner._exit = exit_process
+    capsys.readouterr()
+    with pytest.raises(FixtureExit):
+        runner._hard_exit(75)
+    watchdog_log = capsys.readouterr().out.strip()
+    assert watchdog_log.startswith('SEAT_WATCHDOG_EXIT ')
+    rows = [identity] + [{**identity, 'key': f'Task_xhard1_{n + 1}', 'seed': n + 1,
+                         'episode': n, 'builder_episode': n, 'candidate': n} for n in range(1, 70)]
+    Path(spec['identities']).write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    for model, candidate_label in module.MODELS.items():
+        candidate_queue = sm.DynamicQueue(Path(spec['out']) / f'queue/{candidate_label}/seed7',
+                                         seat='completed', wall_s=60, max_attempts=20)
+        for index, row in enumerate(rows):
+            if model == 'qwen' and index < 11:
+                continue
+            accepted = {**row, 'attempt': 1, 'policy_seed': 7, 'policy_label': candidate_label,
+                        'model': 'groundsg' if candidate_label.startswith('groundsg-') else candidate_label,
+                        'policy_variant': candidate_label.removeprefix('groundsg-'), 'status': 'fail',
+                        'task_success': 0, 'infra': False, 'run_blocked': False, 'budget_exhausted': False}
+            path = Path(spec['out']) / f'rollouts/{candidate_label}/{row["key"]}/result.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(accepted))
+            candidate_queue.accept(sm.identity_for_queue(row, 'ood'), attempt=1, status='fail', result=str(path))
+    Path(seat['log']).write_text(f'RUN_PLAN policy=groundsg label={label} seat={seat["seat_name"]} total=70 '
+        f'claimable=69 max_attempts={max_attempts} route={route} reset_left=inf\n'
+        f'INFRA_TIMEOUT phase=episode_wall key={identity["key"]} limit_s=1800\n'
+        + watchdog_log + '\nEXIT_CODE=75\nEXIT_CODE=75\n')
+    return c, seat, raw, local, budget, queue, calls
+
+
+@pytest.mark.parametrize('attempt,max_attempts', [(1, 2), (19, 20)])
+def test_watchdog_production_hard_exit_missing_final_fields_resumes(tmp_path, capsys, attempt, max_attempts):
+    c, seat, raw, _, budget, queue, calls = watchdog_fixture(tmp_path, capsys, attempt=attempt, max_attempts=max_attempts)
+    before = budget.read_bytes()
+    missing = c.remaining('A', 'qwen')
+    assert len(missing) == 11
+    latest = module.read(queue.claims / f'ood__Task_xhard1_1.a{attempt}.json')
+    assert latest['ended'] is True and 'final' not in latest and 'accepted' not in latest
+    c.tick()
+    events = [json.loads(line) for line in (c.root / 'events.jsonl').read_text().splitlines()]
+    restored = next(e for e in events if e['kind'] == 'watchdog_retry_resume')
+    assert restored['evidence']['attempt'] == attempt and restored['evidence']['missing'] == missing
+    assert c.remaining('A', 'qwen') == missing
+    assert budget.read_bytes() == before
+    assert module.read(raw)['exec_steps'] == 1056 and module.read(raw)['steps'] == 0
+    assert any('fe-controller-A-qwen-' in str(argv) and 'run-model-r3.sh' in str(argv)
+               for argv in calls if 'new-session' in argv)
+
+
+@pytest.mark.parametrize('mutation', ['unsettled_local', 'unsettled_shared', 'fake_log', 'unknown_reason',
+    'normal_result', 'attempt20', 'live_claim', 'budget', 'unknown_exit', 'wrong_model', 'wrong_identity', 'wrong_variant'])
+def test_watchdog_unknown_unsettled_or_exhausted_refuses(tmp_path, capsys, mutation):
+    c, seat, raw, local, budget, queue, calls = watchdog_fixture(tmp_path, capsys,
+        attempt=20 if mutation == 'attempt20' else 1, max_attempts=20 if mutation == 'attempt20' else 2)
+    if mutation in ('unknown_reason', 'normal_result', 'wrong_identity', 'wrong_variant'):
+        doc = module.read(raw)
+        field, value = {'unknown_reason': ('infra_reason', 'other'), 'normal_result': ('infra', False),
+                        'wrong_identity': ('spec_sha256', 'b' * 64),
+                        'wrong_variant': ('policy_variant', 'ground-sg-memer')}[mutation]
+        doc[field] = value
+        raw.write_text(json.dumps(doc))
+    elif mutation == 'unsettled_local':
+        rows = [json.loads(line) for line in local.read_text().splitlines()]
+        local.write_text(''.join(json.dumps(r) + '\n' for r in rows if r['kind'] != 'attempt_end'))
+    elif mutation in ('unsettled_shared', 'budget'):
+        rows = [json.loads(line) for line in budget.read_text().splitlines()]
+        if mutation == 'unsettled_shared':
+            rows = [r for r in rows if r['kind'] != 'commit']
+        else:
+            rows += [{'kind': 'retry_claim', 'route': 'other', 'key': str(i), 'interrupt': 'infra'}
+                     for i in range(module.CAPS['A'][2])]
+        budget.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    elif mutation == 'live_claim':
+        path = queue.claims / 'ood__Task_xhard1_1.a1.json'
+        doc = module.read(path)
+        doc['ended'] = False
+        path.write_text(json.dumps(doc))
+    elif mutation == 'wrong_model':
+        seat['model'] = 'memer'
+        seat['session'] = 'fe-controller-A-memer-0-1'
+    else:
+        path = Path(seat['log'])
+        text = path.read_text()
+        text = text.replace('key=Task_xhard1_1', 'key=Task_xhard1_2') if mutation == 'fake_log' else text.replace('EXIT_CODE=75', 'EXIT_CODE=74')
+        path.write_text(text)
+    with pytest.raises(ValueError):
+        c.tick()
+    assert not any('new-session' in argv for argv in calls)
 
 
 @pytest.mark.parametrize('mutation', ['fake_identity', 'no_local_end', 'no_shared_commit', 'live_claim',

@@ -20,6 +20,8 @@ MODELS = {'perceptual-framesamp-modul': 'perceptual-framesamp-modul', 'smvla': '
           'pp': 'pp', 'oracle': 'groundsg-ground-sg-oracle',
           'qwen': 'groundsg-ground-sg-qwenvl', 'memer': 'groundsg-ground-sg-memer'}
 SEEDS = dict(A=7, B=7, C=0, D=42)
+PP_BLOCK_KEY = 'VideoPlaceOrder_xhard1_17100000'
+PP_CONTEXT_ERROR = 'Ponder context overflow at step 1661: S2 context length 16439 exceeds cap 16384'
 CAPS = {'A': (4680, 9360, 420, 420, 426), 'B': (41580, 83160, 3780, 3780, 3780),
         'C': (46200, 92400, 4200, 4200, 4200), 'D': (46200, 92400, 4200, 4200, 4200)}
 
@@ -72,6 +74,7 @@ class Controller:
                 raise ValueError('非法作业编号')
             if seat.get('session'):
                 self.validate_session(seat)
+        self.blocked_models()
 
     def validate_session(self, seat):
         name = seat['session']
@@ -159,6 +162,10 @@ class Controller:
 
     def legacy_retry_settled(self, seat, log, missing):
         """只核实旧两次上限退出；不领取额度，不修复证据，重试仍由原队列原子领取。"""
+        return self._retry_settled(seat, log, missing)
+
+    def _retry_settled(self, seat, log, missing, *, exhausted=False):
+        """两次上限接续与固定 PP 耗尽隔离共用结算核证；耗尽模式不能领取新额度。"""
         spec = self.c['stages'][seat['stage']]
         label = MODELS[seat['model']]
         policy = 'groundsg' if label.startswith('groundsg-') else label
@@ -184,7 +191,7 @@ class Controller:
 
         plan, summary, incomplete = (fields(name) for name in ('RUN_PLAN', 'RUN_SUMMARY', 'RUN_INCOMPLETE'))
         prefix = incomplete['first'].split(',')
-        if (plan['label'] != label or plan['route'] != route or plan['max_attempts'] != '2'
+        if (plan['label'] != label or plan['route'] != route or plan['max_attempts'] != ('20' if exhausted else '2')
                 or summary['label'] != label or summary['running_elsewhere'] != '0'
                 or summary['accepted'] != str(len(rows) - len(missing))
                 or summary['missing'] != str(len(missing)) or incomplete['missing'] != str(len(missing))
@@ -221,7 +228,8 @@ class Controller:
                 raise ValueError('旧上限领取缺失或尚未收尾')
             attempt, claim_path, claim = claims[-1]
             token = f'{route}|{key}|a{attempt}'
-            if (not 2 <= attempt < 20 or type(claim['attempt']) is not int or claim['attempt'] != attempt
+            if ((attempt != 20 if exhausted else not 2 <= attempt < 20)
+                    or type(claim['attempt']) is not int or claim['attempt'] != attempt
                     or claim['dataset'] != 'ood' or claim['key'] != key or claim['route'] != route
                     or claim['token'] != token or claim['end_status'] != 'infra'
                     or claim['final'] is not False or claim['accepted'] is not False
@@ -274,16 +282,213 @@ class Controller:
                     or any(r.get('route') == route and r.get('key') == key and rid not in budget.commits
                            and rid not in budget.releases for rid, r in budget.reserves.items())):
                 raise ValueError('旧上限共享预约未结算或身份不符')
-            if budget.retries_for(route, key) >= 19:
+            if (budget.retries_for(route, key) != 19 if exhausted else budget.retries_for(route, key) >= 19):
                 raise ValueError('旧上限身份重试预算耗尽')
             attempts[key] = attempt
-        needed = len(missing)
-        pending = max(0, caps[4] - budget.first_started)
+        needed = 0 if exhausted else len(missing)
+        pending = 0 if exhausted else max(0, caps[4] - budget.first_started)
         if (budget.trajectories + needed + pending > caps[0] or budget.resets + 2 * needed > caps[1]
                 or budget.retries_of('infra') + needed > caps[2]
+                or (exhausted and budget.retries_of('expired') > caps[3])
                 or max(budget.recovery_used, len(budget.retries)) + needed > caps[0] - caps[4]):
             raise ValueError('旧上限接续共享预算耗尽')
         return attempts
+
+    def blocked_pp_settled(self, seat, log, missing):
+        """仅隔离本轮 A 的指定 PP 上下文溢出，原缺失身份与二十次失败都保留。"""
+        spec = self.c['stages']['A']
+        codes = re.findall(r'^EXIT_CODE=(\d+)$', log, re.M)
+        if (self.state['stage'] != 'A' or seat['stage'] != 'A' or seat['model'] != 'pp'
+                or spec['seed'] != 7 or missing != [PP_BLOCK_KEY]
+                or len(read_rows(spec['identities'])) != 70
+                or not codes or set(codes) != {'6'}):
+            raise ValueError('PP 阻塞隔离不属于固定阶段、身份或退出')
+        self._retry_settled(seat, log, missing, exhausted=True)
+        out, route = Path(spec['out']), 'pp/seed7/new'
+        identity = next(r for r in read_rows(spec['identities']) if r['key'] == PP_BLOCK_KEY)
+        def records(path):
+            return [json.loads(x) for x in Path(path).read_text().splitlines() if x.strip()]
+        with Path(str(spec['budget']) + '.lock').open('r') as lock:
+            fcntl.flock(lock, fcntl.LOCK_SH)
+            shared = records(spec['budget'])
+        local_paths = set()
+        claims = []
+        latest = None
+        for attempt in range(1, 21):
+            claim_path = out / 'queue/pp/seed7/claims' / f'ood__{PP_BLOCK_KEY}.a{attempt}.json'
+            claim = read(claim_path)
+            token = f'{route}|{PP_BLOCK_KEY}|a{attempt}'
+            if (claim['route'] != route or claim['token'] != token or claim['end_status'] != 'infra'
+                    or claim['ended'] is not True or claim['final'] is not False or claim['accepted'] is not False
+                    or not re.fullmatch(r'[A-Za-z0-9._-]+', claim['seat'])):
+                raise ValueError('PP 阻塞历史领取不是已收尾基础设施尝试')
+            local_path = out / 'seats/pp/seed7' / claim['seat'] / 'pp.ledger.jsonl'
+            local_paths.add(local_path)
+            local = records(local_path)
+            starts = [r for r in local if r.get('kind') == 'attempt_start'
+                      and r.get('key') == PP_BLOCK_KEY and r.get('attempt_no') == attempt]
+            if (len(starts) != 1 or starts[0]['budget_rid'] != claim['rid']
+                    or starts[0]['token'] != token or starts[0]['route'] != route
+                    or starts[0]['seat'] != claim['seat'] or starts[0]['policy'] != 'pp'
+                    or starts[0]['identity'] != {k: v for k, v in identity.items() if k != 'episode'}
+                    or Path(starts[0]['claim']) != claim_path):
+                raise ValueError('PP 阻塞历史本地领取不符')
+            start = starts[0]
+            ends = [r for r in local if r.get('kind') == 'attempt_end' and r.get('attempt_id') == start['attempt_id']]
+            reserves = [r for r in shared if r.get('kind') == 'reserve' and r.get('rid') == claim['rid']]
+            commits = [r for r in shared if r.get('kind') == 'commit' and r.get('rid') == claim['rid']]
+            retries = [r for r in shared if r.get('kind') == 'retry_claim' and r.get('token') == token]
+            if (len(ends) != 1 or len(reserves) != 1 or len(commits) != 1
+                    or ends[0]['key'] != PP_BLOCK_KEY or ends[0]['attempt_no'] != attempt
+                    or ends[0]['status'] != 'error' or ends[0]['infra'] is not True
+                    or ends[0]['infra_reason'] != 'pp_server_error' or ends[0]['budget_exhausted'] is not False
+                    or ends[0].get('run_blocked') or any(r.get('kind') == 'accept'
+                        and r.get('key') == PP_BLOCK_KEY for r in local)
+                    or reserves[0]['route'] != route or reserves[0]['key'] != PP_BLOCK_KEY
+                    or reserves[0]['token'] != token or reserves[0]['attempt_no'] != attempt
+                    or reserves[0]['dataset'] != 'ood' or reserves[0]['resets'] != 2
+                    or reserves[0]['kind_of_try'] != ('first' if attempt == 1 else 'recovery')
+                    or commits[0]['infra'] is not True or commits[0]['status'] not in ('fail', 'error')
+                    or any(r.get('kind') == 'release' and r.get('rid') == claim['rid'] for r in shared)
+                    or (bool(retries) if attempt == 1 else len(retries) != 1)
+                    or (attempt > 1 and (retries[0]['route'] != route
+                        or retries[0]['key'] != PP_BLOCK_KEY or retries[0]['interrupt'] != 'infra'))):
+                raise ValueError('PP 阻塞历史尝试或共享预算未完整结算')
+            claims.append({'path': str(claim_path), 'sha256': hashlib.sha256(claim_path.read_bytes()).hexdigest(),
+                           'attempt_id': start['attempt_id'], 'budget_rid': claim['rid']})
+            latest = start
+        raw = Path(latest['result_path'])
+        result = read(raw)
+        if (result['infra_reason'] != 'pp_server_error' or not isinstance(result.get('error'), str)
+                or PP_CONTEXT_ERROR not in result['error']):
+            raise ValueError('PP 阻塞不是指定的上下文溢出')
+        return {'stage': 'A', 'model': 'pp', 'key': PP_BLOCK_KEY, 'attempt': 20,
+                'seat': dict(seat), 'log': seat['log'], 'log_sha256': hashlib.sha256(log.encode()).hexdigest(),
+                'result': str(raw), 'result_sha256': hashlib.sha256(raw.read_bytes()).hexdigest(),
+                'claims': claims, 'local_ledgers': {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(local_paths)},
+                'shared_ledger': spec['budget'], 'shared_sha256': hashlib.sha256(Path(spec['budget']).read_bytes()).hexdigest()}
+
+    def blocked_models(self):
+        """持久化隔离只允许固定 A/PP；恢复时重核原证据，不能注入任意跳过模型。"""
+        blocked = self.state.get('blocked_models', {})
+        if not blocked:
+            return set()
+        if self.state['stage'] != 'A' or set(blocked) != {'A'} or set(blocked['A']) != {'pp'}:
+            raise ValueError('未知模型阻塞状态')
+        saved = blocked['A']['pp']
+        if not re.fullmatch(r'[0-9a-f]{64}', saved['shared_sha256']):
+            raise ValueError('PP 阻塞共享快照指纹无效')
+        self.validate_session(saved['seat'])
+        current = self.blocked_pp_settled(saved['seat'], Path(saved['log']).read_text(), self.remaining('A', 'pp'))
+        # 其它五模型会继续追加共享账本；其固定 PP 预约仍逐条重核，历史快照哈希保留不更新。
+        if {k: v for k, v in saved.items() if k != 'shared_sha256'} != {k: v for k, v in current.items() if k != 'shared_sha256'}:
+            raise ValueError('PP 阻塞证据改变，交主会话裁决')
+        return {'pp'}
+
+    def watchdog_settled(self, seat, log, missing):
+        """仅恢复 Qwen 已完整结算的 1800 秒局墙钟退出，保持原身份、时限和预算。"""
+        spec = self.c['stages'][seat['stage']]
+        label, route = MODELS['qwen'], f"groundsg/ground-sg-qwenvl/seed{spec['seed']}/new"
+        rows = read_rows(spec['identities'])
+        plans = re.findall(r'^RUN_PLAN policy=groundsg label=' + re.escape(label) + r' seat='
+            + re.escape(seat['seat_name']) + r' total=' + str(len(rows))
+            + r' claimable=\d+ max_attempts=(2|20) route=' + re.escape(route) + r' reset_left=\S+$', log, re.M)
+        watchdogs = re.findall(r'^SEAT_WATCHDOG_EXIT key=(\S+) dataset=ood attempt=(\d+) '
+            r'code=75（已写 attempt_end、结算共享账本、领取文件记收尾）$', log, re.M)
+        codes = re.findall(r'^EXIT_CODE=(\d+)$', log, re.M)
+        if (seat['stage'] != self.state['stage'] or seat['model'] != 'qwen' or seat.get('onlykey')
+                or len(plans) != 1 or len(re.findall(r'^RUN_PLAN ', log, re.M)) != 1
+                or len(watchdogs) != 1 or not codes or set(codes) != {'75'} or 'RUN_BLOCKED ' in log):
+            raise ValueError('看门狗退出不属于已证 Qwen 契约')
+        key, attempt_text = watchdogs[0]
+        attempt = int(attempt_text)
+        identity = next((r for r in rows if r['key'] == key), None)
+        timeouts = re.findall(r'^INFRA_TIMEOUT phase=episode_wall key=(\S+) limit_s=1800$', log, re.M)
+        if (identity is None or key not in missing or not 1 <= attempt < 20 or timeouts != [key]
+                or len(re.findall(r'^INFRA_TIMEOUT ', log, re.M)) != 1
+                or not log.index('RUN_PLAN ') < log.index('INFRA_TIMEOUT ') < log.index('SEAT_WATCHDOG_EXIT ')):
+            raise ValueError('看门狗日志身份、局时限或尝试上限不符')
+        def records(path):
+            return [json.loads(x) for x in Path(path).read_text().splitlines() if x.strip()]
+        queue = Path(spec['out']) / 'queue' / label / f"seed{spec['seed']}"
+        for row in rows:
+            claims = list((queue / 'claims').glob('ood__' + row['key'] + '.a*.json'))
+            if any(read(p).get('ended') is not True for p in claims):
+                raise ValueError('看门狗队列存在未收尾领取')
+            if row['key'] in missing and row['key'] != key and claims:
+                raise ValueError('看门狗之外的缺失身份已有尝试，交主会话核查')
+        claims = sorted((int(p.name.rsplit('.a', 1)[1].removesuffix('.json')), p, read(p))
+                        for p in (queue / 'claims').glob('ood__' + key + '.a*.json'))
+        if not claims or [n for n, _, _ in claims] != list(range(1, attempt + 1)):
+            raise ValueError('看门狗不是队列最后一次尝试')
+        _, claim_path, claim = claims[-1]
+        token = f'{route}|{key}|a{attempt}'
+        if (claim['key'] != key or claim['dataset'] != 'ood' or type(claim['attempt']) is not int
+                or claim['attempt'] != attempt or claim['seat'] != seat['seat_name']
+                or claim['route'] != route or claim['token'] != token
+                or claim['end_status'] != 'infra_timeout' or claim['exit_code'] != 75
+                or 'final' in claim or 'accepted' in claim):
+            raise ValueError('看门狗领取与生产硬退出形态不符')
+        local = records(Path(spec['out']) / 'seats' / label / f"seed{spec['seed']}"
+                        / seat['seat_name'] / f'{label}.ledger.jsonl')
+        starts = [r for r in local if r.get('kind') == 'attempt_start']
+        if not starts:
+            raise ValueError('看门狗本地尝试缺失')
+        start = starts[-1]
+        if (start['key'] != key or start['attempt_no'] != attempt or start['budget_rid'] != claim['rid']
+                or start['token'] != token or start['route'] != route or Path(start['claim']) != claim_path
+                or start['policy'] != 'groundsg' or start['seat'] != seat['seat_name']
+                or start['identity'] != {k: v for k, v in identity.items() if k != 'episode'}):
+            raise ValueError('看门狗最后本地尝试与原身份不符')
+        raw = Path(start['result_path'])
+        if not raw.resolve().is_relative_to((Path(spec['out']) / 'rollouts').resolve()):
+            raise ValueError('看门狗原结果路径越界')
+        result = read(raw)
+        if (any(result[k] != identity[k] or type(result[k]) is not type(identity[k])
+                for k in identity if k != 'builder_episode')
+                or type(result['attempt']) is not int or result['attempt'] != attempt
+                or result['policy_seed'] != spec['seed'] or result['policy_label'] != label
+                or result['model'] != 'groundsg'
+                or result.get('policy_variant') not in (None, 'ground-sg-qwenvl')
+                or result['status'] != 'fail' or result['infra'] is not True
+                or result['infra_reason'] != 'episode_wall'
+                or result['error'] != 'INFRA_TIMEOUT phase=episode_wall limit_s=1800'
+                or result['run_blocked'] is not False or result['budget_exhausted'] is not False
+                or type(result['task_success']) is not int or result['task_success'] != 0
+                or type(result['reset_calls']) is not int or result['reset_calls'] != 2):
+            raise ValueError('看门狗原结果不是完整局墙钟基础设施终态')
+        ends = [r for r in local if r.get('kind') == 'attempt_end' and r.get('attempt_id') == start['attempt_id']]
+        ended_ids = {r.get('attempt_id') for r in local if r.get('kind') == 'attempt_end'}
+        if (len(ends) != 1 or ends[0]['key'] != key or ends[0]['attempt_no'] != attempt
+                or ends[0]['status'] != 'error' or ends[0]['infra'] is not True
+                or ends[0]['infra_reason'] != 'watchdog_exit' or ends[0]['exec_steps'] is not None
+                or ends[0]['budget_exhausted'] is not False or ends[0].get('run_blocked')
+                or any(r.get('kind') == 'accept' and r.get('key') == key for r in local)
+                or any(r['attempt_id'] not in ended_ids for r in starts)):
+            raise ValueError('看门狗本地硬退出未结算或已有正常终态')
+        caps = spec['caps']
+        shared = BudgetLedger(spec['budget'], trajectory_cap=caps[0], reset_cap=caps[1],
+            shared_infra_cap=caps[2], expired_cap=caps[3], planned_first_tries=caps[4])
+        with Path(str(spec['budget']) + '.lock').open('r') as lock:
+            fcntl.flock(lock, fcntl.LOCK_SH)
+            budget = BudgetState(records(spec['budget']))
+        reserve, commit = budget.reserves.get(claim['rid'], {}), budget.commits.get(claim['rid'], {})
+        if (budget.bad_rows or shared._config_diff(budget) or reserve.get('route') != route
+                or reserve.get('key') != key or reserve.get('token') != token
+                or reserve.get('dataset') != 'ood' or reserve.get('attempt_no') != attempt
+                or reserve.get('resets') != 2 or reserve.get('kind_of_try') != ('first' if attempt == 1 else 'recovery')
+                or claim['rid'] in budget.releases or commit.get('status') != 'fail' or commit.get('infra') is not True
+                or budget.retries_for(route, key) != attempt - 1
+                or any(r.get('route') == route and rid not in budget.commits and rid not in budget.releases
+                       for rid, r in budget.reserves.items())):
+            raise ValueError('看门狗共享预约、重试或结算不符')
+        if (budget.trajectories + len(missing) > caps[0] or budget.resets + 2 * len(missing) > caps[1]
+                or budget.retries_of('infra') >= caps[2]
+                or shared._recovery_block(budget, recovery_in_use=max(budget.recovery_used, len(budget.retries)))):
+            raise ValueError('看门狗接续共享预算耗尽')
+        return {'key': key, 'attempt': attempt, 'missing': list(missing), 'result': str(raw),
+                'result_sha256': hashlib.sha256(raw.read_bytes()).hexdigest(),
+                'log_sha256': hashlib.sha256(log.encode()).hexdigest()}
 
     def save(self):
         tmp = self.path.with_suffix('.tmp')
@@ -460,6 +665,7 @@ class Controller:
 
     def tick(self):
         stage = self.state['stage']
+        blocked = self.blocked_models()
         remaining = {m: self.remaining(stage, m) for m in self.c['models']}
         busy = set()
         for seat in self.state['seats']:
@@ -492,10 +698,26 @@ class Controller:
                     # 仅诊断计数；是否可恢复由真实 attempt_no < 20 决定，不新增预算。
                     seat.setdefault('recoveries', {})[scope] = seat.get('recoveries', {}).get(scope, 0) + 1
                 elif code == 6:
-                    attempts = self.legacy_retry_settled(seat, log, remaining[seat['model']])
-                    self.event('legacy_retry_resume', slot=seat['slot'], model=seat['model'],
-                               stage=seat['stage'], session=seat['session'], attempts=attempts,
-                               max_attempts=20)
+                    if (stage == 'A' and seat['model'] == 'pp' and re.search(r'^RUN_PLAN .* max_attempts=20 ', log, re.M)):
+                        evidence = self.blocked_pp_settled(seat, log, remaining['pp'])
+                        if blocked:
+                            raise ValueError('PP 阻塞后出现新的工作者，交主会话核查')
+                        self.state['blocked_models'] = {'A': {'pp': evidence}}
+                        blocked.add('pp')
+                        seat.pop('session')
+                        self.save()
+                        self.event('model_blocked', stage='A', model='pp', key=PP_BLOCK_KEY, evidence=evidence)
+                        print(f'MODEL_BLOCKED=WAIT stage=A model=pp key={PP_BLOCK_KEY} attempt=20', flush=True)
+                        continue
+                    else:
+                        attempts = self.legacy_retry_settled(seat, log, remaining[seat['model']])
+                        self.event('legacy_retry_resume', slot=seat['slot'], model=seat['model'],
+                                   stage=seat['stage'], session=seat['session'], attempts=attempts,
+                                   max_attempts=20)
+                elif code == 75:
+                    evidence = self.watchdog_settled(seat, log, remaining[seat['model']])
+                    self.event('watchdog_retry_resume', slot=seat['slot'], model=seat['model'],
+                               stage=seat['stage'], session=seat['session'], evidence=evidence, max_attempts=20)
                 elif code != 0:
                     raise ValueError(f'席位失败退出码 {code}，交主会话恢复')
                 seat.pop('session')
@@ -519,10 +741,10 @@ class Controller:
                 if not active:
                     self.replace_expired(seat)
                 continue
-            available = [m for m in self.c['priority'] if remaining[m] and m not in busy]
+            available = [m for m in self.c['priority'] if remaining[m] and m not in busy and m not in blocked]
             if not available:
                 # 仅 SMVLA 按身份领取；其它模型依赖已有共享队列的原子领取。
-                available = [m for m in self.c['priority'] if remaining[m] and m != 'smvla']
+                available = [m for m in self.c['priority'] if remaining[m] and m != 'smvla' and m not in blocked]
             if not available:
                 continue
             model = available[0]
