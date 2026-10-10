@@ -1,0 +1,2 @@
+BUDGET_DETAIL ledger=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-01/budget-ledger.jsonl reserves=1 committed=0 released=0 open=1 expired=0/0 reset_cap_exceeded=0 first_started=1/4000 recovery=0/0 config=present
+BUDGET_ENFORCEMENT=PASS trajectories=1/4000 resets=2/8000 astra=0/2 shared_infra=0/0

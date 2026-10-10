@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 
-from raw_ood_controller import atomic, cancel_gpu, load_config, read, validate_config
+from raw_ood_controller import atomic, load_config, query_gpu, read, sha, validate_config
 
 
 def start_guardians(c: dict, guardians: list[dict] | None=None) -> list[dict]:
@@ -42,6 +42,20 @@ def start_guardians(c: dict, guardians: list[dict] | None=None) -> list[dict]:
 
 
 def check_guardians(guardians: list[dict], c: dict) -> None:
+    failures=[]
+    for seat in c['seats']:
+        job=str(seat['job_id']); path=Path(c['root'])/'control'/f'guard-failure-{job}.json'
+        if not path.exists(): continue
+        d=read(path)
+        if d['run']!=c['run'] or str(d['controller_job_id'])!=str(c['controller_job_id']) or str(d['gpu_job_id'])!=job:
+            raise ValueError('守卫原始失败回执身份错误')
+        for k in ('exec_commit','config_sha256'):
+            if k in d and d[k]!=c[k]: raise ValueError('守卫原始失败回执版本错误')
+        if not 0<float(d['time'])<=time.time()+30: raise ValueError('守卫原始失败回执时间错误')
+        failures.append((float(d['time']),d))
+    if failures:
+        d=min(failures,key=lambda pair:pair[0])[1]
+        raise RuntimeError('独立守卫原始失败: '+json.dumps(d,ensure_ascii=False,sort_keys=True))
     marker=Path(c['root'])/'control'/'gpu_work_complete.json'; normal=False
     if marker.exists():
         d=read(marker)
@@ -50,6 +64,17 @@ def check_guardians(guardians: list[dict], c: dict) -> None:
     for g in guardians:
         rc=g['process'].poll()
         if rc is not None and not normal: raise RuntimeError(f"独立守卫提前退出 gpu={g['job_id']} rc={rc}")
+
+
+def final_cleanup_evidence(c: dict, base: dict) -> dict:
+    """保留最初取消回执；最终独立状态查询必须实际为空才通过。"""
+    control=Path(c['root'])/'control'; initial=control/'gpu-cleanup.json'
+    original=read(initial); current=query_gpu(c,timeout=5)
+    result=dict(base,initial_receipt=str(initial),initial_sha256=sha(initial),initial=original,final_query=current,
+                cleanup_incomplete=current['cleanup_incomplete'],time=time.time())
+    atomic(control/'gpu-cleanup-final.json',result)
+    with (control/'gpu-final-checks.jsonl').open('a') as f: f.write(json.dumps(result,ensure_ascii=False,sort_keys=True)+'\n')
+    return result
 
 
 def check_heartbeat(path: Path, base: dict, *, now: float, timeout: float=120) -> dict:
@@ -63,17 +88,12 @@ def check_heartbeat(path: Path, base: dict, *, now: float, timeout: float=120) -
 
 def fail(config: dict, error: BaseException, *, process=None) -> int:
     control=Path(config['root'])/'control'; base={k:config[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
-    atomic(control/'STOP',dict(base,component='supervisor',message=str(error),time=time.time()))
-    atomic(control/'failure.json',dict(base,error=type(error).__name__,message=str(error),time=time.time()))
-    if process and process.poll() is None:
-        try: os.killpg(process.pid,signal.SIGTERM)
-        except ProcessLookupError: pass
-    cleanup=cancel_gpu(config)
-    atomic(control/'cleanup.json',dict(base,**cleanup,time=time.time()))
-    if process and process.poll() is None:
-        try: os.killpg(process.pid,signal.SIGKILL)
-        except ProcessLookupError: pass
-    print('RAW_SUPERVISOR=FAIL error='+str(error),flush=True)
+    outcome=dict(base,error=type(error).__name__,message=str(error),time=time.time(),supervisor_exit_code=1,
+                 controller_pid=process.pid if process else None,controller_action='none',gpu_action='none',
+                 cpu_hold=True,notification_established=False)
+    atomic(control/'supervisor-failure.json',outcome)
+    atomic(control/'intentional-supervisor-stop.json',dict(outcome,reason='exception_stop_only_supervisor'))
+    print('RAW_SUPERVISOR=FAIL cpu_hold=1 gpu_cancel=0 controller_kill=0 notification_established=0 error='+str(error),flush=True)
     return 1
 
 
@@ -83,7 +103,7 @@ def run(config_path: Path) -> int:
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     if str(os.environ.get('SLURM_JOB_ID',''))!=str(c['controller_job_id']): raise ValueError('监督器不在登记CPU作业')
     if int(os.environ.get('SLURM_RESTART_COUNT','0')): raise ValueError('禁止重排队')
-    controller=None; guardians=[]; started=time.time(); last_moved=None; last_progress=started
+    controller=None; guardians=[]; started=time.time(); last_moved=None; last_progress=started; cleanup_settle_started=None
     guard_monitor_stop=threading.Event(); guard_monitor=None
     def term(signum,*_):
         if signum==signal.SIGUSR1: raise RuntimeError('独立守卫异常: '+(control/'guardian-error.json').read_text())
@@ -106,7 +126,6 @@ def run(config_path: Path) -> int:
                 try: check_guardians(list(guardians),c)
                 except BaseException as e:
                     atomic(control/'guardian-error.json',dict(base,error=str(e),time=time.time()))
-                    atomic(control/'STOP',dict(base,component='guardian-monitor',message=str(e),time=time.time()))
                     os.kill(os.getpid(),signal.SIGUSR1)
                     return
         guard_monitor=threading.Thread(target=watch_guards,daemon=True); guard_monitor.start()
@@ -145,13 +164,18 @@ def run(config_path: Path) -> int:
                         if k not in d: raise ValueError('搬运完成缺计数'+k)
                     if d['expected']!=4000 or d['moved']!=4000 or any(d[k]!=0 for k in ('missing','decode_fail','sha_mismatch','pending')):
                         raise ValueError('搬运完整验收失败')
-                    cleanup=read(control/'gpu-cleanup.json')
-                    if cleanup['cleanup_incomplete']: raise RuntimeError('GPU清理未完成')
+                    cleanup=final_cleanup_evidence(c,base)
+                    if cleanup['cleanup_incomplete']:
+                        if cleanup_settle_started is None: cleanup_settle_started=time.monotonic()
+                        if time.monotonic()-cleanup_settle_started>=30: raise RuntimeError('最终GPU状态查询仍非空或未知，清理未完成')
+                        time.sleep(5); continue
                     atomic(control/'completed.json',dict(base,expected=4000,moved=4000,infra=0,time=now))
                     atomic(control/'final-report.json',dict(base,results=read(control/'results-report.json'),delivery=d,cleanup=cleanup,
-                          cpu_exit_code=0,time=now))
+                          supervisor_exit_code=0,cpu_hold=True,notification_established=False,time=now))
+                    atomic(control/'intentional-supervisor-stop.json',dict(base,reason='supervisor_completed',supervisor_exit_code=0,
+                          cpu_hold=True,gpu_action='already_completed_release',controller_action='none',notification_established=False,time=now))
                     print('RAW_DELIVERY=PASS episodes=4000 videos=8000 hash_mismatch=0 decode_fail=0 missing=0 nfs_large_left=0',flush=True)
-                    print('RUN_CLEANUP=PASS gpu_jobs=4 cpu_jobs=1 active=0 cpu_exit_code=0',flush=True)
+                    print('RUN_CLEANUP=PASS gpu_jobs=4 active_gpu=0 supervisor_exit_code=0 cpu_hold=1 notification_established=0',flush=True)
                     print('RAW_SUPERVISOR=PASS expected=4000 moved=4000 infra=0',flush=True); return 0
             if rc is None: start_guardians(c,guardians)
             time.sleep(5)
@@ -165,9 +189,6 @@ def run(config_path: Path) -> int:
         guard_monitor_stop.set()
         if guard_monitor is not None: guard_monitor.join(timeout=2)
         for g in guardians:
-            if g['process'].poll() is None:
-                try: os.killpg(g['process'].pid,signal.SIGTERM)
-                except ProcessLookupError: pass
             g['log'].close()
 
 
@@ -198,25 +219,24 @@ def self_test(root: Path) -> int:
     try:
         c=dict(base,root=str(root),seats=[dict(job_id=str(i)) for i in range(124,128)])
         child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],start_new_session=True)
-        assert fail(c,RuntimeError('夹具控制器崩溃'),process=child)==1
-        child.wait(timeout=5)
-        assert calls.read_text().splitlines()==['124','125','126','127']
-        assert read(root/'control'/'failure.json')['message']=='夹具控制器崩溃'
-        assert not read(root/'control'/'cleanup.json')['cleanup_incomplete']
+        assert fail(c,RuntimeError('夹具监督异常'),process=child)==1
+        assert child.poll() is None and not calls.exists() and not (root/'control'/'STOP').exists()
+        assert read(root/'control'/'supervisor-failure.json')['message']=='夹具监督异常'
+        assert read(root/'control'/'intentional-supervisor-stop.json')['notification_established'] is False
+        child.terminate(); child.wait(timeout=5)  # 仅清理本夹具自己创建的CPU子进程。
         crashed=subprocess.Popen([sys.executable,'-c','raise SystemExit(7)'],start_new_session=True)
         assert crashed.wait(timeout=5)==7
         assert fail(c,RuntimeError('控制器退出7'),process=crashed)==1
-        assert read(root/'control'/'failure.json')['message']=='控制器退出7'
-        # 整个CPU作业从squeue消失时，真实GPU守卫须在ready尚不存在时也停止。
+        assert read(root/'control'/'supervisor-failure.json')['message']=='控制器退出7'
+        # CPU消失时只结束此guard，不取消GPU allocation或其它step。
         guard_root=root/'guard'; (guard_root/'control').mkdir(parents=True)
         (guard_root/'control'/'gpu-job-ids.txt').write_text('124\n125\n126\n127\n')
         guard=subprocess.run(['bash',str(Path(__file__).with_name('raw_ood_hold_guard.sh')),str(guard_root),'fixture','123',str(int(time.time()+60))],
-                             env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='124'),capture_output=True,text=True,timeout=5)
-        assert guard.returncode!=0 and (guard_root/'control'/'STOP').exists()
-        assert calls.read_text().splitlines()[8:]==['125','126','127','124']
+                             env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='124',SLURM_STEP_ID='0'),capture_output=True,text=True,timeout=5)
+        assert guard.returncode!=0 and not (guard_root/'control'/'STOP').exists() and not calls.exists()
     finally: os.environ['PATH']=old
-    atomic(root/'result.json',dict(success=1,global_stop=1,cpu_lost=1,mover_lost=1,parent_exit=1))
-    print('DETACHED_FLOW=PASS success=1 global_stop=1 cpu_lost=1 mover_lost=1 parent_exit=1 simulated_slurm=1')
+    atomic(root/'result.json',dict(supervisor_exit=1,controller_alive=1,guard_self_exit=1,gpu_cancel=0,global_stop=0,parent_exit=1,notification_established=False))
+    print('STOP_ISOLATION=PASS supervisor_exit=1 controller_alive=1 guard_self_exit=1 gpu_cancel=0 global_stop=0 parent_exit=1 notification_established=0 simulated_slurm=1')
     return 0
 
 

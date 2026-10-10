@@ -4,7 +4,7 @@
 
 | 档案 | 目的 | 状态 |
 | --- | --- | --- |
-| [ood-five-raw-seed7-20261010-01](ood-five-raw-seed7-20261010-01/launch.md) | 五模型、16 任务、仅 OOD、原始录像异步搬回本机 | 工程实施中；一次提交四 GPU 与一 CPU 作业，各 120 小时，正式评估尚未启动 |
+| [ood-five-raw-seed7-20261010-01](ood-five-raw-seed7-20261010-01/result.md) | 五模型、16 任务、仅 OOD、原始录像异步搬回本机 | guard退出8后旧策略自动停止：PP 1次轨迹／2 reset、0步／0完整结果；四GPU取消、CPU失败退出。新“只停监督器、CPU占位”已修复并通过58＋1690项拆分测试，未重申资源 |
 | [smvla-no-official-video-20261010-01](smvla-no-official-video-20261010-01/result.md) | GL 常驻两局、跳过官方视频、保留原始记录的计时 | 两局93.9／56.0秒，收尾均值8.5秒；2 次轨迹／4 次 reset、零重试；四卡全量估算约4.65天 |
 | [ood-chunk-time-20261010](ood-chunk-time-20261010/result.md) | OOD 动作块、录像与单局占用时间拆分 | 只读 267 局、10706 块；无新增评估；一个 seed 常驻估算约 660.5 GPU·小时 |
 | [smvla-restart-ab-20261010-01](smvla-restart-ab-20261010-01/result.md) | GL 常驻与逐局启动各两局的最小对照 | 两组都通过：4 轨迹／8 reset／零 infra；常驻同 PID 一次加载，当前两局不需逐局重启 |

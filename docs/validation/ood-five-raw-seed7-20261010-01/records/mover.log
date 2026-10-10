@@ -1,0 +1,3 @@
+RAW_DELIVERY=FAIL error=RuntimeError message=收到全局 STOP
+CONTROL_MIRROR_EXIT_CODE=0
+EXIT_CODE=1

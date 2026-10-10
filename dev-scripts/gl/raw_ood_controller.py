@@ -118,6 +118,16 @@ def make_shards(rows: list[dict]) -> dict[str,list[dict]]:
     return {f'{model}-{i:02d}': {'model':model,'rows':ordered[i*100:(i+1)*100]} for model in MODELS for i in range(8)}
 
 
+def query_gpu(config: dict, *, timeout: float=5) -> dict:
+    """独立查询当前登记GPU状态，未知查询不视作清理成功。"""
+    try:
+        p=subprocess.run(['squeue','-h','-j',','.join(str(s['job_id']) for s in config['seats']),'-o','%A %T'],
+                         capture_output=True,text=True,timeout=timeout)
+        active=p.stdout.strip(); query_rc=p.returncode; stderr=p.stderr
+    except (OSError,subprocess.TimeoutExpired) as e: active=str(e); query_rc=-1; stderr=str(e)
+    return dict(active=active,query_rc=query_rc,stderr=stderr,cleanup_incomplete=bool(active) or query_rc!=0,time=time.time())
+
+
 def cancel_gpu(config: dict, *, timeout: float=25) -> dict:
     """只取消本轮四GPU；每条调用有超时，返回原始回执。"""
     deadline=time.monotonic()+timeout; records=[]
@@ -127,15 +137,12 @@ def cancel_gpu(config: dict, *, timeout: float=25) -> dict:
             p=subprocess.run(['scancel',jid],capture_output=True,text=True,timeout=max(.1,deadline-time.monotonic()))
             records.append(dict(job_id=jid,rc=p.returncode,stdout=p.stdout,stderr=p.stderr))
         except (OSError,subprocess.TimeoutExpired) as e: records.append(dict(job_id=jid,error=str(e)))
-    active='尚未查询'; query_rc=-1
+    latest=dict(active='尚未查询',query_rc=-1,cleanup_incomplete=True)
     while time.monotonic()<deadline:
-        try:
-            p=subprocess.run(['squeue','-h','-j',','.join(str(s['job_id']) for s in config['seats']),'-o','%A %T'],capture_output=True,text=True,timeout=max(.1,deadline-time.monotonic()))
-            active=p.stdout.strip(); query_rc=p.returncode
-        except (OSError,subprocess.TimeoutExpired) as e: active=str(e); query_rc=-1
-        if not active and query_rc==0: break
+        latest=query_gpu(config,timeout=max(.1,deadline-time.monotonic()))
+        if not latest['cleanup_incomplete']: break
         time.sleep(min(.5,max(0,deadline-time.monotonic())))
-    return dict(records=records,active=active,query_rc=query_rc,cleanup_incomplete=bool(active) or query_rc!=0)
+    return dict(records=records,**latest)
 
 
 class Controller:
@@ -295,12 +302,6 @@ class Controller:
                 shard=next(s for s in self.pending if self.shards[s]['model']==model)
                 self.pending.remove(shard); self.start(seat,shard)
 
-    def stop_children(self):
-        for a in self.active.values():
-            if a['process'].poll() is None:
-                try: os.killpg(a['process'].pid,signal.SIGTERM)
-                except ProcessLookupError: pass
-
     def report(self):
         """读取保留的小result与共享账本，自动产生实测报告；任务失败单列。"""
         from budget_ledger import BudgetState
@@ -378,7 +379,8 @@ class Controller:
                     atomic(self.control/'gpu-cleanup.json',cancel_gpu(self.c)); return 0
                 time.sleep(1)
         finally:
-            stop_beat.set(); beat.join(timeout=6); self.stop_children()
+            # 异常只结束控制器自身；已启动的GPU step继续，不主动TERM或scancel。
+            stop_beat.set(); beat.join(timeout=6)
 
 
 def main():

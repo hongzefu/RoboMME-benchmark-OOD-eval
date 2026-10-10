@@ -1,0 +1,4 @@
+RAW_SUPERVISOR=FAIL error=夹具控制器崩溃
+RAW_SUPERVISOR=FAIL error=控制器退出7
+DETACHED_FLOW=PASS success=1 global_stop=1 cpu_lost=1 mover_lost=1 parent_exit=1 simulated_slurm=1
+EXIT_CODE=0

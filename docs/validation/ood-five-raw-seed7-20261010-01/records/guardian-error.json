@@ -1,0 +1,1 @@
+{"config_sha256": "a289e5f3e19c6b6f4d86411155ccf99ea3f393b34b9042025a5f9d4a77c06e2f", "controller_job_id": "63660978", "error": "独立守卫提前退出 gpu=63661000 rc=141", "exec_commit": "3b8d6be938002d00bf1b40e9b6a771844bdf4a15", "run": "ood-five-raw-seed7-20261010-01", "run_name": "ood-five-raw-seed7-20261010-01", "time": 1791666775.1183102}

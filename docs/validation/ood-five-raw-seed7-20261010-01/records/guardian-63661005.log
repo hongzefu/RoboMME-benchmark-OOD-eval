@@ -1,0 +1,8 @@
+GUARD_CANCEL job=63661000 rc=0
+GUARD_CANCEL job=63661007 rc=0
+GUARD_CANCEL job=63661014 rc=0
+GUARD_CANCEL job=63661005 rc=0
+EXIT_CODE=8
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2026-10-10T17:12:54.700] error: *** STEP 63661005.0 ON gl1505 CANCELLED AT 2026-10-10T17:12:54 DUE to SIGNAL Terminated ***
+srun: error: gl1505: task 0: Exited with exit code 8
