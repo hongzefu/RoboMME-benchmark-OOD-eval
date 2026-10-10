@@ -9,9 +9,10 @@
 </style>
 </head>
 <body><main>
-<p class="muted">2026-10-10 · v1.1 → v1.2 方案 · 本轮只写计划，尚未实施</p>
+<p class="muted">2026-10-10 · v1.1 → v1.2 方案 · 已按静态对抗审查补齐迁移与验收，尚未实施</p>
 <div class="note"><strong>先把评估仓迁移并锁定 v1.1；再在 benchmark 的现有 main 修改两个任务、发布 v1.2；让评估仓 dev 锁定 v1.2 后，同步到公开 main。</strong>不创建开发分支或开发 worktree，不运行实际 evaluate、新旧对跑或最后评估验收。</div>
 <h1 id="human">第一部分（给人看）</h1>
+<div class="note"><strong>本次需要用户逐个确认的新增事项：无。</strong>补漏文件、双包防覆盖负例、判据边界、真实 builder 来源及发布门禁均属于既定迁移与检查范围，由 agent 补齐。官方 <code>src/robomme/</code> 与录像器继续冻结，既定任务条件、分支、数据和预算沿用。本轮授权仅修订本 HTML；代码实施仍以修订后完整计划获认可为前提，不能把文档修改授权当成开工令。</div>
 <h2>一、迁移与两个任务的改动</h2>
 <table>
 <tr><th>内容</th><th>方案</th></tr>
@@ -79,12 +80,12 @@
 </figure>
 <table>
 <tr><th>步骤</th><th>在哪做</th><th>完成状态</th></tr>
-<tr><td>1. 接入 v1.1</td><td>eval 的 dev：迁移包名与检查路径，子模块及 <code>BENCH_LOCK</code> 一起改为 <code>51e05fe…</code>，提交并 push。</td><td>评估代码已适配 v1.1，不启动评估。</td></tr>
-<tr><td>2. 发布 v1.2</td><td>benchmark 的 main：改两个任务，必要短测后提交并 push；在新提交创建并推送 <code>v1.2-ood</code> 标签。</td><td>main 与 v1.2 标签指向新提交；v1.0／v1.1 标签不动。</td></tr>
-<tr><td>3. 锁定 v1.2</td><td>eval 的 dev：子模块及 <code>BENCH_LOCK</code> 一起更新为 v1.2 的提交 SHA，提交并 push。</td><td>恢复该 eval 提交即得到最新 v1.2 环境。</td></tr>
-<tr><td>4. 同步公开 main</td><td>eval 的 dev 完成并推送后，运行现有 <code>dev-scripts/release/sync_to_main.sh</code>；同步公开清单文件与子模块指针。</td><td>公开 main 的代码和 benchmark 锁定与该 dev 来源一致，提交带 <code>Dev-Source</code>。</td></tr>
+<tr><td>1. 接入 v1.1</td><td>eval 的 dev：迁移包名与检查路径，补齐遗漏模块及发布脚本门禁，子模块及 <code>BENCH_LOCK</code> 一起改为 <code>51e05fe…</code>，提交并 push。</td><td><code>BUILDER_SOURCE</code>、<code>ORIG_IMPORT_GUARD</code>、<code>MIGRATION_IMPORTS</code> 通过；不启动评估。</td></tr>
+<tr><td>2. 发布 v1.2</td><td>benchmark 的 main：改两个任务，通过边界与源码范围检查后提交并 push；在新提交创建并推送 <code>v1.2-ood</code> 标签。</td><td><code>STOPCUBE_BOUNDARY</code>、<code>MOVECUBE_SCOPE</code>、<code>BENCH_V12_SCOPE</code> 通过；旧标签固定。</td></tr>
+<tr><td>3. 锁定 v1.2</td><td>eval 的 dev：子模块及 <code>BENCH_LOCK</code> 一起更新为已发布 v1.2 的确定 SHA，重新核来源与锁定，提交并 push。</td><td><code>BENCH_LOCK_MATCH</code> 通过，三处锁值及已登记发布 SHA 相同。</td></tr>
+<tr><td>4. 同步公开 main</td><td>eval 的 dev 完成并推送后，运行补强后的 <code>dev-scripts/release/sync_to_main.sh</code>；先核远端可取性，再核暂存的候选公开树与字节，最后发布。</td><td><code>SUBMODULE_PUBLIC</code>、<code>PUBLIC_MANIFEST</code>、<code>PUBLIC_BYTES</code>、<code>SYNC_MAIN</code> 通过，提交带 <code>Dev-Source</code>。</td></tr>
 </table>
-<p class="muted">实现全部由主会话在两仓现有分支完成；只读定位用 Luna，图用 Astra，不派写入子代理创建新分支。必要代码检查与指针检查保留，不增加实际评估或最后验收。</p>
+<p class="muted">实现全部由主会话在两仓现有分支完成；只读定位用 Luna，独立审查与需要的内联图维护用 Sol，不派写入子代理创建新分支。必要代码检查与指针检查保留，不增加实际评估或最后成绩／媒体验收。</p>
 <h2 id="repo-scope">三、两个仓库分别需要改哪些内容</h2>
 <h3>benchmark 仓（main）：修改成功判据，发布 v1.2</h3>
 <p>这个仓的生产代码只改<strong>两个源文件</strong>。StopCube 的判定实际写在共用 helper 中，因此不需要修改 StopCube.py 本身；MoveCube 修改自己的 evaluate 任务列表。</p>
@@ -92,7 +93,7 @@
 <tr><th>改动类别</th><th>大概范围与代表锚点</th></tr>
 <tr><td>StopCube 判据</td><td><code>subgoal_evaluate_func.py::is_obj_stopped_onto</code>：加入 OOD 难度判断，新档倍率 2.5、原档仍为 3，移除重复覆盖赋值；停止状态和时机规则保留。</td></tr>
 <tr><td>MoveCube 判据</td><td><code>MoveCube.py::evaluate</code>：两个执行任务项按难度选择 must_gripper_open，OOD 为 False；演示、原档和抓取放置保留。</td></tr>
-<tr><td>配套测试／契约</td><td>现有 <code>test_stopcube.py</code>、<code>test_movecube.py</code> 和对应 contracts：更新新档行为期待，保留原档和演示检查。只做轻量代码短测。</td></tr>
+<tr><td>配套测试／契约</td><td>在现有 <code>tasks/test_stopcube.py</code>、<code>tasks/test_movecube.py</code> 内新增距离、难度与阶段边界，登记 nodeid；使用纯 CPU 世界验证生产判定，不只改现有期待。保留两条无关历史 planned 契约的原始状态。</td></tr>
 <tr><td>版本发布</td><td>在现有 main 提交并 push，在新提交创建 <code>v1.2-ood</code> 标签并推送。v1.0／v1.1 标签保留；五份规格、身份与交付哈希、官方源码和录像器均不改。</td></tr>
 </table>
 <h3>评估仓（dev）：迁移接入包名，同步工具与锁定检查</h3>
@@ -100,16 +101,30 @@
 <table>
 <tr><th>改动类别</th><th>大概范围与代表文件</th></tr>
 <tr><td>生产接入</td><td><code>episode.py</code>、<code>session.py</code>、<code>models/astra.py</code> 改 builder 导入及环境来源检查；<code>models/pp.py</code> 更新包名说明。策略推理、服务器协议和 Report 统计不变。</td></tr>
-<tr><td>辅助工具接入</td><td><code>dev-scripts/gl/</code> 的起跑来源检查、清单、规格加载与席位来源记录；<code>checks/</code> 的包路径和版本检查；<code>parity/</code>、<code>orig/</code>、<code>media/</code>、<code>site/</code> 的当前版本路径适配。只改接入代码，不运行评估、对拍、生成或渲染工具。</td></tr>
+<tr><td>辅助工具接入</td><td><code>dev-scripts/gl/</code> 的起跑来源检查、清单、规格加载与席位来源记录，补 <code>eval_report.py::hard_specs_path</code>；parity 补真实使用的 <code>_freeze_min.py</code>；orig 补三份 <code>orig_observer</code> 的双包守卫。其余 checks／media／site 保留既定接入适配，不运行评估、对拍、生成或渲染工具。</td></tr>
 <tr><td>测试与现行契约</td><td>包来源、环境替身、当前路径期待和对应 contracts 一起迁移；<code>test_submodule_lock.py::BENCH_LOCK</code> 与 gitlink 同步。<code>bench_gates.py</code> 需适配 v1.1／v1.2 结构，不能继续硬套 v1.0 的白名单。旧版本证据保留，<code>AGENTS.md</code> 只同步标记块外的当前包名与发布口径。</td></tr>
 <tr><td>依赖环境</td><td>根及三个子环境仍依赖 distribution <code>robomme</code>，路径不变、不升级依赖；必要时刷新 editable 安装并检查来源。pyproject／uv.lock 原则上保留，只有实际锁校验要求时才改对应 lock。</td></tr>
 <tr><td>子模块锁定</td><td><code>third_party/robomme_benchmark</code> 和 BENCH_LOCK 先锁 v1.1，再锁已发布 v1.2 的完整提交 SHA；两次都在现有 dev 提交并 push，最后将同一 v1.2 指针同步到公开 main。</td></tr>
-<tr><td>公开 main 发布</td><td>只通过现有 <code>sync_to_main.sh</code> 同步 <code>public-manifest.txt</code> 内文件与 5 个 gitlink，不直接在 main 改源码。公开代码保持英文；本计划、私有工具和运行档案不进入公开清单。</td></tr>
+<tr><td>公开 main 发布</td><td>补强现有 <code>sync_to_main.sh</code> 的分组超时、日志、子模块可取性、候选暂存区全集与字节检查，再同步清单内文件与 5 个 gitlink。使用已有 <code>check_manifest.py</code> 接口，不新增脚本目录或检查器参数；公开代码保持英文。</td></tr>
 </table>
 <p class="muted">上面是改动范围导读；第二部分列出具体文件与执行顺序。历史留档、冻结快照和明确的旧版对拍侧不批量改名，不改数据、权重、任务规模或运行预算。</p>
+<h2 id="acceptance">四、验收判据与停止条件</h2>
+<p>以下均为拟实施的判据，当前没有运行结果。命令和用例在第二部分「四」列出；语义用例通过、进程退出 0、关键用例实际执行且零 skip／xfail、资源调用全零，四项同时成立才放行。<code>TEST_RESOURCE=PASS</code> 单独不能证明功能正确。</p>
+<table>
+<tr><th>查什么／怎么查</th><th>过了说明什么／判定行</th></tr>
+<tr><td>StopCube：xhard1～5 和原档逐项检查 0.055 m，另测距离边界内外、stop=False、停止步及既有时机。</td><td>能识别遗漏倍率或误改原档；<code>STOPCUBE_BOUNDARY=PASS tiers=5 original_tiers=3 mismatches=0</code>。</td></tr>
+<tr><td>MoveCube：两推法 × 演示／执行 × 原档／xhard4，闭爪条件明确；抓放、误抓及 0.048 m 距离检查保留。</td><td>仅 xhard4 的两个执行项放宽；<code>MOVECUBE_SCOPE=PASS ways=2 original_tiers=3 mismatches=0</code>。</td></tr>
+<tr><td>外层 builder：清缓存，工厂置 None，直接解析 hard-verify／ood 身份，核类模块和源码来源，不建场景。</td><td>覆盖生产导入分支；<code>BUILDER_SOURCE=PASS datasets=2 native_reset=0 mismatches=0</code>。</td></tr>
+<tr><td>三个原侧观察器分别注入新／旧包污染，再检查未污染通过；漏项和新旧侧参数用替身单测检查。</td><td>防止把被接管环境当官方环境；<code>ORIG_IMPORT_GUARD=PASS observers=3 packages=2 missed=0</code>、<code>MIGRATION_IMPORTS=PASS missing=0 wrong_side=0</code>。</td></tr>
+<tr><td>v1.2 全跟踪树对固定 v1.1 比较：仅六个批准路径可变，生产修改限两个函数及必要导入，集合非空。</td><td>防止其他任务、规格或官方源码被混入；<code>BENCH_V12_SCOPE=PASS production_files=2 unexpected=0 checked=&lt;实际非零数&gt;</code>。</td></tr>
+<tr><td>暂存／提交锁定检查；公开前核 5 个子模块公开可取、候选 index 路径全集及公开文件字节／模式。</td><td><code>BENCH_LOCK_MATCH=PASS</code>、<code>SUBMODULE_PUBLIC=PASS repos=5 public=5 reachable=5</code>、<code>PUBLIC_MANIFEST=PASS missing=0 extra=0</code>、<code>PUBLIC_BYTES=PASS</code>；任何一项失败均停止发布。</td></tr>
+<tr><td>两仓库存与本轮契约；每组日志和组合退出码，pytest 执行组另核资源守卫。</td><td><code>TEST_INVENTORY=PASS unclassified=0 stale=0</code>、<code>TARGET_CONTRACTS=PASS missing=0 pending=0</code>；pytest 执行组 <code>TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0</code>。</td></tr>
+</table>
+<h2>五、子代理分工与合并（简述）</h2>
+<p>按用户既定分支要求，主会话是两个仓源码和共享文件的唯一写者，顺序为 eval 接入 v1.1 → benchmark 发布 v1.2 → eval 锁定 v1.2 → 公开同步。Luna 分目录只读定位，Sol 分判据、迁移、验收和发布独立审查；本次文档修订也只由主会话写。没有子代理代码提交或分支合并；每次主会话提交前核写集与证据，提交后立即 push，再核已提交锁定。图保留既有内联 SVG，需要维护时遵守 Sol 档职责。</p>
 <h1 id="technical">第二部分（技术细节，供 agent 追踪）</h1>
 <h2>〇、基线、授权与不变项</h2>
-<p>远端已核：benchmark main 与 <code>v1.1-ood^{commit}</code> 均为 <code>51e05feb05c61b9a5a25cef3ba189ad625f2cd83</code>，尚无 v1.2 标签。本次读取的 eval 代码锚点为 <code>3596622ea4ff289a2759002c80c1ffc4c4df3a9c</code>，现 gitlink 为 <code>a5efb992e769b7011281a1d31739b76d8868602a</code>。实施前复核；main 若已前进或 v1.2 已存在，不覆盖、不自行换基线。</p>
+<p>原计划记录的远端状态：benchmark main 与 <code>v1.1-ood^{commit}</code> 均为 <code>51e05feb05c61b9a5a25cef3ba189ad625f2cd83</code>，当时尚无 v1.2 标签。本次静态审查及修订基线为 eval <code>85f011e78d7f5bdae3b3bd6b7b4df9d40b722f6b</code>，其 gitlink 为 <code>a5efb992e769b7011281a1d31739b76d8868602a</code>；benchmark 源码只读固定 v1.1 对象。本轮没有重查远端，实施前必须复核；main 若已前进或 v1.2 已存在，不覆盖、不自行换基线。</p>
 <p>用户已确定“都是只在一个 main branch 上实现，不要创建新的 branch”，澄清为“benchmark 用 main，评估仓仍用现有 dev”，并追加“评估仓 dev 改完之后还要同步到 main”。实现不创建开发分支或开发 worktree；公开同步脚本使用已有的临时 detached 检出，不创建分支，结束自动清理。当前只修订计划，完整方案认可后实施并完成公开同步。</p>
 <p>不改官方 <code>src/robomme/</code>、录像器、其他模型 gitlink、任务规模、预算和旧产物；不调用 scripts/evaluate.py，不做 reset／rollout／Astra 策略请求或作业操作。eval 公开 main 仅由同步脚本更新。既有 SimpleMemVLA 在途改动和其他运行档案绕开；有任务热读当前子模块或 venv 时先等其结束，不改在用环境、不擅停任务。</p>
 <h2>一、eval：迁移到 robomme_ood 的必要改动</h2>
@@ -117,15 +132,19 @@
 <tr><th>文件集合</th><th>具体改动</th></tr>
 <tr><td><code>src/robomme_ood_eval/episode.py</code>、<code>session.py</code></td><td><code>builder_for</code>、<code>EnvSession.builder</code> 的生产导入改为 <code>robomme_ood.env_record_wrapper</code>，接口参数不变。</td></tr>
 <tr><td><code>src/robomme_ood_eval/models/astra.py</code>、<code>models/pp.py</code></td><td>Astra 的 <code>benchmark_src/assert_env_sources</code> 改包目录、导入和诊断字段；PP 包名说明改为新名。保留 <code>RoboMME</code> 协议名，不修改服务器握手或推理语义。</td></tr>
-<tr><td><code>dev-scripts/gl/run_eval_gl.sh</code>、<code>eval_manifest.py</code>、<code>export_eval_identities.py</code>、<code>seat.py</code></td><td>迁移当前环境来源检查、hard_specs 加载、builder 和身份路径。<code>hard_specs</code>、<code>hard-verify</code>、<code>xhard*</code> 这些字段／模块名保留，不按“hard”做全局替换。</td></tr>
-<tr><td><code>dev-scripts/checks/bench_gates.py</code></td><td>当前版本检查改读 <code>src/robomme_ood</code>／<code>tests/robomme_ood</code>，按 v1.1 的发布结构核规格与官方源码；v1.2 差异限定为两任务及必要测试／契约变更。旧 v1.0 结构、规则文件白名单仅留显式旧版模式，不把它硬套新版本，也不简单删除失败检查。</td></tr>
+<tr><td><code>dev-scripts/gl/run_eval_gl.sh</code>、<code>eval_manifest.py</code>、<code>export_eval_identities.py</code>、<code>seat.py</code>、<code>eval_report.py::hard_specs_path</code></td><td>迁移当前环境来源检查、hard_specs 加载、builder 和身份路径；报告只改当前规格定位，统计公式及旧结果保留。<code>hard_specs</code>、<code>hard-verify</code>、<code>xhard*</code> 保留，不按“hard”做全局替换。</td></tr>
+<tr><td><code>dev-scripts/checks/bench_gates.py</code></td><td>拟增显式 <code>--profile v1.1|v1.2|v1.0</code>、<code>--base &lt;固定SHA&gt;</code>、<code>--candidate index|&lt;提交SHA&gt;</code>、<code>--static-only</code>；新版模式只读 Git 对象／index 和规格，不跑旧门禁内的环境导入、慢测或 smoke。v1.2 比较固定 v1.1 全跟踪树的路径、blob 与模式，仅第二节列出的六路径可变，两个生产文件必须确有批准差异，其他生产代码全等；检查集合必须非空。旧 v1.0 规则仅留显式旧版模式，官方源码另对固定上游 <code>016ac1c4ef3df2b88488abc19db08f3de83647b5</code> 检查。</td></tr>
 <tr><td><code>dev-scripts/checks/cap_probe.py</code>、<code>client_replay_eq.py</code>；<code>dev-scripts/media/render_expert_demos.py</code>；<code>dev-scripts/site/render_xhard0.py</code>、<code>site_catalog.py</code></td><td>适配默认读取当前 benchmark 的导入／源码／元数据路径；只改接入，不执行这些消费或渲染工具。</td></tr>
-<tr><td><code>dev-scripts/parity/_common.py</code>、<code>_rollout.py</code>、<code>generate_h5.py</code>、<code>hard_parity.py</code>、<code>hard_regression.py</code>、<code>train_split_runner.py</code>、<code>train_split_worker.py</code>；<code>dev-scripts/orig/official_hard_runner.py</code>、<code>pp_official_runner.py</code></td><td>当前 benchmark 侧改用新包；明确指定的旧版本侧保留旧包解析。原侧防覆盖检查同时拒绝 robomme_ood 和 robomme_hard，保持官方独立进程语义。HF bucket 名与旧快照路径不是包名，不改；不执行对拍或生成。</td></tr>
+<tr><td><code>dev-scripts/parity/_common.py</code>、<code>_rollout.py</code>、<code>_freeze_min.py</code>、<code>generate_h5.py</code>、<code>hard_parity.py</code>、<code>hard_regression.py</code>、<code>train_split_runner.py</code>、<code>train_split_worker.py</code></td><td>按下述显式侧包合约适配当前／旧侧，覆盖顶层导入、<code>_SMOKE_RESOLVE</code>、<code>--pkg</code>、worker 白名单及 <code>_binding_ok</code>。<code>_freeze_min.py</code> 是仍在使用的模块，不是冻结快照；与 _rollout 使用同一规格模块及 SpecsError。不执行对拍或生成。</td></tr>
+<tr><td><code>dev-scripts/orig/official_hard_runner.py</code>、<code>pp_official_runner.py</code>；<code>orig_observer/framesamp_modul_client_wrap.py</code>、<code>orig_observer/smvla_wrap.py</code>、<code>orig_observer/run_orig_framesamp_modul.sh</code></td><td>所有原侧入口同时拒绝 <code>robomme_hard</code>、<code>robomme_ood</code> 及各自子模块，并核官方源码来源；只加守卫，不改变原侧推理或观察器行为。HF bucket 名与旧快照路径保留。</td></tr>
 <tr><td><code>tests/static/test_submodule_lock.py</code>、<code>test_package.py</code>、<code>test_official_names.py</code>、<code>test_resource_policy.py</code></td><td><code>BENCH_LOCK</code> 分两阶段更新；包来源断言由旧名改为新名。原检查禁止在 eval 复制 benchmark 源码的语义保留。</td></tr>
-<tr><td>当前入口与假环境测试：<code>tests/pipeline/eval/entry_bootstrap.py</code>、<code>eval_fakes.py</code>、<code>seat_fake_engine.py</code>、<code>test_client_replay_eq.py</code>、<code>test_seat_scripts.py</code>；<code>tests/pipeline/evalx/astra/astra_fakes.py</code>、<code>test_astra_wiring.py</code></td><td>同步当前包导入与来源期待，使用现有轻量替身；不能为了绿灯将错误来源或未知字段当成功。</td></tr>
+<tr><td>当前入口与假环境测试：<code>tests/test_episode.py</code>；<code>tests/pipeline/eval/entry_bootstrap.py</code>、<code>eval_fakes.py</code>、<code>seat_fake_engine.py</code>、<code>test_client_replay_eq.py</code>、<code>test_seat_scripts.py</code>、<code>test_eval_report.py</code>；<code>tests/pipeline/evalx/astra/astra_fakes.py</code>、<code>test_astra_wiring.py</code>；<code>tests/pipeline/evalx/orig_observer/test_orig_observer.py</code></td><td>同步当前包期待；在现有 test_episode.py 新增不注入工厂的真实 builder 来源用例，现有原侧观察器文件新增双包污染负例，报告复用用例覆盖默认规格定位。对应增量及总契约登记 nodeid；以上现有文件无需新增公开清单路径。</td></tr>
 <tr><td>其余当前路径夹具：<code>tests/pipeline/gen/gen_world.py</code>、<code>test_eval_identities.py</code>、<code>test_rollout_h5_race.py</code>、<code>test_run_batch.py</code>；<code>tests/pipeline/site/site_world.py</code>；<code>tests/pipeline/parity/parity_fixtures.py</code>、<code>test_hard_parity_cli.py</code>、<code>test_hard_parity_compare.py</code>、<code>test_hard_parity_smoke.py</code>；<code>tests/pipeline/evalx/groundsg/test_groundsg_context_seat.py</code>、<code>test_groundsg_orig_runner.py</code>；<code>tests/pipeline/evalx/pp/test_pp_protocol.py</code>；<code>tests/mutation/plugins/mut_inproc.py</code>、<code>tests/mutation/run_mutants.py</code></td><td>只改当前源码／包绑定的期待，旧版侧或负例明确保留；原协议和模拟错误分类不改。各目录已有 contracts.delta.json 中对应条目同步现行口径，不修改无关契约。</td></tr>
 <tr><td><code>tests/static/contracts.delta.json</code>、<code>tests/contract/benchmark_contracts.json</code>；<code>AGENTS.md</code> 标记块外 P2</td><td>同步现行包名、锁定契约和 v1.2 发布口径。AGENTS 通用标记块不改；当前注册覆盖改名承接，不增加新的受保护行为覆盖。</td></tr>
+<tr><td><code>dev-scripts/release/sync_to_main.sh</code>；其轻量回归放现有 <code>tests/pipeline/eval/test_seat_scripts.py</code></td><td>新增本节发布守卫和分组超时，完整输出落唯一 artifacts 日志；回归以假 Git／Python／gh 命令覆盖成功、超时、命令失败、tee 失败、额外 gitlink、错字节及 NOOP 先验门禁。仅使用已有 check_manifest.py 接口；不修改其参数语义，不实际推送。</td></tr>
 </table>
+<p><strong>新旧侧包合约：</strong><code>H/H2/H_new</code> 的环境和规格包为 <code>robomme_ood</code>；<code>H_old</code> 为 <code>robomme_hard</code>，仍读明确固定的旧源码树与解释器；官方 <code>O</code> 的环境包为 <code>robomme</code>，其规格辅助模块来自明确选定的当前 OOD 包。<code>generate_h5.py</code> 必须在加载 _rollout 前确定规格包与源码树，不能顶层先导入新包再靠后解析旧侧 --pkg。按侧验证真实 <code>env_package/env_module</code>，不以接受任一新旧前缀放宽错源检查；缓存也绑定所选规格来源。历史 provenance 保留原值。</p>
+<p><strong>契约归属：</strong>新增／修改 nodeid 同步 <code>tests/pipeline/gen/contracts.delta.json</code>、<code>tests/pipeline/eval/contracts.delta.json</code>、<code>tests/pipeline/parity/contracts.delta.json</code>、<code>tests/pipeline/evalx/orig_observer/contracts.delta.json</code> 及总表中对应条目；外层 builder 来源挂 <code>tests/unit_eval/contracts.delta.json</code> 和总表的既有 <code>C19-RUN-EPISODE</code>。bench_gates 和 release 脚本按实际既有归属登记，不能漏库存，也不新造独立总表。</p>
 <p><strong>旧版证据保留：</strong>docs 留档、冻结的 .txt 源码和固定旧 SHA 的对拍侧不改。parity／orig 及对应 gen／site 测试中，当前侧路径必须适配新包，旧侧明确按旧版本读取；必要时只改当前侧的路径选择，不把历史 <code>robomme_hard</code> 数据批量改写，也不自动从新包降级到旧包或官方包。</p>
 <p><strong>依赖处理：</strong>根及 <code>envs/client-env</code>、<code>envs/orig-framesamp-modul-client-env</code>、<code>envs/smvla-env</code> 的依赖分发名仍为 robomme，editable 路径不变，v1.1 没有升级依赖。保留 pyproject/uv.lock；迁移时按冻结依赖刷新必要的 editable 安装并核 .pth／find_spec 指向当前子模块。只有实际锁校验要求时才更新对应 uv.lock，不无故重锁四份环境，不安装 PyPI 的 robomme_ood。</p>
 <h2>二、benchmark main：只改两个任务，形成 v1.2</h2>
@@ -133,7 +152,7 @@
 <tr><th>文件／锚点</th><th>修改</th></tr>
 <tr><td><code>src/robomme_ood/robomme_env/utils/subgoal_evaluate_func.py::is_obj_stopped_onto</code></td><td>导入同目录 <code>.difficulty</code> 的 is_newvalue_difficulty；去除覆盖赋值，以条件倍率保留原档行为。StopCube.py 无需改动。</td></tr>
 <tr><td><code>src/robomme_ood/robomme_env/MoveCube.py::evaluate</code></td><td>只改 peg_push、gripper_push 的两个 <code>demonstration=False</code> 推目标项；用条件参数令 xhard4 为 False、原档为 True。演示常量 True 不改。</td></tr>
-<tr><td><code>tests/robomme_ood/unit/hard/tasks/test_stopcube.py</code>、<code>test_movecube.py</code>；<code>tests/robomme_ood/unit/hard/contracts.delta.json</code>、<code>tests/robomme_ood/contract/benchmark_contracts.json</code></td><td>仅适配上述新档成功行为的轻量用例和说明，检查原档／演示保留；不改官方原档用例来放宽判据，不新增实际评估批次。</td></tr>
+<tr><td><code>tests/robomme_ood/unit/hard/tasks/test_stopcube.py</code>、<code>test_movecube.py</code>；<code>tests/robomme_ood/unit/hard/contracts.delta.json</code>、<code>tests/robomme_ood/contract/benchmark_contracts.json</code></td><td>新增下述纯 CPU 判据矩阵；同步 <code>C05-HARD-TRUTH-StopCube</code>、<code>C05-HARD-TRUTH-MoveCube</code> 的正例、负例、边界及 nodeid，删除改名后不存在的旧 nodeid。保留原档／演示期待及无关历史缺口，不新增实际评估批次。</td></tr>
 </table>
 <pre><code># StopCube
 from .difficulty import is_newvalue_difficulty
@@ -143,7 +162,15 @@ distance_threshold = self.cube_half_size * factor
 # MoveCube：仅两个执行任务项
 must_gripper_open=not is_newvalue_difficulty(self.difficulty)</code></pre>
 <p>MoveCube 距离仍为 <code>0.048 m</code>，抓取放置和错误抓取不变；StopCube 仍检查 stop、停止步和时机。沿用 v1.1 英文源码／测试风格，不恢复被清理的规则文件或文档。</p>
+<table>
+<tr><th>拟新增／修改的 nodeid（当前尚不存在的新用例须先实现）</th><th>断言与反例</th></tr>
+<tr><td><code>tasks/test_stopcube.py::test_stop_threshold_difficulty_matrix</code></td><td>固定 cube_half_size=0.02 m，难度为缺属性／None／easy／medium／hard／xhard1～5；距离固定取 0.049、0.050、0.051、0.055、0.059、0.060、0.061 m。OOD 阈值 0.05、原档 0.06，等号通过；用 float64 的明确位置检查等号，避免把浮点舍入当语义差异。期望值写成独立真值表，不从生产 factor 反算。</td></tr>
+<tr><td><code>tasks/test_stopcube.py::test_stop_requires_stopped_and_preserves_first_timestep</code></td><td>stop=False 即使在目标附近也不成功且不写 stop_timestep；首次成功记步数，后续不得重写。既有正确圈次、上一圈及未按超窗用例保留。</td></tr>
+<tr><td><code>tasks/test_movecube.py::test_push_gripper_requirement_by_phase_and_difficulty</code></td><td>两推法 × 两阶段 × easy／medium／hard／xhard4，直接调用离线替身上生产 evaluate 生成的任务闭包；合法前序及到达目标条件固定。空夹爪闭合仅 xhard4 执行允许完成，演示和原档执行仍不推进；张开时正常推进。实际抓住错误物体仍失败，不能把“闭爪”混同“抓取”。</td></tr>
+<tr><td>既有 <code>test_gripper_push_way_and_open_gripper_requirement</code> 改名为 <code>test_gripper_push_execution_allows_closed_gripper</code></td><td>xhard4 执行段闭爪到目标立即成功；保留杆推前序、抓放、误抓及距离反例。完成矩阵断言后输出第一部分具名判定，缺参数化情况即失败。</td></tr>
+</table>
 <p><strong>规格不变：</strong>五份 v1.1 specs、逐局 spec_sha256、identity_sha256、delivery_sha256、packaged_specs.sha256 与 UPSTREAM.json 原样保持。<code>hard_fingerprint()</code> 随源码变动而改变；<code>load_specs</code> 对历史 provenance 不符仅警告。保留这个真实生成来源，不把历史数据伪写成 v1.2 生成，也不静默关闭警告。新增判据不会重新抽样或重签数据。</p>
+<p>此处字节不变的比较区间明确为 v1.1→v1.2。v1.0→v1.1 已有包名和文本清理，规格文件 SHA 与批次 identity_sha256 不同；逐局 spec 内容／执行身份和 delivery_sha256 兼容，不能把它扩大为旧新两版本文件逐位相同。源码范围闸门同时核五份规格与 packaged_specs.sha256、UPSTREAM.json 对 v1.1 的 blob 相同。</p>
 <h2>三、分支、发布与锁定命令</h2>
 <p>以下仅列未来实施顺序。本轮不切换子模块、不修改源码、不提交发布标签。每次源码提交后立即 push；失败就停，不 force。</p>
 <pre><code># A. eval dev：先接入 v1.1；同步包名、检查路径和 BENCH_LOCK
@@ -165,7 +192,9 @@ git push origin refs/tags/v1.2-ood
 # C. eval dev：取得已发布 v1.2 并更新锁定
 cd /data/hongzefu/RoboMME-benchmark-OOD-eval
 git -C third_party/robomme_benchmark fetch origin tag v1.2-ood
-NEW_BENCH_SHA=$(git -C third_party/robomme_benchmark rev-parse 'v1.2-ood^{commit}')
+FETCHED_BENCH_SHA=$(git -C third_party/robomme_benchmark rev-parse 'v1.2-ood^{commit}')
+# NEW_BENCH_SHA 是 B 阶段已记录的发布提交；接续会话时从提交记录恢复，不用 fetched 值自证
+test "$FETCHED_BENCH_SHA" = "$NEW_BENCH_SHA"
 git -C third_party/robomme_benchmark switch --detach "$NEW_BENCH_SHA"
 # 同步 tests/static/test_submodule_lock.py 的 BENCH_LOCK=$NEW_BENCH_SHA
 git add third_party/robomme_benchmark tests/static/test_submodule_lock.py
@@ -176,14 +205,104 @@ cd /data/hongzefu/RoboMME-benchmark-OOD-eval
 UV_CACHE_DIR=/home/hongzefu/.cache/uv bash dev-scripts/release/sync_to_main.sh \
   --message "Migrate to robomme_ood and pin benchmark v1.2-ood"</code></pre>
 <p>锁定的是 <code>v1.2-ood^{commit}</code>，不是 annotated tag 对象自身的 SHA。旧标签不移动，新 v1.2 已存在就停止。发布后核远端 main 与 v1.2 剥离出的 commit 同为 NEW_SHA；eval 的 gitlink、BENCH_LOCK 和实际子模块 HEAD 也须相同。恢复该 eval 提交时正常 submodule update 会取得固定版本，不用 --remote。</p>
-<p><strong>公开同步前置：</strong>dev 已提交并推送，工作区满足脚本的 clean 检查，公开清单的语言、路径、清单三项检查及清单内纯 CPU 短测通过。脚本仅复制 dev 已提交的公开文件和 5 个 gitlink，main 提交使用英文摘要并带 <code>Dev-Source: &lt;dev完整SHA&gt;</code>，快进推送后输出 <code>SYNC_MAIN=PASS</code>（无差异为 NOOP）。其他会话未跟踪档案可能阻止 clean 检查，应等待所属会话处理，不代提交、stash 或删除；检查／推送失败即停，不绕过脚本。</p>
+<p><strong>公开同步前置：</strong>dev 已提交并推送，工作区满足脚本 clean 检查，固定本次 <code>DEV_SHA</code>。公开语言、路径、固定来源清单收集、清单内纯 CPU 短测及远端可取性分别通过；复制并暂存后，再核候选 index 全集、gitlink 字典和公开文件字节／模式。全部闸门必须位于 NOOP／DRYRUN／commit／push 之前。清单内测试仍在 dev 检出执行：未提交候选 WT 的 HEAD 是旧 main，不能把读取 HEAD 的锁定单测直接移进去。其他会话未跟踪档案若阻止 clean 检查，等待所属会话处理，不代提交、stash 或删除。</p>
+<p>以下使用 <strong>已有</strong> check_manifest.py 参数，插入同步脚本对应阶段；本轮仅写方案。<code>--tree</code> 读取候选 index；<code>--submodules</code> 当前忽略 --ref，故调用前后必须核 dev HEAD 始终等于 DEV_SHA，并保持工作区 clean、.gitmodules 与该提交一致。不能写“--submodules --ref”并声称已有固定来源能力。遇额外 gitlink 或错字节停止，不自行删掉未登记对象。</p>
+<pre><code># 在 sync_to_main.sh 内：定义与下节同契约的 run_gate，先固定 DEV_SHA
+test "$(git rev-parse HEAD)" = "$DEV_SHA"
+run_gate public-submodules "$PY" "$REL/check_manifest.py" --submodules
+test "$(git rev-parse HEAD)" = "$DEV_SHA"
+
+# 复制与暂存完成、LIST 尚未删除时；既有 --tree 读取候选暂存区
+run_gate public-tree "$PY" "$REL/check_manifest.py" \
+  --manifest "$MANIFEST" --ref "$DEV_SHA" --tree "$WT"
+mapfile -t PUBLIC_PATHS &lt; "$LIST"
+run_gate public-bytes git -C "$WT" diff --cached --quiet "$DEV_SHA" -- "${PUBLIC_PATHS[@]}"
+# 只有 public-bytes 退出 0 才输出 PUBLIC_BYTES=PASS
+# 接着删除本轮 LIST 等临时文件，再进入 NOOP／DRYRUN／commit／push
+# main 提交保持英文摘要及 Dev-Source；推送后核 main 提交树仍符合来源
+</code></pre>
 <h2>四、必要短测与主会话分工</h2>
-<p>主会话唯一写者：benchmark 在 main，eval 源码在 dev；main 发布交现有同步脚本。实现不新建开发分支、开发 worktree 或写入子代理；发布脚本的临时 detached 检出按其原流程自动清理。Luna 只读定位，Astra 只返回图。实施前核根目录、分支、写集和在用环境，其他会话改动绕开。</p>
-<p>检查使用 uv，显式 <code>UV_CACHE_DIR=/home/hongzefu/.cache/uv</code>，NFS 用 copy。benchmark 仅选上述两个任务的纯 CPU 轻量用例；eval 至少覆盖 builder／session／Astra 来源绑定的现有替身用例。资源守卫要求 native_reset、GPU、权重与网络调用为零；每组超时 280 秒。无实际 evaluate、dummy 或最后成绩／媒体验收。</p>
+<p>主会话唯一写者：benchmark 在 main，eval 源码在 dev；main 发布交补强后的既有同步脚本。实现不新建开发分支、开发 worktree 或写入子代理，遵守用户既定分支决定；发布脚本的临时 detached 检出按原流程精确清理。以下新增用例和 bench_gates 参数均为拟实施能力，当前不可假定已经可运行。</p>
+<table>
+<tr><th>子任务／目标</th><th>读写、禁触与共享归属</th><th>依赖／顺序／验收</th><th>资源与交付</th></tr>
+<tr><td>主会话自做：两仓修改与整合</td><td>可写前两节逐文件集合；官方 src/robomme、录像器、其他模型、历史证据及在途文件禁触；总契约、gitlink、发布脚本均归主会话。</td><td>按 A→B→C→D，提交前短测和 staged 核对，提交后核 HEAD；无子分支合并。</td><td>CPU 短测；GPU／端口／JobID／tmux 均不分配；日志只在本仓 artifacts 下。</td></tr>
+<tr><td>Luna：分目录定位</td><td>只读明确基线、目录、关键词；不可写、运行、提交或 push。</td><td>修改前列正向命中与遗漏，主会话打开原文核实。</td><td>返回路径、符号、原文依据与未验证项。</td></tr>
+<tr><td>Sol：判据／迁移／验收／发布独立审查</td><td>只读确定 BASE／候选差异，受保护及其他在途路径排除；不可写、运行或 push。</td><td>修改后审四块并核具名判定契约；失败由主会话在授权写集内修订，重审。</td><td>返回缺陷与证据；内联图若需维护归主会话，未派写入代理。</td></tr>
+</table>
+<h3>4.1 短测日志与时间上限</h3>
+<p>检查使用 uv，显式 UV_CACHE_DIR，NFS 用 copy。每组最多 280 秒：命令在 275 秒收到 TERM，最多再等 5 秒 KILL；若采用 280 秒 TERM 加 5 秒宽限，则实际上限为 285 秒，不符合本计划。各次代码修改后的核心验证预计总耗时不超过 5 分钟；预计或实际超过时按仓规则另明确唯一 run_name、tmux、留档与启动版本，不能把长诊断作为短测继续。本轮不启动这些检查。</p>
+<p>在各仓实体 artifacts 下新建本轮唯一日志目录，先核输出根，不沿用已有目录；以下 TEST_OUT 为该仓目录，发布脚本内部使用同样唯一日志机制。保留完整输出，命令及 tee 任一失败即停止，不只截取 tail。短测原始输出不进 git，关键命令、判定和退出状态写提交正文。</p>
+<pre><code># 每仓分别在其根目录初始化；仅在代码实施获准后执行
+set -euo pipefail
+export UV_CACHE_DIR=/home/hongzefu/.cache/uv PYTHONUNBUFFERED=1
+ls -ld artifacts
+test -d artifacts &amp;&amp; test ! -L artifacts
+mkdir -p artifacts/checks
+TEST_OUT=$(mktemp -d "$PWD/artifacts/checks/success-conditions-v12.XXXXXX")
+run_gate() {
+  local gate_name="$1" gate_rc tee_rc final_rc
+  shift
+  set +e
+  timeout --signal=TERM --kill-after=5s 275s "$@" 2&gt;&amp;1 | tee "$TEST_OUT/$gate_name.log"
+  gate_rc=${PIPESTATUS[0]} tee_rc=${PIPESTATUS[1]}
+  set -e
+  final_rc=$gate_rc
+  if test "$final_rc" -eq 0 &amp;&amp; test "$tee_rc" -ne 0; then
+    final_rc=$tee_rc
+  fi
+  printf 'GATE_EXIT name=%s exit=%s tee_exit=%s\nEXIT_CODE=%s\n' \
+    "$gate_name" "$gate_rc" "$tee_rc" "$final_rc" | tee -a "$TEST_OUT/$gate_name.log"
+  test "$final_rc" -eq 0
+}
+</code></pre>
+<h3>4.2 benchmark 两任务与库存</h3>
+<pre><code># 工作目录：/data/hongzefu/RoboMME-benchmark-OOD；新用例已实现后
+run_gate benchmark-tasks uv run --no-sync python -m pytest -q -s \
+  tests/robomme_ood/unit/hard/tasks/test_stopcube.py \
+  tests/robomme_ood/unit/hard/tasks/test_movecube.py \
+  --junitxml="$TEST_OUT/benchmark-tasks.xml"
+run_gate benchmark-inventory uv run --no-sync python -m pytest -q -s \
+  tests/robomme_ood/static/test_inventory.py::test_inventory_every_tracked_file_classified \
+  tests/robomme_ood/static/test_inventory.py::test_contracts_nodeids_collected \
+  --junitxml="$TEST_OUT/benchmark-inventory.xml"
+
+# 工作目录切回 eval；拟新增 bench_gates 参数已实现、六路径已逐个暂存后
+run_gate benchmark-scope uv run --no-sync python dev-scripts/checks/bench_gates.py \
+  --bench /data/hongzefu/RoboMME-benchmark-OOD --profile v1.2 \
+  --base 51e05feb05c61b9a5a25cef3ba189ad625f2cd83 --candidate index --static-only
+# 提交后再用 --candidate "$NEW_BENCH_SHA" 核已提交对象，不能只查工作区
+</code></pre>
+<p>上述两任务测试利用既有 cpu_world／offline_scene 替身调用生产判据；不执行 native reset。库存检查内部允许既有 <code>--collect-only</code> 子进程收集仿真 nodeid，不能执行其用例；顶层不启用仿真 reset。benchmark 全局契约基线已有 <code>C14-14</code>、<code>T3-C02-task-order</code> 两个 planned：保留原始 <code>TEST_CONTRACTS=FAIL ... planned=2 pending=2</code>，不补无关覆盖或改状态以造 PASS。本轮目标两任务契约必须 verified、新增 nodeid 全部收集且执行、missing=0、目标 pending=0、无新增全局 planned；用 <code>TARGET_CONTRACTS</code> 单独报告。</p>
+<h3>4.3 eval 生产来源与迁移漏项</h3>
+<p>拟在已有 <code>tests/test_episode.py</code> 增加 <code>test_builder_for_real_namespace_identity_without_reset</code>：autouse 假工厂之后显式置 BUILDER_FACTORY=None 并 clear_builders，参数化两个 dataset；核 class.__module__、源码路径、1300／1800 步配置，身份与独立读取的官方 subset／打包 spec 对照。仅 builder 构造与 resolve_identity，不调用 make_env_for_episode／reset／step；不能替换生产 builder 类来绕过导入。</p>
+<pre><code># 工作目录：/data/hongzefu/RoboMME-benchmark-OOD-eval；新增用例实现后
+run_gate eval-source uv run --no-sync python -m pytest -q -s \
+  tests/test_episode.py::test_builder_for_real_namespace_identity_without_reset \
+  tests/pipeline/eval/test_env_session.py::test_own_builder_uses_dataset_and_max_steps \
+  tests/pipeline/evalx/astra/test_astra_wiring.py::test_env_sources_point_to_benchmark_submodule \
+  --junitxml="$TEST_OUT/eval-source.xml"
+run_gate eval-migration uv run --no-sync python -m pytest -q -s \
+  tests/pipeline/gen/test_freeze.py \
+  tests/pipeline/eval/test_eval_report.py::test_v9_total_table_matches_v9_cells \
+  tests/pipeline/parity/test_hard_parity_smoke.py \
+  --junitxml="$TEST_OUT/eval-migration.xml"
+run_gate eval-inventory uv run --no-sync python -m pytest -q -s \
+  tests/static/test_inventory.py::test_inventory_every_tracked_file_classified \
+  tests/static/test_inventory.py::test_contracts_nodeids_collected \
+  --junitxml="$TEST_OUT/eval-inventory.xml"
+</code></pre>
+<p>原侧守卫在现有 <code>test_orig_observer.py</code> 新增 <code>test_preflight_rejects_both_ood_namespaces</code>，覆盖三入口 × 两包污染与未污染对照；发布在现有 <code>test_seat_scripts.py</code> 新增 <code>test_sync_main_rejects_invalid_candidate_and_failed_gate</code> 和 <code>test_sync_main_noop_requires_all_gates</code>，以假命令／临时夹具覆盖阻断，绝不推送。运行命令为 <code>run_gate eval-release-fixtures uv run --no-sync python -m pytest -q -s tests/pipeline/evalx/orig_observer/test_orig_observer.py::test_preflight_rejects_both_ood_namespaces tests/pipeline/eval/test_seat_scripts.py::test_sync_main_rejects_invalid_candidate_and_failed_gate tests/pipeline/eval/test_seat_scripts.py::test_sync_main_noop_requires_all_gates --junitxml="$TEST_OUT/eval-release-fixtures.xml"</code>。这些 nodeid 尚待实现，不是现有通过证据。</p>
+<p>_freeze_min 三个现有用例验证方式解析、排他写入及规格读回；报告复用用例走真实默认 hard_specs_path。parity smoke 单测现有 World.install 将 builder 解析、生成、搬运替换为夹具，补按侧包名断言；不得去掉这些替身启动真实对拍。eval 库存入口在 tests/static/test_inventory.py，tests/contract 下只有总表；要求其 <code>TEST_CONTRACTS=PASS missing=0 pending=0</code>。</p>
+<h3>4.4 发布分组检查与完整通过条件</h3>
+<p>sync_to_main.sh 的语言、路径、固定 DEV_SHA 清单收集、远端子模块、公开短测、候选树和公开字节每组都用 run_gate 包装，不能只给最外层同步命令加超时而让后台子进程留下。清单收集命令为 <code>run_gate public-collect "$PY" "$REL/check_manifest.py" --ref "$DEV_SHA" --collect</code>；公开短测命令为 <code>run_gate public-tests "$PY" -m pytest -m 'not slow' -q -s -p no:cacheprovider "${TESTS[@]}" --junitxml="$TEST_OUT/public-tests.xml"</code>。公开收集器现有成功输出不透传子 pytest 资源行，不把它冒充资源实测；资源判定取实际公开短测日志。</p>
+<p>所有 run_gate 组检查命令与 tee 均退出 0、组合 EXIT_CODE=0，并核该组具名判定。执行 pytest 用例的测试组另检查非空收集、约定参数化身份全部实际执行、JUnit failures=errors=skipped=0、零 xfail／未验证跳过，以及完整 TEST_RESOURCE 原文的四类调用和 violations／not_verified 均为 0。仅收集组要求非空收集和 PUBLIC_MANIFEST，通过只证明收集，不作为用例执行或资源实测证据；静态／远端组核各自判定及实际非空计数，不要求不存在的 JUnit 或资源行。具名语义判定只能在对应断言和执行完整性核验之后输出；两仓总表与增量的目标语义及 nodeid 另逐项核对。</p>
 <p>锁定单测原来读 HEAD：提交前用暂存区核 gitlink 与待提交 BENCH_LOCK、子模块 HEAD 一致；保留原单测语义，提交后再核已落地 HEAD。不能因尚未提交而放宽或删除锁检查。判据检查只运行修改后实现，不起旧版回合。</p>
 <h2>五、风险、未验证与提交记录</h2>
 <p>包名迁移必须覆盖 session、GL 来源与规格路径；不能只升 gitlink。协议名 RoboMME、分发名 robomme、schema hard-specs/4 等不是旧 Python 包名，不改。旧门禁白名单与当前包名必须分版本处理，历史证据不能改成新版本。已发布标签冲突、远端前进或推送失败交回，不改历史；没有实跑就不报告成功率或运行等价。</p>
-<p>实施写集只含 namespace 接入、必要契约／测试、两任务及 gitlink，不改变策略推理、Report 统计、数据或运行预算；完成后同步 eval main。此轮仅更新本 HTML，提交编号接续 eval 最新记录；后续三阶段独立中文提交、立即 push，v1.2 标签另行推送，最后由脚本生成英文 main 提交。过程与用户原话写 commit body，不新增运行档案或规则日志。</p>
+<p>实施写集为前两节的 namespace 接入、必要契约／测试、两任务、gitlink 与发布守卫；不改变策略推理、Report 统计、数据或运行预算。边界／来源／发布检查补齐不需要用户逐项批准；本计划没有受保护源码修改或新的生产覆盖。若实际阻塞要求改官方 src/robomme、录像器、新增生成／reset／Astra 局或扩大费用预算，属于本计划之外，先列明确文件／符号／改动或规模，一次提交需要用户裁决的事项。</p>
+<p><strong>未验证项：</strong>editable 刷新后的实际导入、各组耗时和资源计数、拟新增 CLI／用例、远端当前状态及真实发布结果均待实施。静态审查只证明既定两判据的作用范围与规格读取机制，不证明历史轨迹在新成功判据下仍成功，也不报告新版成绩或运行等价。</p>
+<p><strong>本次文档验证与留档：</strong>只改本 HTML；核两个一级标题、内联图与本地链接、示例语法、完整写集和原要求保留，执行 git diff --check，独立只读复审后逐路径暂存。提交编号接续 eval 最新记录为 1.95，正文保留本轮用户原话、六项修正、验证结果和边界，立即 push dev；不切子模块、不运行上述未来命令、不发布 v1.2 或同步 main。实际实施后三阶段独立中文提交与标签推送按前述顺序，过程写 commit body，短测原始输出在 artifacts，预计／实际超过 5 分钟按运行留档规则处理。</p>
 <p class="muted">用户已定口径：“迁移到 V1.1 OOD，然后再去改这个两个任务，然后定位为 V1.2 OOD”；“都是只在一个 main branch 上实现，不要创建新的 branch”；澄清为 benchmark/main、eval/dev；追加“评估仓 dev 改完之后还要同步到 main”。</p>
+<p class="muted">本轮追加原话：“有哪些需要用户逐个确认的，剩下的你可以直接去修改这个计划。”本轮修订完成不代表代码实施、评估或公开同步已经获准。</p>
 <footer class="muted">源仓：<a href="https://github.com/hongzefu/RoboMME-benchmark-OOD">RoboMME-benchmark-OOD</a>；当前接入锚点：<a href="../../src/robomme_ood_eval/episode.py">builder_for</a>、<a href="../../src/robomme_ood_eval/session.py">EnvSession.builder</a>、<a href="../../tests/static/test_submodule_lock.py">BENCH_LOCK</a>。本轮只交付计划，v1.2 新提交及标签尚未产生。</footer>
 </main></body></html>
