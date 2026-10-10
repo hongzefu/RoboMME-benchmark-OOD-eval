@@ -98,6 +98,8 @@ from typing import Any, Callable
 
 import numpy as np
 
+from robomme_ood_eval import timing as chunk_timing
+
 NORMAL = ("success", "fail", "timeout")
 #: exceptions not swallowed as environment errors (matched by class name to avoid importing env_client)
 PASS_THROUGH = ("StepCapReached", "RecorderError", "ResetBudgetExhausted")
@@ -302,9 +304,10 @@ class TracingClient:
     code; with the language ledger open it is recorded in this ``action_model`` call (``server_final_text=None`` when
     the key is missing)."""
 
-    def __init__(self, inner: Any, tap: EpisodeTap):
+    def __init__(self, inner: Any, tap: EpisodeTap, timer=None, timing=None):
         self._inner = inner
         self._tap = tap
+        self._timer, self._timing = timer, timing
 
     def reset(self):
         self._tap.on_request("reset", {"reset": True})
@@ -323,8 +326,13 @@ class TracingClient:
         # no audit block
         if hasattr(self._inner, "_last_audit"):
             self._inner._last_audit = None
+        if self._timer is not None:
+            for name, value in (("_last_rtt", {}), ("_last_server_timing", None), ("_last_recv_t", None)):
+                if hasattr(self._inner, name):
+                    setattr(self._inner, name, value)
         try:
             out = self._inner.infer(obs)
+            t_ret = time.perf_counter() if self._timer is not None else None
         except BaseException:
             if lang is not None:
                 lang.close(cid, status="error")
@@ -332,6 +340,18 @@ class TracingClient:
         audit = out.pop(AUDIT_KEY, None) if isinstance(out, dict) else None
         if audit is None:
             audit = getattr(self._inner, "_last_audit", None)
+        if self._timer is not None and isinstance(out, dict) and "actions" in out:
+            rtts = getattr(self._inner, "_last_rtt", {})
+            rtt = rtts.get("infer") if isinstance(rtts, dict) else None
+            server = getattr(self._inner, "_last_server_timing", None)
+            missing = rtt is None or not hasattr(self._inner, "_last_server_timing")
+            if missing and self._timing is not None:
+                self._timing["timing_missing"] = self._timing.get("timing_missing", 0) + 1
+            recv_t = getattr(self._inner, "_last_recv_t", None)
+            self._timer.close(t=recv_t if recv_t is not None else t_ret,
+                              decision=self._tap.decisions - 1, env_step=self._tap.steps,
+                              action_rtt_ms=rtt,
+                              server_infer_ms=server.get("infer_ms") if isinstance(server, dict) else None)
         if lang is not None:
             lang.action_close(cid, audit)
         self._tap.on_response(out["actions"], call_id=cid)
@@ -416,7 +436,8 @@ class LangTap:
     ``step`` line (or the last ``demo`` frame).
     """
 
-    def __init__(self, log: Any, tap: EpisodeTap, *, variant: str, api: Any = None, params: dict | None = None):
+    def __init__(self, log: Any, tap: EpisodeTap, *, variant: str, api: Any = None, params: dict | None = None,
+                 timer=None):
         self.log, self.tap, self.variant, self.api = log, tap, variant, api
         self.params = dict(params or {})
         self.pending: list[str] = []  # subgoal calls opened but not yet closed in this get_subgoal
@@ -424,6 +445,8 @@ class LangTap:
         self.subgoal_calls = 0
         self.action_calls = 0
         self.reuses = 0
+        self.timer = timer
+        self._open_t: dict[str, tuple[float, int]] = {}
 
     @property
     def memer(self) -> bool:
@@ -434,6 +457,7 @@ class LangTap:
         if call_id is None:
             return
         self.log.close_call(call_id, **kw)
+        self._open_t.pop(call_id, None)
         if call_id in self.pending:
             self.pending.remove(call_id)
 
@@ -468,6 +492,8 @@ class LangTap:
                 self.log.message(cid, dir="in", role=msg.get("role"), text=msg.get("content"),
                                  images=self._subgoal_images(f["images"]), demo_video=demo)
         self.pending.append(cid)
+        if self.timer is not None:
+            self._open_t[cid] = (time.perf_counter(), retry)
         self.subgoal_calls += 1
         return cid
 
@@ -477,6 +503,11 @@ class LangTap:
         except Exception:  # noqa: BLE001
             text = None
         self.log.message(call_id, dir="out", role="assistant", text=text)
+        opened = self._open_t.pop(call_id, None)
+        if self.timer is not None and opened is not None:
+            t0, retry = opened
+            self.timer.add_lang((time.perf_counter() - t0) * 1000, kind="ask", env_step=self.tap.steps,
+                                retry=retry, call_id=call_id)
 
     def subgoal_begin(self) -> None:
         for cid in list(self.pending):
@@ -560,6 +591,65 @@ class _EngineTap:
             raise
         self._lang.subgoal_reply(cid, out)
         return out
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def _timing_cuda():
+    """Use an already imported CUDA backend; CPU timing never imports or synchronizes CUDA."""
+    torch = sys.modules.get("torch")
+    cuda = getattr(torch, "cuda", None)
+    return cuda if cuda is not None and cuda.is_available() else None
+
+
+class _CountingEngine:
+    """Count actual asks independently of the optional language ledger."""
+
+    def __init__(self, inner):
+        self._inner, self.n = inner, 0
+
+    def infer(self, *args, **kwargs):
+        self.n += 1
+        return self._inner.infer(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _TimedPredictor:
+    """Episode-local evaluator wrapper; the context retains the original predictor."""
+
+    def __init__(self, inner, timer, *, variant, counter=None, tap=None):
+        self._inner, self._timer, self._variant = inner, timer, variant
+        self._counter, self._tap = counter, tap
+
+    def get_subgoal(self, count, current_subgoal, last_subgoal):
+        self._timer.start()
+        if self._variant == official_defs.VARIANT_ORACLE:
+            return self._inner.get_subgoal(count, current_subgoal, last_subgoal)
+        n0 = self._counter.n if self._counter is not None else 0
+        cuda = _timing_cuda()
+        if cuda is not None:
+            cuda.synchronize()
+        t0, exc = time.perf_counter(), None
+        try:
+            return self._inner.get_subgoal(count, current_subgoal, last_subgoal)
+        except BaseException as e:
+            exc = e
+            raise
+        finally:
+            if cuda is not None:
+                cuda.synchronize()
+            ms = (time.perf_counter() - t0) * 1000
+            extra = {}
+            if self._counter is not None:
+                asks = self._counter.n - n0
+                extra.update(tries=asks, reuse=asks == 0)
+            if self._variant == official_defs.VARIANT_MEMER:
+                extra["fallback"] = getattr(getattr(self._inner, "api", None), "_memer_fallback", None)
+            self._timer.add_lang(ms, kind="subgoal", env_step=self._tap.steps if self._tap is not None else count,
+                                 error=type(exc).__name__ if exc else None, **extra)
 
     def __getattr__(self, name):
         return getattr(self._inner, name)
@@ -795,7 +885,8 @@ def make_policy_context(seat_info: dict, *, client_factory: Callable | None = No
 
     def ws_factory(host, port):
         ep = ctx["episode"]
-        client = TracingClient(ctx["client_factory"](host, port, ep), ep["tap"])
+        client = TracingClient(ctx["client_factory"](host, port, ep), ep["tap"],
+                               timer=ep["chunk_timer"], timing=ep["timing"])
         ep["clients"].append(client)
         return client
 
@@ -1047,7 +1138,8 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
     """Shared by both sides: run one ``eval_each_episode`` on the official evaluator in ``ctx``, catch exceptions,
     clean up temporary directories, and return the terminal-status dict.
 
-    Without ``keep_official`` the behavior and return value are byte-identical to before; with a true value the
+    Without ``keep_official`` the video behavior is unchanged; all episodes add chunk and language timing to the
+    existing ``timing`` result. With a true value the
     official overlay video is kept (see the module docstring), and ``official_provenance`` is the identity, route
     etc. written into ``provenance.json`` (dict). When ``language_log`` (the return value of ``open_language_log``) is
     not None the language ledger is wired via ``LangTap``, and the predictor and engine are restored at the end of the
@@ -1058,15 +1150,26 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
     keep = keep_official is not _UNSET and bool(keep_official)
     predictor, evaluator = ctx["predictor"], ctx["evaluator"]
     ctx["episode"] = {"tap": tap, "clients": [], "recorder": recorder, "timing": {}}
+    ep = ctx["episode"]
+    timer = chunk_timing.ChunkTimer()
+    ep["chunk_timer"] = timer
+    ep["timing"]["timing_missing"] = 0
     video_dir = scratch / "official-video"
     qbase = qwen_begin(predictor, scratch, dataset, episode_tag)
     lang = None
     undo_lang = None
     if language_log is not _UNSET and language_log is not None:
         lang = LangTap(language_log, tap, variant=ctx.get("variant"), api=getattr(predictor, "api", None),
-                       params=language_params(ctx))
+                       params=language_params(ctx), timer=timer)
         tap.lang = lang
         undo_lang = install_language(predictor, lang)
+    counter = None
+    counted_engine = None
+    api = getattr(predictor, "api", None)
+    if ctx.get("variant") != official_defs.VARIANT_ORACLE and hasattr(api, "engine"):
+        counted_engine = api.engine
+        counter = api.engine = _CountingEngine(counted_engine)
+    timed = _TimedPredictor(predictor, timer, variant=ctx.get("variant"), counter=counter, tap=tap)
     error = None
     exc_name = None
     flag = None
@@ -1087,7 +1190,7 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
         evaluator.init_episode = init_episode_capture
     t0 = time.perf_counter()
     try:
-        flag = evaluator.eval_each_episode(runner, predictor, video_dir)
+        flag = evaluator.eval_each_episode(runner, timed, video_dir)
     except Exception as e:  # noqa: BLE001 recorded as error, same as the episode-level catch-all of the official evaluate
         exc_name = type(e).__name__
         print(f"Error evaluating episode {episode_tag}: {e}")
@@ -1098,6 +1201,8 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
                 evaluator.init_episode = saved_attr
             else:
                 vars(evaluator).pop("init_episode", None)
+        if counted_engine is not None:
+            api.engine = counted_engine
         if undo_lang is not None:
             undo_lang()
         tap.lang = None
@@ -1120,6 +1225,10 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
     if "per_msg" in timing:  # per-message timing of the new-side recording client: summarized on the same basis as framesamp_modul_client
         timing = load_sibling("framesamp_modul_client").summarize_timing(timing)
     timing["episode_s"] = wall
+    cuda = _timing_cuda()
+    chunk_timing.attach_policy_timing(timing, timer,
+                                     gpu_name=cuda.get_device_name(0) if cuda is not None else None,
+                                     model_kind="serial")
     ctx["episode"] = None
     res = {"status": status, "task_success": status == "success", "steps": tap.steps, "error": error,
            "success_flag": flag, "decisions": tap.decisions, "infra": infra is not None, "infra_reason": infra,

@@ -14,6 +14,7 @@
 - 工作区既有改动：`third_party/SimpleMemVLA` 内 16 个描述文件有未提交修改。本轮保留、绕开，不暂存、不回滚、不将其混入固定提交审查；正式评估使用干净的固定版本副本。
 - 五个第三方 gitlink、受保护目录、`pyproject.toml` 与 `uv.lock` 冻结；公开清单中的源码按项目例外使用英文。
 - 环境：`sled-vail`，2 张 RTX 6000 Ada，共享盘与 SSH 配置存在，`micromamba` 与 `uv` 可用。Codex 子代理并发配置为 16。
+- 后续核验澄清：SimpleMemVLA 的 16 个描述文件实际与其锁定提交原始 blob 逐字节一致，所谓在途 diff 是 LFS clean 过滤器将普通文本转为指针造成。主检出仍原样保留。另建本轮干净运行工作树，只在该工作树子模块的 `.git/info/attributes` 对这 16 个明确文本路径取消过滤器；源码字节、`.gitattributes` 和五个 gitlink 全部不改。判定：`SUBMODULE_SOURCE_BYTES=PASS files=16 original_matches_git=1 snapshot_matches_git=1 cause=lfs_clean_filter`。
 
 ## 运行位置与资源归属
 
@@ -21,6 +22,7 @@
 - GL 副本：`/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval`，仅本机同步，GL 侧不做 git 操作。
 - 用户授权复用的既有占位作业：`63431430`（gl1525）、`63431431`（gl1512）、`63431432`（gl1512）、`63431433`（gl1513）。本会话未提交这些作业，禁止在收尾取消。
 - 本轮 tmux 会话：尚未启动；启动前逐个登记完整名称、日志与命令。
+- 本机运行副本：`artifacts/worktrees/infer-timing-runtime`，五个子模块均从本机既有对象按 gitlink 初始化，不递归初始化；正式起跑前快进到最终实现提交并复核 clean HEAD。本机非 Astra 使用 `CUDA_VISIBLE_DEVICES=1` 且省略 `--gpus`，使客户端与服务子进程共同继承物理 GPU 1；Astra 使用原有双卡 `--gpus 1,0`。GPU 0 的既有 738 MiB 进程不清理、不干预。
 
 ## 配置与验证口径
 
@@ -30,6 +32,8 @@
 - Astra 三次尝试共享 5 美元上限，使用本轮唯一费用账本；不通过分别建账本绕过累计额度。旧任务账本保持原样。
 - 六个 GL 正式身份各最多一次基础设施重试；正常任务失败不重试。累计硬上限为 54 次 reset、27 次轨迹尝试。模型缓冲 reset 与真实环境 reset 分别核对，不增加预热环境局。
 - 短测入口：`UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -m 'not slow' -q`；正式命令、权重、启动提交与退出状态在实际起跑前补齐。
+- 已导出单行身份：`VideoUnmask_xhard0_560300`，`builder_episode=0`、`source_episode=3`、`seed=560300`，两个空身份字段为 null；`identities.jsonl` 的 sha256 为 `48ced718820688e271b60e5d8679c05c621888428d78a47625ead5fe72d8a1c7`。此 seed 是环境身份；本机 policy_seed=0，GL policy_seed=7，不混淆二者。
+- 短冒烟停止控制在本轮临时入口 `artifacts/infer-timing-20261009/smoke_once.py`：保留 `spec.max_steps=1300` 的正式配对，只在评估仓外层会话拦截额外执行；首次合法动作块之后最多执行一步，审计关路径最多一步。`SINGLE_CHUNK_STOP_FIXTURE=PASS audit_on=1 audit_off=1 hold_prefix=1 extra_env_step=0`。正式 Astra 通过同入口的 `--it-formal` 仅登记累计预算，不施加短冒烟停止。
 
 ## 留档边界
 
