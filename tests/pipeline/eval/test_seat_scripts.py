@@ -119,11 +119,37 @@ exec "$@"
 
 
 @pytest.mark.parametrize("mode", ["tree", "bytes", "submodules", "collect", "tests", "completeness", "timeout", "tee"])
-def test_sync_main_rejects_invalid_candidate_and_failed_gate(tmp_path, mode):
+def test_sync_main_rejects_invalid_candidate_and_failed_gate(tmp_path, mode, monkeypatch):
     result, events = _sync_fixture(tmp_path, mode)
     assert result.returncode != 0, result.stdout + result.stderr
     assert "SYNC_MAIN=NOOP" not in result.stdout and "SYNC_MAIN=DRYRUN" not in result.stdout
     assert "FORBIDDEN" not in events
+    if mode == "tree":
+        from tests._support.dev_loaders import load_script
+        checker = load_script("release/check_manifest.py", fresh=True)
+        links = {f"third_party/p{k}": "a" * 40 for k in range(5)}
+        manifest = tmp_path / "manifest.txt"
+        manifest.write_text("\n".join(checker.REQUIRED) + "\n")
+        with monkeypatch.context() as patch:
+            patch.setattr(checker.M, "tracked_files", lambda **kw: list(checker.REQUIRED))
+            patch.setattr(checker.M, "gitlinks", lambda **kw: links)
+            index = "\n".join(f"160000 {sha} 0\t{path}" for path, sha in links.items())
+            index += "\n160000 " + "b" * 40 + " 0\tthird_party/unlisted\n"
+            patch.setattr(checker.subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a, 0, index, ""))
+            assert checker.main(["--manifest", str(manifest), "--ref", "fixed", "--tree", str(tmp_path)]) == 1
+    if mode == "bytes":
+        repo = tmp_path / "bytes-fixture"
+        repo.mkdir()
+        def git(*args):
+            return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=10)
+        assert git("init", "-q").returncode == 0
+        file = repo / "readme.md"
+        file.write_text("expected bytes")
+        assert git("add", "readme.md").returncode == 0
+        assert git("-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "fixture").returncode == 0
+        file.write_text("wrong bytes")
+        assert git("add", "readme.md").returncode == 0
+        assert git("diff", "--cached", "--quiet", "HEAD", "--", "readme.md").returncode == 1
 
 
 def test_sync_main_noop_requires_all_gates(tmp_path):

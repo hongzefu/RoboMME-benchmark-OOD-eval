@@ -28,7 +28,7 @@ from tests._support.loaders import REPO
 SUBMODULE = "third_party/robomme_benchmark"
 BENCH_URL = "https://github.com/hongzefu/RoboMME-benchmark-OOD.git"
 #: Locked commit of the benchmark submodule (written in commit 1.7; change together with the gitlink when upgrading)
-BENCH_LOCK = "51e05feb05c61b9a5a25cef3ba189ad625f2cd83"
+BENCH_LOCK = "adf19363d4347af77f3fb6746c3a6b685991aba0"
 
 
 def _git(*args: str, cwd: Path = REPO) -> str:
