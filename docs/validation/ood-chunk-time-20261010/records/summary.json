@@ -1,0 +1,1544 @@
+{
+  "source_root": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts",
+  "method": "每局先汇总，再按任务等权；稳态按原决策序号排除前三块，全部稳态块合并；P95采用排序后的向下取整索引；PP为成本归集特殊口径",
+  "rows": [
+    {
+      "model": "groundsg-ground-sg-memer",
+      "episodes": 24,
+      "tasks": 5,
+      "chunks": 1329,
+      "steady_chunks": 1257,
+      "missing_wall_fields": 0,
+      "steady_mean_s": 26.475032161495623,
+      "steady_p95_s": 37.012869,
+      "task_equal": {
+        "total_s": 1641.9751185274124,
+        "steps": 873.6800000000001,
+        "decisions": 55.05,
+        "decision_s": 1422.6180814399997,
+        "env_s": 12.931473773792385,
+        "record_s": 0.8630584377702326,
+        "outer_tail_s": 174.60881852741244,
+        "other_s": 219.35703708741266,
+        "unallocated_s": 30.9536863484376
+      }
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "episodes": 22,
+      "tasks": 5,
+      "chunks": 1225,
+      "steady_chunks": 1159,
+      "missing_wall_fields": 0,
+      "steady_mean_s": 0.16882954098360656,
+      "steady_p95_s": 0.18989799999999998,
+      "task_equal": {
+        "total_s": 318.1201547908783,
+        "steps": 824.44,
+        "decisions": 52.06,
+        "decision_s": 8.73786916,
+        "env_s": 14.644294854402542,
+        "record_s": 89.2934605797194,
+        "outer_tail_s": 199.0936147908783,
+        "other_s": 309.3822856308783,
+        "unallocated_s": 6.350915405878084
+      }
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "episodes": 58,
+      "tasks": 12,
+      "chunks": 2568,
+      "steady_chunks": 2394,
+      "missing_wall_fields": 0,
+      "steady_mean_s": 5.902059921888053,
+      "steady_p95_s": 25.420489,
+      "task_equal": {
+        "total_s": 529.4756385535002,
+        "steps": 687.6458333333334,
+        "decisions": 43.416666666666664,
+        "decision_s": 279.22221490833334,
+        "env_s": 15.211323068531541,
+        "record_s": 4.025163648130062,
+        "outer_tail_s": 224.35743855350017,
+        "other_s": 250.25342364516683,
+        "unallocated_s": 6.659498375005029
+      }
+    },
+    {
+      "model": "perceptual-framesamp-modul",
+      "episodes": 41,
+      "tasks": 9,
+      "chunks": 1231,
+      "steady_chunks": 1108,
+      "missing_wall_fields": 0,
+      "steady_mean_s": 0.24599721389891696,
+      "steady_p95_s": 0.26639999999999997,
+      "task_equal": {
+        "total_s": 197.75546596315172,
+        "steps": 553.4777777777778,
+        "decisions": 35.05,
+        "decision_s": 10.731590650000001,
+        "env_s": 11.427335495946721,
+        "record_s": 47.22393539249897,
+        "outer_tail_s": 126.09132707426284,
+        "other_s": 187.02387531315173,
+        "unallocated_s": 2.2812773504431902
+      }
+    },
+    {
+      "model": "pp",
+      "episodes": 68,
+      "tasks": 14,
+      "chunks": 1862,
+      "steady_chunks": 1661,
+      "missing_wall_fields": 0,
+      "steady_mean_s": 0.8636879500301023,
+      "steady_p95_s": 1.8816140000000001,
+      "task_equal": {
+        "total_s": 342.46564115967067,
+        "steps": 540.1964285714286,
+        "decisions": 27.150000000000002,
+        "decision_s": 28.66249486785714,
+        "env_s": 15.37334344800495,
+        "record_s": 36.09590709645168,
+        "outer_tail_s": 218.5034518739564,
+        "other_s": 313.8031462918135,
+        "unallocated_s": 43.83044387340044
+      }
+    },
+    {
+      "model": "smvla",
+      "episodes": 54,
+      "tasks": 11,
+      "chunks": 2491,
+      "steady_chunks": 2329,
+      "missing_wall_fields": 0,
+      "steady_mean_s": 2.180536307428081,
+      "steady_p95_s": 2.455249,
+      "task_equal": {
+        "total_s": 366.2208850936456,
+        "steps": 726.0636363636364,
+        "decisions": 45.86363636363636,
+        "decision_s": 100.91140431363635,
+        "env_s": 15.288955683443188,
+        "record_s": 23.666494226337157,
+        "outer_tail_s": 225.05735327546378,
+        "other_s": 265.30948078000927,
+        "unallocated_s": 1.2966775947651286
+      }
+    }
+  ],
+  "sources": [
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/BinFill_ep0_xhard1/result.json",
+      "sha256": "bd507b122b3d0cd328d438ea57c18e86558118d0300f6128fca82a396b93b597",
+      "bytes": 37710
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/BinFill_ep1_xhard1/result.json",
+      "sha256": "13fcba4c7c20a093a7a141ce0fbfc71cfaa170ab5f3d68ae2cc0ce9f15b1853f",
+      "bytes": 48427
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/BinFill_ep25_xhard2/result.json",
+      "sha256": "c6a3ef76f3b43ba0fbc9ab084e13987e5b8a3ce52b4d5a569ab6f7a3def64127",
+      "bytes": 34998
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/BinFill_ep26_xhard2/result.json",
+      "sha256": "1454e069d9f275221386a43c7056302a09f83e38e3be13045162cc86bdcba754",
+      "bytes": 48407
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/BinFill_ep2_xhard1/result.json",
+      "sha256": "493cb80d61e5eb6ff4f25313c4e70f25fb70ca108099d401b607cab4aeff249d",
+      "bytes": 27519
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/ButtonUnmask_ep0_xhard1/result.json",
+      "sha256": "ea49edf74e0df8df12a9a5950738a21625a2a5915ee70ec784b781c4d4bf1f94",
+      "bytes": 14445
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/ButtonUnmask_ep13_xhard2/result.json",
+      "sha256": "b7213f7ce7ff6b5f92ef727369f1985e35c8632ebd396400df68a6524965abf8",
+      "bytes": 21211
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/ButtonUnmask_ep1_xhard1/result.json",
+      "sha256": "c1ae673bc80845a283ed773de9273ba23ee812857bff6b210f67057486718e38",
+      "bytes": 12595
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/ButtonUnmask_ep26_xhard3/result.json",
+      "sha256": "6071b6c2eadbedb430b2683ce1c6cc81da2d47c7fa2cfba6a77e7d80a116157b",
+      "bytes": 48706
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/PickXtimes_ep0_xhard1/result.json",
+      "sha256": "44e145f73f1753b532828ba1a85dee8b8cc18a6f4ee3a539303a52847bc0ec2e",
+      "bytes": 31687
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/PickXtimes_ep17_xhard2/result.json",
+      "sha256": "f46002a77dc42c825b0f62133e3ab98d632328e50b36935f279570eceb4a429a",
+      "bytes": 37590
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/PickXtimes_ep18_xhard2/result.json",
+      "sha256": "e5176d1d1263343ef0a7999b9e33a9e7d05ec531dc6974f3723fef7d0a349308",
+      "bytes": 44333
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/PickXtimes_ep1_xhard1/result.json",
+      "sha256": "f6851764f23689fa4f60ba72dcde9fc8d31abe5ac3483225419e1c1be0157a96",
+      "bytes": 29787
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/PickXtimes_ep34_xhard3/result.json",
+      "sha256": "e2c358ab75b2dfb05dcfa06c37dd05b8fc96933e872c6bf95c49012ea2e94a41",
+      "bytes": 26123
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/StopCube_ep0_xhard1/result.json",
+      "sha256": "680dba52da508f2fe4fc8e91d229a0ffc0e3aa7e64c973145bfd105d7d209acd",
+      "bytes": 14960
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/StopCube_ep10_xhard2/result.json",
+      "sha256": "35d833e58d4ecdd35f9e4652df1e0a1f8660d10d3d9fe90bb628dca66c0a0214",
+      "bytes": 16494
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/StopCube_ep20_xhard3/result.json",
+      "sha256": "fa4f1aa4c52ec1b1fd8b82c354146f3f9ae01394e9f9990448e2c681c92b83d7",
+      "bytes": 17577
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/StopCube_ep30_xhard4/result.json",
+      "sha256": "00512a0b780ed149de154cbb59a329ddc16df63740115f160d4b0681c2ec01cc",
+      "bytes": 19042
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/StopCube_ep40_xhard5/result.json",
+      "sha256": "4fb06099386d519f2aaa3105e7b00a40bc21d3c2f33885b876d07c1c955777ff",
+      "bytes": 20525
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/SwingXtimes_ep0_xhard1/result.json",
+      "sha256": "9a93b3dd77eb2d984520e0fc83b64b8efec20ce5d196b246de0e43100bb3d712",
+      "bytes": 16827
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/SwingXtimes_ep10_xhard2/result.json",
+      "sha256": "40edc341d95de85d57e60fc4dc850e586891ffa42f79c115e7a97573595e6231",
+      "bytes": 22359
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/SwingXtimes_ep20_xhard3/result.json",
+      "sha256": "702f7b71bcca6f90156b61a9977ba663f1c6ece452d7907e391f157e50d4f098",
+      "bytes": 19756
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/SwingXtimes_ep30_xhard4/result.json",
+      "sha256": "acf5fceb2b3a30eaaad6138283026b827fc06d0e7f8695707955a67d94d286c4",
+      "bytes": 20139
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/SwingXtimes_ep40_xhard5/result.json",
+      "sha256": "6d7630985639824689386dc54c8911558f91a6defbf4db01dd0c1090c6553b7b",
+      "bytes": 20879
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "sha256": "60af0b540e8384da15686ae108a4c616c82c0778ad74856e757d4c7ca89a3718",
+      "bytes": 14599
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/BinFill_ep0_xhard1/result.json",
+      "sha256": "6cae86382665bc10becd61bfb7d6aaf0e4201cd817b2747fb9bd9695497202dd",
+      "bytes": 26269
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/BinFill_ep1_xhard1/result.json",
+      "sha256": "635742531ce7fc98947a58db37a3f532e86aaca35e779b0c02cda40288caaddc",
+      "bytes": 17850
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/BinFill_ep25_xhard2/result.json",
+      "sha256": "2e000c2972a8760aba6eb0f28e93f31b20002a7b69f1f318dd8ac72055d37518",
+      "bytes": 24625
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/BinFill_ep26_xhard2/result.json",
+      "sha256": "b4bde814ba5d3928933887b7feecc9caa9360c4978ca73e222bbcf4783519184",
+      "bytes": 24547
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/BinFill_ep2_xhard1/result.json",
+      "sha256": "e67c5a3b2c5973dc3a74a1077c0b78b8d7769fee5993c98165887fb38a0c993a",
+      "bytes": 22689
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/ButtonUnmask_ep0_xhard1/result.json",
+      "sha256": "bca0aae7ea86c098d9361c9a18bd252a3df7120d54d5f6787ab98f151ec1d7c4",
+      "bytes": 10795
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/ButtonUnmask_ep1_xhard1/result.json",
+      "sha256": "70de221e057f6295d42dda6bb8b5684dfab982c0ed1645e9317a94e6047efb86",
+      "bytes": 9325
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/PickXtimes_ep0_xhard1/result.json",
+      "sha256": "0c124b2fd287784d9ee42ead72e14a5dcc901572a44837c267f7b26f17240a55",
+      "bytes": 14734
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/PickXtimes_ep17_xhard2/result.json",
+      "sha256": "d35ce1fcff2cefe40b9014805c5836669852f15883cd19311f76fd7e10e2a0bd",
+      "bytes": 17256
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/PickXtimes_ep18_xhard2/result.json",
+      "sha256": "89fa391274cd8de13a484a4895ff701d59eae6b6da7e5bed1d9d15586fe98406",
+      "bytes": 13749
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/PickXtimes_ep1_xhard1/result.json",
+      "sha256": "81d56d004f9f201f3d37a8aa815d22c0449970143a7587cb013a8285946c4e1a",
+      "bytes": 15403
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/PickXtimes_ep34_xhard3/result.json",
+      "sha256": "5e44199e1a374c83bb4324baa30f93baa4553a5ea186c9e10610816482510ff9",
+      "bytes": 14225
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/StopCube_ep0_xhard1/result.json",
+      "sha256": "9a97676edcd2cd8fdc1f9597eedd2e60b19fd134e53a30bd0a5025335844d339",
+      "bytes": 9155
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/StopCube_ep10_xhard2/result.json",
+      "sha256": "5f5d5e8de6fa1bb32216d8d0ee83db84845d861973b7b0a0a5d89898a7b2ec98",
+      "bytes": 9982
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/StopCube_ep20_xhard3/result.json",
+      "sha256": "6620cc10e502bfd2166dd256b66044b2864df63afd55975e56b1d89ce5da03f4",
+      "bytes": 10484
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/StopCube_ep30_xhard4/result.json",
+      "sha256": "9ec52d10c4b2fec12f5530fbca56ee04f2dee0404fabbf029a04095513c6ca22",
+      "bytes": 10962
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/StopCube_ep40_xhard5/result.json",
+      "sha256": "f6ffcbf047b4e9ac77de7da20a9d6cedddc415ebe0e8745ed689dede8fa61eb1",
+      "bytes": 11646
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/SwingXtimes_ep0_xhard1/result.json",
+      "sha256": "19d087d5cc204669313cff26071d367316853cb17cf19c202ad196e44cf0160b",
+      "bytes": 12376
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/SwingXtimes_ep10_xhard2/result.json",
+      "sha256": "afedb172f09330379d378d226f639fb7f023cccd6ee504cb9ae38b0ce066899f",
+      "bytes": 13010
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/SwingXtimes_ep20_xhard3/result.json",
+      "sha256": "405b293b4b155d8322a7774deb901a4fe39ae87dcdc09e369a5b45597f183571",
+      "bytes": 14688
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/SwingXtimes_ep30_xhard4/result.json",
+      "sha256": "b85dffd441ec9bfe2b9e4e170403a84ec517b3247816584cbccdebb8843f449b",
+      "bytes": 14197
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/SwingXtimes_ep40_xhard5/result.json",
+      "sha256": "8a6b700841128ab933a8f5dc1bf5c7969cdefcbef90e254bab53edddf1a480a9",
+      "bytes": 15200
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "sha256": "de0106e3a49cf050812c9d29b7d3bbcef5d6b07c819666bac3c3229ef17d8b71",
+      "bytes": 9637
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/BinFill_ep0_xhard1/result.json",
+      "sha256": "c80e8593828f2ed039fc9720c386bb5fb725828e311c1751c08ace595aa6619a",
+      "bytes": 46532
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/BinFill_ep1_xhard1/result.json",
+      "sha256": "7ad35aa249e49a946f89302facf2941ba5c16c34c7ac5f33e7f7598dcd18348f",
+      "bytes": 47852
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/BinFill_ep25_xhard2/result.json",
+      "sha256": "b4147ded0ee2a0221bd0f38ff070abb763836d99b24d239481bcd4e11141da75",
+      "bytes": 39313
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/BinFill_ep26_xhard2/result.json",
+      "sha256": "98ba873ca83862ac254567440d95dde656ccc4e853478dfa6e627c459e78f52d",
+      "bytes": 43359
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/BinFill_ep2_xhard1/result.json",
+      "sha256": "219c90497a455db009fc83eb479f0f16d16f3b526f7887fff98a804bfd299054",
+      "bytes": 47880
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "8e36b1b43a55d152091dac514acfd6d70145056b997719bc9ccf17071d8ff776",
+      "bytes": 15005
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "52d9d677014a03a4ea8d0c57b7ac78c0e5a97782ab790a2f262cc93207bee3d1",
+      "bytes": 14764
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "7eede8932153cb2161a3357c7f56c5b98ae4451125146c0ea8cbb7705db45401",
+      "bytes": 46890
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "6886674f3d801e8d32b81cda90fa119352e227e1e88ba504db76fa06ffc64024",
+      "bytes": 16632
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "bd6b7bbb178909eff5862b9ae1713fa8f12f45c3d4c8ce5ddd96514ad380617c",
+      "bytes": 17350
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmask_ep0_xhard1/result.json",
+      "sha256": "c565d88e4692715c81d3ba5b26b14d688db0c58b26554c88f6b594bf8ac184a2",
+      "bytes": 47446
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmask_ep13_xhard2/result.json",
+      "sha256": "b0f9a8fad981e4cb9ce06b0d62014ed2bc2b8eff63da04fd027a368d32a4e093",
+      "bytes": 13880
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmask_ep1_xhard1/result.json",
+      "sha256": "34e9cbeb562804b380797f2094f8a903d9476d8bcb0420ab5cacbbbd3111d7e3",
+      "bytes": 11876
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmask_ep26_xhard3/result.json",
+      "sha256": "1e48e366907197523b39f09501152676127abd47338f3fd773f3c535f79ed560",
+      "bytes": 47637
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/ButtonUnmask_ep38_xhard4/result.json",
+      "sha256": "29884cd205f7380bbce7a886afa3e836e0b1bd067f4a6cf33840141a51bb5663",
+      "bytes": 47603
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickHighlight_ep0_xhard1/result.json",
+      "sha256": "49cf1002e18cd7d7adf44ad174d4a765cca233577f6044a7f5eeed49405052ee",
+      "bytes": 11817
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickHighlight_ep1_xhard1/result.json",
+      "sha256": "81b847b25b3c5ab65ca6028e0ba6ab292a65394b2d5611df983ed1cad87b2c41",
+      "bytes": 47398
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickHighlight_ep25_xhard2/result.json",
+      "sha256": "5b01318a6de6c6c812817308892d63d02d3223af31434bf8b1a5d301bdca72aa",
+      "bytes": 15480
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickHighlight_ep26_xhard2/result.json",
+      "sha256": "b8aa0181c628800707972d06fbc2be46e201165eedbb1e5e6c85f3f586568a06",
+      "bytes": 11506
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickHighlight_ep2_xhard1/result.json",
+      "sha256": "26c081c49e53f84bef57b887e7f935464accdd9b49be87e850c389018bfd5587",
+      "bytes": 47379
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickXtimes_ep0_xhard1/result.json",
+      "sha256": "ef34dff464c94c4750f22d4053118f3a9daf275433dd4f8aed295c4cf21eaafa",
+      "bytes": 38291
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickXtimes_ep17_xhard2/result.json",
+      "sha256": "e90dd8473fd2d1ec2f5fe20b6bab2ad6746903f0dbc652723428b618aea230b5",
+      "bytes": 35708
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickXtimes_ep18_xhard2/result.json",
+      "sha256": "c58667e263cac39ec301402a5f59a2ef289224f786dba8b03064f075c139f7bb",
+      "bytes": 47948
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickXtimes_ep1_xhard1/result.json",
+      "sha256": "bcd8dc6be4d5ef27f7315acf4ac152eca1ce28296524285717fda1342f85f20d",
+      "bytes": 33138
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickXtimes_ep34_xhard3/result.json",
+      "sha256": "0a807518516b7d3d9ffc74ff4dd676061a7a78faceca14c5620982f7fb5796e1",
+      "bytes": 36782
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/StopCube_ep0_xhard1/result.json",
+      "sha256": "73e6605bab1f8d772f61bc972c895bf5490b165d12d1c7db313008034ee1be7d",
+      "bytes": 14805
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/StopCube_ep10_xhard2/result.json",
+      "sha256": "41b1202f0f4592a733ee1a9dd8f60f8df22f9b58657fa667f42eb88cddce03db",
+      "bytes": 16273
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/StopCube_ep20_xhard3/result.json",
+      "sha256": "418173795804ba09b47cf688f3f89b98f76ad49dc9bc27808647c5bd12764f97",
+      "bytes": 17349
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/StopCube_ep30_xhard4/result.json",
+      "sha256": "678cc9ed4aafdd2b78405cf980c4250796407a0fbfbaf09c8059849340dc1433",
+      "bytes": 18814
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/StopCube_ep40_xhard5/result.json",
+      "sha256": "a1692c93fb6a5e3a12617d4a90256266c707ecef6c2487d7c50148303401b8c9",
+      "bytes": 20239
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/SwingXtimes_ep0_xhard1/result.json",
+      "sha256": "95560b512501dc8af006d7af0f003b599c8c3eecf3494b051b394e2ac9f16182",
+      "bytes": 20253
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/SwingXtimes_ep10_xhard2/result.json",
+      "sha256": "9e0dab4a642ffcb5c474d106fc74e43665269d003a8cf4b0f85d525ff06319f7",
+      "bytes": 19914
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/SwingXtimes_ep20_xhard3/result.json",
+      "sha256": "68e036169554288bc74c6ad1ad65ab4ee8c8f015396e441586eaa775cc3385b1",
+      "bytes": 20613
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/SwingXtimes_ep30_xhard4/result.json",
+      "sha256": "0e0d038c04a33fbe7753cfb1ef0f42b4716216be4260d4acfb51656f92075f44",
+      "bytes": 22460
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/SwingXtimes_ep40_xhard5/result.json",
+      "sha256": "c7d725d79fd51c2e0fc59b3d1803f0451bc023b075b9443f31613b171b283a82",
+      "bytes": 22392
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceButton_ep0_xhard1/result.json",
+      "sha256": "52eb5f7eff1c40c7c0acc2a686797635ef906c7647b29c9b1de2c16d0e644b07",
+      "bytes": 14369
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceButton_ep1_xhard1/result.json",
+      "sha256": "b130add515c01151deec4343bba4446f686b8bb50aa77a322297d96e64c4ddb6",
+      "bytes": 13261
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceButton_ep25_xhard2/result.json",
+      "sha256": "327b723868e74c27a69a2c5da15d7c351f4a34a31134a0079dcbb568fc7d1471",
+      "bytes": 11085
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceButton_ep26_xhard2/result.json",
+      "sha256": "230fb9fe29d83347ddc866c840bb04bd8fa1dc161a58c413741ecc5a4ba4ea50",
+      "bytes": 10672
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceButton_ep2_xhard1/result.json",
+      "sha256": "4c6685773556b94e2b8d546893ee350b4849701bb5b853a4e11581689e88236e",
+      "bytes": 11411
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep0_xhard1/result.json",
+      "sha256": "a3af689de3b062f90b1e672fdbc56d3be855cb7c9c280dd8da4186e4d1a27c34",
+      "bytes": 12115
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep1_xhard1/result.json",
+      "sha256": "7ac2d6ef09c150759efdf25f218773c8285e465186afba841392f195d99c1383",
+      "bytes": 12109
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep25_xhard2/result.json",
+      "sha256": "28ee64f026f18dd7bb3f8f61e76af732d1d01613306f972a412cc6b65b06c126",
+      "bytes": 11729
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep26_xhard2/result.json",
+      "sha256": "cdb42271aabaab9b2d50be788f6700471ee2b34cfc9afc3044aa100c9b09461c",
+      "bytes": 971
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep2_xhard1/result.json",
+      "sha256": "ecc46657a56ffb92e76328f70feb865151deae05b31abf424a120bd5fa2c1668",
+      "bytes": 11723
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoRepick_ep0_xhard1/result.json",
+      "sha256": "3c061ec51080873369196ad033cada79fc64f4f44ba590889163298075466baf",
+      "bytes": 11518
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoRepick_ep1_xhard1/result.json",
+      "sha256": "38598a81b6113e4187a7d033da9fb0c28e70dfefc82ae6c9387156561349eba6",
+      "bytes": 15193
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoRepick_ep25_xhard2/result.json",
+      "sha256": "1cc092b47030b3739f5840b15bd3fcbfab56ecdfebedc438b96ff7b58d06376c",
+      "bytes": 10057
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoRepick_ep26_xhard2/result.json",
+      "sha256": "4c553c0509517da38694a659326abd86ccb88caea99d08e5279ae36457a16b49",
+      "bytes": 17486
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoRepick_ep2_xhard1/result.json",
+      "sha256": "d5d21487ccef1ba41b2ab4621137e4fba1a4ec0d818e7f0794f04c19a538f2f2",
+      "bytes": 9306
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "799efe5f3ee4230315d650ee54447b35573c15870c6ab7205343617673303a56",
+      "bytes": 9215
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "dd505642009e867a80ab71cc0697228eb4c3a294b6e6a1f06a04f9102e1900ae",
+      "bytes": 10677
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "6f19cf0968ab02ab26e4ffb180ecf53409cbc4d8d851a0db220d1ca044ad5ea3",
+      "bytes": 18219
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "8104df39c0aa0828373f0c1ea89dde5a50aadee8a9eb8f2142f4de8628e676f2",
+      "bytes": 11243
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "12b66020c12c95b8824a4cea63e17d2e4f9fe923aaef30fb3fc48cfde5d95c41",
+      "bytes": 9962
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "sha256": "0c9aa37b0a63fe76703e40c251144d00fcf545483f9adbae80cc7531616eddde",
+      "bytes": 18503
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep13_xhard2/result.json",
+      "sha256": "d2aad5c05e63b1346e2eed23041de7a61db49524861387fa6f0c49a39f3e0dc7",
+      "bytes": 17479
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep1_xhard1/result.json",
+      "sha256": "a32cd5c17f3b54035293463ffc6e286ce402fec4b5e9d830de4f8e8f51ab876d",
+      "bytes": 15097
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep26_xhard3/result.json",
+      "sha256": "28df74a3eb2960c6caef4b0361a5984c6532dfdc429e55f6df59751e0ab38336",
+      "bytes": 17824
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep38_xhard4/result.json",
+      "sha256": "0f3fe272078cf9a36034ec61c746104b3e5a99717fc0328e3a45672529fa59d6",
+      "bytes": 9669
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/BinFill_ep0_xhard1/result.json",
+      "sha256": "c3c3dcfa12d9a55fb046dbc8eecf115eac6a5ca53940fd04e73da635d078a56b",
+      "bytes": 15471
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/BinFill_ep1_xhard1/result.json",
+      "sha256": "4c471abb2d5dca1de7b9d0e9f8592fad87f8065f569e1ba4b2763df60115fd1f",
+      "bytes": 14754
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/BinFill_ep25_xhard2/result.json",
+      "sha256": "c080daad3ffe3fcc40e55e725272837a72b5e164cea0c22722cbf5c5b37bfe1d",
+      "bytes": 13046
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/BinFill_ep26_xhard2/result.json",
+      "sha256": "d3c4f31423a48c533371cd959fa2ab4e0972c60ce449bc7fc384437b08086f1f",
+      "bytes": 18640
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/BinFill_ep2_xhard1/result.json",
+      "sha256": "0db94557bb0aa7970b979b0cf3034414f72585bbd00e7f8b34672acc39652d1d",
+      "bytes": 10464
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "48df64fbf21f519f036ae5c3f0c1312f414e31ca8d218ff4957d271f11eea7e2",
+      "bytes": 11418
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "2be7f8a1231ea31b6f45b65bf3be9f6d8f2e6fabbe09c79cbdc855765c5b34ca",
+      "bytes": 9308
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "b4dbe63f509ecfa454838fe3404a02d638ac0a4954b5eb7ad8d00d0d3cc9b934",
+      "bytes": 9387
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "bcb2e66dcf6543bb70f7e4d3f203b502e41a6f1ac900bc80cce817d972e3560b",
+      "bytes": 10483
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "3b32184007fcc8bac390f6fc63cc8eb48ff7e0433686fa00a87bfe8ce82fb3fe",
+      "bytes": 29361
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmask_ep0_xhard1/result.json",
+      "sha256": "9dd959d5e8c337872ffe9fd5dd08b57b9aeaa3a8bf913d08dc2a2b4a3f82833a",
+      "bytes": 9462
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmask_ep13_xhard2/result.json",
+      "sha256": "e8d29d91b30fe1b6fa133c35bb0a0225f28d935d1740e82d0babb4155a9cb527",
+      "bytes": 7606
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmask_ep1_xhard1/result.json",
+      "sha256": "6c882ce7279376a9dc474361d563fd01f1e6c805f34b38ac03a4cb8a2849a292",
+      "bytes": 7702
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmask_ep26_xhard3/result.json",
+      "sha256": "d39582e6209b44da6169a69f48481f3afab4770eaf2d9dbc994be1a97785bcb4",
+      "bytes": 7840
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/ButtonUnmask_ep38_xhard4/result.json",
+      "sha256": "41cc9647ffd69a59eb1ab1e8fb718e0aec7744b8e980f485b6426ac2b50e5268",
+      "bytes": 7851
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickHighlight_ep0_xhard1/result.json",
+      "sha256": "1970775aa93f46622de3222fd527e34f73e493578b1f12331df8eb5861329fdb",
+      "bytes": 29239
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickHighlight_ep1_xhard1/result.json",
+      "sha256": "7833b2c20ee3e9f551dbafef847361279d82ff2d14b11e5bdcef0bcca2d02e42",
+      "bytes": 29241
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickXtimes_ep0_xhard1/result.json",
+      "sha256": "28a14b72fd39248cf6697478205c9f24f5a37fbfa75326e9f26261018df06f57",
+      "bytes": 15241
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickXtimes_ep17_xhard2/result.json",
+      "sha256": "2ec223b58d7eab32092fc02023de4fc97908653ab3330d9f5a9607b857873b7d",
+      "bytes": 6159
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickXtimes_ep18_xhard2/result.json",
+      "sha256": "6d5797774a8feb3beb5671e3088d580b820b164e49b339d3f5f5e6d4cf940992",
+      "bytes": 11596
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickXtimes_ep1_xhard1/result.json",
+      "sha256": "2d130313930309f274a45474234e1cd900142570260efe640e65219fb8a2b3fd",
+      "bytes": 12865
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/PickXtimes_ep34_xhard3/result.json",
+      "sha256": "096ece7b6752dc9208f8ed04663be1b4ae2375895905f0c4de1914a420d10827",
+      "bytes": 6360
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/StopCube_ep0_xhard1/result.json",
+      "sha256": "59b0cbe686cdc157bc8c667aba89adca13615f7c391163534ed0430a5cdd2d92",
+      "bytes": 8698
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/StopCube_ep10_xhard2/result.json",
+      "sha256": "6816deae50db88a07ecc2b5a8d2fdad45799c02392724f46da4ac26cef042e53",
+      "bytes": 7624
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/StopCube_ep20_xhard3/result.json",
+      "sha256": "6784f78fe6cc1f94cfde0503e150bd800a8c08bc8ec183b4fe86a6a5b48d1111",
+      "bytes": 10427
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/StopCube_ep30_xhard4/result.json",
+      "sha256": "0add02bd37326c2e7e338426ce43a4a7e4ce00f7325e21354fa9aaee49a46330",
+      "bytes": 11054
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/StopCube_ep40_xhard5/result.json",
+      "sha256": "a867d51cd83c0e49e1317e5c56bf8f942cfe245a7cd6128e110df63d3bf98b9a",
+      "bytes": 8477
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/SwingXtimes_ep0_xhard1/result.json",
+      "sha256": "c911b31ee80d228f7c4eece950786aa14d56edb05f23858d25af771437e90565",
+      "bytes": 12188
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/SwingXtimes_ep10_xhard2/result.json",
+      "sha256": "4eb675c29ada799acd66d2e1d96b37812ef74a0e1856b1ee400ea5c0b8f9e4d3",
+      "bytes": 11514
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/SwingXtimes_ep20_xhard3/result.json",
+      "sha256": "d30136f7f962b9842beb75065e7f392851d8d78c0afda057152b2129761d4b74",
+      "bytes": 11745
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/SwingXtimes_ep30_xhard4/result.json",
+      "sha256": "27198a1c0b488bd4a6a65545ee7b7f664d6a978ba9b846c42ee7c795a433be46",
+      "bytes": 11129
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/SwingXtimes_ep40_xhard5/result.json",
+      "sha256": "e9344d7f70ec92e63478bf18402e241ce85680370b3e6363605f73d94c0bfc42",
+      "bytes": 10871
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "aba267d19e27e8bc19d307e85d70dd4db43d28b0d8cd179a30a28396f64ae351",
+      "bytes": 6414
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "74b990a8727c42a64b1e49ad1645eea26c6e30a03a5c9bd8a51b856b65cd584a",
+      "bytes": 8603
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "40046e6fab0a38b7fc018c147a72f4ac049dc87e0eec5882594342ea89b6d6af",
+      "bytes": 10875
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "70ef04f5456754eb431621a584e87bf403115c4105d4d0225d931bdbb584b596",
+      "bytes": 6313
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "c2250bc342fa83f401d7bc58b3ba69e779d61d1094146b8a6b2a21cec5955760",
+      "bytes": 6642
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "sha256": "a0067fe083d37a2bba42adbc2c372493ec29707db305c21047fb95ae57dcf793",
+      "bytes": 7804
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep13_xhard2/result.json",
+      "sha256": "788cc01fc897ade56e77cc6f419fba75478970811640a8aba4718d45edf10e67",
+      "bytes": 6324
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep1_xhard1/result.json",
+      "sha256": "9264ae5ba5d15d3221eb559f766983e0a6675606954c8fa6313db13b516e146d",
+      "bytes": 6206
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep26_xhard3/result.json",
+      "sha256": "3a60ee799127d0ef6b8097e413f47cc09507ab18df36186f49dbc5a0705d955d",
+      "bytes": 6296
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep38_xhard4/result.json",
+      "sha256": "eebf86796949b0d4fdd45777e305064ec62f55ba6fd85e2a7c62a7a5e1b6d2a2",
+      "bytes": 6515
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/BinFill_ep0_xhard1/result.json",
+      "sha256": "a2b0ccded7470836466dc20824bc50e262e95bb131ac0fc2547ec75ba5ef35fd",
+      "bytes": 69492
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/BinFill_ep1_xhard1/result.json",
+      "sha256": "a0562ddbd57ae9469df7fc311de4d74d07fc6c9c1de72657f5833b590d229fc5",
+      "bytes": 69284
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/BinFill_ep25_xhard2/result.json",
+      "sha256": "55a6ec7b5ae1cb70299ea70a4479fb14ba5f8aa737cb249312d7822c3b2c156f",
+      "bytes": 51944
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/BinFill_ep26_xhard2/result.json",
+      "sha256": "4349fd83e1b1d94abffb6769fe964f6423eb476c3cc48a55a20325f12ebabfc1",
+      "bytes": 69209
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/BinFill_ep2_xhard1/result.json",
+      "sha256": "0956c9ab74a7ef303e37d315cbf9902b7eb3c3fcdec0921999725b564a16ca4f",
+      "bytes": 69288
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "824275ed04b048e4c044bff2d75dfab0e500684698810d437f782431e5900daa",
+      "bytes": 16120
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "da35d1927549da87cbe01c72899ec4af9b4938b01eca14ee18acd7f4ee6e25ad",
+      "bytes": 15501
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "5c0b69f03c479cafe1ff763e392c32683596abebd2cb1283efd6d04b0a2ba96c",
+      "bytes": 24428
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "1dde6c0f507c27f38df55ab804f83c8fbc778d8dd961cf7762073891d399a255",
+      "bytes": 15490
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "c6da3f3f06f262e545dfba5f31f339153f2fa312238ca46bbca4ba7693026460",
+      "bytes": 15574
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmask_ep0_xhard1/result.json",
+      "sha256": "373ea87307e26f28b93521cd798a995a6843161f8bdd3b52f53fbf20f528e5f3",
+      "bytes": 12580
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmask_ep13_xhard2/result.json",
+      "sha256": "bfd5df0bf91ea7013225c657763a923ca9ff9512ac7da6f595c5bfe68c84deab",
+      "bytes": 24885
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmask_ep1_xhard1/result.json",
+      "sha256": "7d17b60a71382ab30a496e9ac6f3d1237529c7b95173b9547c59a37645de558a",
+      "bytes": 17567
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmask_ep26_xhard3/result.json",
+      "sha256": "495a5c9e6c3569b97038fe7adbbb9722784d4ef02d562aa296543482e389cef4",
+      "bytes": 16106
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/ButtonUnmask_ep38_xhard4/result.json",
+      "sha256": "505490ec850dffe21acc5f290afe625f4a6a71b26ef1c68850589592b2343229",
+      "bytes": 12517
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PatternLock_ep0_xhard1/result.json",
+      "sha256": "f7f9cda9f40b427d72839ade694ac9e46d24817b4c588d62dbd865d49d1d6aac",
+      "bytes": 6514
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PatternLock_ep17_xhard2/result.json",
+      "sha256": "1d01f973db9a0d480d847e23abd5a1766ac69db0bef051b0613368cf9cb43e37",
+      "bytes": 5035
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PatternLock_ep18_xhard2/result.json",
+      "sha256": "3e8c3bc585a0c47bd8e403ff2c8069cc3796f226a38df3453520b146817bc477",
+      "bytes": 8697
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PatternLock_ep1_xhard1/result.json",
+      "sha256": "aab5523dd79bc290770d83d1daef2f1b1cb3a5d727d803788c15c5ba25b02e3e",
+      "bytes": 9014
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PatternLock_ep34_xhard3/result.json",
+      "sha256": "27c6b7b52aebdec5467224671dea543a7e6fc426570cf4b2e4abc018a4e77931",
+      "bytes": 11067
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickHighlight_ep0_xhard1/result.json",
+      "sha256": "acefed6e42073864d1ed9516632b4ecdc2a151125a605424fe802eafaa79e947",
+      "bytes": 19938
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickHighlight_ep1_xhard1/result.json",
+      "sha256": "e2c0799374590137ac18b4f1d693ea86b73139828fb2dbbc6bf55c92eb0df534",
+      "bytes": 69211
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickHighlight_ep25_xhard2/result.json",
+      "sha256": "cfbd327a6f39bd7b7910bd41c6c08eea094f7b6a03f8ed0dd154162287fdddb7",
+      "bytes": 69236
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickHighlight_ep26_xhard2/result.json",
+      "sha256": "f3e55898e61f0efb24ca5afaa48d68b312e1e463299f1906764d9cae1255a47d",
+      "bytes": 69285
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickHighlight_ep2_xhard1/result.json",
+      "sha256": "ea0fe5aca9e787839bf3796b982e1b10efa5b60d492c0ff4692b524aac77bb9c",
+      "bytes": 69311
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickXtimes_ep0_xhard1/result.json",
+      "sha256": "f819f455f37800d6abc3425ab0db6a5b6d8822a46cdbe073c03653ecb9666056",
+      "bytes": 39566
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickXtimes_ep17_xhard2/result.json",
+      "sha256": "da055aa811c80a9b0e2126e0f7f3746465415e3f87450191905c49182a7971d8",
+      "bytes": 43782
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickXtimes_ep18_xhard2/result.json",
+      "sha256": "010d65dc00a5d4336cfdd14db0d1b605912fa5c7f842363ebd57007266feaaab",
+      "bytes": 69319
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickXtimes_ep1_xhard1/result.json",
+      "sha256": "18de2ea4161068cb3230c3c99b934385706cb04349e5f6af6556ad3399b71ced",
+      "bytes": 52329
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/PickXtimes_ep34_xhard3/result.json",
+      "sha256": "6863ff379f39f9476ba6cf036ba9be227c4f80459e09d0f5be94538ee4494af0",
+      "bytes": 48792
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/RouteStick_ep0_xhard1/result.json",
+      "sha256": "45af00a75fb433df6632d2409ee016a22c800e06abe30690fc53d95d789aa77e",
+      "bytes": 5906
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/RouteStick_ep17_xhard2/result.json",
+      "sha256": "5a7d2b99a700bd20e53e881d5d41a41344da7611d14e78de93fceacdfb17ad1b",
+      "bytes": 6008
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/RouteStick_ep18_xhard2/result.json",
+      "sha256": "e80515e724b4fdba534a2df1b4cf892178a963c9f83271008af51c0ad40ba552",
+      "bytes": 5322
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/RouteStick_ep1_xhard1/result.json",
+      "sha256": "9392f94173763ab532a60ac721f5fe48dcc844ce0e1934041a208f31c222dc1f",
+      "bytes": 5522
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/RouteStick_ep34_xhard3/result.json",
+      "sha256": "fe1d8a2355dfbf343fa8521ee98aa66815436d91e9e09ae9c3954f371d643132",
+      "bytes": 5884
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/StopCube_ep0_xhard1/result.json",
+      "sha256": "2ec670e2b2dd5b989d69e5c6e0707258dc6caf1541bfff3b1a61049e57259f23",
+      "bytes": 14665
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/StopCube_ep10_xhard2/result.json",
+      "sha256": "4732cc268d245e351bc3b5a3c061c18e850110384443208450630c9d13470adb",
+      "bytes": 13112
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/StopCube_ep20_xhard3/result.json",
+      "sha256": "1087af6f4762a593dc21ad93dc67117a3f5a5acefe44aa98ac3d22998ede3281",
+      "bytes": 11669
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/StopCube_ep30_xhard4/result.json",
+      "sha256": "f07a17d23560414e3de248cd879f52d6cd648cb17b72d69bcd310232d46e0c4f",
+      "bytes": 13273
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/StopCube_ep40_xhard5/result.json",
+      "sha256": "ea410e440a5195f22baa89fb7e0c2ebffde81ebaab92102072c8266c8815a163",
+      "bytes": 13296
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/SwingXtimes_ep0_xhard1/result.json",
+      "sha256": "f3b11a039b16e5e7129b91ac5e3ce44fb80f4d4d0ed3dfffc9035003c3f91f5d",
+      "bytes": 29331
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/SwingXtimes_ep10_xhard2/result.json",
+      "sha256": "177f1ed7e6871ddf59726b256d4a8ee7e76983664b31cff33e01ea6187d816a6",
+      "bytes": 27280
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/SwingXtimes_ep20_xhard3/result.json",
+      "sha256": "d077ea23a4f5761bb77b9f160c58bcd8413e03580b7147f6f27afbf13e2aa577",
+      "bytes": 29585
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/SwingXtimes_ep30_xhard4/result.json",
+      "sha256": "ac0d6a396a642a2ada54140a28bc4caaf2854818e38c182bd1d39e5f1c3de5de",
+      "bytes": 25844
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/SwingXtimes_ep40_xhard5/result.json",
+      "sha256": "5718f876792cfcf99270f9075a4dbddee57bb7449e22ca49c7db6a812a6c97f9",
+      "bytes": 22711
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceButton_ep0_xhard1/result.json",
+      "sha256": "cf129f7ea754265d54a359b46c17272aaa6636fd43bd86b1269f00aea544989f",
+      "bytes": 11851
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceButton_ep1_xhard1/result.json",
+      "sha256": "b5c71c71db5eb5bfbc368d52c46e7099b559286cf7d18bb39532176701172f53",
+      "bytes": 9813
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceButton_ep25_xhard2/result.json",
+      "sha256": "d80d6fd101a99adba9a48e150efacea7197d901c3271901669e2ba94b906260a",
+      "bytes": 10612
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceButton_ep26_xhard2/result.json",
+      "sha256": "fb507bbcaad6a375469c03062a6f6b3e08d480be46c2d63352c3aa3e97734acc",
+      "bytes": 11308
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceButton_ep2_xhard1/result.json",
+      "sha256": "e0817c5bbc341db6ad3f402bd7cf1d9dc7645fe64ad34e43063b2ab4b44a323b",
+      "bytes": 10439
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep0_xhard1/result.json",
+      "sha256": "c09787c4fbb89c486590d3a5e62c397ff9203002e777f34250e643c87731cacf",
+      "bytes": 64292
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep1_xhard1/result.json",
+      "sha256": "c070530b53da65fcb1bbc5ebd6692220b2120d650a7cf1931b6692586a9a0969",
+      "bytes": 10548
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep25_xhard2/result.json",
+      "sha256": "6e7021263d4c2b527c48035ec96c6d7af8812da0def44edec1c993597b72dd6c",
+      "bytes": 11252
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep26_xhard2/result.json",
+      "sha256": "a8f5d0a303ffe3504f582ed17c4bb385f9615c7e6bd8380b9c0543553ae98ac0",
+      "bytes": 22497
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep2_xhard1/result.json",
+      "sha256": "7f6e415f2c218004b1e2998b6b9c32b5cdadcea075290f222df50879d9ecdf2a",
+      "bytes": 11335
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoRepick_ep0_xhard1/result.json",
+      "sha256": "b90d852f8a8706db18e008709e3beac67ed6e3dd92752ac2f2842092cae45476",
+      "bytes": 7574
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoRepick_ep1_xhard1/result.json",
+      "sha256": "0a90d3e76fea7ca4551c060657139134150b009ca84e8b4c78d8ead87df7d869",
+      "bytes": 7721
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoRepick_ep25_xhard2/result.json",
+      "sha256": "e113e3049de9f397f090ae2872de52d0528ba1d4ab877ec52721842043024c17",
+      "bytes": 21536
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoRepick_ep26_xhard2/result.json",
+      "sha256": "a6419127aa100baec5964c07dcd228d8f7c1d4c5bfff0bfab8f28207b979f919",
+      "bytes": 7576
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoRepick_ep2_xhard1/result.json",
+      "sha256": "fe26bd58b5e8f42dc093d852bb335b6f56098c151a1c439e0b94cf1bc09e5b70",
+      "bytes": 7337
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "581820c0e73d5c7ca4ac836a7c1eeb89f4cc295768422823771dd72c3054fd82",
+      "bytes": 13234
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "ffe2e2217ed6de8035d17283317e74b9e02997f0ece3307b50351eae0617184f",
+      "bytes": 7526
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "e06ead20113965919488c73ace44df90a5c9fbfbc0467e25044a5e22c356071c",
+      "bytes": 10684
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "4ecd77a7f7f47aeb52c710cf5cb18ee7b0a0c48edbc6c475b78327e0f2528457",
+      "bytes": 7690
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "ff323b8ed61bb4e06de57edf07421bd2eea8bd62e2e14f7a4f58749be3ecb49e",
+      "bytes": 7990
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "sha256": "e5f21d3e54b86011a33ef39350e434753c6c49d70232935fb039c64faf7152ad",
+      "bytes": 14154
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmask_ep13_xhard2/result.json",
+      "sha256": "57666d5940244412ab927e03ea498487c08ec12ea7c8cbccf6dab17c6126d0c2",
+      "bytes": 31421
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmask_ep1_xhard1/result.json",
+      "sha256": "1f43e34dfbce2227abd2fb8d69a4fccb13c1f4bf599bdb43596bd7c00f717b3e",
+      "bytes": 13529
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmask_ep26_xhard3/result.json",
+      "sha256": "a05f81208da6332b287face53fd0b8d177d8c107015f717c6d744384f744234b",
+      "bytes": 11048
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmask_ep38_xhard4/result.json",
+      "sha256": "37c00a2acf794f38e030d00681d73b4b82331204915be581bc71ac8682faf9cd",
+      "bytes": 31543
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/BinFill_ep0_xhard1/result.json",
+      "sha256": "c5b588db7c00b9d0e07f0135a19ce490c844def975ed47ed63f94f284bb36737",
+      "bytes": 51611
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/BinFill_ep1_xhard1/result.json",
+      "sha256": "0bc67ce4a4e20873e4571262bbb8231441153791815cd29512071d7ea5c4cecc",
+      "bytes": 47969
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/BinFill_ep25_xhard2/result.json",
+      "sha256": "de9cfce73bab92dc574a959ccac007df3c6a037880a215bbba34b4ee785e9d15",
+      "bytes": 50380
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/BinFill_ep26_xhard2/result.json",
+      "sha256": "f5993314141e723a3fc36a68873ec0d7a3050fa8ff7d683541803440777c94c7",
+      "bytes": 46753
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/BinFill_ep2_xhard1/result.json",
+      "sha256": "aab505faf3557c329a31ef0e75f4bce359c577c57590531ad292cac52d3163ff",
+      "bytes": 18856
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "3fb39e6c99570fe82335ea927b2d496055a1507f80be1b21b2959d3c23cef383",
+      "bytes": 15785
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "c7d8f494a3e8d565093d9820485515b675def7feeb45fdc1e7b32d9f0801af1e",
+      "bytes": 15429
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "0165948604f759f6edf1cac7bca5ea8de60a4e4ad38fbd1604da3507fe42bbf7",
+      "bytes": 51889
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "175323405d59bdf2b6808e61cadac62a9f2b52f49bdb5a9155acaa7b47cd2949",
+      "bytes": 15491
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "52d02b493eb37a61ca60142d3b5083833c44da86ef68c7dca670276341e3b80e",
+      "bytes": 15392
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmask_ep0_xhard1/result.json",
+      "sha256": "06d106ad9f75b108b0941fc5a22e595b2937aadbfb3f308faff2ec1101bf8bcc",
+      "bytes": 21640
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmask_ep13_xhard2/result.json",
+      "sha256": "789670319ca272f48a6f3bc6a269aa28a7cb541a8456133c4651083636b0c3fd",
+      "bytes": 20571
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmask_ep1_xhard1/result.json",
+      "sha256": "d8ac6eaa4bda443ae1a9085a5a3ff3afa065fb8779137862876a1339ca631d07",
+      "bytes": 16949
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmask_ep26_xhard3/result.json",
+      "sha256": "50d2206d60a1e4a658c15efc16195f285ec8288b54bc49ee6ed24ea7830a502d",
+      "bytes": 51827
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/ButtonUnmask_ep38_xhard4/result.json",
+      "sha256": "5a7b392b42c7cacfb0aa63d9996fc5081696ffe856c624d70afb062d38e5a52f",
+      "bytes": 23324
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickHighlight_ep0_xhard1/result.json",
+      "sha256": "8050a787ef22724fb75033e30b4ef91b31a0d77a5774fe7a07cc373abe70ed46",
+      "bytes": 44018
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickHighlight_ep1_xhard1/result.json",
+      "sha256": "88855671631928259ad439e08436fd04b6655ada755e8460fcac4f19e583356c",
+      "bytes": 51646
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickHighlight_ep25_xhard2/result.json",
+      "sha256": "ed6138264047d9b58a6d716930fced1f000db72b2e6cd0436ddee206c17ae3eb",
+      "bytes": 51658
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickHighlight_ep26_xhard2/result.json",
+      "sha256": "1c347fc5098c6a7e405a463301ab817abbef9cc15494c4e58ede50404fe7778d",
+      "bytes": 51636
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickHighlight_ep2_xhard1/result.json",
+      "sha256": "346490908f94cccb7b2d9f68d6d5861cafcccb4e9203396264fc2b65878db915",
+      "bytes": 51640
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickXtimes_ep0_xhard1/result.json",
+      "sha256": "20ec21c683e60ccc1fef58189afa3a539e5d1289f3550ac1e0672a3e55dc4697",
+      "bytes": 27470
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickXtimes_ep17_xhard2/result.json",
+      "sha256": "1b312ddb253a528ce74ebf156a4c61110640c79b689e1ac9621e3100d9680491",
+      "bytes": 27503
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickXtimes_ep18_xhard2/result.json",
+      "sha256": "9b7e341f4f141fa67a3ad3b19ffe9074cc2c80f2eb35350b081756385a028b4a",
+      "bytes": 29492
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickXtimes_ep1_xhard1/result.json",
+      "sha256": "3f4edc4e4f6a69cdd7c552cb30a7b81ac8404962e801a43fecf7ed3363d27d63",
+      "bytes": 31016
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/PickXtimes_ep34_xhard3/result.json",
+      "sha256": "3aa3d7f7a66741560233d15ee580cf9abde4d7851a647297efc76622795d5cd2",
+      "bytes": 23963
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/StopCube_ep0_xhard1/result.json",
+      "sha256": "d98733e08d407d1bd241290a25caba7d7ea4242061e616b997babc2877ea5f65",
+      "bytes": 14440
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/StopCube_ep10_xhard2/result.json",
+      "sha256": "0d4c27887bd16021586d65801374abe6130b84686d526221aae7ace48b04b476",
+      "bytes": 14070
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/StopCube_ep20_xhard3/result.json",
+      "sha256": "cacffeba9e028e1e0c5f1d0bf19fd302bff905a77f502aebcdda7fd84e8e3c75",
+      "bytes": 17623
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/StopCube_ep30_xhard4/result.json",
+      "sha256": "413ee289d7758d885648b69525eb4aab878684990e14243481b517478dbc2359",
+      "bytes": 18751
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/StopCube_ep40_xhard5/result.json",
+      "sha256": "c437b1e2e9a6ac344d331dbf770f11d4c738b7b4218a1415ebf130165bef999c",
+      "bytes": 20343
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/SwingXtimes_ep0_xhard1/result.json",
+      "sha256": "8d3322c959282960086d8cadb83d8ef5db9043ed6d372f3218b9ca454917e3bc",
+      "bytes": 22573
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/SwingXtimes_ep10_xhard2/result.json",
+      "sha256": "de5cc7e9ac81b3fd7324d1989cc0f9e1bae3c6f368e5c61827d02473d7b85aae",
+      "bytes": 26110
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/SwingXtimes_ep20_xhard3/result.json",
+      "sha256": "2bac243ce662a3b5374a4ae1a22d08323dbb17801670ed40034828a8acb18367",
+      "bytes": 20979
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/SwingXtimes_ep30_xhard4/result.json",
+      "sha256": "e031a2fbe284141889ee4775e050aaf9c6e68999a91472857477aea44629146b",
+      "bytes": 22977
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/SwingXtimes_ep40_xhard5/result.json",
+      "sha256": "4c2af11e48f74afd721a79bd81925ef11b153826ffcab2407e9561c395df3019",
+      "bytes": 20181
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoPlaceButton_ep0_xhard1/result.json",
+      "sha256": "f372b35766ea315fd478122e78e486e0003bc2f0862cfa79e48115e4fc853881",
+      "bytes": 21721
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoPlaceButton_ep1_xhard1/result.json",
+      "sha256": "d4e17abe076c71377d99bfe1f8ac8ef6d6b2bab3ba7496a6128b8b5d49fca50a",
+      "bytes": 13846
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoPlaceButton_ep25_xhard2/result.json",
+      "sha256": "3002e83ff01d4c8c5fd7866ce61dafe7d32f1222b103da4d667c9044e6353c8f",
+      "bytes": 18072
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoPlaceButton_ep26_xhard2/result.json",
+      "sha256": "32c33e4b8447d4dbedb6ac09b20a9a100fca8937a4efdb2349ed0a9f73009225",
+      "bytes": 18533
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoPlaceButton_ep2_xhard1/result.json",
+      "sha256": "943d14c077dd6c4a51aba0b598a1b13cb9d03cf8b4f80c25420640625c7a16ca",
+      "bytes": 51725
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoRepick_ep0_xhard1/result.json",
+      "sha256": "c1817cefa947544a334b15368e58180b956b88b7c3b64f0721fd3807ac9c134b",
+      "bytes": 9920
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoRepick_ep1_xhard1/result.json",
+      "sha256": "e3e2b2abd4a36ee95001fc0b19089faf20008075d6cfc33787ac7153a3d5500b",
+      "bytes": 16578
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoRepick_ep25_xhard2/result.json",
+      "sha256": "37113d96c594aff4c0fdb01630c770d19873359d393509738af537cbe5ec71cd",
+      "bytes": 10295
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoRepick_ep26_xhard2/result.json",
+      "sha256": "ca3e2931929aff75ab124989de29dd0c14cd3509622f752ffe63622aa14354e7",
+      "bytes": 9958
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoRepick_ep2_xhard1/result.json",
+      "sha256": "f33a023ef7ca44a3a8b3b3526c71e8798c27fa75fcf5752cbb6a4018c0e88c80",
+      "bytes": 9926
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmaskSwap_ep0_xhard1/result.json",
+      "sha256": "ef612ed28b11ec835764e800cfee9e509b8f75164dc4e8f252cbeff777f311a3",
+      "bytes": 9446
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmaskSwap_ep1_xhard1/result.json",
+      "sha256": "10c40589c82bb2cdd1f91211b046d569ae65f368d275274ecbeddcac29827013",
+      "bytes": 9839
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmaskSwap_ep25_xhard2/result.json",
+      "sha256": "c561562941bfae521679f8086360f85da65ad2e00cc99720f01486bb7fb502d8",
+      "bytes": 11962
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmaskSwap_ep26_xhard2/result.json",
+      "sha256": "3c39aefdcd03c82e3f31d339638fa86b3c853d5ff6aad590fd38c4078de93809",
+      "bytes": 9951
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmaskSwap_ep2_xhard1/result.json",
+      "sha256": "31c07e696fed834d751f3e76d1e85e67f627477053bf065fdc0d738efa9f6842",
+      "bytes": 13423
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "sha256": "a13d2bd0342572e31b21bb5d026c7feb7e89abe16f9c452ddf986a26e7547e8d",
+      "bytes": 13779
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep13_xhard2/result.json",
+      "sha256": "ca1eb761008a073f1e53634a24eb71f1095805c0b8441137d161335091caadc9",
+      "bytes": 19426
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep1_xhard1/result.json",
+      "sha256": "4aac272b6fd75f8ff02ea7856c10e0ac09555c3906a411cd96019b537dcc487f",
+      "bytes": 13411
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep26_xhard3/result.json",
+      "sha256": "9903a3f636aba4db2c6db1d47f6ef1b6cc7f64f51eceadd2f7178cfc79fca128",
+      "bytes": 17451
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep38_xhard4/result.json",
+      "sha256": "13e756ef4bfb9fff201e169bfcd0f498165faf9c64996806cb8b29b7dc2ceb10",
+      "bytes": 27994
+    }
+  ],
+  "excluded": [
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "reason": "smoke"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "reason": "smoke"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoPlaceOrder_ep26_xhard2/result.json",
+      "reason": "infra"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "reason": "smoke"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "reason": "smoke"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoPlaceOrder_ep0_xhard1/result.json",
+      "reason": "infra"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "reason": "smoke"
+    },
+    {
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/seed7/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1/result.json",
+      "reason": "smoke"
+    }
+  ],
+  "verdict": "OOD_TIMING_READBACK=PASS models=6 episodes=267 chunks=10706 missing=0 new_rollouts=0"
+}
