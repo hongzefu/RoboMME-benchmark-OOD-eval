@@ -1257,8 +1257,11 @@ class SeatRunner:
                 break
             if parent.is_symlink():
                 raise ValueError("上一尝试账本路径含符号链接")
+        ledger_bytes = path.read_bytes()
         old_ledger = AttemptLedger(path, seat=old_seat, policy=self.args.policy, shared=None,
                                    route=self.route, expired_jobs=self.ledger._expired_jobs)
+        if path.read_bytes() != ledger_bytes:
+            raise ValueError("读取旧本地账本期间内容变化")
         starts = [row for row in old_ledger.starts.get(c.key, [])
                   if row.get("attempt_no") == c.attempt - 1 and row.get("budget_rid") == previous.get("rid")
                   and row.get("token") == previous.get("token") and row.get("claim") == str(previous_path)]
@@ -1288,6 +1291,12 @@ class SeatRunner:
         spec, _ = self.E.make_spec(policy, c.ident["dataset"], c.ident["task"], int(c.ident["builder_episode"]),
                                    self.out, attempt=c.attempt - 1)
         identity = spec.identity()
+        # 账本路线含种子隔离段；真实 trace 路线只标模型／变体与方向，精确移除绑定的种子段。
+        parts = self.route.rsplit("/", 2)
+        if len(parts) != 3 or not parts[0] or parts[1] != f"seed{self.policy_seed}" or parts[2] != "new" \
+                or not _is_int(self.policy_seed):
+            raise ValueError("共享账本路线缺少绑定的种子隔离段")
+        expected_trace_route = f"{parts[0]}/new"
         meta = read_json(raw / "meta.json")
         if not meta or meta.get("model") != policy.model or meta.get("policy_label") != self.E._label(policy) \
                 or not isinstance(meta.get("identity"), dict) \
@@ -1302,19 +1311,42 @@ class SeatRunner:
                     header = json.loads(fh.readline())
                 except json.JSONDecodeError as e:
                     raise ValueError("到期半局 trace header 不完整") from e
+                incomplete_tail = False
+                for line in fh:
+                    if not line.strip():
+                        continue
+                    if incomplete_tail:
+                        raise ValueError("到期 trace 中间有损坏记录")
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        if line.endswith("\n"):
+                            raise ValueError("到期 trace 完整行损坏") from e
+                        incomplete_tail = True
+                        continue
+                    if not isinstance(record, dict) or record.get("kind") == "header":
+                        raise ValueError("到期 trace 非对象记录或重复header")
+                    if record.get("kind") == "end" and record.get("status") in ("success", "fail", "timeout"):
+                        raise ValueError("旧trace已有正常终态，须恢复媒体而非重新执行")
+            if not isinstance(header, dict):
+                raise ValueError("到期 trace header 不是对象")
             traced = header.get("identity")
             required = ("dataset", "task", "tier", "seed", "source_episode", "builder_episode", "key", "attempt", "policy_seed")
-            if header.get("kind") != "header" or not isinstance(traced, dict) \
+            if header.get("kind") != "header" or header.get("route") != expected_trace_route or not isinstance(traced, dict) \
                     or any(k not in traced or type(traced[k]) is not type(identity[k])
                            or traced[k] != identity[k] for k in required) \
                     or any(traced[k] != identity[k] for k in traced.keys() & identity.keys()) \
-                    or ("policy_seed" in header and header["policy_seed"] != self.policy_seed):
+                    or not _is_int(header.get("policy_seed")) or header["policy_seed"] != self.policy_seed:
                 raise ValueError("到期半局 trace header 身份冲突")
         digest = lambda row: hashlib.sha256(dumps(row).encode("utf-8")).hexdigest()
         rows = {"previous_claim": previous, "attempt_start": start, "attempt_end": end,
                 "previous_reserve": before, "previous_commit": commit, "retry_claim": retry[0], "current_reserve": after}
+        if path.read_bytes() != ledger_bytes:
+            raise ValueError("核证旧本地账本期间内容变化")
         return {"incomplete_expired": True, "expiry_evidence": evidence,
+                "ledger_route": self.route, "trace_route": expected_trace_route if trace.exists() else None,
                 "previous_claim_path": str(previous_path), "previous_ledger_path": str(path),
+                "previous_ledger_sha256": hashlib.sha256(ledger_bytes).hexdigest(),
                 "previous_claim_sha256": hashlib.sha256(previous_path.read_bytes()).hexdigest(),
                 "meta_sha256": hashlib.sha256((raw / "meta.json").read_bytes()).hexdigest(),
                 "evidence_rows": rows, "evidence_sha256": {k: digest(v) for k, v in rows.items()}}
