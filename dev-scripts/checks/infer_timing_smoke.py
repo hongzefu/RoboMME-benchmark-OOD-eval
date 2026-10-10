@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import runpy
 import sys
+import uuid
 
 
 def install_stop(episode, timing, *, audit: bool):
@@ -57,6 +58,8 @@ def main():
         if sys.argv[sys.argv.index(flag) + 1] != allowed:
             raise ValueError(f"本轮入口要求 {flag}={allowed}")
     out = Path(sys.argv[sys.argv.index("--out") + 1]).resolve()
+    if out.exists() or out.is_symlink():
+        raise ValueError(f"输出目录已存在，拒绝重新执行：{out}")
     ledger_path = Path(os.environ["IT_BUDGET_LEDGER"])
     module_spec = importlib.util.spec_from_file_location("it_shared_budget", root / "dev-scripts/gl/budget_ledger.py")
     budget_module = importlib.util.module_from_spec(module_spec)
@@ -65,7 +68,8 @@ def main():
     ledger = budget_module.BudgetLedger(ledger_path, trajectory_cap=27, reset_cap=54, astra_cap=3,
                                        shared_infra_cap=6, expired_cap=0, planned_first_tries=21)
     route = f"{'formal' if formal else 'smoke'}-{model}-{os.environ.get('SGEVAL_AUDIT', '1')}"
-    rid = ledger.reserve(resets=2, route=route, key=str(out), token=str(out), kind_of_try="first",
+    # 每次启动单独扣额；预检中断且尚未创建输出目录时也不能复用旧预约。
+    rid = ledger.reserve(resets=2, route=route, key=str(out), token=f"{out}:{uuid.uuid4().hex}", kind_of_try="first",
                          astra=model == "astra")
     claims = {"n": 0}
     original_session = episode.EnvSession

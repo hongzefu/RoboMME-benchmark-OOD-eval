@@ -88,3 +88,35 @@ def test_main_charges_build_reset_and_preserves_formal_loop(tmp_path, monkeypatc
     assert ok
     assert any("trajectories=1/27" in line and "resets=2/54" in line for line in lines)
     print(f"SINGLE_CHUNK_BUDGET=PASS mode={'formal' if formal else 'smoke'} trajectories=1 resets=2 real_resets=0")
+
+
+def test_interrupted_same_out_charges_separate_attempts(tmp_path, monkeypatch):
+    module = load_smoke()
+    ledger_path = tmp_path / "shared.jsonl"
+    out = tmp_path / "not_created"
+    monkeypatch.setenv("ROBOMME_EVAL_ROOT", str(ROOT))
+    monkeypatch.setenv("IT_BUDGET_LEDGER", str(ledger_path))
+    argv = ["entry", "--model", "astra", "--dataset", "hard-verify", "--tasks", "VideoUnmask",
+            "--episodes", "0:1", "--out", str(out), "--it-formal"]
+    def interrupted(*args, **kwargs):
+        raise RuntimeError("模拟创建输出前中断")
+    monkeypatch.setattr(module.runpy, "run_path", interrupted)
+    monkeypatch.setattr(episode, "EnvSession", episode.EnvSession)
+    for _ in range(3):
+        monkeypatch.setattr(sys, "argv", list(argv))
+        with pytest.raises(RuntimeError, match="模拟创建输出前中断"):
+            module.main()
+    budget = sys.modules["it_shared_budget"].BudgetLedger(ledger_path, trajectory_cap=27, reset_cap=54,
+                                                         astra_cap=3, shared_infra_cap=6, expired_cap=0,
+                                                         planned_first_tries=21)
+    assert budget._load().trajectories == 3 and budget._load().astra == 3
+    monkeypatch.setattr(sys, "argv", list(argv))
+    with pytest.raises(RuntimeError, match="astra=3/3") as refusal:
+        module.main()
+    assert refusal.value.reason == "astra_cap"
+    out.mkdir()
+    monkeypatch.setattr(sys, "argv", list(argv))
+    with pytest.raises(ValueError, match="输出目录已存在"):
+        module.main()
+    assert budget._load().trajectories == 3
+    print("SMOKE_ATTEMPTS=PASS interrupted=3 charged=3 fourth_refused=1 existing_out_refused=1 real_resets=0")
