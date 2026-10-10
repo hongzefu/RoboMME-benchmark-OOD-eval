@@ -32,7 +32,7 @@
     "oracle": "手写身份与真实序列化队列布局，独立计算档位轮转、差集、任务宏平均及最近秩P95",
     "positive": "2／3／4／5档任务轮转各取5局，B精确补集，C/D全量；六模型阶段白名单隔离；无帧非基础设施错误单列并计分母",
     "negative": "非法、重复及缺项身份；accepted／result／追加行非对象、缺失、重复、尝试不符；同步篡改model；空或不全模型集合均失败",
-    "boundaries": "25项参数化纯CPU测试；A/B共享seed7目录不会互相计入；sacct只计数字工作步，整程GPU分配秒与阶段wall代理分列",
+    "boundaries": "72项参数化纯CPU测试；A/B共享seed7目录不会互相计入；媒体未开启明确未验证；恢复证据绑定身份与原始字节；sacct只计数字工作步，整程GPU分配秒与阶段wall代理分列",
     "nodeids": [
       "tests/test_select_stage_identities.py::test_rotation_and_complement",
       "tests/test_select_stage_identities.py::test_exclusion_and_invalid",
@@ -42,7 +42,18 @@
       "tests/test_stage_report.py::test_sacct_steps",
       "tests/test_stage_report.py::test_incomplete_models_never_stage_pass",
       "tests/test_stage_report.py::test_non_object_fail_closed",
-      "tests/test_stage_report.py::test_model_tampering_and_error_exception"
+      "tests/test_stage_report.py::test_model_tampering_and_error_exception",
+      "tests/test_stage_report.py::test_stage_cap_guard",
+      "tests/test_stage_report.py::test_effective_cap_precedence_and_media_disabled",
+      "tests/test_stage_report.py::test_recovery_bound_inputs_and_appended_history",
+      "tests/test_stage_report.py::test_standard_media_white_list",
+      "tests/test_stage_report.py::test_recovery_semantic_binding",
+      "tests/test_stage_report.py::test_standard_trace_binding",
+      "tests/test_stage_report.py::test_trace_terminal_normalization",
+      "tests/test_stage_report.py::test_recovery_updated_fingerprints_do_not_override_identity",
+      "tests/test_stage_report.py::test_meta_recorded_identity_cannot_be_resealed",
+      "tests/test_stage_report.py::test_legacy_trace_without_spec_uses_recorded_meta",
+      "tests/test_stage_report.py::test_recovery_groundsg_label_binding"
     ],
     "resource": "cpu（不reset、不初始化GPU、不加载权重、不联网）",
     "mutants": [],

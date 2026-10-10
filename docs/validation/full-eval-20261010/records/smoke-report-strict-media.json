@@ -1,0 +1,284 @@
+{
+  "stage": "A",
+  "policy_seed": 7,
+  "ok": true,
+  "coverage": [
+    {
+      "model": "perceptual-framesamp-modul",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    },
+    {
+      "model": "smvla",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    },
+    {
+      "model": "pp",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    },
+    {
+      "model": "groundsg-ground-sg-memer",
+      "expected": 1,
+      "missing": 0,
+      "invalid": 0,
+      "accepted": 1,
+      "no_frame_error": 0
+    }
+  ],
+  "errors": [],
+  "success": [
+    {
+      "model": "groundsg-ground-sg-memer",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 0,
+      "episode_success_rate": 0.0,
+      "task_macro_success_rate": 0
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 0,
+      "episode_success_rate": 0.0,
+      "task_macro_success_rate": 0
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 1,
+      "episode_success_rate": 1.0,
+      "task_macro_success_rate": 1
+    },
+    {
+      "model": "perceptual-framesamp-modul",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 0,
+      "episode_success_rate": 0.0,
+      "task_macro_success_rate": 0
+    },
+    {
+      "model": "pp",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 1,
+      "episode_success_rate": 1.0,
+      "task_macro_success_rate": 1
+    },
+    {
+      "model": "smvla",
+      "tier": "xhard1",
+      "episodes": 1,
+      "successes": 1,
+      "episode_success_rate": 1.0,
+      "task_macro_success_rate": 1
+    }
+  ],
+  "timing": [
+    {
+      "model": "groundsg-ground-sg-memer",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 457.5685842037201,
+      "wall_p95_s": 457.5685842037201,
+      "episode_wall_sum_s": 457.5685842037201,
+      "gpu_seconds_proxy": 457.5685842037201
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 106.06172966957092,
+      "wall_p95_s": 106.06172966957092,
+      "episode_wall_sum_s": 106.06172966957092,
+      "gpu_seconds_proxy": 106.06172966957092
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 384.5857403278351,
+      "wall_p95_s": 384.5857403278351,
+      "episode_wall_sum_s": 384.5857403278351,
+      "gpu_seconds_proxy": 384.5857403278351
+    },
+    {
+      "model": "perceptual-framesamp-modul",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 76.42179584503174,
+      "wall_p95_s": 76.42179584503174,
+      "episode_wall_sum_s": 76.42179584503174,
+      "gpu_seconds_proxy": 76.42179584503174
+    },
+    {
+      "model": "pp",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 61.77441191673279,
+      "wall_p95_s": 61.77441191673279,
+      "episode_wall_sum_s": 61.77441191673279,
+      "gpu_seconds_proxy": 61.77441191673279
+    },
+    {
+      "model": "smvla",
+      "tier": "xhard1",
+      "episodes": 1,
+      "wall_mean_s": 50.116467237472534,
+      "wall_p95_s": 50.116467237472534,
+      "episode_wall_sum_s": 50.116467237472534,
+      "gpu_seconds_proxy": 50.116467237472534
+    }
+  ],
+  "episode_wall_sum_s": 1136.5287292003632,
+  "timing_scope": "仅阶段 accepted 局；GPU 秒为单局墙钟之和代理，不含加载及基础设施失败",
+  "verdicts": [
+    "EVAL_COVERAGE=PASS stage=A model=perceptual-framesamp-modul expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "EVAL_COVERAGE=PASS stage=A model=smvla expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "EVAL_COVERAGE=PASS stage=A model=pp expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "EVAL_COVERAGE=PASS stage=A model=groundsg-ground-sg-oracle expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "EVAL_COVERAGE=PASS stage=A model=groundsg-ground-sg-qwenvl expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "EVAL_COVERAGE=PASS stage=A model=groundsg-ground-sg-memer expected=1 accepted=1 missing=0 invalid=0 no_frame_error=0",
+    "STAGE_MODELS=PASS expected=6 actual=6",
+    "EVAL_REPORT=PASS stage=A model=perceptual-framesamp-modul cap_mismatch=0 exec_over_cap=0",
+    "EVAL_REPORT=PASS stage=A model=smvla cap_mismatch=0 exec_over_cap=0",
+    "EVAL_REPORT=PASS stage=A model=pp cap_mismatch=0 exec_over_cap=0",
+    "EVAL_REPORT=PASS stage=A model=groundsg-ground-sg-oracle cap_mismatch=0 exec_over_cap=0",
+    "EVAL_REPORT=PASS stage=A model=groundsg-ground-sg-qwenvl cap_mismatch=0 exec_over_cap=0",
+    "EVAL_REPORT=PASS stage=A model=groundsg-ground-sg-memer cap_mismatch=0 exec_over_cap=0",
+    "OFFICIAL_MEDIA_INPUTS=PASS stage=A total=6 fail=0",
+    "OFFICIAL_MEDIA=PASS stage=A total=6 fail=0",
+    "STAGE_TIMING=PASS stage=A models=6 episodes=6 wall_h=0.315702"
+  ],
+  "cap": [
+    {
+      "model": "perceptual-framesamp-modul",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    },
+    {
+      "model": "smvla",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    },
+    {
+      "model": "pp",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    },
+    {
+      "model": "groundsg-ground-sg-memer",
+      "cap_mismatch": 0,
+      "exec_over_cap": 0
+    }
+  ],
+  "media": [
+    {
+      "model": "perceptual-framesamp-modul",
+      "key": "VideoUnmask_xhard1_16600000",
+      "dir": "VideoUnmask_ep0_xhard1",
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/perceptual-framesamp-modul/ood/seed7/raw/VideoUnmask_ep0_xhard1",
+      "reasons": [],
+      "status_result": "fail",
+      "video_rel": "videos/VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "videos": [
+        "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4"
+      ],
+      "frames_source": "trace",
+      "video": "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "frames_expected": 173,
+      "frames_decoded": 173,
+      "video_sha256": "d41b90919d717227d43dfb53c84e39be60d626a5c8590f14528c87d48a284220",
+      "status": "pass"
+    },
+    {
+      "model": "smvla",
+      "key": "VideoUnmask_xhard1_16600000",
+      "status": "pass",
+      "recovered": true,
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1",
+      "frames_decoded": 336
+    },
+    {
+      "model": "pp",
+      "key": "VideoUnmask_xhard1_16600000",
+      "status": "pass",
+      "recovered": true,
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1",
+      "frames_decoded": 343
+    },
+    {
+      "model": "groundsg-ground-sg-oracle",
+      "key": "VideoUnmask_xhard1_16600000",
+      "dir": "VideoUnmask_ep0_xhard1",
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-oracle/ood/seed7/raw/VideoUnmask_ep0_xhard1",
+      "reasons": [],
+      "status_result": "fail",
+      "video_rel": "videos/VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "videos": [
+        "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4"
+      ],
+      "frames_source": "trace",
+      "video": "VideoUnmask_ep0_fail_watch the video carefully, then pick up the container hiding the blue cube, finally pick up another container hiding the red cube_xhard1.mp4",
+      "frames_expected": 272,
+      "frames_decoded": 272,
+      "video_sha256": "5dae9661826b8c2b2df7b225587204ee56259cae348d4d168588ad7408f5b596",
+      "status": "pass"
+    },
+    {
+      "model": "groundsg-ground-sg-qwenvl",
+      "key": "VideoUnmask_xhard1_16600000",
+      "status": "pass",
+      "recovered": true,
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmask_ep0_xhard1",
+      "frames_decoded": 507
+    },
+    {
+      "model": "groundsg-ground-sg-memer",
+      "key": "VideoUnmask_xhard1_16600000",
+      "status": "pass",
+      "recovered": true,
+      "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/artifacts/full-eval-20261010/smoke/rollouts/groundsg-ground-sg-memer/ood/seed7/raw/VideoUnmask_ep0_xhard1",
+      "frames_decoded": 324
+    }
+  ]
+}
