@@ -99,6 +99,22 @@ def test_bad_reset_stops_before_observe(field, value):
     assert conn.observes == conn.infers == 0
 
 
+@pytest.mark.parametrize("kind", ["protocol", "io"])
+def test_post_success_observe_failure_preserves_evidence(kind):
+    """真实动作块返回成功后观察通信失败，不抹去已执行步数和成功证据。"""
+    class LastObserveFailure(Conn):
+        def call(self, msg):
+            if "observe" in msg and self.observes >= 1:
+                if kind == "protocol":
+                    raise F.smvla_client().ProtocolError("bad final observation")
+                raise OSError(5, "final observation I/O error")
+            return super().call(msg)
+    out, conn = episode(conn=LastObserveFailure(), plan=F.Plan(success_at=4))
+    assert out["status"] == "error" and out["infra"] is True
+    assert out["task_success"] is True and out["steps"] == 4
+    assert conn.infers == 1
+
+
 def test_first_decision_starts_before_reset_observe():
     out, _ = episode(conn=Conn(first_obs=.2))
     first, second = out["timing"]["chunks"][:2]

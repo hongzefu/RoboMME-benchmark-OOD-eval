@@ -893,12 +893,12 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                         out.update(infra=True, infra_reason=f"env_step:{m}")
                     rec.add_event({"kind": "step_exc", "error": error})
                     break
+                success = bool(res.get("success", False))
+                steps += int(res.get("consumed", 0) or 0)
                 start_chunk()
                 observe(res["frames"], "step")
                 if res.get("states"):
                     cur_state = np.asarray(res["states"][-1], dtype=np.float32)
-                success = bool(res.get("success", False))
-                steps += int(res.get("consumed", 0) or 0)
                 rec.add_event({"kind": "chunk_done", "decision": decisions - 1, "consumed": res["consumed"],
                                "steps": steps, "status": res["status"], "done": res["done"]})
                 if res.get("done", False):

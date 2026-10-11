@@ -7,6 +7,36 @@ import types
 HERE=Path(__file__).resolve().parents[2]/'dev-scripts/gl'
 
 
+def test_cli_astra_zero_opens_upgraded_shared_ledger(tmp_path):
+    """旧配置追加升级后，真实席位构造器必须使用显式零上限预约并收尾。"""
+    import sys, json
+    spec=importlib.util.spec_from_file_location('raw_astra_seat',HERE/'seat.py')
+    seat=importlib.util.module_from_spec(spec); sys.modules[spec.name]=seat; spec.loader.exec_module(seat)
+    argv=['run','--policy','smvla','--policy-seed','7','--out',str(tmp_path/'stage'),
+          '--identities',str(tmp_path/'ids'),'--budget-ledger',str(tmp_path/'budget'),
+          '--trajectory-cap','4000','--reset-cap','8000','--shared-infra-cap','0',
+          '--expired-cap','0','--planned-first-tries','4000']
+    assert seat.build_parser().parse_args(argv).astra_cap == 2
+    args=seat.build_parser().parse_args(argv+['--astra-cap','0'])
+    caps=seat.budget_caps(args)
+    bm=seat.load_sibling('budget_ledger')
+    legacy=bm.BudgetLedger(args.budget_ledger,**caps)
+    config=legacy.config(); config.pop('astra_cap'); config['schema']='sgeval-budget/3'
+    path=Path(args.budget_ledger); before=(json.dumps(config)+'\n').encode(); path.write_bytes(before)
+    bm.BudgetLedger(path,legacy_astra_cap=0,**caps).check()
+    runner=seat.SeatRunner(args)
+    try:
+        shared=runner.ledger.shared
+        shared.check()
+        rid=shared.reserve(resets=2,route=runner.route,key='fixture',astra=False)
+        shared.commit(rid,resets=2)
+        state=shared.state()
+        assert state.config['astra_cap']==0 and rid in state.commits
+        assert path.read_bytes().startswith(before)
+    finally:
+        runner.close()
+
+
 def test_claim_stop_deadline_and_file(tmp_path):
     import sys
     spec=importlib.util.spec_from_file_location('raw_drain_seat',HERE/'seat.py')
