@@ -119,8 +119,7 @@ try:
   phase='intentional_supervisor_stop'; stop=json.loads(intent.read_text())
   for key in ('run','exec_commit','config_sha256','controller_job_id'): assert str(stop[key])==str(r[key])
   print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
-  accepted=p/('guardian-intent-accepted-'+sys.argv[4]+'.json')
-  tmp=accepted.with_name(accepted.name+'.'+str(os.getpid())+'.tmp'); tmp.write_text(json.dumps(stop)); os.replace(tmp,accepted)
+  accepted_stop=stop
   monitor='controller'
   # 监督器退出不结束健康守卫；改由控制器真实主循环进展维持监视。
  phase='heartbeat_read'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
@@ -138,6 +137,9 @@ try:
   if monitor=='controller': raise ValueError('退出意图后没有控制器心跳')
   phase='heartbeat_missing_grace'; assert time.time()-ready.stat().st_mtime<120
  phase='ready_publish'
+ if 'accepted_stop' in locals():
+  accepted=p/('guardian-intent-accepted-'+sys.argv[4]+'.json')
+  tmp=accepted.with_name(accepted.name+'.'+str(os.getpid())+'.tmp'); tmp.write_text(json.dumps(accepted_stop)); os.replace(tmp,accepted)
  target=p/('guardian-ready-'+sys.argv[4]+'.json')
  if not target.exists():
   doc={k:r[k] for k in ('run','exec_commit','config_sha256','controller_job_id')}
@@ -151,7 +153,9 @@ try:
  print('GUARD_PHASE gpu='+sys.argv[4]+' phase=validated',flush=True)
 except Exception as e:
  signal.alarm(0)
- if isinstance(e,OSError) and e.errno in (5,121,116) and 'cached' in locals() and cached is not None:
+ fs_timeout=isinstance(e,TimeoutError) and phase in ('ready_read','heartbeat_read','intentional_supervisor_stop','ready_publish')
+ transient_io=isinstance(e,OSError) and e.errno in (5,121,116)
+ if (transient_io or fs_timeout) and 'cached' in locals() and cached is not None:
   remaining=min(cached['verified_t']+120,cached['loop_t']+120)-time.time()
   if remaining>0:
    print('GUARD_NFS_RETRY errno='+str(e.errno)+' expires='+str(cached['verified_t']+120)+' phase='+phase,flush=True)
