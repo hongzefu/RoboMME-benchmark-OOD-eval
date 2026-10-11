@@ -184,3 +184,44 @@ tmux new-session -d -s ev-ood-simple-g1 "srun --jobid=63664391 --job-name=ood-si
 - 本机为四份 `shard-gN.log` 各挂一个 Monitor，过滤词按计划 §五。
 - 定时巡检：会话级 CronCreate 任务 `2fccbc06`，规则 `17 */3 * * *`，首次触发约 18:17 EDT，7 天后过期：`CRON_UP=PASS id=2fccbc06 every=3h`。
 - 承诺边界（P4）：分片在计算节点上独立运行；巡检与 Monitor 只在本会话存活期间有效，会话关闭后没有人负责重起。
+
+### 迁移到 8 核占位 job（2026-10-11 17:31～17:34 EDT）
+
+**发现**：起跑后按每局 result.json 的 `timing` 拆解，本轮 oracle 16 局平均墙钟 437.5 s。其中：
+- `record_overhead_s` 281 s，占 64%。这是原始录像 `front.mkv`／`wrist.mkv` 的 AV1 4:4:4 编码，由 imageio_ffmpeg 完成。
+- 环境步进 106 s。
+- 策略决策 31 s，其中服务端推理 15 s。
+- 平均 1652 步，13/16 局跑满 1800 步。
+
+02 轮的录制开销小得多：qwenvl 每局 12 s，pp 23 s。原因是这些模型每步推理慢，编码可以在等推理时并行做完。
+
+实测四个 GPU 占位 job 和其中全部作业步的 `AllocCPUS=1`，gl1505 上 `nproc=1`。仿真、客户端、服务端和两路 ffmpeg 挤在 1 个核上。oracle 推理快，环境只能等编码，录制就成了瓶颈。
+
+**用户裁决（原话）**：「b」；AskUserQuestion 依次选「四个一次全迁」「一并取消」（CPU job 63664373）。随后追加「换成8cpu memory是否要增加？现在占用的是多少」「分开决策」「然后所有的新job都留2天的余量。」，并在 AskUserQuestion 中选「48G」「统一 7 天」。
+
+**内存依据**：
+- 四个分片当时 MaxRSS 为 17.4～18.1 G。
+- 02 轮 pp／smvla／qwenvl 冒烟步骤的峰值为 24.6～25.2 G，已顶到旧申请量 24G。
+
+**配额**：chaijy2 的 GPU 配额 20 张已满（cokite 12、rickzhao 4、本任务 4），所以只能先取消自己的旧 job，再立即重新提交。
+
+**过程**：
+1. 17:31:00 用 `scancel --signal=TERM` 对四个作业步 `63664391.18`／`63664392.15`／`63664393.16`／`63664404.10` 只发 TERM。四步随即退出，`SRUN_EXIT=141`。
+2. 17:33:32 逐个 `scancel` 旧 job 63664391、63664392、63664393、63664404，以及 CPU job 63664373。
+3. 紧接着提交四个新的占位 job，规格为 `--cpus-per-task=8 --mem=48G --time=7-00:00:00`，其余参数同标准块，并当场拿到席位：
+
+| 分片 | 新 job | 节点 | 到期 |
+|---|---|---|---|
+| g1 | 63707684 | gl1512 | 2026-10-18 17:33 |
+| g2 | 63707685 | gl1505 | 2026-10-18 17:33 |
+| g3 | 63707686 | gl1505 | 2026-10-18 17:33 |
+| g4 | 63707687 | gl1505 | 2026-10-18 17:33 |
+
+4. 17:33:45 在 gl-login1 重起四个 tmux 会话 `ev-ood-simple-gN`。srun 换成新 jobid，并改为 `--cpus-per-task=8`；srun 日志改为追加写入（`>>`）。
+5. JobID 清单写入 NFS `simple/logs/hold-jobs-ood-simple.txt`。
+
+**中断局**：每个分片各有 1 局半截，分别为 oracle 的 `PickHighlight_ep7_xhard1`、`BinFill_ep3_xhard1`、`MoveCube_ep4_xhard4`、`InsertPeg_ep4_xhard4`。重起时由脚本移存并登记（`REATTEMPT total=1 cap=3`），计入口径 8：四分片合计已用 4 局，封顶 12 局。
+
+**发现的缺陷（未修）**：Slurm 的 TERM 会发给作业步内全部进程，`tee` 先退出，bash 写收尾行时触发 SIGPIPE。结果是 shard 日志没有 `SHARD_SIGNAL`／`EXIT_CODE=143` 尾行，srun 退出码为 141。夹具的 term 场景只对 bash 进程发信号，没有覆盖这种情况。作业步退出时 Slurm 已清掉步内全部进程，所以没有残留进程；半截局由下次起跑登记。
+
+**巡检**：旧的定时任务 `2fccbc06` 已删除，新建 `fec913dd`（`17 */3 * * *`）。新任务传 `SIMPLE_JOBS` 为新 job，`SIMPLE_SEC_oracle=437`、`SIMPLE_SEC_framesamp=400`，重起命令改为 8 核。迁移后首次巡检判定 `CHECK=OK`，最慢的 g4 按 1 核时的单局耗时外推在 10-16 10:22 完成，距 job 到期约 2.3 天。
