@@ -523,13 +523,19 @@ def test_fingerprint_approved_instance_error_can_resume_without_global_ignore(pu
     assert MOVER.raw_main(args)==1
 
 
-def test_real_mixed_terminal_finishes_available_media_without_waiting_for_failed_raw(publication,tmp_path,monkeypatch):
+@pytest.mark.parametrize('infra,status,corrupt',[
+    (False,'success',None),(False,'fail',None),(False,'timeout',None),(False,'error',None),
+    (True,'fail',None),(True,'timeout',None),(False,'fail','zero'),(True,'fail','identity')])
+def test_real_mixed_terminal_finishes_available_media_without_waiting_for_failed_raw(publication,tmp_path,monkeypatch,infra,status,corrupt):
     import shutil
     import raw_ood_controller as C
-    from test_raw_ood_controller import watchdog_fixture
+    from robomme_ood_eval import episode as E
+    from test_raw_ood_controller import watchdog_fixture,existing_fixture
+    from test_raw_ood_supervisor import consume_actual_mover_delivery
     _,dest,source,row=publication
     (tmp_path/'controller').mkdir()
-    ctl,_,_,_,_,_=watchdog_fixture(tmp_path/'controller',monkeypatch)
+    if infra: ctl,_,_,_,_,_=watchdog_fixture(tmp_path/'controller',monkeypatch)
+    else: ctl,_,_=existing_fixture(tmp_path/'controller',monkeypatch)
     cfg=ctl.control/'mover-config.json'; initial=dict(ctl.c); initial.pop('config_sha256'); C.atomic(cfg,initial)
     ctl.c['config_sha256']=C.sha(cfg); ctl.base['config_sha256']=ctl.c['config_sha256']
     for path in Path(ctl.c['root']).rglob('*.json'):
@@ -543,9 +549,14 @@ def test_real_mixed_terminal_finishes_available_media_without_waiting_for_failed
     for key in sorted(withheld): (ctl.gl/'published'/C.publication_name(key)).unlink()
     # 已消费预算、未保留本夹具正常发布的身份明确列为未决，不能洗成未尝试。
     ctl.published={identity}; ctl.unresolved=set(withheld)
-    result=json.loads((source/'result.json').read_text()); result['key']=identity.split(':',2)[2]
-    MOVER.raw_atomic(source/'result.json',result)
-    trace=[json.loads(line) for line in (source/'trace.jsonl').read_text().splitlines()]; trace[0]['identity']['key']=result['key']
+    success=int(status=='success')
+    result=E.EpisodeResult(dataset='ood',task='VideoUnmask',episode=0,source_episode=0,tier='xhard1',seed=0,candidate=None,
+        spec_sha256=None,key=identity.split(':',2)[2],max_steps=1800,strict_cap=True,attempt=1,policy_seed=7,model='smvla',policy_label='smvla')
+    output=E.normalize_play_output(dict(status=status,task_success=success,steps=1,error='模型应答异常' if status=='error' else None,infra=False,infra_reason=None))
+    session=SimpleNamespace(steps=1,step_cap=1,cap_hit=status=='timeout',reset_calls=2,timing={},budget_exhausted=False,info={'success':bool(success)})
+    E._classify(result,output,session); result.recorder_verify='PASS'
+    MOVER.raw_atomic(source/'result.json',result.to_dict())
+    trace=[json.loads(line) for line in (source/'trace.jsonl').read_text().splitlines()]; trace[0]['identity']['key']=result.key
     (source/'trace.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in trace))
     relative=row['relative_dir']; target=ctl.gl/relative
     for path in source.iterdir(): shutil.copy2(path,target/path.name)
@@ -555,9 +566,22 @@ def test_real_mixed_terminal_finishes_available_media_without_waiting_for_failed
     ctl.active.clear(); assert ctl.report()==2
     # 还原真实媒体工具；共同终态与failure证据均来自生产器，没有终态helper替身。
     monkeypatch.undo()
-    args=SimpleNamespace(stage=str(ctl.gl),dest=str(dest),manifest=str(cfg),min_free_gib=0,heartbeat_file=None,error_file=None,stop_file=None,once=False,interval=.01)
+    args=SimpleNamespace(stage=str(ctl.gl),dest=str(dest),manifest=str(cfg),min_free_gib=0,
+        heartbeat_file=str(ctl.control/'mover-heartbeat.json'),error_file=None,stop_file=None,once=False,interval=.01)
     start=time.monotonic(); assert MOVER.raw_main(args)==2
     assert time.monotonic()-start<30
     report=json.loads((ctl.gl/'mover/completed.json').read_text())
-    assert report['status']=='INCOMPLETE' and report['expected']==4000 and report['moved']==1 and report['infra']==1 and report['raw_missing']==3999
+    assert report['status']=='INCOMPLETE' and report['expected']==4000 and report['moved']==1 and report['infra']==int(infra) and report['raw_missing']==3999
+    results=json.loads((ctl.control/'results-report.json').read_text())
+    assert results['observed_count']==1 and results['observed_success']==success
     assert not (ctl.gl/'mover/error.json').exists()
+    if corrupt:
+        terminal=json.loads((ctl.gl/'gpu_work_complete.json').read_text())
+        if corrupt=='zero': del terminal['infra']
+        else: terminal['published_identities'][0]='smvla:ood:unknown'
+        for path in (ctl.gl/'gpu_work_complete.json',ctl.control/'gpu_work_complete.json'): MOVER.raw_atomic(path,terminal)
+        args.error_file=str(ctl.control/'corrupt-marker-error.json')
+        original=(ctl.gl/'mover/completed.json').read_bytes()
+        assert MOVER.raw_main(args)==1
+        assert (ctl.gl/'mover/completed.json').read_bytes()==original
+    consume_actual_mover_delivery(ctl,cfg,monkeypatch,corrupt=corrupt)

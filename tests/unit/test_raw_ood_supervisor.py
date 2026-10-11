@@ -12,6 +12,55 @@ sys.path.insert(0,str(HERE))
 import raw_ood_supervisor as S
 
 
+def consume_actual_mover_delivery(ctl, cfg, monkeypatch, *, corrupt=None):
+    """原样消费实际搬运器的JSON；仅用CPU进程代替模型与资源占位。"""
+    import types
+    root=Path(ctl.c['root']); terminal=S.read(ctl.gl/'gpu_work_complete.json')
+    delivery_path=ctl.gl/'mover/completed.json'; delivery_bytes=delivery_path.read_bytes(); delivery=S.read(delivery_path)
+    assert delivery['expected']==4000 and delivery['moved']==1 and delivery['raw_missing']==3999
+    assert delivery['status']==terminal['status']=='INCOMPLETE'
+    if not corrupt:
+        assert all(delivery[k]==terminal[k] for k in ('infra','unresolved','unattempted'))
+        assert terminal['settled']+terminal['unresolved']+terminal['unattempted']==4000
+    S.atomic(ctl.control/'launch.ready',dict(ctl.base,root=str(root),config_path=str(cfg)))
+    S.atomic(ctl.control/'jobs.json',dict(run='fixture',controller_job_id='100',gpu_job_ids=['101','102','103','104']))
+    # 心跳同样来自刚才raw_main的真实线程，不另手写成功心跳。
+    heartbeat=S.read(ctl.control/'mover-heartbeat.json'); assert heartbeat['config_sha256']==ctl.c['config_sha256']
+    hold=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],start_new_session=True)
+    try:
+        with monkeypatch.context() as isolated:
+            isolated.setattr(S,'process_identity',lambda pid:None)
+            attached=S.AttachedController(ctl.c,123,{})
+            if corrupt:
+                with pytest.raises(ValueError): attached.poll()
+            else:
+                assert attached.poll()==0
+                attached_terminal=S.read(ctl.control/'controller-attach-terminal.json')['terminal']
+                assert attached_terminal==terminal
+            isolated.setenv('SLURM_JOB_ID','100')
+            isolated.setattr(S,'start_guardians',lambda c,guardians=None:[])
+            isolated.setattr(S.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=123,poll=lambda:2))
+            isolated.setattr(S.subprocess,'run',lambda *a,**kw:pytest.fail('监督器不得查询或取消真实资源'))
+            assert S.run(cfg)==(1 if corrupt else 2)
+            if not corrupt:
+                final=S.read(ctl.control/'final-report.json')
+                assert final['delivery']==delivery and final['terminal']==terminal
+                assert final['cpu_hold'] is True and final['gpu_action']=='none'
+            else:
+                failure=S.read(ctl.control/'supervisor-failure.json')
+                assert failure['cpu_hold'] is True and failure['gpu_action']=='none' and failure['controller_action']=='none'
+        assert hold.poll() is None and not (ctl.control/'STOP').exists()
+        guard=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(root),'fixture','100',str(int(time.time()+60))],
+                env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0'),capture_output=True,text=True,timeout=15)
+        assert guard.returncode==(4 if corrupt else 0),guard.stdout+guard.stderr
+        if not corrupt: assert 'GUARD_TERMINAL status=INCOMPLETE' in guard.stdout
+        assert hold.poll() is None and not (ctl.control/'STOP').exists()
+        # 各消费者读取期间，没有改写实际搬运器的原始交付报告。
+        assert delivery_path.read_bytes()==delivery_bytes
+    finally:
+        hold.terminate(); hold.wait(timeout=5)
+
+
 def guard_complete(control, base):
     """序列化严格完整终态，旧弱标记不再作为成功夹具。"""
     import hashlib
