@@ -1,6 +1,6 @@
 # 失败终态与接续的完整对抗复核
 
-本轮尚在修复和验证中，本文不代表全量评估完成或所有异常已经验证通过。审查发起锚为 `f34ca9c9d2183799c9bb4994bb6c343149a25492`，发起时工作区干净；最终整合锚、独立复审和动态结果在通过后补入。
+本轮完整对抗审查和独立 CPU 状态复验已完成，正式全量评估仍在进行。审查发起锚为 `f34ca9c9d2183799c9bb4994bb6c343149a25492`，发起时工作区干净；三路最终静态复核与独立五百用例均锚定 `891b462726bf018c439a2fce9657aa85199d9f77`。实跑随后发现新旧心跳消费者混用，最后仅修 CPU 编排器并定向验证，锚为 `75b722f0016f9dbb22e10440d5d6466ba190d865`，四个模型进程未重启。
 
 用户要求：「修复完之后再做一轮完整的对抗审查，就是所有的状态的异常你都要检查到位，各种 success、failure、timeout等等，你都要检查清楚，都能够正常接续。」已有执行范围、预算和原作业保持不变：五模型 × 十六任务 × 每任务五十身份（各任务按既定难度分配）共四千首试；旧轮的一次首试和两次 reset 另计。失败身份保留，不新增重试，不把未知成功位写成零。
 
@@ -36,10 +36,28 @@
 | 真实交付生产者链路 | `11e065daa72b93fde100578a260dec28cc6437ac` | 八项通过，十六点一五秒；由真实搬运器产生交付报告后交三类消费者 |
 | 暂停搬运与监督消费 | `4b7072a72b383c099a2ddc2ca3c1dfee5349c94d` | 暂停全链五项通过，十九点七五秒；搬运与监督核心七十项通过，一百四十点一七秒 |
 
-上表均为修复代理交回的动态证据，退出码为零，资源守卫的真实 reset、GPU、权重和网络计数全为零。独立控制审查已对 `f2d429115a9b55e0e6994b0b26aa197df59f84f4` 的三文件增量判定 `SCOPED_STATIC_AUDIT=PASS`，该结论不替代最终整合版的完整复审。整合代码锚为 `63d4074`；随后只补本留档，待最终独立验证。
+上表均为修复代理交回的动态证据，退出码为零，资源守卫的真实 reset、GPU、权重和网络计数全为零。随后完整整合审查还发现看门狗恢复丢失出口字段、附着监督不能确认暂停两项实质问题，分别由 `73cd6e92f30e8f73fccfd2b2a22a676301467677` 与 `98f9e350bf042e7dc59c2786327d92032de54e8f` 修复。前者真实阻塞结算子进程恢复组合与二百三十七用例通过，后者七十六核心用例通过，并绑定当前 PID、启动时间和完整账本字节。
+
+三路独立代理最终对固定 `891b462726bf018c439a2fce9657aa85199d9f77` 分别返回 `FINAL_AUDIT_A=PASS`、`FINAL_AUDIT_B=PASS`、`FINAL_AUDIT_C=PASS`。运行职责独立代理在同一干净提交的 detached 会话 `ev-ood-failure-final-validation-1011` 执行两组真实 CPU 验证：席位与控制六文件 `421 passed / 188.00s`，搬运与监督核心 `79 passed / 171.64s`，合计五百用例、三百五十九点六四秒。两组 pytest 与 tee 退出零；原判定为 `TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`、`FINAL_VALIDATION=PASS head=891b462726bf018c439a2fce9657aa85199d9f77`、`EXIT_CODE=0`。完整原日志在本轮产物根 `control/1011-final-validation.log`，会话自然结束，未清理其他会话。
+
+真实 CPU 链覆盖生产看门狗退出七十五、外壳确认、结果落盘、结算恢复和失败校验；模型、环境及 Slurm 查询使用夹具。实际控制器与搬运器产出的不完整／暂停 JSON 交给直接、附着和 shell 消费者；完整统计分支的部分交付输入是合成报告，不能写成四千份实际媒体已经完成。测试中的既有 `hard_fingerprint` 警告也不是资产身份验收。
+
+## 实际恢复中的问题与最终处置
+
+新完整 worker 快照为 `runtime-code-resume-03/ @891b462726bf018c439a2fce9657aa85199d9f77`；配置 `control/run-config-resume-03.json` 原字节 SHA 为 `cecdacdd07ef98958632efe91b2f84234ec73b5c4b4e5d2d15d968fee78cda02`，来源清单独立锁定旧 5cc、bbe、6eb 三配置。`EXEC_COPY=PASS ... gitlinks=5 files=2285` 和 `INPUTS_LOCK=PASS files=2285 gitlinks=5 identities=800 tokenizer=1 client_origins=3 server_origins=5 gpu_initializations=0` 均退出零。第一次输入检查早于 rsync 结束而拒绝缺文件，原失败留在 `control/check-resume-03-inputs-before-sync.log`，没有放行模型。
+
+恢复十一因准备程序只复制、未移存旧协议槽，监督和守卫读到旧版本心跳而退出。确认失败 CPU 进程已退出、原 GPU 任务未动后，按明确路径把二十八个过期协议槽和派生错误原字节移存到 `control/resume-11-startup-failure/`；旧五项历史首因仍保留原路径与 SHA。
+
+恢复十二的两个空席客户端在模型加载前因 `mme_vla_dirty` 被拒绝。NFS 将文件权限从 `100644` 表现为 `100755`，源码字节未变；仅在新冻结副本的 Git 配置设 `core.filemode=false`，SimpleMemVLA 采用旧冻结副本已有的 LFS `cat` 表示。未修改模型源码、权重、gitlink 或 `allow_dirty` 开关。`FROZEN_GIT_METADATA=PASS repos=6 source_bytes_unchanged=2285`；确认两个目录只有预算头、没有任何身份预约、reset 或结果后，完整移存到 `control/resume-12-load-failure/`。重新执行加载一次，轨迹重试零，原失败加载日志没有覆盖。
+
+恢复十三中两个新客户端已通过模型预检并进入实际执行，控制器却把现代 `t` 进展起点当作心跳；加载一百九十七秒而 `t_heartbeat` 新鲜时误报失联。最后修复 `7d94c534167b500d781d17df0c8b9b21ef88d8f1`、整合锚 `75b722f0016f9dbb22e10440d5d6466ba190d865`，使接管预检与运行检查共同严格读取显式 `t_heartbeat`；仅锁定旧 33／6eb 来源可用旧 `t`。真实进展和一百二十秒失联、三千六百秒加载期限均未放宽。修复代理控制核心一百六十七用例、三十点二二秒通过；主会话真实生产器定向十一用例、一点一六秒通过，资源全零。按用户审查次数上限，不追加全面审查轮，随后直接实测接管四个已有工作负载。
+
+最终 CPU 七文件闭包为 `orchestration-recovery-14/ @75b722f0016f9dbb22e10440d5d6466ba190d865`，锁为 `control/orchestration-lock-recovery-14.json`；不从该束执行模型或实际搬运。真实集群接管预检 `EXISTING_DISPATCHES_PREFLIGHT=PASS active=4 infra=1 unresolved=0`，识别原四步骤 `63664391.10`、`63664392.8`、`63664393.14`、`63664404.8`。四 worker PID `2424981`、`2424934`、`3019810`、`3019805` 保持；原超时身份 `VideoUnmaskSwap_xhard1_16501700` 不重试，新工作执行其后的未尝试身份。
 
 ## 恢复约束
 
-正在执行的两条原 Qwen 工作负载不重启；另外两个原 GPU 作业待修复、完整复审和动态验证通过后承接未尝试身份。新执行快照完整冻结，五个第三方 gitlink 不变；旧源码、配置、失败报告和进度原字节不改。旧稀疏七十五只允许精确锁定的 `33bef4f485ca95b6c43017369220eec7eb7fd668` 与配置 SHA `6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e`，并要求真实 `FAILED/75:0`、原预算和领取证据闭合；新生产器不借此放宽终态协议。
+两条原 Qwen 工作负载未重启；两个原空席已承接未尝试身份。接续十四在二百二十四秒窗口内实际保持四 worker、监督器、控制器和四守卫循环心跳新鲜，无新错误；判定 `STABLE_WINDOW=PASS seconds=224 active=4 errors=0`。两个新席位在窗口中各完成三局；首局分别真实执行一百五十六／六百三十步，`task_success=0`、`infra=False`、`RECORDER_VERIFY=PASS`，正常失败如实计入且不重试。窗口快照 `reserve=301 reset_claim=602 commit=297`，重复预约零，历史基础设施失败一，正常发布、回执和已搬运各二百九十六、积压零；该数字是当时快照，运行继续增长，并非四千身份已完成。
+
+新执行快照完整冻结，五个第三方 gitlink 不变；旧源码、配置、失败报告和进度原字节不改。旧稀疏七十五只允许精确锁定的 `33bef4f485ca95b6c43017369220eec7eb7fd668` 与配置 SHA `6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e`，并要求真实 `FAILED/75:0`、原预算和领取证据闭合；新生产器不借此放宽终态协议。
 
 后台工作进程、阶段接续、异常通知和代理自动唤醒分别验收。当前未建立代理自动唤醒，不能承诺代理会无人值守处理所有未来异常。

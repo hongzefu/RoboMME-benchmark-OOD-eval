@@ -114,3 +114,28 @@ ssh -o ControlPath=/home/hongzefu/.ssh/cm2-%r@%h:%p -o ControlMaster=no -o Batch
 外部持有该命令的detached tmux为 `ev-ood-five-raw-supervisor-resume-10-20261010-02`，日志本机运行根 `control/supervisor-resume-10.log`；独立搬运为 `ev-ood-five-raw-mover-resume-02-20261010-02`，日志 `control/mover-resume-02.log`。监督异常只停止监督器自身，GPU不中止，CPU wrapper持续占位，不自动重启。通知失败／完成按每个监督实例独立留原字节，原邮件探针与用户实收证明不修改。
 
 本轮新增但未清理的准确会话另有 `ev-ood-five-raw-supervisor-resume-07-20261010-02`、`ev-ood-five-raw-supervisor-resume-08-20261010-02`、`ev-ood-five-raw-supervisor-resume-09-20261010-02`；它们仅保留各自CPU wrapper。前述02／06及用户站点会话未动，不关闭SSH master，不使用全局清理命令。完整进展及验收见result；代理自动唤醒未建立。
+
+## 十月十一日完整对抗修复后的接续十四
+
+用户要求修复后再做完整子代理对抗审查，覆盖成功、失败、超时和正常接续；继续原作业，不停止 GPU，CPU 持续占位。三路最终审查与五百 CPU 用例锚定 `891b462726bf018c439a2fce9657aa85199d9f77`；实际 GL 心跳协议的最后修复仅更新 CPU 编排器，锚为 `75b722f0016f9dbb22e10440d5d6466ba190d865`。完整过程、拒绝反例和动态边界见 [本轮复核记录](1011-adversarial-recovery.md)，不将代码测试写成全量模型评估完成。
+
+模型与真实搬运继续用完整 `runtime-code-resume-03/ @891b462726bf018c439a2fce9657aa85199d9f77`；两端逐文件字节核验二千二百八十五项、五个 gitlink，身份每模型八百，实际 Python 包来源核验三种客户端解释器和五个服务器。NFS 权限差异仅在新副本的 Git 元数据中校正，六仓状态为空，模型源码和权重不改。新配置 `control/run-config-resume-03.json` SHA 为 `cecdacdd07ef98958632efe91b2f84234ec73b5c4b4e5d2d15d968fee78cda02`；新来源清单锁旧 5cc、bbe、6eb 三份原配置。旧源码和配置均不覆盖，已尝试的超时身份不重跑。
+
+CPU 编排七文件闭包为 `orchestration-recovery-14/`，锁为 `control/orchestration-lock-recovery-14.json`，其中明确 worker 仍为 891、配置仍为 cecd；不从这个束执行模型或真实搬运。接续十四真实预检退出零，识别四个在途步骤 `63664391.10`、`63664392.8`、`63664393.14`、`63664404.8`，没有重新启动四个模型进程。实际 CPU 步骤 `63664373.37`，监督器 `1931600`、控制器 `1931859`。资源仍为原 CPU 63664373 和四 GPU 63664391／63664392／63664393／63664404，各一百二十小时，不新增 job。
+
+启动命令由本机 detached 会话 `ev-ood-five-raw-supervisor-resume-14-20261010-02` 持有，日志本机本轮 `control/supervisor-resume-14.log`：
+
+```bash
+ssh -o ControlPath=/home/hongzefu/.ssh/cm2-%r@%h:%p -o ControlMaster=no -o BatchMode=yes greatlakes \
+  srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none \
+  bash /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-14/raw_ood_supervisor_hold.sh \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02 \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-14/raw_ood_supervisor.py run \
+  --config /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/run-config-resume-03.json \
+  --resume-existing-dispatches --orchestration-commit 75b722f0016f9dbb22e10440d5d6466ba190d865
+```
+
+唯一实际搬运器会话为 `ev-ood-five-raw-mover-resume-03-20261010-02`，使用本机完整 891 的 `dev-scripts/gl/eval_video_mover.py --layout raw-ood --stage <本轮NFS根>/gl --dest <本轮本机根>/gl --manifest <本轮NFS根>/control/run-config-resume-03.json --interval 30 --min-free-gib 50`，心跳、错误和 STOP 槽继续原运行根。旧 mover02 只按清单精确删除该会话，删前后差集恰一项，原 PID 已消失；没有第二个搬运器并发。
+
+这次另登记的会话 `ev-ood-five-raw-supervisor-resume-11-20261010-02`、`ev-ood-five-raw-supervisor-resume-12-20261010-02`、`ev-ood-five-raw-supervisor-resume-13-20261010-02` 保留各自 CPU hold。独立验证会话 `ev-ood-failure-final-validation-1011` 已自然结束。准备和加载失败原证据分别在 `control/resume-11-startup-failure/`、`resume-12-load-failure/`、`resume-13-heartbeat-failure/`；模型加载前拒绝的一次重载没有任何预约或 reset，原目录已原字节移存。未清理用户站点或其他会话，未关闭 SSH master。GPU／CPU 不自动取消；失败通知沿已实收探针确认的 sendmail 通道，新失败的发送零退出仅记提交成功。
