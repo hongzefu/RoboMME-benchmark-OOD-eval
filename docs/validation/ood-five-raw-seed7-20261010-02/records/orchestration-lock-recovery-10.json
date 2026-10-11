@@ -1,0 +1,36 @@
+{
+  "orchestration_commit": "65a852bafecba5454529e40c90d93d8168dc27d8",
+  "worker_exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+  "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+  "files": {
+    "budget_ledger.py": {
+      "sha256": "c8a7ef39e91071b869d73f202767f49d50ddeddd5f1ea7262f0890d64edb649c",
+      "bytes": 40703
+    },
+    "raw_ood_context.py": {
+      "sha256": "b073d99d33be87e0dfe9c4f84c200f97f509be1a6feac14514238de151c0c160",
+      "bytes": 4389
+    },
+    "raw_ood_controller.py": {
+      "sha256": "5bf667f45ab3e2b0b1776759f76d42310883ebdb7bfc5349df7508e114f22902",
+      "bytes": 84947
+    },
+    "raw_ood_supervisor.py": {
+      "sha256": "2b33834b9e7a177fee40035890d2ec240a9a8e0b35038f4b33efce8797aa2ef0",
+      "bytes": 34809
+    },
+    "raw_ood_hold_guard.sh": {
+      "sha256": "993fc583c1c5d5bfe406ad545996da5b5b86662cf2238a3d72ebdf947c40effe",
+      "bytes": 12237
+    },
+    "raw_ood_supervisor_hold.sh": {
+      "sha256": "412cc5045b69dbc2a2706058c5f0207ab0687d71d053fb91e10f9f33ee4603b9",
+      "bytes": 924
+    },
+    "eval_video_mover.py": {
+      "sha256": "aa3a2661ea0c032a91e712fa045dbb26e815ef1d96755aa652a4ea35f0af49f6",
+      "bytes": 65279
+    }
+  },
+  "purpose": "仅附着监督闭包；模型和搬运使用完整33bef4f快照"
+}

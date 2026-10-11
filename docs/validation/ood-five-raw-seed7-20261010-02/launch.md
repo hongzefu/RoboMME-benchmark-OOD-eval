@@ -90,3 +90,27 @@ tmux new-session -d -s ev-ood-five-raw-supervisor-resume-06-20261010-02 'bash /d
 ```
 
 该载体在63664373同CPU作业内运行 `raw_ood_supervisor_hold.sh <NFS运行根> <NFS主解释器> <NFS运行根>/orchestration-recovery-06/raw_ood_supervisor.py run --config <NFS运行根>/control/run-config-resume-01.json --resume-existing-dispatches --orchestration-commit e39c6d4a407bb81f49f6f293a0be86b4f9a03cf3`。新监督器734024／控制器734113，原3worker PID不改。真实首步和心跳已取得；最后Slurm刷新仍待SSH可新开会话，详见result的具名判定。未建立代理自动唤醒。
+
+## 五轮审查后的最终接续10
+
+上述06为历史载体。审查后07正式恢复运行的完整worker快照为 `33bef4f485ca95b6c43017369220eec7eb7fd668`，配置 `control/run-config-resume-02.json` SHA `6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e`；原5cc／bbe配置及60已尝试身份保留复用。源清单 `control/source-contexts-resume-02.json` 锁两个旧配置原字节，独立暂停证明 `control/pause-snapshot-resume-02.json` 锁原STOP及三条排空分片。来源字段不重标，现有模型进程不重启。
+
+控制器后来因共享盘errno121自行退出。第五轮审查结束后按用户限额完成第六次最终修复，编排锚 `65a852bafecba5454529e40c90d93d8168dc27d8`，七文件闭包位于 `orchestration-recovery-10/`，清单 `control/orchestration-lock-recovery-10.json`。该束仅执行CPU监督和控制，模型与搬运器仍用完整33bef4f快照；不从这个七文件束执行真实搬运。CPU实际在途预检退出0：`EXISTING_DISPATCHES_PREFLIGHT=PASS accepted=78 active=4 drained=3 published=65 remaining=3922`，确认旧三条暂停历史和当前四条RUNNING可接管，未新增尝试。
+
+资源始终为CPU63664373及GPU63664391／63664392／63664393／63664404，各120小时获批配置不变；新控制器接管原步骤63664391.10／63664392.8／63664393.7／63664404.1，不新起模型，不重新申请资源。实际10启动命令（变量仅为书写缩写，均给出绝对值）：
+
+```bash
+TASK_NFS_ROOT=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02
+TASK_CODE="$TASK_NFS_ROOT/orchestration-recovery-10"
+ssh -o ControlPath=/home/hongzefu/.ssh/cm2-%r@%h:%p -o ControlMaster=no -o BatchMode=yes greatlakes \
+  srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none \
+  bash "$TASK_CODE/raw_ood_supervisor_hold.sh" "$TASK_NFS_ROOT" \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python \
+  "$TASK_CODE/raw_ood_supervisor.py" run \
+  --config "$TASK_NFS_ROOT/control/run-config-resume-02.json" \
+  --resume-existing-dispatches --orchestration-commit 65a852bafecba5454529e40c90d93d8168dc27d8
+```
+
+外部持有该命令的detached tmux为 `ev-ood-five-raw-supervisor-resume-10-20261010-02`，日志本机运行根 `control/supervisor-resume-10.log`；独立搬运为 `ev-ood-five-raw-mover-resume-02-20261010-02`，日志 `control/mover-resume-02.log`。监督异常只停止监督器自身，GPU不中止，CPU wrapper持续占位，不自动重启。通知失败／完成按每个监督实例独立留原字节，原邮件探针与用户实收证明不修改。
+
+本轮新增但未清理的准确会话另有 `ev-ood-five-raw-supervisor-resume-07-20261010-02`、`ev-ood-five-raw-supervisor-resume-08-20261010-02`、`ev-ood-five-raw-supervisor-resume-09-20261010-02`；它们仅保留各自CPU wrapper。前述02／06及用户站点会话未动，不关闭SSH master，不使用全局清理命令。完整进展及验收见result；代理自动唤醒未建立。

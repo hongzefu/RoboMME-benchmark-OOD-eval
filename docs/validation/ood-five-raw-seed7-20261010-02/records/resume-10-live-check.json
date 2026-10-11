@@ -1,0 +1,263 @@
+{
+  "time": 1791691120.6116893,
+  "control": {
+    "guardian-heartbeat-63664404.json": {
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "gpu_job_id": "63664404",
+      "step_id": "3",
+      "pid": 2469139,
+      "t": 1791691117.7040515,
+      "monitor_t": 1791691117.7040517,
+      "verified_t": 1791691116.981372,
+      "verified_loop_t": 1791691114.8449433,
+      "monitor": "supervisor"
+    },
+    "guardian-heartbeat-63664391.json": {
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "gpu_job_id": "63664391",
+      "step_id": "12",
+      "pid": 2469083,
+      "t": 1791691111.6243463,
+      "monitor_t": 1791691111.6243467,
+      "verified_t": 1791691106.9478269,
+      "verified_loop_t": 1791691104.8197381,
+      "monitor": "supervisor"
+    },
+    "mover-heartbeat.json": {
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "last_progress": 1791691009.1442096,
+      "moved": 79,
+      "pending": 0,
+      "pid": 3269914,
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "schema": "raw-ood-v1",
+      "time": 1791691116.7165434
+    },
+    "supervisor-started.json": {
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "controller_pid": 1058433,
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "pid": 1058343,
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "time": 1791690919.2952974
+    },
+    "controller-heartbeat.json": {
+      "active": 4,
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "loop_t": 1791691119.979934,
+      "phase": "worker_scanned",
+      "pid": 1058433,
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "start_ticks": 630572317,
+      "t": 1791691119.9976416
+    },
+    "guardian-heartbeat-63664393.json": {
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "gpu_job_id": "63664393",
+      "step_id": "9",
+      "pid": 2469116,
+      "t": 1791691111.6239474,
+      "monitor_t": 1791691111.6239476,
+      "verified_t": 1791691106.9478269,
+      "verified_loop_t": 1791691104.8197381,
+      "monitor": "supervisor"
+    },
+    "cpu-heartbeat.json": {
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "controller_pid": 1058433,
+      "controller_started_t": 1791690919.292833,
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "loop_t": 1791691114.8449433,
+      "pid": 1058343,
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "t": 1791691116.981372
+    },
+    "notification-failure.json": {
+      "command": [
+        "/usr/sbin/sendmail",
+        "-i",
+        "-t"
+      ],
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "delivery_verified": false,
+      "event": "failure",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "notification_established": false,
+      "rc": 0,
+      "receipt_path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/notifications/1031828-1791689252639087531/failure.json",
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "state": "submitted",
+      "stderr": "",
+      "stdout": "",
+      "subject": "RoboMME ood-five-raw-seed7-20261010-02 failure CPU 63664373 6eb5cdcdf6c0 supervisor 1031828-1791689252639087531",
+      "supervisor_instance": "1031828-1791689252639087531",
+      "time": 1791689399.1607718,
+      "timeout": 30,
+      "to": "hongzefu@umich.edu"
+    },
+    "guardian-heartbeat-63664392.json": {
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "gpu_job_id": "63664392",
+      "step_id": "10",
+      "pid": 2469086,
+      "t": 1791691117.704502,
+      "monitor_t": 1791691117.7045023,
+      "verified_t": 1791691116.981372,
+      "verified_loop_t": 1791691114.8449433,
+      "monitor": "supervisor"
+    },
+    "notification-latest-failure.json": {
+      "config_sha256": "6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e",
+      "controller_job_id": "63664373",
+      "exec_commit": "33bef4f485ca95b6c43017369220eec7eb7fd668",
+      "receipt_path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/notifications/1042569-1791689941233301785/failure.json",
+      "run": "ood-five-raw-seed7-20261010-02",
+      "run_name": "ood-five-raw-seed7-20261010-02",
+      "supervisor_instance": "1042569-1791689941233301785",
+      "time": 1791689941.4217653
+    }
+  },
+  "workers": [
+    {
+      "name": "qwenvl-00-resume-1-full",
+      "progress": {
+        "attempt_no": 1,
+        "dataset": "ood",
+        "episodes_done": 3,
+        "host": "gl1505.arc-ts.umich.edu",
+        "key": "PickXtimes_xhard1_16101200",
+        "label": "groundsg-ground-sg-qwenvl",
+        "phase": "episode",
+        "pid": 2424981,
+        "policy": "groundsg",
+        "policy_seed": 7,
+        "seat": "s1-qwenvl-00-resume-1-full",
+        "slurm_job_id": "63664391",
+        "slurm_step_id": "10",
+        "t": 1791691110.3841152
+      },
+      "srun_pid": 1011615,
+      "trace_proof": {
+        "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/gl/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/PickXtimes_ep12_xhard1/trace.jsonl",
+        "step": 448,
+        "rows": 563
+      }
+    },
+    {
+      "name": "qwenvl-01-resume-1-full",
+      "progress": {
+        "attempt_no": 1,
+        "dataset": "ood",
+        "episodes_done": 6,
+        "host": "gl1505.arc-ts.umich.edu",
+        "key": "SwingXtimes_xhard3_20300900",
+        "label": "groundsg-ground-sg-qwenvl",
+        "phase": "episode",
+        "pid": 2424934,
+        "policy": "groundsg",
+        "policy_seed": 7,
+        "seat": "s2-qwenvl-01-resume-1-full",
+        "slurm_job_id": "63664392",
+        "slurm_step_id": "8",
+        "t": 1791691110.371838
+      },
+      "srun_pid": 1011623,
+      "trace_proof": {
+        "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/gl/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/SwingXtimes_ep29_xhard3/trace.jsonl",
+        "step": 752,
+        "rows": 943
+      }
+    },
+    {
+      "name": "qwenvl-02-full",
+      "progress": {
+        "attempt_no": 1,
+        "dataset": "ood",
+        "episodes_done": 5,
+        "host": "gl1505.arc-ts.umich.edu",
+        "key": "VideoUnmaskSwap_xhard1_16500400",
+        "label": "groundsg-ground-sg-qwenvl",
+        "phase": "episode",
+        "pid": 2424920,
+        "policy": "groundsg",
+        "policy_seed": 7,
+        "seat": "s3-qwenvl-02-full",
+        "slurm_job_id": "63664393",
+        "slurm_step_id": "7",
+        "t": 1791691110.2742064
+      },
+      "srun_pid": 1011631,
+      "trace_proof": {
+        "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/gl/rollouts/groundsg-ground-sg-qwenvl/ood/seed7/raw/VideoUnmaskSwap_ep4_xhard1/trace.jsonl",
+        "step": 80,
+        "rows": 103
+      }
+    },
+    {
+      "name": "pp-00-full",
+      "progress": {
+        "attempt_no": 1,
+        "dataset": "ood",
+        "episodes_done": 5,
+        "host": "gl1505.arc-ts.umich.edu",
+        "key": "PickXtimes_xhard1_16100500",
+        "label": "pp",
+        "phase": "episode",
+        "pid": 2424948,
+        "policy": "pp",
+        "policy_seed": 7,
+        "seat": "s4-pp-00-full",
+        "slurm_job_id": "63664404",
+        "slurm_step_id": "1",
+        "t": 1791691110.8673232
+      },
+      "srun_pid": 1011639,
+      "trace_proof": {
+        "path": "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/gl/rollouts/pp/ood/seed7/raw/PickXtimes_ep5_xhard1/trace.jsonl",
+        "step": 1155,
+        "rows": 4624
+      }
+    }
+  ],
+  "counts": {
+    "config": 1,
+    "reserve": 83,
+    "reset_claim": 166,
+    "commit": 79,
+    "config_upgrade": 1
+  },
+  "duplicate_reserve": 0,
+  "infra_commit": 0,
+  "pub": 79,
+  "receipts": 79,
+  "window": 201.31885623931885,
+  "status": "STABLE_WINDOW=PASS seconds=201 active=4 duplicate_reserve=0 infra_commit=0"
+}
