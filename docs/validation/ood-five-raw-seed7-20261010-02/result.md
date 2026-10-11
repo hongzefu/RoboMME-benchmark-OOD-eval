@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-用户要求审查后，评估已在局间边界暂停，原四个GPU及CPU占位保留。新轮60次已领取尝试全部结算，停止后没有新领取，原始结果保留；下文历史运行状态只描述当时快照。新的SSH命令会话通过显式cm2连接已恢复可用。修复正在整合验证，尚未把恢复启动或完整五模型交付写为完成。
+评估已沿原四个GPU及CPU作业恢复，四条正式worker均有新版本真实动作。暂停前已领取结果复用，原三局补发布和搬运完成。监督器退出时GPU继续运行；随后原控制器也因共享盘读取错误自行退出，正在按用户限定的第六次最终修复恢复在途接管。完整五模型交付仍未完成，下文历史状态均为当时快照。
 
 ## 暂停后的修复与审查
 
@@ -13,6 +13,24 @@
 原数据和源码快照不覆盖。PP历史S2合成量显式标为 `pp_s2_composite`；连续完整墙钟时间仍为未验证，不把任务执行通过写为完整计时通过。
 
 主分支整合后定向测试退出0：`226 passed in 61.00s`，覆盖账本、原始媒体、席位暂停、SMVLA／GroundSG／FrameSamp／PP协议、计时及外层episode；`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。新增来源模块登记后契约清单测试退出0：`11 passed in 4.53s`，资源守卫全零。命令为 `UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 280s uv run --no-sync python -m pytest -q` 后接上述链路的既有测试文件；清单测试入口为 `tests/static/test_inventory.py`。尚未覆盖待整合生命周期修复与真实集群恢复。
+
+## 暂停后真实恢复及有限修复
+
+生命周期旧夹具首次回归65失败／70通过，未被记为通过。适配真实零Astra、暂停及守卫新契约后，两个测试文件 `137 passed in 108.66s`，退出0且资源守卫全零；新增租约及暂停续段核心夹具 `2 passed in 0.46s`。第三轮固定03e00e4静态 `R1_ROUND3=PASS`。
+
+原CPU两次真实只读预检退出0：`PAUSED_RESUME_PREFLIGHT=PASS accepted=60 active=0 drained=3 published=57 remaining=3940`。第二次核验schema4零Astra，账本仅追加元数据，原字节前缀完整保留。完整执行锚 `33bef4f485ca95b6c43017369220eec7eb7fd668` 与配置SHA `6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e` 固定：`INPUTS_LOCK=PASS files=2277 gitlinks=5 identities=800 tokenizer=1 client_origins=3 server_origins=5 gpu_initializations=0`。NFS强制执行位不能chmod复原，冻结副本沿既有core.filemode=false；SMVLA沿既有cat过滤器，逐文件字节仍等于固定Git blob与SHA，未改模型源码。
+
+监督器07在原CPU步骤24启动控制器1011559及四正式步骤63664391.10／63664392.8／63664393.7／63664404.1。旧三个未发布结果经新媒体及完整状态数组验收搬运，发布／回执补齐60；旧57份仅复核回执、身份与本机全量SHA，最终交付仍会完整复核所有媒体及数组，不把复用写为全部重新解码。
+
+实跑后第四守卫因Slurm查询连续超时30秒而误退出，尽管CPU心跳约1.8秒旧；监督器退出但控制器和GPU继续。旧通知回执阻挡新失败通知，未称邮件送达。第四轮最小修补与静态 `R1_ROUND4=PASS` 后，监督器08严格附着原控制器；查询未知由原心跳有效期裁定，通知改为监督实例独立幂等。真实shell7项／45.43秒、附着及替身MTA12项／0.11秒，退出0且资源全零。
+
+附着约146秒后，共享盘ready_publish写入超过5秒又使守卫及监督器退出。第五轮最后静态 `R1_ROUND5=PASS`，四明确文件阶段的TimeoutError仅在已验证原t／loop_t加120秒内重试；无缓存、过期及身份错仍拒绝。真实write／rename慢夹具5项／45.96秒，意图回归3项／20.21秒，退出0且资源全零。未继续增加审查轮次。
+
+与此同时原控制器因读取pp进度出现 `OSError errno=121` 自行退出，CPU实际只读进程查询证实 `OLD_CONTROLLER_GONE`；09附着正确拒绝失效心跳，没有启动重复控制器。其故障通知通过同CPU投递链提交：`state=submitted rc=0 delivery_verified=false`，原完整回执按实例保留，未声称收件人实收。
+
+四正式worker步骤及PID保持，新动作快照为QwenVL的PickXtimes × xhard1 × 1当前局432步、SwingXtimes × xhard3 × 1当前局503步、BinFill × xhard2 × 1当前局464步，及PP的PickXtimes × xhard1 × 1当前局981步；后续快照仍继续增长，没有基础设施失败结算或重复reserve。它们是进展，不是完整成绩。总授权仍为5模型 × 16任务 × 每任务50身份（依原难度表分配）=4000首试／8000 reset，加旧PP × VideoUnmask × xhard1 × 1首试的1／2，累计上限4001／8002。
+
+后台阶段接续由控制器负责，媒体交付由搬运器负责；原CPU占位始终保留。宿主未提供可建立的自动唤醒工具，代理自动唤醒未建立，不把后台进程存活写为代理无人值守自动修复保证。
 
 | 模型 | 范围 | 实际步数 | task_success | infra |
 | --- | --- | --- | --- | --- |
