@@ -720,6 +720,40 @@ def test_gl_noprogress_watchdog_kills_hung_client(rig, gl_repo):
     assert [r["event"] for r in _events(rig, "seat")] == ["start", "term"]
 
 
+def test_gl_dedicated_heartbeats_cannot_hide_hung_worker(rig, gl_repo):
+    """真实 bash 外壳下持续刷新专属心跳；真实进展不动仍有限时退出，且不误启动第二尝试。"""
+    worker = rig["tmp"] / "heartbeat-worker.py"
+    worker.write_text('''import json, os, signal, sys, time
+from pathlib import Path
+args = sys.argv[1:]
+path = Path(args[args.index("--progress-file") + 1])
+stamp = time.time()
+def stop(*_):
+    sys.exit(0)
+signal.signal(signal.SIGTERM, stop)
+while True:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"pid": os.getpid(), "phase": "episode", "step": 0,
+                               "t_progress": stamp, "t_heartbeat": time.time()}))
+    os.replace(tmp, path)
+    time.sleep(0.1)
+''')
+    original = rig["fakepy"].read_text()
+    old = f'*seat.py) shift; exec "{sys.executable}" "{ENGINE}" seat "$@";;'
+    assert old in original
+    rig["fakepy"].write_text(original.replace(old, f'*seat.py) shift; exec "{sys.executable}" "{worker}" "$@";;'))
+    progress = rig["tmp"] / "dedicated-progress.json"
+    started = time.monotonic()
+    rc, out = _run(_gl_cmd(rig, gl_repo, "--progress-file", str(progress), "--noprog-s", "2"),
+                   rig["env"], timeout=20)
+    assert rc == 124 and time.monotonic() - started < 15, out
+    assert "GL_NOPROGRESS policy=pp" in out and "restarts=0 noprog=1" in out
+    assert "GL_CLIENT_RESTART" not in out
+    row = json.loads(progress.read_text())
+    assert row["t_heartbeat"] > row["t_progress"] + 2
+    assert not _alive(row["pid"])
+
+
 def test_gl_term_finalizes_once(rig, gl_repo):
     rig["env"]["FAKE_CLIENT_CODES"] = "-1"
     p = _popen(_gl_cmd(rig, gl_repo), rig["env"])

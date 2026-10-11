@@ -49,6 +49,277 @@ def _ident():
     return F.packaged_identity(task, tier, 0)
 
 
+@pytest.fixture(autouse=True)
+def observed_fake_environment_success(monkeypatch):
+    """手写环境在真实返回的 info 中补其已知目标结果，不改变动作、步数或终态。"""
+    original_reset, original_step = F.FakeEnv.reset, F.FakeEnv.step
+    def reset(env):
+        obs, info = original_reset(env)
+        return obs, dict(info, success=False)
+    def step(env, action):
+        obs, reward, terminated, truncated, info = original_step(env, action)
+        return obs, reward, terminated, truncated, dict(info, success=info["status"] == "success")
+    monkeypatch.setattr(F.FakeEnv, "reset", reset)
+    monkeypatch.setattr(F.FakeEnv, "step", step)
+
+
+def _pending_settlement(tmp_path, **kwargs):
+    """真实序列化的已执行尝试夹具；不建立环境、不消耗 reset 或轨迹额度。"""
+    ec = F.env_client()
+    bm = ec.load_sibling("budget_ledger")
+    shared = bm.BudgetLedger(tmp_path / "budget.jsonl")
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World(),
+                           budget_ledger=shared, **kwargs)
+    runner._open_shared_budget()
+    c = runner.claim(_ident())
+    aid = "settlement-fault"
+    path = tmp_path / "serialized" / "result.json"
+    path.parent.mkdir()
+    result = {"key": c.key, "attempt": c.attempt, "status": "fail", "infra": False,
+              "task_success": 0, "exec_steps": 7}
+    path.write_text(json.dumps(result))
+    runner.ledger.attempt_start(key=c.key, attempt_id=aid, attempt_no=c.attempt, retry=False,
+                               identity=c.ident, budget_rid=c.rid, token=c.token, claim=str(c.path),
+                               result_path=str(path))
+    runner._current, runner._current_attempt_id = c, aid
+    return runner, c, aid, runner._result_row(c, aid, result), shared
+
+
+@pytest.mark.parametrize("boundary", ["attempt_end", "accept", "shared", "queue_accept", "claim", "report", "complete"])
+@pytest.mark.parametrize("after", [False, True])
+@pytest.mark.parametrize("terminal", ["success", "fail", "timeout"])
+def test_settlement_recovers_every_write_boundary_once(tmp_path, monkeypatch, boundary, after, terminal):
+    """每个写边界前后断电：新进程读真实 JSONL 补结算，两次恢复不重跑、不重复结果。"""
+    runner, c, aid, row, shared = _pending_settlement(tmp_path)
+    row.update(status=terminal, task_success=int(terminal == "success"))
+    saved = json.loads(Path(row["result"]).read_text())
+    saved.update(status=row["status"], task_success=row["task_success"])
+    Path(row["result"]).write_text(json.dumps(saved))
+    ec = F.env_client()
+    triggered = []
+    def inject(operation):
+        def call(*args, **kwargs):
+            if triggered:
+                return operation(*args, **kwargs)
+            if after:
+                operation(*args, **kwargs)
+            triggered.append(True)
+            raise OSError("写边界故障")
+        return call
+    with monkeypatch.context() as patch:
+        if boundary in ("attempt_end", "accept", "complete", "report"):
+            original = ec.append_result
+            def append(path, record):
+                match = ((boundary == "report" and Path(path) == runner.results_path) or
+                         record.get("kind") == {"complete": "settlement_complete"}.get(boundary, boundary))
+                return inject(original)(path, record) if match else original(path, record)
+            patch.setattr(ec, "append_result", append)
+        elif boundary == "shared":
+            patch.setattr(shared, "commit", inject(shared.commit))
+        elif boundary == "queue_accept":
+            patch.setattr(runner.queue, "accept", inject(runner.queue.accept))
+        else:
+            patch.setattr(runner.queue, "end_claim", inject(runner.queue.end_claim))
+        with pytest.raises(OSError):
+            runner._end(c, aid, row, void=False)
+    assert triggered
+    again = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World(), budget_ledger=shared)
+    for _ in range(2):
+        again.recover_dangling()
+        again.recover_crash_window()
+    ledger = F.seat_ledger(tmp_path / "stage", LABEL)
+    assert [r["kind"] for r in ledger].count("attempt_start") == 1
+    assert [r["kind"] for r in ledger].count("attempt_end") == 1
+    assert [r["kind"] for r in ledger].count("accept") == 1
+    assert [r["kind"] for r in ledger].count("settlement_complete") == 1
+    assert len(shared.state().reserves) == len(shared.state().commits) == 1
+    assert not shared.state().claimed and not shared.state().retries
+    reports = F.seat_results(tmp_path / "stage", LABEL)
+    assert len(reports) == 1 and reports[0]["attempt_id"] == aid
+    assert reports[0]["status"] == terminal and reports[0]["task_success"] == int(terminal == "success")
+    assert reports[0]["exec_steps"] == 7 and not reports[0]["infra"]
+    assert reports[0]["result"] == row["result"] and reports[0]["accepted"]
+    assert json.loads(c.path.read_text())["ended"]
+
+
+@pytest.mark.parametrize("boundary", ["attempt_end", "shared", "claim", "report"])
+def test_hard_exit_reports_failed_stage_and_still_exits(tmp_path, monkeypatch, capsys, boundary):
+    """看门狗逐阶段写真实失败证据；失败不妨碍其余阶段或硬退出。"""
+    exits = []
+    runner, c, aid, row, shared = _pending_settlement(tmp_path, hard_exit=exits.append)
+    ec = F.env_client()
+    monkeypatch.delattr(runner.E.WATCHDOG_STATE, "result", raising=False)
+    def broken(*_a, **_kw):
+        raise OSError("写边界故障")
+    if boundary in ("attempt_end", "report"):
+        original = ec.append_result
+        def append(path, record):
+            if record.get("kind") == boundary or (boundary == "report" and Path(path) == runner.results_path):
+                return broken()
+            return original(path, record)
+        monkeypatch.setattr(ec, "append_result", append)
+    elif boundary == "shared":
+        monkeypatch.setattr(shared, "commit", broken)
+    else:
+        monkeypatch.setattr(runner.queue, "end_claim", broken)
+    runner._hard_exit(75)
+    assert exits == [75] and aid not in runner.ledger.settled
+    text = capsys.readouterr().out
+    assert f"SEAT_SETTLE=FAIL stage={boundary}" in text
+    assert f"attempt_id={aid} budget_rid={c.rid}" in text
+    assert "SEAT_WATCHDOG_EXIT" in text
+    for report in F.seat_results(tmp_path / "stage", LABEL):
+        assert report["infra"] and report["infra_reason"] == "watchdog_exit"
+        assert report["task_success"] is None and report["exec_steps"] is None
+
+
+def test_progress_heartbeat_keeps_real_progress_clock(tmp_path):
+    """心跳改 mtime 和活性时间；只有本进程、本身份、本尝试的阶段或步数变化才刷新进展。"""
+    import os
+    runner, c, aid, row, shared = _pending_settlement(tmp_path, progress_file=str(tmp_path / "progress.json"))
+    ep_path = tmp_path / "episode-progress.json"
+    runner.progress("episode", episode_progress_file=str(ep_path))
+    doc = json.loads(runner.progress_path.read_text())
+    runner.heartbeat_once()
+    beat = json.loads(runner.progress_path.read_text())
+    assert beat["t_progress"] == doc["t_progress"] and beat["t_heartbeat"] >= doc["t_heartbeat"]
+    ep = {"pid": os.getpid(), "key": c.key, "dataset": c.ident["dataset"], "attempt": c.attempt,
+          "phase": "episode", "step": 1, "t": doc["t_progress"] + 1}
+    ep_path.write_text(json.dumps(ep))
+    runner.heartbeat_once()
+    assert json.loads(runner.progress_path.read_text())["t_progress"] == ep["t"]
+    ep["t"] += 1
+    ep_path.write_text(json.dumps(ep))
+    runner.heartbeat_once()
+    assert json.loads(runner.progress_path.read_text())["t_progress"] == ep["t"] - 1
+    ep.update(pid=os.getpid() + 1, step=2)
+    ep_path.write_text(json.dumps(ep))
+    runner.heartbeat_once()
+    assert json.loads(runner.progress_path.read_text())["exec_steps"] == 1
+
+
+def test_hard_exit_busy_settlement_lock_is_bounded(tmp_path, monkeypatch, capsys):
+    """主线程持锁时，退出线程不无限等待；六个缺阶段均记失败，进程仍走硬退出。"""
+    import time
+    exits = []
+    runner, c, aid, row, shared = _pending_settlement(tmp_path, hard_exit=exits.append)
+    monkeypatch.delattr(runner.E.WATCHDOG_STATE, "result", raising=False)
+    with runner._lock:
+        started = time.monotonic()
+        runner._hard_exit(75)
+        assert time.monotonic() - started < 3
+    assert exits == [75] and aid not in runner.ledger.settled
+    text = capsys.readouterr().out
+    assert text.count("SEAT_SETTLE=FAIL") == 6 and "error=settlement_lock_busy" in text
+
+
+@pytest.mark.parametrize("phase,reason", [("episode_wall", "episode_wall"), ("first_infer", "deadline_first_infer"),
+                                        ("media_finalize", "deadline_media_finalize")])
+@pytest.mark.parametrize("observed_success", [None, 0, 1])
+def test_hard_exit_preserves_original_timeout_without_result_file(tmp_path, monkeypatch, phase, reason, observed_success):
+    """超时结果文件写不出时，线程内原始证据仍进入席位报告与共享结算。"""
+    exits = []
+    runner, c, aid, row, shared = _pending_settlement(tmp_path, hard_exit=exits.append)
+    E = runner.E
+    spec, _ = E.make_spec(runner.fake_policy, c.ident["dataset"], c.ident["task"],
+                          c.ident["builder_episode"], runner.out, attempt=c.attempt)
+    timeout = E.EpisodeResult.from_spec(spec, runner.fake_policy)
+    timeout.task_success = observed_success
+    dog = E._Watchdog(runner.fake_policy, spec, timeout, {})
+    monkeypatch.setattr(E, "HARD_EXIT", runner._hard_exit)
+    def fail(*_args):
+        raise OSError("结果文件写不出")
+    monkeypatch.setattr(E, "_write_result", fail)
+    with pytest.raises(OSError):
+        dog._fire(phase, 1200)
+    assert exits == [75]
+    (report,) = F.seat_results(tmp_path / "stage", LABEL)
+    assert report["infra_reason"] == reason
+    assert report["exit_kind"] == "watchdog_hard_exit" and report["exit_code"] == 75
+    assert report["error"].startswith(f"INFRA_TIMEOUT phase={phase}")
+    assert report["result"] is None and report["task_success"] == observed_success and report["exec_steps"] is None
+    assert report["attempt_id"] == aid and report["budget_rid"] == c.rid and report["key"] == c.key
+    assert shared.state().commits[c.rid]["infra"] is True
+
+
+def test_recover_legacy_end_accept_and_report_keeps_original_infra_status(tmp_path):
+    """旧账本没有完整 seat_result 或完成标记时，复用原始席位报告，不把 infra 的 fail 改写成 error。"""
+    runner, c, aid, row, shared = _pending_settlement(tmp_path)
+    row.update(status="fail", infra=True, infra_reason="episode_wall", task_success=None)
+    runner.ledger.attempt_end({"key": c.key, "attempt_id": aid, "attempt_no": c.attempt,
+                               "status": "error", "infra": True, "infra_reason": "episode_wall"})
+    runner._settle_shared(c.rid, status="fail", infra=True)
+    runner.queue.end_claim(c.path, "infra")
+    row.update(accepted=False, final=False, late=False, void=False)
+    F.env_client().append_result(runner.results_path, row)
+    before = runner.results_path.read_bytes()
+    again = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World(), budget_ledger=shared)
+    assert again.recover_crash_window() == 1
+    assert again.recover_crash_window() == 0
+    assert again.results_path.read_bytes() == before
+    assert aid in again.ledger.settled
+
+
+@pytest.mark.parametrize("fault", ["identity", "server_reset", "protocol"])
+def test_faults_have_safe_terminal_state_without_false_success(tmp_path, monkeypatch, fault):
+    """身份与服务阻断不进入环境；协议错误不得造成功，重连只恢复结算，不消费额外轨迹。"""
+    from robomme_ood_eval.policy import ServerDead
+    shared = F.env_client().load_sibling("budget_ledger").BudgetLedger(tmp_path / "budget.jsonl")
+    world = F.World()
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), world,
+                           budget_ledger=shared, infra_retries=0)
+    if fault == "identity":
+        original = runner.E.make_spec
+        def wrong(*args, **kwargs):
+            spec, identity = original(*args, **kwargs)
+            return spec, dict(identity, seed=identity["seed"] + 1)
+        monkeypatch.setattr(runner.E, "make_spec", wrong)
+    elif fault == "server_reset":
+        def dead(*_):
+            raise ServerDead("服务已退出")
+        monkeypatch.setattr(runner.fake_policy, "reset", dead)
+    else:
+        monkeypatch.setattr(runner.fake_policy, "play", lambda *_: {"status": "success", "task_success": 0,
+                            "steps": 0, "error": None, "infra": False, "infra_reason": None})
+    assert F.run_rows(runner, [_ident()]) == (6 if fault == "protocol" else 3)
+    (report,) = F.seat_results(tmp_path / "stage", LABEL)
+    assert report["task_success"] is None and not report["accepted"]
+    assert not list(runner.queue.accepted_path(_ident()).parent.glob("*.json"))
+    if fault == "protocol":
+        assert report["status"] == "fail" and report["infra_reason"] == "play_contract" and report["infra"]
+    else:
+        assert report["run_blocked"] and report["result"] is None and report["exec_steps"] is None
+        assert world.envs == []
+    assert len(shared.state().reserves) == 1
+    assert len(shared.state().commits) + len(shared.state().releases) == 1
+    before = runner.results_path.read_bytes()
+    assert runner.recover_dangling() == runner.recover_crash_window() == 0
+    assert runner.results_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("failure", ["serialize", "fsync", "publish"])
+def test_accept_marker_failure_never_leaves_partial_authority(tmp_path, monkeypatch, failure):
+    """接受标记只在完整序列化、fsync 后发布；每道写入失败都不留下可误读的标记。"""
+    ec = F.env_client()
+    queue = ec.DynamicQueue(tmp_path / "queue", seat="cpu", wall_s=60)
+    ident = _ident()
+    def fail(*_a, **_kw):
+        raise OSError("接受标记写入故障")
+    with monkeypatch.context() as patch:
+        if failure == "serialize":
+            patch.setattr(ec, "dumps", fail)
+        elif failure == "fsync":
+            patch.setattr(ec.os, "fsync", fail)
+        else:
+            patch.setattr(ec.os, "link", fail)
+        with pytest.raises(OSError):
+            queue.accept(ident, attempt=1, status="fail", result=None, attempt_id="cpu-attempt")
+    assert not queue.accepted_path(ident).exists()
+    assert not list(queue.accepted_path(ident).parent.glob("*.tmp"))
+    assert queue.accept(ident, attempt=1, status="fail", result=None, attempt_id="cpu-attempt")
+    assert json.loads(queue.accepted_path(ident).read_text())["attempt_id"] == "cpu-attempt"
+
+
 def test_env_build_guard_settles_then_stops(tmp_path, capsys, monkeypatch):
     """构建失败保存真实结果并结清 rid，关闭策略，第二身份完全不尝试。"""
     # 复用生产席位打开账本的模块，避免重复导入数据类。
@@ -247,7 +518,10 @@ def test_retry_archive_rejects_unsafe_previous_raw(tmp_path, damage, capsys):
     assert second_world.envs == []
     state = shared.state()
     assert len(state.reserves) == 2 and len(state.releases) == len(state.commits) == 1
-    assert state.resets == 2
+    # 2 次预约 × 每次 2 个 reset 计量 = 4；退回预约不能刷新预算。
+    assert state.resets == 4
+    # 真正进入环境的只有首次 build/reset，第二次归档阻断没有实际 reset。
+    assert sum(state.claimed.values()) + state.orphan_claims == 2
     assert "RUN_BLOCKED reason=attempt_archive" in capsys.readouterr().out
     for path, data in snapshot.items():
         if "/raw/" in path or "/attempts/" in path:

@@ -138,6 +138,7 @@ class EnvSession:
         self._builder = builder
         self._env = None
         self._info: Any = None
+        self._task_success: int | None = None
         self._steps = 0
         self._cap_hit = False
         self._reset_calls = 0
@@ -162,6 +163,22 @@ class EnvSession:
     @property
     def steps(self) -> int:
         return self._steps
+
+    @property
+    def task_success(self) -> int | None:
+        """Latest observed scalar ``info.success``; absent or invalid evidence remains unknown."""
+        return self._task_success
+
+    def _observe_success(self, info) -> None:
+        self._task_success = None
+        value = info.get("success") if isinstance(info, dict) else None
+        if callable(getattr(value, "item", None)):
+            try:
+                value = value.item()
+            except (ValueError, RuntimeError):
+                return
+        if type(value) is bool or (type(value) is int and value in (0, 1)):
+            self._task_success = int(value)
 
     @property
     def cap_hit(self) -> bool:
@@ -228,6 +245,7 @@ class EnvSession:
         obs, info = self._env.reset()
         self.timing["reset_s"] = time.perf_counter() - t0
         self._info = info
+        self._observe_success(info)
         t1 = time.perf_counter()
         goal = info.get("task_goal") if isinstance(info, dict) else None
         self.task_goal = goal[0] if isinstance(goal, list) else goal
@@ -244,6 +262,7 @@ class EnvSession:
                              "front": [sha(f) for f in front], "wrist": [sha(f) for f in wrist], "state8": s8,
                              "task_goal": self.task_goal,
                              "status": info.get("status") if isinstance(info, dict) else None,
+                             "task_success": self._task_success,
                              "reset_s": self.timing["reset_s"]})
         self._rec_s += time.perf_counter() - t1
         self.timing["demo_frames"] = int(front.shape[0]) - 1
@@ -280,9 +299,11 @@ class EnvSession:
         self._step_s.append(t2 - t1)
         obs, reward, terminated, truncated, info = out
         self._info = info
+        self._observe_success(info)
         status = info.get("status") if isinstance(info, dict) else None
         ev: dict[str, Any] = {"kind": "env_step", "step": self._steps, "terminated": bool(terminated),
-                              "truncated": bool(truncated), "status": status, "reward": _scalar(reward)}
+                              "truncated": bool(truncated), "status": status, "task_success": self._task_success,
+                              "reward": _scalar(reward)}
         if obs is None:
             ev.update(front=None, wrist=None, obs_none=True)
         else:

@@ -116,14 +116,14 @@ def test_play_output_contract_required_fields():
                                      ("steps", True), ("infra", 1), ("error", []),
                                      ("infra_reason", 1), ("task_success", 0)])
 def test_play_output_rejects_invalid_values(key, value):
-    """独立成功、步数与基础设施字段必须遵循严格类型契约。"""
+    """Success, step counts and infrastructure fields obey their strict type contract."""
     out = dict(status="success", task_success=1, steps=0, error=None, infra=False, infra_reason=None)
     with pytest.raises(E.PlayContractError):
         E.normalize_play_output(out | {key: value})
 
 
 def test_independent_success_survives_error_serialization(tmp_path):
-    """媒体失败仍保留已取得的成功证据，实际写入再读回核对。"""
+    """Media failure preserves success evidence through serialization and readback."""
     import json
     out = E.normalize_play_output(dict(status="error", task_success=1, steps=4, error="disk full",
                                        infra=True, infra_reason="media_system"))
@@ -196,7 +196,8 @@ def test_success_result(tmp_path):
 def test_play_exception_recorded_and_next_episode_runs(tmp_path):
     p = load_policy("fake", 7, behavior="raise")
     r1 = run(p, out=tmp_path, ep=0)
-    assert (r1.status, r1.error_kind, r1.infra) == ("fail", "error", False)
+    assert (r1.status, r1.error_kind, r1.infra) == ("fail", "error", True)
+    assert r1.task_success is None and r1.infra_reason == "missing_success_observation"
     assert "ValueError" in r1.error
     assert fakes.EVENTS.count("env.close") == 1 and fakes.EVENTS.count("recorder.close") == 1  # finally still tears down
     p.behavior = "success"
@@ -241,6 +242,42 @@ def test_error_status_merged_into_fail(tmp_path):
     p = load_policy("fake", 7, behavior="return_error")
     res = run(p, out=tmp_path)
     assert (res.status, res.error_kind, res.error, res.task_success) == ("fail", "error", "IK failed", 0)
+
+
+@pytest.mark.parametrize("observed", [False, True])
+@pytest.mark.parametrize("ending", ["step_cap", "model_error"])
+def test_cap_and_model_error_preserve_real_observed_success(tmp_path, monkeypatch, observed, ending):
+    import numpy as np
+    monkeypatch.setitem(E.DATASET_MAX_STEPS, "ood", 2)
+    monkeypatch.setattr(E, "BUILDER_FACTORY", partial(fakes.FakeBuilder, finish_at=None))
+    original_step = fakes.FakeEnv.step
+    def observed_step(env, action):
+        obs, reward, terminated, truncated, info = original_step(env, action)
+        return obs, reward, terminated, truncated, dict(info, success=np.array([observed]))
+    monkeypatch.setattr(fakes.FakeEnv, "step", observed_step)
+    p = load_policy("fake", 7, behavior="stepcap")
+    if ending == "model_error":
+        def fail(session, *_):
+            session.reset()
+            session.step(np.zeros(8))
+            raise RuntimeError("model failed after observed goal")
+        monkeypatch.setattr(p, "play", fail)
+    result = run(p, out=tmp_path)
+    saved = json.loads((Path(result.raw_dir) if Path(result.raw_dir).is_absolute() else
+                       tmp_path / "rollouts/fake/ood/seed7" / result.raw_dir).joinpath("result.json").read_text())
+    assert saved["task_success"] == int(observed) and saved["infra"] is False
+    assert saved["status"] == ("timeout" if ending == "step_cap" else "fail")
+    assert saved["exec_steps"] == (2 if ending == "step_cap" else 1)
+
+
+def test_unknown_normal_result_stops_as_infrastructure_evidence(tmp_path, monkeypatch):
+    p = load_policy("fake", 7)
+    def fail(*_):
+        raise RuntimeError("failed before any success observation")
+    monkeypatch.setattr(p, "play", fail)
+    result = run(p, out=tmp_path)
+    assert result.status == "fail" and result.task_success is None
+    assert result.infra and result.infra_reason == "missing_success_observation"
 
 
 def test_bad_play_output_is_error(tmp_path):
@@ -313,6 +350,61 @@ def test_watchdog_wall_timeout_writes_and_exits(tmp_path, monkeypatch, capsys):
     assert (res.status, res.infra, res.infra_reason, res.error_kind) == ("fail", True, "episode_wall", "error")
     rows = (tmp_path / "rollouts/fake/ood/seed7/results.jsonl").read_text().splitlines()
     assert len(rows) == 1 and json.loads(rows[0])["error"].startswith("INFRA_TIMEOUT")
+
+
+@pytest.mark.parametrize("failure", [OSError("disk full"), TypeError("not serializable")])
+def test_watchdog_write_failure_still_hard_exits(tmp_path, monkeypatch, failure):
+    exits = []
+    p = load_policy("fake", 7)
+    spec, _ = E.make_spec(p, "ood", "MoveCube", 0, tmp_path)
+    state = {}
+    dog = E._Watchdog(p, spec, E.EpisodeResult.from_spec(spec, p), state)
+    monkeypatch.setattr(E, "HARD_EXIT", exits.append)
+    def broken(*_args):
+        raise failure
+    monkeypatch.setattr(E, "_write_result", broken)
+    with pytest.raises(type(failure)):
+        dog._fire("episode_wall", 1800)
+    assert exits == [75]
+    saved = state["timeout_result"].to_dict()
+    assert saved["infra_reason"] == "episode_wall"
+    assert saved["exec_steps"] is None and saved["task_success"] is None
+    assert E.WATCHDOG_STATE.result is None
+
+
+def test_watchdog_diagnostic_failure_still_hard_exits(tmp_path, monkeypatch):
+    exits = []
+    p = load_policy("fake", 7, with_server=True)
+    spec, _ = E.make_spec(p, "ood", "MoveCube", 0, tmp_path)
+    dog = E._Watchdog(p, spec, E.EpisodeResult.from_spec(spec, p), {})
+    monkeypatch.setattr(E, "HARD_EXIT", exits.append)
+    monkeypatch.setattr(E, "_write_result", lambda *_args: None)
+    def broken(*_args, **_kwargs):
+        raise OSError("closed stdout")
+    monkeypatch.setattr("builtins.print", broken)
+    with pytest.raises(OSError):
+        dog._fire("first_infer", 1800)
+    assert exits == [75]
+
+
+@pytest.mark.parametrize("failure", ["OSError", "TypeError"])
+def test_watchdog_real_process_exits_75_on_failed_result_write(failure):
+    import subprocess
+    import sys
+    script = '''from types import SimpleNamespace
+import dataclasses
+from robomme_ood_eval import episode as E
+Record = dataclasses.make_dataclass("Record", [("status", str, dataclasses.field(default="fail")),
+                                              ("task_success", object, dataclasses.field(default=None))])
+def fail(*_):
+    raise FAILURE("result write failed")
+E._write_result = fail
+E._Watchdog(SimpleNamespace(), SimpleNamespace(key="cpu-fixture"), Record(), {})._fire("episode_wall", 1800)
+raise AssertionError("hard exit returned")
+'''.replace("FAILURE", failure)
+    child = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=15)
+    assert child.returncode == 75, child.stdout + child.stderr
+    assert "INFRA_TIMEOUT phase=episode_wall" in child.stdout
 
 
 def test_first_episode_wall_extension():

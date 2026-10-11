@@ -69,6 +69,8 @@ WATCH_REASONS = {"episode_wall": "episode_wall", "first_infer": "deadline_first_
                  "media_finalize": "deadline_media_finalize"}
 #: hard-exit function (os._exit in production; unit tests replace it with a non-exiting recorder)
 HARD_EXIT: Callable[[int], Any] = os._exit
+#: timeout evidence for the exit hook, isolated to the watchdog thread
+WATCHDOG_STATE = threading.local()
 
 
 class IdentityMismatch(RuntimeError):
@@ -210,7 +212,8 @@ class EpisodeResult:
 
     ``status`` is one of success / fail / timeout; ``error_kind`` records the original terminal status folded into
     fail (``error``), None otherwise; the count fields ``task_success`` / ``steps`` / ``exec_steps`` /
-    ``reset_calls`` / ``decisions`` / ``demo_frames`` are always written explicitly; model-specific fields in
+    ``reset_calls`` / ``decisions`` / ``demo_frames`` are always written explicitly; unavailable task success
+    and executed steps are null rather than fabricated zeros. Model-specific fields in
     ``extra`` (e.g. PonderPounce's ``pp_sid_use_index``) are flattened to the top level by ``to_dict``."""
 
     dataset: str
@@ -230,9 +233,9 @@ class EpisodeResult:
     policy_label: str
     server_seed: int | None = None
     status: str = "fail"
-    task_success: int = 0
+    task_success: int | None = None
     steps: int = 0
-    exec_steps: int = 0
+    exec_steps: int | None = None
     cap_hit: bool = False
     reset_calls: int = 0
     demo_frames: int = 0
@@ -398,7 +401,8 @@ def _progress(spec: EpisodeSpec, phase: str, step: int = 0) -> None:
     try:
         write_json_atomic(rdir / "progress.json", {"pid": os.getpid(), "host": socket.gethostname(),
                                                    "key": spec.key, "task": spec.task, "episode": spec.episode,
-                                                   "dataset": spec.dataset, "phase": phase, "step": int(step),
+                                                   "dataset": spec.dataset, "attempt": spec.attempt,
+                                                   "phase": phase, "step": int(step),
                                                    "t": time.time()})
     except OSError:
         pass
@@ -436,28 +440,38 @@ class _Watchdog:
             self.disarm(p)
 
     def _fire(self, phase: str, limit: float) -> None:
+        # Exit must survive result serialization, filesystem and diagnostic failures.
         with self.lock:
             if self.state.get(f"{phase}_done") or self.state.get("fired"):
                 return
             self.state["fired"] = phase
+        try:
             sess = self.state.get("session")
             res = dataclasses.replace(self.result)
-            res.status, res.task_success, res.error_kind = "fail", 0, "error"
+            res.status, res.error_kind = "fail", "error"
+            if res.task_success is None and sess is not None:
+                res.task_success = sess.task_success
             res.infra, res.infra_reason = True, WATCH_REASONS.get(phase, f"deadline_{phase}")
             res.error = f"INFRA_TIMEOUT phase={phase} limit_s={limit:.0f}"
-            res.exec_steps = int(getattr(sess, "steps", 0) or 0)
+            res.exec_steps = int(sess.steps) if sess is not None else None
             res.reset_calls = int(getattr(sess, "reset_calls", 0) or 0)
             res.cap_hit = bool(getattr(sess, "cap_hit", False))
             res.demo_frames = int(((getattr(sess, "timing", None) or {}).get("demo_frames")) or 0)
             res.t_end = time.time()
             self.state["timeout_result"] = res
+            WATCHDOG_STATE.result = res
             try:
                 _write_result(res, self.spec)
             finally:
                 print(f"INFRA_TIMEOUT phase={phase} key={self.spec.key} limit_s={limit:.0f}", flush=True)
                 for srv in _servers_of(self.policy):
                     print(srv.left_line(), flush=True)
-        HARD_EXIT(EXIT_WALL)
+        finally:
+            try:
+                HARD_EXIT(EXIT_WALL)
+            finally:
+                # Non-exiting test hooks must not leak evidence into a later episode.
+                WATCHDOG_STATE.result = None
 
 
 def _servers_of(policy) -> list:
@@ -587,7 +601,7 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
                 out = {"status": "error", "error": f"RecorderError: {e}"[:800], "infra": True,
                        "infra_reason": "recorder"}
             except PlayContractError as e:
-                out = {"status": "error", "task_success": 0, "error": f"PlayContractError: {e}", "infra": True,
+                out = {"status": "error", "task_success": None, "error": f"PlayContractError: {e}", "infra": True,
                        "infra_reason": "play_contract"}
             except Exception as e:  # noqa: BLE001 ordinary model-side exception: record error, still finalize; the Policy moves on to the next episode
                 if session.budget_exhausted:
@@ -683,7 +697,12 @@ def _classify(result: EpisodeResult, out: dict, session: EnvSession) -> None:
         result.status, result.error_kind = "fail", "error"
     else:
         result.status = status
-    result.task_success = int(out.get("task_success", 0))
+    result.task_success = out.get("task_success")
+    if result.task_success is None:
+        result.task_success = session.task_success
+    if result.task_success is None and not result.infra and not result.budget_exhausted:
+        result.infra = True
+        result.infra_reason = result.infra_reason or "missing_success_observation"
 
 
 __all__ = ["EpisodeSpec", "EpisodeResult", "run_episode", "make_spec", "result_path", "run_dir", "builder_for",
