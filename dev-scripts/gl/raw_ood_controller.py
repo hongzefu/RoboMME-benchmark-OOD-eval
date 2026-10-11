@@ -286,6 +286,21 @@ def worker_account(step,name):
     raise ValueError('已有worker异常终态或未知退出 '+str(rows[0]))
 
 
+def step_inventory(c):
+    """Slurm步骤格式只读取StepID与JobName，状态独立以sacct确认。"""
+    jobs={str(s['job_id']) for s in c['seats']}
+    q=subprocess.run(['squeue','--steps','-h','-j',','.join(sorted(jobs)),'-o','%i %j'],capture_output=True,text=True,timeout=5)
+    if q.returncode or q.stderr: raise ValueError('全步骤查询未知 '+q.stderr)
+    steps={}
+    for line in q.stdout.splitlines():
+        cols=line.split()
+        parts=cols[0].split('.') if cols else []
+        if len(cols)!=2 or len(parts)!=2 or parts[0] not in jobs or not (parts[1].isdigit() or parts[1] in ('batch','extern','interactive')) or cols[0] in steps:
+            raise ValueError('全步骤查询格式/作业/重复不符')
+        steps[cols[0]]=cols[1]
+    return steps
+
+
 class ExistingProcess:
     """附着已存在srun，只查询；没有wait/kill/launch能力。"""
     def __init__(self,pid,identity,step,name): self.pid=pid; self.identity=identity; self.step=step; self.name=name
@@ -389,15 +404,11 @@ class Controller:
         """手动复用原三个已结算首局；先完整验证全部输入，再发布，绝不启动worker。"""
         import re
         if not re.fullmatch('[0-9a-f]{40}',str(orchestration_commit)): raise ValueError('恢复须记录40位orchestration_commit')
-        jobs={str(s['job_id']) for s in self.c['seats']}
         old=legacy_context(self.c); oldbase={k:old[k] for k in self.base}
-        q=subprocess.run(['squeue','--steps','-h','-j',','.join(sorted(jobs)),'-o','%i %j %T'],capture_output=True,text=True,timeout=5)
-        if q.returncode: raise ValueError('恢复时步骤查询未知')
-        for line in q.stdout.splitlines():
-            cols=line.split()
-            if len(cols)!=3: raise ValueError('恢复步骤查询格式未知')
-            if cols[0].split('.')[0] not in jobs: raise ValueError('恢复查询返回未登记作业')
-            if cols[1].startswith('raw-ood-worker-') and cols[2]!='COMPLETED': raise ValueError('原worker仍在途或异常，不可接管')
+        for step,name in step_inventory(self.c).items():
+            if name.startswith('raw-ood-worker-'):
+                allowed={'raw-ood-worker-'+m+'-00-smoke' for m in ('qwenvl','smvla','pp')}
+                if name not in allowed or worker_account(step,name)!=0: raise ValueError('原worker仍在途或异常，不可接管')
         invs=self.control/'invocations'
         if any((invs/f'{m}-00-smoke').exists() for m in ('oracle','framesamp')): raise ValueError('仅允许复用原三个smoke')
         ledger,ledger_sha=ledger_snapshot(Path(self.c['budget_ledger']))
@@ -585,13 +596,7 @@ class Controller:
         if not paths: raise ValueError('缺少已有正式派发')
         allowed_dirs={p.parent.name for p in paths}|{m+'-00-smoke' for m in MODELS}
         if any(p.name not in allowed_dirs or p.is_symlink() for p in (self.control/'invocations').iterdir()): raise ValueError('未知或符号链invocation目录')
-        queue=subprocess.run(['squeue','--steps','-h','-j',','.join(str(s['job_id']) for s in self.c['seats']),'-o','%i %j %T'],capture_output=True,text=True,timeout=5)
-        known_steps={}
-        if queue.returncode: raise ValueError('接续全步骤查询未知')
-        for line in queue.stdout.splitlines():
-            cols=line.split()
-            if len(cols)!=3 or cols[0].split('.')[0] not in {str(s['job_id']) for s in self.c['seats']}: raise ValueError('接续全步骤查询格式或作业不符')
-            if cols[1].startswith('raw-ood-worker-'): known_steps[cols[0]]=cols[1:]
+        known_steps=step_inventory(self.c)
         for path in paths:
             d=read(path); shard=d['shard_id']; model=d['model']; job=str(d['gpu_job_id'])
             if any(str(d[k])!=str(v) for k,v in self.base.items()) or d['smoke'] is not False or shard not in self.shards or self.shards[shard]['model']!=model or path.parent.name!=shard+'-full':
@@ -606,7 +611,7 @@ class Controller:
             step=job+'.'+str(progress['slurm_step_id']); rc=worker_account(step,name)
             pid=int(d['srun_pid']); proc=process_identity(pid)
             if rc is None:
-                if known_steps.pop(step,None)!=[name,'RUNNING']: raise ValueError('运行worker与全步骤清单冲突')
+                if known_steps.pop(step,None)!=name: raise ValueError('运行worker与全步骤清单冲突')
                 if proc is None or proc['state']=='Z': raise ValueError('已有运行srun PID不存在')
                 args=proc['command']; expected=d['command']
                 if not args or Path(args[0]).name!='srun' or args[1:]!=expected[1:] or not re.search(r'job[_/-]'+re.escape(str(self.c['controller_job_id']))+r'(?:/|$)',proc['cgroup']):
@@ -619,7 +624,7 @@ class Controller:
                 used_jobs.add(job)
             else:
                 listed=known_steps.pop(step,None)
-                if listed is not None and (listed[0]!=name or listed[1] not in ('RUNNING','COMPLETED')): raise ValueError('已有终态与全步骤清单冲突')
+                if listed is not None and listed!=name: raise ValueError('已有终态与全步骤清单冲突')
                 if progress['phase']!='finished' or progress['rc']!=0: raise ValueError('已有终态缺finished/rc0证据')
             phase_start=float(d['time'])
             if progress['key'] is not None:
@@ -658,7 +663,7 @@ class Controller:
                 terminal.append(a)
             else: gathered.append(a)
             dispatched.add(shard)
-        if known_steps: raise ValueError('存在未登记或未接管的worker步骤')
+        if any(name.startswith('raw-ood-worker-') for name in known_steps.values()): raise ValueError('存在未登记或未接管的worker步骤')
         if not set(pubs)<=reported: raise ValueError('已有发布缺少对应已结算席位报告')
         fresh=[]
         for a,row,doc in newpub:

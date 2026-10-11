@@ -378,7 +378,8 @@ def existing_fixture(tmp_path,monkeypatch):
     def query(cmd,**kw):
         if cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]],stderr='')
         if '--steps' in cmd:
-            return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(line.strip().split('|')[:3])+'\n' for line in account.values() if '|RUNNING|' in line),stderr='')
+            assert cmd[cmd.index('-o')+1]=='%i %j'
+            return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(line.strip().split('|')[:2])+'\n' for line in account.values() if '|RUNNING|' in line),stderr='')
         return types.SimpleNamespace(returncode=0,stdout='PENDING\n',stderr='')
     monkeypatch.setattr(C.subprocess,'run',query)
     return C.Controller(ctl.c),metadata,account
@@ -426,7 +427,7 @@ def test_production_mover_receipt_serialization_is_consumed_strictly(tmp_path,mo
     monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid))
     def query(cmd,**kw):
         if cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]],stderr='')
-        return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(x.strip().split('|')[:3])+'\n' for x in account.values()),stderr='')
+        return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(x.strip().split('|')[:2])+'\n' for x in account.values()),stderr='')
     monkeypatch.setattr(C.subprocess,'run',query)
     assert receipt['decoded']=={'front':1,'wrist':1}
     if kind=='bool': receipt['decoded']=True
@@ -507,9 +508,17 @@ def formal_report_fixture(ctl):
     return inv,report,row
 
 
-def test_existing_terminal_and_unpublished_rows_resume_without_budget_write(tmp_path,monkeypatch):
+@pytest.mark.parametrize('listed',[False,True])
+def test_existing_terminal_and_unpublished_rows_resume_without_budget_write(tmp_path,monkeypatch,listed):
     ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv,report,row=formal_report_fixture(ctl)
     account['101.5']='101.5|raw-ood-worker-qwenvl-00-full|COMPLETED|0:0\n'; metadata.pop(9000)
+    if listed:
+        original=C.subprocess.run
+        def query(cmd,**kw):
+            value=original(cmd,**kw)
+            if '--steps' in cmd: value.stdout+='101.5 raw-ood-worker-qwenvl-00-full\n'
+            return value
+        monkeypatch.setattr(C.subprocess,'run',query)
     p=C.read(inv/'progress.json'); p.update(phase='finished',rc=0,episodes_done=1); C.atomic(inv/'progress.json',p)
     before=Path(ctl.c['budget_ledger']).read_bytes(); pub_before=len(list((ctl.gl/'published').glob('*.json')))
     proof=ctl.resume_existing_dispatches('c'*40,preflight=True)
@@ -518,6 +527,48 @@ def test_existing_terminal_and_unpublished_rows_resume_without_budget_write(tmp_
     assert 'qwenvl-00' in ctl.completed and len(ctl.published)==6 and len(ctl.active)==2
     assert Path(ctl.c['budget_ledger']).read_bytes()==before
     for a in ctl.active.values(): a['log'].close()
+
+
+@pytest.mark.parametrize('kind',['unsupported_stderr_rc0','duplicate','unknown_job','wrong_name','extra_column'])
+def test_step_inventory_uses_two_columns_and_rejects_invalid_cli_output(tmp_path,monkeypatch,kind):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch)
+    original=C.subprocess.run
+    def query(cmd,**kw):
+        if '--steps' not in cmd: return original(cmd,**kw)
+        assert cmd[cmd.index('-o')+1]=='%i %j'
+        stdout='101.5 raw-ood-worker-qwenvl-00-full\n102.5 raw-ood-worker-qwenvl-01-full\n103.5 raw-ood-worker-smvla-00-full\n'; stderr=''
+        if kind=='unsupported_stderr_rc0': stderr='Invalid job step format specification: T'; stdout=stdout.replace('\n',' %T\n')
+        elif kind=='duplicate': stdout+='101.5 raw-ood-worker-qwenvl-00-full\n'
+        elif kind=='unknown_job': stdout+='999.1 raw-ood-worker-qwenvl-07-full\n'
+        elif kind=='wrong_name': stdout=stdout.replace('qwenvl-00-full','qwenvl-07-full')
+        else: stdout=stdout.replace('\n',' RUNNING\n')
+        return types.SimpleNamespace(returncode=0,stdout=stdout,stderr=stderr)
+    monkeypatch.setattr(C.subprocess,'run',query)
+    before=Path(ctl.c['budget_ledger']).read_bytes()
+    with pytest.raises(ValueError): ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert Path(ctl.c['budget_ledger']).read_bytes()==before and not ctl.active
+
+
+@pytest.mark.parametrize('kind',['completed','running','unsupported_stderr_rc0','duplicate','unknown_job'])
+def test_old_smoke_resume_uses_supported_step_columns_and_true_sacct(tmp_path,monkeypatch,kind):
+    ctl,original=resume_fixture(tmp_path,monkeypatch)
+    def query(cmd,**kw):
+        if '--steps' not in cmd: return original(cmd,**kw)
+        assert cmd[cmd.index('-o')+1]=='%i %j'
+        stdout='101.1 raw-ood-worker-qwenvl-00-smoke\n'; stderr=''
+        if kind=='unsupported_stderr_rc0': stdout='101.1 raw-ood-worker-qwenvl-00-smoke %T\n'; stderr='Invalid job step format specification: T'
+        elif kind=='duplicate': stdout*=2
+        elif kind=='unknown_job': stdout='999.1 raw-ood-worker-qwenvl-00-smoke\n'
+        return types.SimpleNamespace(returncode=0,stdout=stdout,stderr=stderr)
+    def wrapped(cmd,**kw):
+        if kind=='running' and cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout='101.1|raw-ood-worker-qwenvl-00-smoke|RUNNING|0:0\n',stderr='')
+        return query(cmd,**kw)
+    monkeypatch.setattr(C.subprocess,'run',wrapped)
+    before=Path(ctl.c['budget_ledger']).read_bytes()
+    if kind=='completed': assert ctl.resume_completed_smokes('c'*40,preflight=True)['reused']==3
+    else:
+        with pytest.raises(ValueError): ctl.resume_completed_smokes('c'*40,preflight=True)
+    assert Path(ctl.c['budget_ledger']).read_bytes()==before and not ctl.published
 
 
 @pytest.mark.parametrize('kind',['already_published','duplicate','half_terminal','uncommitted','cross_identity'])
