@@ -328,6 +328,45 @@ def test_actual_read_deadline_and_first_failure_phase_are_preserved(tmp_path):
     assert not cancelled.exists() and not (control/'STOP').exists() and 'GUARD_CHECK_END gpu=101 payload_rc=1' in p.stdout
 
 
+@pytest.mark.parametrize('kind',['write_once','rename_once','expired_cache','no_cache'])
+def test_filesystem_timeout_retries_only_with_unexpired_verified_heartbeat(tmp_path,kind):
+    control,base,env,cancelled=guard_fixture(tmp_path)
+    if kind=='expired_cache': S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time()-119,loop_t=time.time()-119))
+    marker=tmp_path/'slow-injected'; shim=tmp_path/'isolated-python'
+    shim.write_text('#!'+sys.executable+'\n'+
+        "import os,pathlib,sys,time\nargs=sys.argv[1:]; i=args.index('-'); sys.argv=['-',*args[i+1:]]\n"+
+        'marker=pathlib.Path('+repr(str(marker))+'); mode='+repr(kind)+'\n'+
+        "original_write=pathlib.Path.write_text; original_read=pathlib.Path.read_text; original_replace=os.replace\n"+
+        "def slow_once():\n if not marker.exists(): marker.touch(); time.sleep(6)\n"+
+        "def write(self,*a,**k):\n if self.name.startswith('guardian-ready-') and mode in ('write_once','expired_cache'): slow_once()\n return original_write(self,*a,**k)\n"+
+        "def read(self,*a,**k):\n if self.name=='cpu-heartbeat.json' and mode=='no_cache': slow_once()\n return original_read(self,*a,**k)\n"+
+        "def replace(src,dest):\n if pathlib.Path(dest).name.startswith('guardian-ready-') and mode=='rename_once': slow_once()\n return original_replace(src,dest)\n"+
+        "pathlib.Path.write_text=write; pathlib.Path.read_text=read; os.replace=replace\nexec(compile(sys.stdin.read(),'<真实guard payload>','exec'))\n")
+    shim.chmod(0o700); env['BENCH_PY']=str(shim)
+    p=subprocess.Popen(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+120))],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    try:
+        deadline=time.monotonic()+3
+        while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+        assert marker.exists()
+        time.sleep(5.2)
+        if kind in ('write_once','rename_once'):
+            assert p.poll() is None
+            assert not (control/'guardian-ready-101.json').exists() and not (control/'guardian-heartbeat-101.json').exists()
+            deadline=time.monotonic()+14
+            while not (control/'guardian-heartbeat-101.json').exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+            assert (control/'guardian-heartbeat-101.json').exists() and p.poll() is None
+            assert S.read(control/'guardian-heartbeat-101.json')['verified_t']==S.read(control/'cpu-heartbeat.json')['t']
+            S.atomic(control/'gpu_work_complete.json',base); p.terminate(); out=p.communicate(timeout=15)[0]
+            assert p.returncode==0 and 'GUARD_NFS_RETRY' in out
+        else:
+            out=p.communicate(timeout=3)[0]
+            assert p.returncode==8 and 'GUARD_NFS_RETRY' not in out
+            assert S.read(control/'guard-failure-101.json')['error_kind']=='TimeoutError'
+        assert not cancelled.exists() and not (control/'STOP').exists()
+    finally:
+        if p.poll() is None: p.kill(); p.wait(timeout=3)
+
+
 def test_stale_heartbeat_threshold_unchanged_and_primary_error_precedes_secondary_pipe(tmp_path):
     import types
     control,base,env,cancelled=guard_fixture(tmp_path); env['SLURM_JOB_ID']='102'
