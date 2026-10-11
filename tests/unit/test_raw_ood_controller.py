@@ -146,7 +146,7 @@ def test_controller_heartbeat_has_single_thread_writer(tmp_path,monkeypatch):
     monkeypatch.setattr(C,'atomic',atomic)
     monkeypatch.setattr(controller,'scan',lambda:(tmp_path/'control/STOP').write_text('fixture'))
     monkeypatch.setattr(controller,'dispatch',lambda:None)
-    with pytest.raises(RuntimeError,match='STOP'): controller.run()
+    with pytest.raises(RuntimeError,match='STOP'): controller.run(pause_on_stop=False)
     assert writers and len(set(writers))==1 and writers[0]!=threading.get_ident()
 
 
@@ -208,7 +208,7 @@ def prior_config(tmp_path):
     old.write_bytes((HERE.parents[1]/'docs/validation/ood-five-raw-seed7-20261010-01/records/stopped-budget-ledger.jsonl').read_bytes())
     c['prior_work']=dict(ledger=str(old),sha256=C.PRIOR_SHA256,expected_trajectories=1,expected_reset_claims=2,
                         combined_trajectory_cap=4001,combined_reset_cap=8002)
-    budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000).check()
+    budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000).check()
     return c
 
 
@@ -322,7 +322,7 @@ def resume_fixture(tmp_path,monkeypatch,models=('qwenvl','smvla','pp')):
     c=config(tmp_path); rows=identities()
     for row in rows: row['seed']=int(row['key'].rsplit('_',1)[1])
     p=Path(c['identities']); p.write_text(''.join(json.dumps(r)+'\n' for r in rows)); c['identities_sha256']=C.sha(p)
-    led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
     led.check(); creator=C.Controller(c)
     monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=999))
     for index,model in enumerate(models):
@@ -364,7 +364,8 @@ def existing_fixture(tmp_path,monkeypatch):
         row=json.loads((Path(ctl.c['gl_root'])/'seats'/ctl.c['models'][model]['label']/'seed7'/f"{seat['seat']}-{model}-00-smoke"/'seat-results.jsonl').read_text())
         a=dict(model=model,shard=model+'-00',rows=ctl.shards[model+'-00']['rows'][:1],smoke=True)
         doc=ctl.prepare_publication(a,row); C.atomic(ctl.gl/'published'/C.publication_name(doc['identity_key']),doc)
-        C.atomic(ctl.gl/'mover/receipts'/C.publication_name(doc['identity_key']),dict(doc,result='moved',decoded={'front':1,'wrist':1},trace_checked=True))
+        C.atomic(ctl.gl/'mover/receipts'/C.publication_name(doc['identity_key']),dict(doc,result='moved',dest=str(tmp_path/'delivered'/doc['relative_dir']),
+            bytes=sum(x['size'] for x in doc['files'].values()),decoded={'front':1,'wrist':1},trace_checked=True))
     metadata={}; account={}
     for index,shard in enumerate(('qwenvl-00','qwenvl-01','smvla-00')):
         seat=ctl.c['seats'][index]; ctl.start(seat,shard); inv=ctl.control/'invocations'/(shard+'-full')
@@ -374,7 +375,8 @@ def existing_fixture(tmp_path,monkeypatch):
                   slurm_job_id=seat['job_id'],slurm_step_id='5',seat=f"{seat['seat']}-{shard}-full",policy_seed=7,pid=2000+index))
         metadata[9000+index]=dict(state='S',start_ticks=3000+index,start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
         account[step]=f'{step}|raw-ood-worker-{shard}-full|RUNNING|0:0\n'
-    monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid))
+    actual_identity=C.process_identity
+    monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid) if 9000<=pid<=9002 else actual_identity(pid))
     def query(cmd,**kw):
         if cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]],stderr='')
         if '--steps' in cmd:
@@ -429,7 +431,7 @@ def test_production_mover_receipt_serialization_is_consumed_strictly(tmp_path,mo
         if cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]],stderr='')
         return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(x.strip().split('|')[:2])+'\n' for x in account.values()),stderr='')
     monkeypatch.setattr(C.subprocess,'run',query)
-    assert receipt['decoded']=={'front':1,'wrist':1}
+    assert receipt['decoded']=={'front':2,'wrist':2}
     if kind=='bool': receipt['decoded']=True
     elif kind=='zero': receipt['decoded']['front']=0
     elif kind=='missing_camera': del receipt['decoded']['wrist']
@@ -499,7 +501,7 @@ def formal_report_fixture(ctl):
     meta=C.read(directory/'meta.json'); meta['identity']=ident; C.atomic(directory/'meta.json',meta)
     (directory/'trace.jsonl').write_text(json.dumps(dict(kind='header',identity=ident))+'\n'+json.dumps(dict(kind='end',exec_steps=1))+'\n')
     route='groundsg/ground-sg-qwenvl/seed7/new'; token=route+'|'+ident['key']+'|a1'
-    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
     rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id=seat['job_id'])
     led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id=seat['job_id'])
     smoke=ctl.gl/'seats'/ctl.c['models'][model]['label']/'seed7'/f"{seat['seat']}-{model}-00-smoke"/'seat-results.jsonl'
@@ -628,6 +630,51 @@ def test_real_process_identity_preserves_empty_gpu_argument(tmp_path):
     finally: child.kill(); child.wait(timeout=2)
 
 
+def test_controller_lease_is_exclusive_across_real_processes(tmp_path):
+    import subprocess,time
+    c=config(tmp_path); (tmp_path/'control').mkdir(); cfg=tmp_path/'config.json'; C.atomic(cfg,c)
+    ready=tmp_path/'lease-ready'; release=tmp_path/'release'
+    code="import pathlib,sys,time; sys.path.insert(0,sys.argv[1]); import raw_ood_controller as C; ctl=C.Controller(C.read(pathlib.Path(sys.argv[2]))); lease=C.ControllerLease(ctl); lease.__enter__(); pathlib.Path(sys.argv[3]).write_text('ready');\nwhile not pathlib.Path(sys.argv[4]).exists(): time.sleep(.01)\nlease.__exit__(None,None,None)"
+    child=subprocess.Popen([sys.executable,'-c',code,str(HERE),str(cfg),str(ready),str(release)])
+    try:
+        deadline=time.monotonic()+3
+        while not ready.exists() and child.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+        assert ready.exists()
+        with pytest.raises(C.ControllerLeaseBusy): C.Controller(c).run()
+        assert not (tmp_path/'control/controller-heartbeat.json').exists() and not (tmp_path/'control/controller-error.json').exists()
+    finally:
+        release.write_text('release'); child.wait(timeout=3)
+
+
+def test_paused_complete_prefix_restores_only_unattempted_new_segment(tmp_path,monkeypatch):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv,report,row=formal_report_fixture(ctl)
+    planned=C.make_shards(ctl.rows)['qwenvl-00']['rows'][:3]; ctl.shards['qwenvl-00']['rows']=planned
+    (inv/'identities.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in planned)); C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
+    stop=ctl.control/'preserved-STOP'; stop.write_text('本夹具暂停'); workers=[]; stop_time=C.time.time()-1
+    for path in sorted((ctl.control/'invocations').glob('*-full/dispatch.json')):
+        d=C.read(path); p=path.parent/'progress.json'; progress=C.read(p); progress.update(phase='finished',rc=6); C.atomic(p,progress)
+        step=str(d['gpu_job_id'])+'.'+progress['slurm_step_id']; name='raw-ood-worker-'+path.parent.name
+        account[step]=step+'|'+name+'|FAILED|6:0\n'; metadata.pop(d['srun_pid'])
+        results=ctl.gl/'seats'/ctl.c['models'][d['model']]['label']/'seed7'/progress['seat']/'seat-results.jsonl'
+        workers.append(dict(invocation=str(path.parent),dispatch_sha256=C.sha(path),progress_sha256=C.sha(p),report_sha256=C.sha(results) if results.exists() else None,
+                            step_id=step,job_name=name,state='FAILED',exit_code='6:0'))
+    snapshot=ctl.control/'snapshot.json'; C.atomic(snapshot,dict(schema='raw-ood-pause-v1',run=ctl.c['run'],run_name=ctl.c['run_name'],root=str(tmp_path),stop_time=stop_time,
+                   stop_files=[dict(path=str(stop),sha256=C.sha(stop))],workers=workers))
+    ctl.c['pause_snapshot']=dict(path=str(snapshot),sha256=C.sha(snapshot)); ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
+    source_before={p:p.read_bytes() for p in (ctl.control/'invocations').rglob('*') if p.is_file()}
+    proof=ctl.resume_existing_dispatches('c'*40,paused=True,preflight=True)
+    assert proof['accepted']==6 and not ctl.published and ledger.read_bytes()==before
+    ctl.resume_existing_dispatches('c'*40,paused=True)
+    assert len(ctl.published)==6 and ctl.resume_rows['qwenvl-00']==[planned[2]] and ctl.segment_numbers['qwenvl-00']==1
+    captured=[]; monkeypatch.setattr(C.subprocess,'Popen',lambda cmd,**kw:captured.append(cmd) or types.SimpleNamespace(pid=9900))
+    ctl.start(ctl.c['seats'][0],'qwenvl-00')
+    ids=ctl.control/'invocations/qwenvl-00-resume-1-full/identities.jsonl'
+    assert [json.loads(x) for x in ids.read_text().splitlines()]==[planned[2]]
+    assert '--job-name=raw-ood-worker-qwenvl-00-resume-1-full' in captured[0] and ledger.read_bytes()==before
+    assert all(p.read_bytes()==raw for p,raw in source_before.items())
+    ctl.active['101']['log'].close()
+
+
 def test_existing_resume_validation_runs_inside_real_heartbeat_thread(tmp_path,monkeypatch):
     import time,threading
     ctl,metadata,account=existing_fixture(tmp_path,monkeypatch)
@@ -644,8 +691,8 @@ def test_existing_resume_validation_runs_inside_real_heartbeat_thread(tmp_path,m
 def test_delayed_fourth_seat_does_not_request_exhausted_initial_model(tmp_path,monkeypatch):
     ctl=C.Controller(config(tmp_path)); ctl.formal=True; ctl.pending=['oracle-07']; ctl.initial_dispatched={'101','102','103'}
     ctl.active={str(s['job_id']):{} for s in ctl.c['seats'][:3]}
-    seat=ctl.c['seats'][3]; C.atomic(ctl.control/'guardian-ready-104.json',dict(ctl.base,gpu_job_id='104',pid=123,time=C.time.time(),step_id='1'))
-    monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:types.SimpleNamespace(returncode=0,stdout='RUNNING',stderr=''))
+    seat=ctl.c['seats'][3]; C.atomic(ctl.control/'guardian-heartbeat-104.json',dict(ctl.base,gpu_job_id='104',pid=123,t=C.time.time(),monitor_t=C.time.time(),step_id='1'))
+    monkeypatch.setattr(C.subprocess,'run',lambda cmd,**k:types.SimpleNamespace(returncode=0,stdout='104.1 raw-ood-lifecycle-guard\n' if '--steps' in cmd else 'RUNNING',stderr=''))
     launched=[]; monkeypatch.setattr(ctl,'start',lambda seat,shard:launched.append(shard))
     ctl.dispatch(); assert launched==['oracle-07'] and not ctl.pending
 
@@ -701,10 +748,12 @@ def test_manual_resume_validates_all_closed_smokes_then_skips_existing(tmp_path,
     assert ctl.smoked=={'qwenvl','smvla','pp'} and len(ctl.published)==3 and ledger.read_bytes()==before
     assert C.read(ctl.control/'resume-completed-smokes.json')['orchestration_commit']=='c'*40
     launches=[]
-    def run(cmd,**kw): return types.SimpleNamespace(returncode=0,stdout='RUNNING\n',stderr='')
+    def run(cmd,**kw):
+        job=cmd[cmd.index('-j')+1]
+        return types.SimpleNamespace(returncode=0,stdout=job+'.2 raw-ood-lifecycle-guard\n' if '--steps' in cmd else 'RUNNING\n',stderr='')
     monkeypatch.setattr(C.subprocess,'run',run)
     for seat in ctl.c['seats']:
-        C.atomic(ctl.control/f"guardian-ready-{seat['job_id']}.json",dict(ctl.base,gpu_job_id=seat['job_id'],pid=2000,time=C.time.time(),step_id='2'))
+        C.atomic(ctl.control/f"guardian-heartbeat-{seat['job_id']}.json",dict(ctl.base,gpu_job_id=seat['job_id'],pid=2000,t=C.time.time(),monitor_t=C.time.time(),step_id='2'))
     def launch(seat,shard,smoke=False):
         launches.append(shard); ctl.active[str(seat['job_id'])]={'model':shard.rsplit('-',1)[0]}
     monkeypatch.setattr(ctl,'start',launch)

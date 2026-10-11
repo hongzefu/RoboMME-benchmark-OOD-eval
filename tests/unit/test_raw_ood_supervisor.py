@@ -25,7 +25,7 @@ def test_heartbeat_missing_fields_and_staleness(tmp_path):
 def test_gpu_guard_term_with_complete_never_stop_or_cancel(tmp_path):
     control=tmp_path/'control'; control.mkdir()
     base=dict(root=str(tmp_path),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64)
-    S.atomic(control/'launch.ready',base); S.atomic(control/'gpu_work_complete.json',base)
+    S.atomic(control/'launch.ready',base); S.atomic(control/'gpu_work_complete.json',dict(base,expected=4000,published=4000))
     bindir=tmp_path/'bin'; bindir.mkdir(); cancelled=tmp_path/'cancelled'
     scancel=bindir/'scancel'; scancel.write_text('#!/bin/bash\necho "$*" >> '+str(cancelled)+'\n'); scancel.chmod(0o700)
     marker=tmp_path/'python-started'
@@ -166,8 +166,8 @@ def test_guard_exit_never_touches_other_cleanup_lock_or_jobs(tmp_path):
 
 def guard_fixture(root):
     control=root/'control'; control.mkdir(parents=True)
-    base=dict(root=str(root),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64)
-    S.atomic(control/'launch.ready',base); S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time()))
+    base=dict(root=str(root),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64,expected=4000,published=4000)
+    S.atomic(control/'launch.ready',base); S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),loop_t=time.time()))
     (control/'gpu-job-ids.txt').write_text('101\n102\n103\n104\n')
     bindir=root/'bin'; bindir.mkdir(); cancelled=root/'cancelled'
     for name,body in [('squeue','echo RUNNING'),('scancel','echo "$*" >> '+str(cancelled))]:
@@ -181,7 +181,7 @@ def test_explicit_guard_ready_binds_new_context_without_cancel(tmp_path,kind):
     control,base,env,cancelled=guard_fixture(tmp_path)
     current=dict(base,exec_commit='d'*40,config_sha256='e'*64)
     ready=control/'resume-ready.json'; S.atomic(ready,current)
-    S.atomic(control/'cpu-heartbeat.json',dict(current,t=time.time()))
+    S.atomic(control/'cpu-heartbeat.json',dict(current,t=time.time(),loop_t=time.time()))
     if kind=='symlink':
         linked=control/'linked.json'; linked.symlink_to(ready); ready=linked
     elif kind=='outside': ready=tmp_path/'outside.json'; S.atomic(ready,current)
@@ -191,7 +191,7 @@ def test_explicit_guard_ready_binds_new_context_without_cancel(tmp_path,kind):
         while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
         assert marker.exists()
         row=S.read(marker); assert row['config_sha256']=='e'*64 and row['exec_commit']=='d'*40
-        S.atomic(control/'intentional-supervisor-stop.json',current)
+        S.atomic(control/'gpu_work_complete.json',current); p.terminate()
     out=p.communicate(timeout=20)[0]
     assert p.returncode==(0 if kind=='new' else 8),out
     assert not cancelled.exists() and not (control/'STOP').exists()
@@ -205,19 +205,22 @@ def test_guard_exit_uses_current_payload_state_not_old_receipt(tmp_path,kind):
     S.atomic(receipt,stale); before=receipt.read_bytes()
     if kind!='healthy_old_receipt':
         S.atomic(control/'intentional-supervisor-stop.json',base if kind=='current_intent' else stale)
+    if kind=='current_intent': S.atomic(control/'controller-heartbeat.json',dict(base,t=time.time(),loop_t=time.time(),pid=123,start_ticks=10))
     p=subprocess.Popen(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+60))],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
     try:
-        if kind=='healthy_old_receipt':
+        if kind in ('healthy_old_receipt','current_intent'):
             marker=control/'guardian-ready-101.json'; deadline=time.monotonic()+3
             while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
             assert marker.exists()
             time.sleep(.2)
-            assert p.poll() is None and receipt.read_bytes()==before
+            assert p.poll() is None
+            if kind=='healthy_old_receipt': assert receipt.read_bytes()==before
+            else: assert S.read(control/'guardian-heartbeat-101.json')['monitor']=='controller'
             # 正常完成标记仅用于结束本夹具，不触及其它作业。
             S.atomic(control/'gpu_work_complete.json',base); p.terminate()
         out=p.communicate(timeout=15)[0]
         assert p.returncode==(8 if kind=='wrong_intent' else 0),out
-        if kind=='current_intent': assert S.read(receipt)==base and 'payload_rc=10' in out
+        if kind=='current_intent': assert S.read(receipt)==base and 'phase=intentional_supervisor_stop' in out
         elif kind=='wrong_intent': assert receipt.read_bytes()==before and S.read(control/'guard-failure-101.json')['phase']=='intentional_supervisor_stop'
         assert not cancelled.exists() and not (control/'STOP').exists()
     finally:
@@ -347,14 +350,21 @@ def test_prepare_timeout_reports_once_and_keeps_cpu_hold(tmp_path):
     finally: p.terminate(); p.communicate(timeout=5)
 
 
-def test_guard_legitimate_supervisor_stop_exits_own_step_only(tmp_path):
+def test_guard_legitimate_supervisor_stop_keeps_fresh_controller_guard_alive(tmp_path):
     control,base,env,cancelled=guard_fixture(tmp_path)
     S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time()-121))
     S.atomic(control/'intentional-supervisor-stop.json',dict(base,reason='exception_stop_only_supervisor',cpu_hold=True))
-    p=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+60))],
-                     env=env,capture_output=True,text=True,timeout=5)
-    assert p.returncode==0 and not cancelled.exists() and not (control/'STOP').exists()
-    assert (control/'guardian-intent-accepted-101.json').exists() and 'phase=intentional_supervisor_stop' in p.stdout
+    S.atomic(control/'controller-heartbeat.json',dict(base,t=time.time(),loop_t=time.time(),pid=123,start_ticks=10))
+    p=subprocess.Popen(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+60))],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    try:
+        marker=control/'guardian-heartbeat-101.json'; deadline=time.monotonic()+3
+        while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+        assert marker.exists() and p.poll() is None and S.read(marker)['monitor']=='controller'
+        S.atomic(control/'gpu_work_complete.json',base); p.terminate(); out=p.communicate(timeout=15)[0]
+        assert p.returncode==0 and not cancelled.exists() and not (control/'STOP').exists()
+        assert (control/'guardian-intent-accepted-101.json').exists() and 'phase=intentional_supervisor_stop' in out
+    finally:
+        if p.poll() is None: p.kill(); p.wait(timeout=3)
 
 
 def test_supervisor_process_exits_but_controller_guard_and_batch_pids_live(tmp_path):
