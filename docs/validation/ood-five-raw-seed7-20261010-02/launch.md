@@ -78,3 +78,15 @@ srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none
 ```
 
 CPU只读预检、实际新步骤／PID及交接判定回写result；这里只固定已提交源码和真实参数，不把命令准备视为运行成功。
+
+## 最终真实接管入口
+
+第二次恢复曾因排队作业查询超时自停，原三个formal继续；03／04／05均仅预检拒绝，未启动监督器。最后实际接管使用六文件 `orchestration-recovery-06/ @e39c6d4a407bb81f49f6f293a0be86b4f9a03cf3`，锁在 `records/orchestration-lock-recovery-06.json`，worker仍8c3／配置bbe。CPU只读 `existing-dispatches-preflight` 已通过，运行入口为 `--resume-existing-dispatches`，取代旧的三首局恢复flag。
+
+本轮仍需保留的精确会话：`ev-ood-five-raw-mover-resume-20261010-02`、`ev-ood-five-raw-supervisor-resume-02-20261010-02`（旧CPUstep12保持原三srun所在cgroup）及 `ev-ood-five-raw-supervisor-resume-06-20261010-02`（新监督／控制器）。主连接也不能为了清理被关闭。实际一次启动命令：
+
+```bash
+tmux new-session -d -s ev-ood-five-raw-supervisor-resume-06-20261010-02 'bash /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/supervisor-resume-06-run.sh'
+```
+
+该载体在63664373同CPU作业内运行 `raw_ood_supervisor_hold.sh <NFS运行根> <NFS主解释器> <NFS运行根>/orchestration-recovery-06/raw_ood_supervisor.py run --config <NFS运行根>/control/run-config-resume-01.json --resume-existing-dispatches --orchestration-commit e39c6d4a407bb81f49f6f293a0be86b4f9a03cf3`。新监督器734024／控制器734113，原3worker PID不改。真实首步和心跳已取得；最后Slurm刷新仍待SSH可新开会话，详见result的具名判定。未建立代理自动唤醒。

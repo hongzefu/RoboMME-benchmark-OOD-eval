@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-五个正式首局均完成执行与原始媒体核验，正常任务失败独立记分；原三局复用没有重跑。正式分片已派发，之后控制器／监督器因第四排队GPU的调度查询超时退出，三个正式worker保留运行；附着恢复与真实首步交接待验。CPU与原GPU占位保留，完整五模型结果尚未完成。
+五个正式首局均完成执行与原始媒体核验，正常任务失败独立记分；原三局复用没有重跑。CPU监督已恢复并附着原三个正式worker，真实首步、三份新鲜心跳和无错误检查通过。最后的外部Slurm作业状态刷新因SSH新会话被拒未完成，交接明确为不完整；CPU与原GPU继续，完整五模型结果尚未完成。
 
 | 模型 | 范围 | 实际步数 | task_success | infra |
 | --- | --- | --- | --- | --- |
@@ -83,3 +83,17 @@
 05实际CPU预检继续拒绝，未启动监督器：步骤清单使用了作业状态字段 `%T`，但当前Slurm步骤模式不支持它。主实查 `squeue --steps -o '%i %j %T'` 给出stderr错误且退出0，stdout第三列为字面 `%T`，不能用于状态判定。改用受支持的 `%i %j` 两列清单，stderr空、合法登记StepID与唯一名称均必检；实际RUNNING／COMPLETED／退出码继续严格取精确sacct，不从列表推断状态。原三个formal仍运行，未重复启动或领取预算；05失败日志保留。
 
 步骤格式补充修复固定 `52b5b2f43d597ed8ae51ab9a5f4b524b95fbe545`，`SLURM_STEP_FORMAT_REVIEW=PASS`；主整合控制器及契约门禁 `108 passed in 18.68s`、退出0，资源守卫全零。旧首局和新在途恢复共用正确步骤清单，原预算／来源／进程绑定不放宽。
+
+## 06真实接管与交接边界
+
+实际编排为已推送 `e39c6d4a407bb81f49f6f293a0be86b4f9a03cf3`，六文件束 `orchestration-recovery-06/` 两端SHA和四模块独立导入通过。原CPU真实预检退出0：`EXISTING_DISPATCHES_PREFLIGHT=PASS active=3 completed=0 published=5`，严格复用原步骤63664391.5／63664392.5／63664393.4。新监督器734024、控制器734113启动，三个新守卫分别为63664391.7／63664392.6／63664393.5；原srun683623／683630／683637与client2247115／2247129／2247043保持，没有重复启动。
+
+本机读取真实已序列化回执、保留小result、预算共享锁快照与最新心跳，短检查退出0：`RAW_SMOKE=PASS models=5 task=VideoUnmask tier=xhard1 first_tries=5 infra=0 media=5 success=4`；`FIRST_DISPATCH=PASS model=qwenvl step=63664391.5 actions=1379`；`RUN_HEARTBEATS=PASS fresh=3 errors=0 mover_alive=1 supervisor_session_alive=1 old_cpu_wrapper_session_alive=1`。首动作证明为原PickXtimes首局result，正常任务失败不重试。
+
+快照尝试乘式：Oracle／FrameSamp／PP各1任务VideoUnmask × 1档xhard1 × 1首试；QwenVL为1任务PickXtimes × 1档xhard1 × 2首试 + 1任务StopCube × 1档xhard5 × 1首试 + 1任务SwingXtimes × 1档xhard1 × 6首试 + 1任务VideoUnmask × 1档xhard1 × 1首试；SMVLA为1任务PickXtimes × 1档xhard1 × 5首试 + 1任务VideoUnmask × 1档xhard1 × 1首试。新轮合计19／38，加旧PP × 1任务VideoUnmask × 1档xhard1 × 1首试的1／2，累计20轨迹／40reset，零重试；只是该时点快照，运行会正常增长，上限仍4001／8002。
+
+外部SSH追加查询出现 `Session open refused by peer`，随后普通客户端尝试新认证并报失败。核对greatlakes.md及当前状态：`ssh -O check greatlakes` 退出0、Master PID1709683存活，TCP到GreatLakes22端口仍ESTAB；主连接并未消失。问题是新增命令会话被拒，容量／服务器策略原因尚未确证，不将其表述为连接过期或要求用户先重新认证。未关闭主连接或任何既有会话。最后Slurm状态刷新尚未取得：`AGENT_HANDOFF=INCOMPLETE missing=fresh_slurm_job_query ssh_session_refused=1 automatic_agent_wakeup=0`，不伪造全通过。
+
+后台CPU调度与搬运继续；故障邮件通道已由用户实收探针验证，后续故障邮件仅证提交，不逐封声称实收。当前宿主未建立代理自动唤醒，不能承诺代理无人值守自行修复异常。恢复可用新SSH命令会话后补最后查询；不重跑GPU或重复申请CPU许可。
+
+用户追问：「为什么会有这个问题？你检查一下 Great Lakes Markdown 里面的 SSH 的这个链接是不是现在已经没有了吗？就是链接已经没有了吗。」「活动连接已经没有了吗？」据greatlakes.md的ControlMaster规则重新只读核验：主进程、控制socket和TCP ESTAB均在，不属于主连接丢失。当前/proc扫描发现主进程10个唯一输出pipe，其中8条暂无可见本机reader、2条有本轮ssh/tee存活端点；不能把10pipe直接换算10SSH会话，也不能据此确认远端MaxSessions设置或擅自清理。先前请用户恢复登录不够准确，已纠正为无需先重新认证；新会话被拒的具体远端原因尚未确证。

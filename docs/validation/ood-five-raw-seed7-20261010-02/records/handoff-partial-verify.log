@@ -1,0 +1,6 @@
+RAW_SMOKE=PASS models=5 task=VideoUnmask tier=xhard1 first_tries=5 infra=0 media=5 success=4
+FIRST_DISPATCH=PASS model=qwenvl step=63664391.5 actions=1379
+RUN_HEARTBEATS=PASS fresh=3 errors=0 mover_alive=1 supervisor_session_alive=1 old_cpu_wrapper_session_alive=1
+AGENT_HANDOFF=INCOMPLETE missing=fresh_slurm_job_query ssh_session_refused=1 automatic_agent_wakeup=0
+{"combined": {"reset_cap": 8002, "reset_claims": 40, "reset_count": 40, "trajectories": 20, "trajectory_cap": 4001}, "current": {"reset_cap": 8000, "reset_claims": 38, "reset_count": 38, "retries": 0, "trajectories": 19, "trajectory_cap": 4000}, "prior": {"reset_claims": 2, "sha256": "fc294d2d4dfe5d3ad00b1cd93afe7d1e3e47989ba457b0241c0695b1b1131d74", "trajectories": 1}}
+尝试数乘式：groundsg/ground-sg-oracle/seed7/new：1任务 VideoUnmask × 1档 xhard1 × 1首试 + groundsg/ground-sg-qwenvl/seed7/new：1任务 PickXtimes × 1档 xhard1 × 2首试 + groundsg/ground-sg-qwenvl/seed7/new：1任务 StopCube × 1档 xhard5 × 1首试 + groundsg/ground-sg-qwenvl/seed7/new：1任务 SwingXtimes × 1档 xhard1 × 6首试 + groundsg/ground-sg-qwenvl/seed7/new：1任务 VideoUnmask × 1档 xhard1 × 1首试 + perceptual-framesamp-modul/seed7/new：1任务 VideoUnmask × 1档 xhard1 × 1首试 + pp/seed7/new：1任务 VideoUnmask × 1档 xhard1 × 1首试 + smvla/seed7/new：1任务 PickXtimes × 1档 xhard1 × 5首试 + smvla/seed7/new：1任务 VideoUnmask × 1档 xhard1 × 1首试 = 19
