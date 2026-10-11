@@ -55,6 +55,8 @@ def test_gpu_guard_cpu_missing_before_ready_exits_without_cancel(tmp_path):
 
 def test_gpu_guard_hanging_query_is_bounded(tmp_path):
     control=tmp_path/'control'; control.mkdir(); (control/'gpu-job-ids.txt').write_text('101\n102\n103\n104\n')
+    base=dict(root=str(tmp_path),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64)
+    S.atomic(control/'launch.ready',base); S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time()-121,loop_t=time.time()-121))
     bindir=tmp_path/'bin'; bindir.mkdir(); cancelled=tmp_path/'cancelled'
     for name,body in [('squeue','exec sleep 60'),('scancel','echo "$*" >> '+str(cancelled))]:
         p=bindir/name; p.write_text('#!/bin/bash\n'+body+'\n'); p.chmod(0o700)
@@ -62,7 +64,7 @@ def test_gpu_guard_hanging_query_is_bounded(tmp_path):
     start=time.monotonic()
     p=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+120))],env=env,capture_output=True,text=True,timeout=36)
     elapsed=time.monotonic()-start
-    assert p.returncode==7 and elapsed<35,p.stdout+p.stderr
+    assert p.returncode==8 and elapsed<12,p.stdout+p.stderr
     assert not (control/'STOP').exists() and not cancelled.exists()
 
 
@@ -174,6 +176,45 @@ def guard_fixture(root):
         p=bindir/name; p.write_text('#!/bin/bash\n'+body+'\n'); p.chmod(0o700)
     env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0',PATH=str(bindir)+':'+os.environ['PATH'])
     return control,base,env,cancelled
+
+
+def test_continuous_query_failure_does_not_override_fresh_heartbeat(tmp_path):
+    import threading
+    control,base,env,cancelled=guard_fixture(tmp_path)
+    query=tmp_path/'bin/squeue'; query.write_text('#!/bin/bash\nexit 1\n')
+    stop=threading.Event()
+    def heartbeat():
+        while not stop.is_set():
+            S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),loop_t=time.time()))
+            stop.wait(.2)
+    writer=threading.Thread(target=heartbeat); writer.start()
+    p=subprocess.Popen(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(int(time.time()+120))],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    try:
+        deadline=time.monotonic()+3
+        while not (control/'guardian-heartbeat-101.json').exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
+        assert (control/'guardian-heartbeat-101.json').exists()
+        time.sleep(31)
+        assert p.poll() is None
+        stop.set(); writer.join(timeout=2)
+        S.atomic(control/'cpu-heartbeat.json',dict(base,t=time.time()-121,loop_t=time.time()-121))
+        out=p.communicate(timeout=15)[0]
+        assert p.returncode==8 and 'state=UNKNOWN' in out
+        assert S.read(control/'guard-failure-101.json')['phase']=='heartbeat_validate'
+        assert not cancelled.exists() and not (control/'STOP').exists()
+    finally:
+        stop.set(); writer.join(timeout=2)
+        if p.poll() is None: p.kill(); p.wait(timeout=3)
+
+
+def test_unknown_query_without_verified_ready_has_initial_120_second_bound(tmp_path):
+    control,base,env,cancelled=guard_fixture(tmp_path); (control/'launch.ready').unlink()
+    (tmp_path/'bin/squeue').write_text('#!/bin/bash\nexit 1\n')
+    # 注入只用于夹具的wall clock，真正shell走120秒边界，避免实等两分钟。
+    counter=tmp_path/'clock-count'; clock=tmp_path/'bin/date'; initial=int(time.time())
+    clock.write_text('#!/bin/bash\nn=0\n[[ ! -f '+str(counter)+' ]] || n=$(cat '+str(counter)+')\necho $((n+1)) > '+str(counter)+'\nif (( n==0 )); then echo '+str(initial)+'; else echo '+str(initial+121)+'; fi\n'); clock.chmod(0o700)
+    p=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'r','100',str(initial+600)],env=env,capture_output=True,text=True,timeout=5)
+    assert p.returncode==7 and 'state=UNKNOWN' in p.stdout
+    assert not cancelled.exists() and not (control/'guardian-ready-101.json').exists()
 
 
 @pytest.mark.parametrize('kind',['new','symlink','outside'])
@@ -426,6 +467,28 @@ def mail_config(tmp_path):
     return c
 
 
+@pytest.mark.parametrize('mode',['existing','paused','both','neither'])
+def test_attach_binds_exact_original_recovery_mode_without_new_controller(tmp_path,monkeypatch,mode):
+    c=mail_config(tmp_path); c['python']=sys.executable; control=tmp_path/'control'
+    cfg=control/'config.json'; S.atomic(cfg,c); source=tmp_path/'raw_ood_controller.py'; source.write_text('可信原源码夹具')
+    base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}; now=time.time()
+    origin=dict(base,orchestration_commit='c'*40,resume_existing_dispatches=mode in ('existing','both'),resume_paused=mode in ('paused','both'),resume_completed_smokes=False)
+    S.atomic(control/'orchestration-started.json',origin); S.atomic(control/'supervisor-started.json',dict(base,controller_pid=777,time=now))
+    S.atomic(control/'controller-heartbeat.json',dict(base,pid=777,t=now,loop_t=now,start_ticks=12))
+    manifest=control/'original-lock.json'; S.atomic(manifest,dict(orchestration_commit='c'*40,worker_exec_commit=c['exec_commit'],config_sha256=c['config_sha256'],files={'raw_ood_controller.py':dict(bytes=source.stat().st_size,sha256=S.sha(source))}))
+    flag='--resume-paused' if mode=='paused' else '--resume-existing-dispatches'
+    proc=dict(state='S',command=[sys.executable,str(source),'run','--config',str(cfg),flag,'--orchestration-commit','c'*40],start_ticks=12,start_time=now,cgroup='0::/slurm/job_100/step_12/task0')
+    monkeypatch.setattr(S,'process_identity',lambda pid:proc)
+    monkeypatch.setattr(S.subprocess,'Popen',lambda *a,**kw:pytest.fail('附着禁止新控制器'))
+    before={p:p.read_bytes() for p in control.iterdir()}
+    if mode in ('both','neither'):
+        with pytest.raises(ValueError): S.attach_controller(c,cfg,777,source,manifest,S.sha(manifest))
+    else:
+        process,proof=S.attach_controller(c,cfg,777,source,manifest,S.sha(manifest))
+        assert process.poll() is None and proof['command']==proc['command'] and proof['budget_action']=='none'
+    assert all(p.read_bytes()==raw for p,raw in before.items())
+
+
 @pytest.mark.parametrize('kind',['valid','missing','context','channel'])
 def test_legacy_notification_reuses_only_same_channel_received_proof(tmp_path,kind):
     import copy
@@ -460,6 +523,22 @@ def test_notification_submit_is_bound_idempotent_and_not_delivery(tmp_path,monke
     S.require_probe(c); assert S.notify(c,'probe',{})==report and len(calls)==1
     bad=dict(c,config_sha256='c'*64)
     with pytest.raises(ValueError): S.require_probe(bad)
+
+
+def test_each_supervisor_instance_notifies_once_and_preserves_legacy_receipt(tmp_path,monkeypatch):
+    import types
+    c=mail_config(tmp_path); calls=[]; legacy=tmp_path/'control/notification-failure.json'
+    S.atomic(legacy,dict(config_sha256='old',state='failed')); original=legacy.read_bytes()
+    monkeypatch.setattr(S.subprocess,'run',lambda cmd,**kw:calls.append(cmd) or types.SimpleNamespace(returncode=0,stdout=b'queued',stderr=b''))
+    for instance in ('instance-1','instance-2'):
+        monkeypatch.setattr(S,'NOTIFICATION_INSTANCE',instance)
+        record=S.notify(c,'failure',dict(error='本实例错误'))
+        assert record['supervisor_instance']==instance and record['state']=='submitted'
+        assert S.notify(c,'failure',{})==record
+        assert S.read(Path(record['receipt_path']))==record
+    assert len(calls)==2 and legacy.read_bytes()==original
+    latest=S.read(tmp_path/'control/notification-latest-failure.json'); assert latest['supervisor_instance']=='instance-2'
+    assert (tmp_path/'control/notifications/instance-1/failure.json').exists()
 
 
 def test_notification_failure_does_not_stop_other_pids(tmp_path,monkeypatch):
