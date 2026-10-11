@@ -317,7 +317,7 @@ def test_live_worker_heartbeat_gate_is_not_relaxed(tmp_path):
     a['log'].close()
 
 
-def resume_fixture(tmp_path,monkeypatch):
+def resume_fixture(tmp_path,monkeypatch,models=('qwenvl','smvla','pp')):
     import budget_ledger, time
     c=config(tmp_path); rows=identities()
     for row in rows: row['seed']=int(row['key'].rsplit('_',1)[1])
@@ -325,8 +325,8 @@ def resume_fixture(tmp_path,monkeypatch):
     led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
     led.check(); creator=C.Controller(c)
     monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=999))
-    for index,model in enumerate(('qwenvl','smvla','pp')):
-        seat=c['seats'][index]; creator.start(seat,model+'-00',smoke=True); a=creator.active[str(seat['job_id'])]; ident=a['rows'][0]
+    for index,model in enumerate(models):
+        seat=c['seats'][index%3]; creator.start(seat,model+'-00',smoke=True); a=creator.active[str(seat['job_id'])]; ident=a['rows'][0]
         seat_name=f"{seat['seat']}-{model}-00-smoke"; label=c['models'][model]['label']
         C.atomic(a['progress'],dict(label=label,phase='finished',rc=0,episodes_done=1,pid=1000,seat=seat_name,policy_seed=7,
                                    slurm_job_id=seat['job_id'],slurm_step_id='1',key=None,t=time.time()))
@@ -353,6 +353,190 @@ def resume_fixture(tmp_path,monkeypatch):
         return types.SimpleNamespace(returncode=0,stdout=step+'|raw-ood-worker-'+model+'-00-smoke|COMPLETED|0:0\n',stderr='')
     monkeypatch.setattr(C.subprocess,'run',query)
     return ctl,query
+
+
+def existing_fixture(tmp_path,monkeypatch):
+    import time
+    ctl,_=resume_fixture(tmp_path,monkeypatch,models=C.MODELS)
+    C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
+    for index,model in enumerate(C.MODELS):
+        seat=ctl.c['seats'][index%3]; inv=ctl.control/'invocations'/(model+'-00-smoke')
+        row=json.loads((Path(ctl.c['gl_root'])/'seats'/ctl.c['models'][model]['label']/'seed7'/f"{seat['seat']}-{model}-00-smoke"/'seat-results.jsonl').read_text())
+        a=dict(model=model,shard=model+'-00',rows=ctl.shards[model+'-00']['rows'][:1],smoke=True)
+        doc=ctl.prepare_publication(a,row); C.atomic(ctl.gl/'published'/C.publication_name(doc['identity_key']),doc)
+        C.atomic(ctl.gl/'mover/receipts'/C.publication_name(doc['identity_key']),dict(doc,result='moved',decoded=True,trace_checked=True))
+    metadata={}; account={}
+    for index,shard in enumerate(('qwenvl-00','qwenvl-01','smvla-00')):
+        seat=ctl.c['seats'][index]; ctl.start(seat,shard); inv=ctl.control/'invocations'/(shard+'-full')
+        d=C.read(inv/'dispatch.json'); d['srun_pid']=9000+index; C.atomic(inv/'dispatch.json',d)
+        model=ctl.shards[shard]['model']; step=str(seat['job_id'])+'.5'
+        C.atomic(inv/'progress.json',dict(phase='context_load',key=None,t=time.time(),label=ctl.c['models'][model]['label'],
+                  slurm_job_id=seat['job_id'],slurm_step_id='5',seat=f"{seat['seat']}-{shard}-full",policy_seed=7,pid=2000+index))
+        metadata[9000+index]=dict(state='S',start_ticks=3000+index,start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
+        account[step]=f'{step}|raw-ood-worker-{shard}-full|RUNNING|0:0\n'
+    monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid))
+    def query(cmd,**kw):
+        if cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]],stderr='')
+        if '--steps' in cmd:
+            return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(line.strip().split('|')[:3])+'\n' for line in account.values() if '|RUNNING|' in line),stderr='')
+        return types.SimpleNamespace(returncode=0,stdout='PENDING\n',stderr='')
+    monkeypatch.setattr(C.subprocess,'run',query)
+    return C.Controller(ctl.c),metadata,account
+
+
+def test_existing_dispatch_preflight_and_attach_do_not_replay_or_republish(tmp_path,monkeypatch):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch)
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**k:pytest.fail('禁止重派'))
+    proof=ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert proof['active']==3 and proof['published']==5 and not ctl.active
+    assert {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+    ledger=Path(ctl.c['budget_ledger']).read_bytes()
+    ctl.resume_existing_dispatches('c'*40)
+    assert len(ctl.active)==3 and len(ctl.pending)==37 and ctl.smoked==set(C.MODELS) and ctl.formal
+    assert ctl.initial_dispatched=={'101','102','103'} and len(ctl.published)==5
+    ctl.scan(); ctl.dispatch()
+    assert Path(ctl.c['budget_ledger']).read_bytes()==ledger
+    for a in ctl.active.values(): a['log'].close()
+
+
+@pytest.mark.parametrize('kind',['command','cgroup','time','tick','unknown','infra','publication','receipt','directory','identities','context','missing_pid'])
+def test_existing_dispatch_rejects_before_any_write(tmp_path,monkeypatch,kind):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv=ctl.control/'invocations/qwenvl-00-full'
+    if kind=='command': metadata[9000]['command']=['srun','wrong']
+    elif kind=='cgroup': metadata[9000]['cgroup']='0::/slurm/job_999/step_12'
+    elif kind=='time': metadata[9000]['start_time']-=10
+    elif kind=='tick':
+        d=C.read(inv/'dispatch.json'); d['srun_start_ticks']=999; C.atomic(inv/'dispatch.json',d)
+    elif kind=='unknown': account['101.5']='101.5|raw-ood-worker-qwenvl-00-full|UNKNOWN|0:0\n'
+    elif kind=='infra': account['101.5']='101.5|raw-ood-worker-qwenvl-00-full|FAILED|1:0\n'
+    elif kind in ('publication','receipt'):
+        path=next((ctl.gl/('published' if kind=='publication' else 'mover/receipts')).glob('*.json'))
+        row=C.read(path); row['worker_exec_commit']='f'*40; C.atomic(path,row)
+    elif kind=='directory': (ctl.control/'invocations/unknown').mkdir()
+    elif kind=='identities': (inv/'identities.jsonl').write_text('{}\n')
+    elif kind=='context':
+        d=C.read(inv/'dispatch.json'); d['config_sha256']='f'*64; C.atomic(inv/'dispatch.json',d)
+    else: metadata.pop(9000)
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    with pytest.raises((ValueError,RuntimeError,KeyError)): ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+
+
+def test_query_unknown_window_and_pending_cooldown_never_launch(tmp_path,monkeypatch):
+    c=config(tmp_path); clock=[0.]; calls=[]; states={}; mode=['timeout']
+    monkeypatch.setattr(C.time,'monotonic',lambda:clock[0])
+    def query(cmd,**kw):
+        calls.append(cmd); assert kw['timeout']==5
+        if mode[0]=='timeout': raise C.subprocess.TimeoutExpired(cmd,5)
+        return types.SimpleNamespace(returncode=0,stdout=mode[0],stderr='')
+    monkeypatch.setattr(C.subprocess,'run',query)
+    assert C.observed_job_state(c,'104',states,'controller') is None
+    clock[0]=4; assert C.observed_job_state(c,'104',states,'controller') is None and len(calls)==1
+    clock[0]=5; assert C.observed_job_state(c,'104',states,'controller') is None and len(calls)==2
+    clock[0]=30
+    with pytest.raises(RuntimeError,match='SLURM_QUERY_WINDOW'): C.observed_job_state(c,'104',states,'controller')
+    states.clear(); mode[0]='PENDING'; clock[0]=40
+    assert C.observed_job_state(c,'104',states,'controller')=='PENDING'
+    mode[0]='RUNNING'; clock[0]=49; assert C.observed_job_state(c,'104',states,'controller') is None
+    clock[0]=50; assert C.observed_job_state(c,'104',states,'controller')=='RUNNING'
+    assert C.observed_job_state(c,'104',states,'controller')=='RUNNING'
+
+
+def formal_report_fixture(ctl):
+    import budget_ledger,shutil
+    model='qwenvl'; shard=model+'-00'; seat=ctl.c['seats'][0]; inv=ctl.control/'invocations'/(shard+'-full')
+    rows=ctl.shards[shard]['rows'][:2]; ctl.shards[shard]['rows']=rows
+    (inv/'identities.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in rows)); C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
+    ident=rows[1]; directory=ctl.gl/'rollouts'/ctl.c['models'][model]['label']/'ood/seed7/raw/VideoUnmask_ep1_xhard1'
+    source=directory.with_name('VideoUnmask_ep0_xhard1'); shutil.copytree(source,directory)
+    result=C.read(directory/'result.json'); result.update(ident); C.atomic(directory/'result.json',result)
+    meta=C.read(directory/'meta.json'); meta['identity']=ident; C.atomic(directory/'meta.json',meta)
+    (directory/'trace.jsonl').write_text(json.dumps(dict(kind='header',identity=ident))+'\n'+json.dumps(dict(kind='end',exec_steps=1))+'\n')
+    route='groundsg/ground-sg-qwenvl/seed7/new'; token=route+'|'+ident['key']+'|a1'
+    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id=seat['job_id'])
+    led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id=seat['job_id'])
+    smoke=ctl.gl/'seats'/ctl.c['models'][model]['label']/'seed7'/f"{seat['seat']}-{model}-00-smoke"/'seat-results.jsonl'
+    row=json.loads(smoke.read_text()); row.update(key=ident['key'],seat=f"{seat['seat']}-{shard}-full",result=str(directory/'result.json'),budget_rid=rid,budget_token=token)
+    report=smoke.parent.with_name(row['seat'])/'seat-results.jsonl'; report.parent.mkdir(); report.write_text(json.dumps(row)+'\n')
+    return inv,report,row
+
+
+def test_existing_terminal_and_unpublished_rows_resume_without_budget_write(tmp_path,monkeypatch):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv,report,row=formal_report_fixture(ctl)
+    account['101.5']='101.5|raw-ood-worker-qwenvl-00-full|COMPLETED|0:0\n'; metadata.pop(9000)
+    p=C.read(inv/'progress.json'); p.update(phase='finished',rc=0,episodes_done=1); C.atomic(inv/'progress.json',p)
+    before=Path(ctl.c['budget_ledger']).read_bytes(); pub_before=len(list((ctl.gl/'published').glob('*.json')))
+    proof=ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert proof['completed']==1 and proof['active']==2 and len(list((ctl.gl/'published').glob('*.json')))==pub_before
+    ctl.resume_existing_dispatches('c'*40)
+    assert 'qwenvl-00' in ctl.completed and len(ctl.published)==6 and len(ctl.active)==2
+    assert Path(ctl.c['budget_ledger']).read_bytes()==before
+    for a in ctl.active.values(): a['log'].close()
+
+
+@pytest.mark.parametrize('kind',['already_published','duplicate','half_terminal','uncommitted','cross_identity'])
+def test_existing_report_rows_are_checked_before_offset_or_publish(tmp_path,monkeypatch,kind):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv,report,row=formal_report_fixture(ctl)
+    a=dict(model='qwenvl',shard='qwenvl-00',rows=ctl.shards['qwenvl-00']['rows'],smoke=False)
+    if kind=='already_published':
+        doc=ctl.prepare_publication(a,row); C.atomic(ctl.gl/'published'/C.publication_name(doc['identity_key']),doc)
+    elif kind=='duplicate': report.write_text(report.read_text()*2)
+    elif kind=='half_terminal':
+        report.write_text(report.read_text().rstrip('\n')); account['101.5']='101.5|raw-ood-worker-qwenvl-00-full|COMPLETED|0:0\n'
+        p=C.read(inv/'progress.json'); p.update(phase='finished',rc=0); C.atomic(inv/'progress.json',p)
+    elif kind=='uncommitted': row['budget_rid']='missing'; report.write_text(json.dumps(row)+'\n')
+    else: row['key']='wrong'; report.write_text(json.dumps(row)+'\n')
+    before=Path(ctl.c['budget_ledger']).read_bytes()
+    if kind=='already_published':
+        ctl.resume_existing_dispatches('c'*40); assert ctl.active['101']['offset']==1
+        ctl.scan(); assert ctl.active['101']['offset']==1 and len(ctl.published)==6
+        for x in ctl.active.values(): x['log'].close()
+    else:
+        with pytest.raises((ValueError,RuntimeError,KeyError)): ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert Path(ctl.c['budget_ledger']).read_bytes()==before
+
+
+def test_existing_adapter_real_pid_disappearance_requires_true_terminal_accounting(tmp_path,monkeypatch):
+    import subprocess,time
+    ready=tmp_path/'ready'
+    child=subprocess.Popen([sys.executable,'-c',"import pathlib,time,sys; pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(.3)",str(ready)])
+    deadline=time.monotonic()+2
+    while not ready.exists() and time.monotonic()<deadline: time.sleep(.01)
+    assert ready.exists()
+    proc=C.process_identity(child.pid); adapter=C.ExistingProcess(child.pid,proc,'101.5','raw-ood-worker-qwenvl-00-full')
+    try:
+        assert adapter.poll() is None
+        child.wait(timeout=2)
+        monkeypatch.setattr(C,'worker_account',lambda *a:None)
+        with pytest.raises(ValueError,match='退出未知'): adapter.poll()
+        monkeypatch.setattr(C,'worker_account',lambda *a:0)
+        assert adapter.poll()==0
+    finally:
+        if child.poll() is None: child.kill(); child.wait(timeout=2)
+
+
+def test_existing_resume_validation_runs_inside_real_heartbeat_thread(tmp_path,monkeypatch):
+    import time,threading
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch)
+    def verify(*args,**kwargs):
+        path=ctl.control/'controller-heartbeat.json'; deadline=time.monotonic()+2
+        while not path.exists() and time.monotonic()<deadline: time.sleep(.01)
+        assert C.read(path)['config_sha256']==ctl.c['config_sha256']
+        raise ValueError('夹具结束只退出控制器')
+    monkeypatch.setattr(ctl,'resume_existing_dispatches',verify)
+    with pytest.raises(ValueError,match='夹具结束'): ctl.run(resume_existing_dispatches=True,orchestration_commit='c'*40)
+    assert not any(t.name=='raw-ood-controller-heartbeat' and t.is_alive() for t in threading.enumerate())
+
+
+def test_delayed_fourth_seat_does_not_request_exhausted_initial_model(tmp_path,monkeypatch):
+    ctl=C.Controller(config(tmp_path)); ctl.formal=True; ctl.pending=['oracle-07']; ctl.initial_dispatched={'101','102','103'}
+    ctl.active={str(s['job_id']):{} for s in ctl.c['seats'][:3]}
+    seat=ctl.c['seats'][3]; C.atomic(ctl.control/'guardian-ready-104.json',dict(ctl.base,gpu_job_id='104',pid=123,time=C.time.time(),step_id='1'))
+    monkeypatch.setattr(C.subprocess,'run',lambda *a,**k:types.SimpleNamespace(returncode=0,stdout='RUNNING',stderr=''))
+    launched=[]; monkeypatch.setattr(ctl,'start',lambda seat,shard:launched.append(shard))
+    ctl.dispatch(); assert launched==['oracle-07'] and not ctl.pending
 
 
 def legacy_fixture(ctl):
