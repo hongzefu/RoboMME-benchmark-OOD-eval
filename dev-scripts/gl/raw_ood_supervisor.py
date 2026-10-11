@@ -14,6 +14,8 @@ import threading
 import time
 
 from raw_ood_controller import Controller, atomic, control_file, ledger_snapshot, legacy_context, load_config, observed_job_state, process_identity, query_gpu, read, sha, validate_config
+from raw_ood_context import is_historical_error, validate_historical_errors, validate_terminal_marker
+from eval_video_mover import raw_validate_delivery
 MAIL_TO='hongzefu@umich.edu'
 MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
 GUARD_QUERY_FAILURES={}
@@ -125,22 +127,24 @@ def check_guardians(guardians: list[dict], c: dict) -> None:
     failures=[]
     for seat in c['seats']:
         job=str(seat['job_id']); path=Path(c['root'])/'control'/f'guard-failure-{job}.json'
-        if not path.exists(): continue
-        d=read(path)
-        if d['run']!=c['run'] or str(d['controller_job_id'])!=str(c['controller_job_id']) or str(d['gpu_job_id'])!=job:
-            raise ValueError('守卫原始失败回执身份错误')
-        for k in ('exec_commit','config_sha256'):
-            if k in d and d[k]!=c[k]: raise ValueError('守卫原始失败回执版本错误')
-        if not 0<float(d['time'])<=time.time()+30: raise ValueError('守卫原始失败回执时间错误')
-        failures.append((float(d['time']),d))
+        for candidate in [path,*path.parent.glob(f'{path.stem}.current-*.json')]:
+            if not candidate.exists() or is_historical_error(candidate,c): continue
+            d=read(candidate)
+            if d['run']!=c['run'] or str(d['controller_job_id'])!=str(c['controller_job_id']) or str(d['gpu_job_id'])!=job:
+                raise ValueError('守卫原始失败回执身份错误')
+            for k in ('exec_commit','config_sha256'):
+                if k in d and d[k]!=c[k]: raise ValueError('守卫原始失败回执版本错误')
+            if not 0<float(d['time'])<=time.time()+30: raise ValueError('守卫原始失败回执时间错误')
+            # shell秒级时间可能向下取整，不能压过稍早写出的原始payload错误。
+            failures.append((candidate.stat().st_mtime_ns,d))
     if failures:
         d=min(failures,key=lambda pair:pair[0])[1]
         raise RuntimeError('独立守卫原始失败: '+json.dumps(d,ensure_ascii=False,sort_keys=True))
     marker=Path(c['root'])/'control'/'gpu_work_complete.json'; normal=False
     if marker.exists():
         d=read(marker)
-        normal=all(str(d[k])==str(c[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
-        if not normal: raise ValueError('GPU正常完成标记身份错误')
+        validate_terminal_marker(d,c)
+        normal=True  # 合法不完整终态也允许守卫结束自身，allocation仍保留。
     paused=Path(c['root'])/'control/paused.json'
     if paused.exists() and (Path(c['root'])/'control/STOP').exists():
         pointer=read(paused); path=control_file(c,pointer['proof_path']); proof=read(path)
@@ -173,25 +177,35 @@ def check_heartbeat(path: Path, base: dict, *, now: float, timeout: float=120) -
 
 
 def controller_terminal_proof(c,base):
-    """PID消失本身没有成功含义；只接受完整4000终态协议，最终搬运及清理仍由监督主循环验。"""
+    """PID消失没有成功含义；严格终态证明完成与不完整，媒体交付另行核验。"""
     control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
-    if (control/'controller-error.json').exists(): raise RuntimeError('附着控制器已记录错误')
+    error=control/'controller-error.json'
+    if error.exists() and not is_historical_error(error,c): raise RuntimeError('附着控制器已记录错误')
+    markers=[]
     for path in (control/'gpu_work_complete.json',gl/'gpu_work_complete.json'):
         d=read(path)
-        if any(str(d[k])!=str(v) for k,v in base.items()) or d['expected']!=4000 or d['published']!=4000:
-            raise ValueError('附着控制器完成标记不符')
+        validate_terminal_marker(d,c); markers.append(d)
+    if markers[0]!=markers[1]: raise ValueError('双侧控制器终态标记不一致')
+    terminal=markers[0]
     result=read(control/'results-report.json')
-    if any(str(result[k])!=str(v) for k,v in base.items()) or result['expected']!=4000 or result['accepted']!=4000 or result['missing']!=0 or result['infra']!=0:
-        raise ValueError('附着控制器4000终态报告不符')
+    for key in ('expected','accepted','missing','infra','settled','unresolved','unattempted','observed_count','observed_success'):
+        if type(result[key]) is not int or result[key]<0: raise ValueError('控制器报告缺明确非负整数'+key)
+    if result['status']!=terminal['status'] or any(result[k]!=terminal[k] for k in ('settled','unresolved','unattempted')) or result['observed_count']!=terminal['published'] or result['observed_success']>result['observed_count']:
+        raise ValueError('控制器报告状态、失败计数或已观察分母不符')
+    if any(str(result[k])!=str(v) for k,v in base.items()) or result['expected']!=4000 or result['accepted']!=terminal['published'] or result['missing']!=4000-terminal['published'] or result['infra']!=terminal['infra']:
+        raise ValueError('附着控制器终态报告不符')
     ledger,_=ledger_snapshot(Path(c['budget_ledger']))
     budget=result['budget']
-    if ledger.trajectories!=4000 or ledger.retries or ledger.recovery_used or ledger.astra or budget['trajectories']!=4000 or budget['retries']!=0 or budget['bad_rows']!=0:
+    attempts=terminal['settled']+terminal['unresolved']
+    if ledger.trajectories!=attempts or ledger.retries or ledger.recovery_used or ledger.astra or budget['trajectories']!=attempts or budget['retries']!=0 or budget['bad_rows']!=0:
         raise ValueError('附着控制器终态预算不符')
     claims=sum(ledger.claimed.values())+ledger.orphan_claims
     if claims>8000 or budget['reset_claims']!=claims or budget['reset_count']!=ledger.resets: raise ValueError('附着控制器终态reset计量不符')
-    if len(c['expected_publications'])!=4000 or {p.name for p in (gl/'published').glob('*.json')}!=set(c['expected_publications']):
-        raise ValueError('附着控制器4000发布集合不符')
-    return dict(results_sha256=sha(control/'results-report.json'),budget_trajectories=4000,reset_claims=claims)
+    import hashlib
+    normal={hashlib.sha256(k.encode()).hexdigest()+'.json' for k in terminal['published_identities']}
+    if len(c['expected_publications'])!=4000 or {p.name for p in (gl/'published').glob('*.json')}!=normal:
+        raise ValueError('附着控制器正常发布集合不符')
+    return dict(results_sha256=sha(control/'results-report.json'),budget_trajectories=ledger.trajectories,reset_claims=claims,terminal=terminal)
 
 
 class AttachedController:
@@ -206,7 +220,7 @@ class AttachedController:
             return None
         try: proof=controller_terminal_proof(self.c,self.base)
         except (FileNotFoundError,KeyError) as e: raise RuntimeError('附着控制器消失且终态未知，不当作成功') from e
-        atomic(Path(self.c['root'])/'control/controller-attach-terminal.json',dict(self.base,pid=self.pid,exit_code=None,status_source='validated_complete_protocol',**proof,time=time.time()))
+        atomic(Path(self.c['root'])/'control/controller-attach-terminal.json',dict(self.base,pid=self.pid,exit_code=None,status_source='validated_terminal_protocol',**proof,time=time.time()))
         return 0
 
 
@@ -275,6 +289,7 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
         raise RuntimeError('CPU监督收到终止信号')
     signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term); signal.signal(signal.SIGUSR1,term)
     try:
+        validate_historical_errors(c)
         if sum((resume_completed_smokes,resume_existing_dispatches,resume_paused))>1: raise ValueError('手动恢复模式互斥')
         if attach_controller_pid is not None and (resume_completed_smokes or resume_existing_dispatches or resume_paused): raise ValueError('附着与重建恢复模式互斥')
         validate_config(c)
@@ -330,7 +345,9 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
             now=time.time()
             check_guardians(guardians,c)
             for f in (control/'controller-error.json',control/'guardian-error.json',mover_error,gl/'mover'/'error.json',control/'STOP',gl/'STOP'):
-                if f.exists(): raise RuntimeError(f'已发布错误{f}: {f.read_text()[:3000]}')
+                if f.exists() and not is_historical_error(f,c): raise RuntimeError(f'已发布错误{f}: {f.read_text()[:3000]}')
+                for current in f.parent.glob(f'{f.stem}.current-*.json'):
+                    if not is_historical_error(current,c): raise RuntimeError(f'新实例错误{current}: {current.read_text()[:3000]}')
             h=check_heartbeat(mover,base,now=now)
             # 零值必须实际写入JSON；缺键属于错误，不能默认成功。
             pending=int(h['pending']); moved=int(h['moved']); progress=float(h['last_progress'])
@@ -352,32 +369,34 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
                     raise ValueError('控制器暂停证明不完整')
                 atomic(control/'supervisor-paused.json',dict(base,controller_pid=controller.pid,accepted=proof['accepted'],remaining=proof['remaining'],paused_proof=d,time=now))
                 print('SUPERVISOR_PAUSED=PASS accepted='+str(proof['accepted'])+' remaining='+str(proof['remaining']),flush=True); return 6
-            elif rc!=0: raise RuntimeError(f'控制器退出{rc}')
+            elif rc not in (0,2): raise RuntimeError(f'控制器退出{rc}')
             else:
                 complete=gl/'mover'/'completed.json'
                 if not (control/'gpu_work_complete.json').exists(): raise RuntimeError('控制器退出缺GPU完成标记')
+                proof=controller_terminal_proof(c,base); terminal=proof['terminal']
                 if complete.exists():
                     d=read(complete)
-                    for k,v in base.items():
-                        if str(d[k])!=str(v): raise ValueError('搬运完成身份错误')
-                    for k in ('expected','moved','missing','decode_fail','sha_mismatch','pending'):
-                        if k not in d: raise ValueError('搬运完成缺计数'+k)
-                    if d['expected']!=4000 or d['moved']!=4000 or any(d[k]!=0 for k in ('missing','decode_fail','sha_mismatch','pending')):
-                        raise ValueError('搬运完整验收失败')
-                    cleanup=final_cleanup_evidence(c,base)
-                    if cleanup['cleanup_incomplete']:
-                        if cleanup_settle_started is None: cleanup_settle_started=time.monotonic()
-                        if time.monotonic()-cleanup_settle_started>=30: raise RuntimeError('最终GPU状态查询仍非空或未知，清理未完成')
-                        time.sleep(5); continue
+                    raw_validate_delivery(d,terminal,c)
+                    if d['terminal_sha256']!=sha(gl/'gpu_work_complete.json'): raise ValueError('搬运消费的终态标记原字节不符')
+                    if terminal['status']=='INCOMPLETE':
+                        atomic(control/'delivery-incomplete.json',dict(base,**{k:d[k] for k in ('expected','moved','infra','raw_missing')},status='INCOMPLETE',time=now))
+                        report=dict(base,results=read(control/'results-report.json'),terminal=terminal,delivery=d,
+                                    supervisor_exit_code=2,cpu_hold=True,gpu_action='none',notification_established=False,time=now)
+                        atomic(control/'intentional-supervisor-stop.json',dict(base,reason='supervisor_delivery_incomplete',supervisor_exit_code=2,cpu_hold=True,gpu_action='none',controller_action='none',notification_established=False,time=now))
+                        report['notification']=notify(c,'failure',report); atomic(control/'final-report.json',report)
+                        print(f"RAW_DELIVERY=INCOMPLETE expected={d['expected']} moved={d['moved']} infra={d['infra']} raw_missing={d['raw_missing']}",flush=True)
+                        print('RAW_SUPERVISOR=INCOMPLETE supervisor_exit_code=2 cpu_hold=1 gpu_cancel=0',flush=True); return 2
+                    # 完整终态只结束监督自身；资源释放仍由主会话单独裁决。
+                    cleanup=dict(cpu_hold=True,gpu_action='none',gpu_cancel=0,cleanup_performed=False)
                     atomic(control/'completed.json',dict(base,expected=4000,moved=4000,infra=0,time=now))
                     atomic(control/'final-report.json',dict(base,results=read(control/'results-report.json'),delivery=d,cleanup=cleanup,
                           supervisor_exit_code=0,cpu_hold=True,notification_established=False,time=now))
                     atomic(control/'intentional-supervisor-stop.json',dict(base,reason='supervisor_completed',supervisor_exit_code=0,
-                          cpu_hold=True,gpu_action='already_completed_release',controller_action='none',notification_established=False,time=now))
+                          cpu_hold=True,gpu_action='none',controller_action='none',notification_established=False,time=now))
                     report=read(control/'final-report.json'); report['notification']=notify(c,'completed',report)
                     atomic(control/'final-report.json',report)
                     print('RAW_DELIVERY=PASS episodes=4000 videos=8000 hash_mismatch=0 decode_fail=0 missing=0 nfs_large_left=0',flush=True)
-                    print('RUN_CLEANUP=PASS gpu_jobs=4 active_gpu=0 supervisor_exit_code=0 cpu_hold=1 notification_established=0',flush=True)
+                    print('RUN_HOLD=PASS gpu_jobs=4 gpu_cancel=0 supervisor_exit_code=0 cpu_hold=1 notification_established=0',flush=True)
                     print('RAW_SUPERVISOR=PASS expected=4000 moved=4000 infra=0',flush=True); return 0
             if rc is None: start_guardians(c,guardians)
             loop_state['t']=time.time()

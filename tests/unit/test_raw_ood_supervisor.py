@@ -12,6 +12,111 @@ sys.path.insert(0,str(HERE))
 import raw_ood_supervisor as S
 
 
+def guard_complete(control, base):
+    """序列化严格完整终态，旧弱标记不再作为成功夹具。"""
+    import hashlib
+    identities=[f'smvla:ood:fixture-{i}' for i in range(4000)]
+    config={**base,'root':str(control.parent),'expected_identities':identities,'expected_publications':[hashlib.sha256(k.encode()).hexdigest()+'.json' for k in identities]}
+    config.pop('config_sha256',None)
+    cfg=control/'terminal-config.json'; S.atomic(cfg,config)
+    current={**base,'root':str(control.parent),'config_path':str(cfg),'config_sha256':S.sha(cfg)}
+    ready=control/'launch.ready'
+    if (control/'resume-ready.json').exists(): ready=control/'resume-ready.json'
+    S.atomic(ready,current)
+    terminal={k:current[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+    terminal.update(schema='raw-ood-terminal-v1',status='COMPLETE',expected=4000,settled=4000,published=4000,infra=0,unresolved=0,unattempted=0,
+                    published_identities=identities,failure_documents={},unresolved_identities=[],unattempted_identities=[])
+    S.atomic(control/'gpu_work_complete.json',terminal)
+    return terminal
+
+
+def delivery_terminal_fixture(tmp_path, monkeypatch, *, infra):
+    """真实控制器统计生产器写出四千身份终态；只有预算与小报告，无GPU或媒体。"""
+    import json
+    import raw_ood_controller as C
+    from test_raw_ood_controller import watchdog_fixture
+    ctl,_,_,_,_,_=watchdog_fixture(tmp_path,monkeypatch)
+    cfg=ctl.control/'delivery-config.json'
+    original=dict(ctl.c); original.pop('config_sha256'); C.atomic(cfg,original)
+    ctl.c['config_sha256']=C.sha(cfg); ctl.base['config_sha256']=ctl.c['config_sha256']
+    for path in tmp_path.rglob('*.json'):
+        doc=C.read(path)
+        if isinstance(doc,dict) and 'config_sha256' in doc:
+            doc['config_sha256']=ctl.c['config_sha256']; C.atomic(path,doc)
+    ctl.resume_existing_dispatches('c'*40)
+    failed=next(iter(ctl.failures))
+    if not infra:
+        ctl.failures.clear()
+        rows=[json.loads(line) for line in Path(ctl.c['budget_ledger']).read_text().splitlines()]
+        for row in rows:
+            if row.get('kind')=='commit' and row.get('infra') is True: row.update(infra=False,status='fail')
+        Path(ctl.c['budget_ledger']).write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    rows=[json.loads(line) for line in Path(ctl.c['budget_ledger']).read_text().splitlines()]
+    reserve=next(row for row in rows if row['kind']=='reserve')
+    commit=next(row for row in rows if row['kind']=='commit')
+    normal=set(ctl.c['expected_identities'])-({failed} if infra else set())
+    for index,key in enumerate(sorted(normal)):
+        model,_,episode=key.split(':',2)
+        # 不重复运行真实媒体编码；终态生产器只消费这些明确标注的CPU小报告。
+        directory=ctl.gl/'cpu-terminal-fixture'/str(index)
+        C.atomic(directory/'result.json',dict(task='VideoUnmask',tier='xhard1',task_success=False))
+        C.atomic(ctl.gl/'published'/C.publication_name(key),dict(ctl.base,model=model,identity_key=key,relative_dir=str(directory.relative_to(ctl.gl))))
+        route=ctl.c['models'][model]['policy']+('/'+C.ROUTES[model][2] if C.ROUTES[model][2] else '')+'/seed7/new'
+        if not any(r.get('kind')=='reserve' and r.get('route')==route and r.get('key')==episode for r in rows):
+            rid=f'cpu-delivery-{index}'; token=route+'|'+episode+'|a1'
+            rows.extend([dict(reserve,rid=rid,key=episode,route=route,token=token),
+                         dict(kind='reset_claim',rid=rid,what='build'),dict(kind='reset_claim',rid=rid,what='reset'),
+                         dict(commit,rid=rid,infra=False,status='fail')])
+    Path(ctl.c['budget_ledger']).write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    ctl.published=normal; ctl.unresolved.clear()
+    for active in ctl.active.values(): active['log'].close()
+    ctl.active.clear()
+    assert ctl.report()==(2 if infra else 0)
+    terminal=C.read(ctl.gl/'gpu_work_complete.json')
+    ready=dict(ctl.base,root=str(tmp_path),config_path=str(cfg)); C.atomic(ctl.control/'launch.ready',ready)
+    return ctl,terminal,cfg
+
+
+@pytest.mark.parametrize('infra',[False,True])
+def test_real_terminal_producer_delivery_guard_and_attached_consume(tmp_path,monkeypatch,infra):
+    import types
+    from eval_video_mover import raw_validate_delivery
+    ctl,terminal,cfg=delivery_terminal_fixture(tmp_path,monkeypatch,infra=infra)
+    report=dict(ctl.base,schema='raw-ood-delivery-v1',status=terminal['status'],expected=4000,moved=4000-int(infra),infra=int(infra),
+                unresolved=0,unattempted=0,raw_missing=int(infra),missing=int(infra),decode_fail=0,sha_mismatch=0,pending=0,
+                moved_identities=terminal['published_identities'],terminal_sha256=S.sha(ctl.gl/'gpu_work_complete.json'),time=time.time())
+    S.atomic(ctl.gl/'mover/completed.json',report)
+    assert raw_validate_delivery(S.read(ctl.gl/'mover/completed.json'),terminal,ctl.c)==report
+    proof=S.controller_terminal_proof(ctl.c,ctl.base); assert proof['terminal']['infra']==int(infra)
+    monkeypatch.setattr(S,'process_identity',lambda pid:None)
+    attached=S.AttachedController(ctl.c,123,{}); assert attached.poll()==0
+    receipt=S.read(ctl.control/'controller-attach-terminal.json'); assert receipt['terminal']['status']==terminal['status']
+    S.atomic(ctl.control/'jobs.json',dict(run='fixture',controller_job_id='100',gpu_job_ids=['101','102','103','104']))
+    S.atomic(ctl.control/'mover-heartbeat.json',dict(ctl.base,time=time.time(),pending=0,moved=report['moved'],last_progress=time.time()))
+    monkeypatch.setenv('SLURM_JOB_ID','100')
+    monkeypatch.setattr(S,'start_guardians',lambda c,guardians=None:[])
+    monkeypatch.setattr(S.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=123,poll=lambda:2 if infra else 0))
+    assert S.run(cfg)==(2 if infra else 0)
+    final=S.read(ctl.control/'final-report.json')
+    assert final['cpu_hold'] is True and final['delivery']['raw_missing']==int(infra)
+    assert S.read(ctl.control/'intentional-supervisor-stop.json')['gpu_action']=='none'
+    for zero in ('infra','unresolved','unattempted'):
+        broken=dict(terminal); broken.pop(zero)
+        from raw_ood_context import validate_terminal_marker
+        with pytest.raises(ValueError): validate_terminal_marker(broken,ctl.c)
+    for mutation in ('unknown','duplicate'):
+        broken=dict(terminal); broken['published_identities']=list(terminal['published_identities'])
+        if mutation=='unknown': broken['published_identities'][0]='smvla:ood:unknown'
+        else: broken['published_identities'].append(broken['published_identities'][0])
+        with pytest.raises(ValueError): validate_terminal_marker(broken,ctl.c)
+    # 真shellguard通过同一配置原字节与共同helper，不查询/取消任何真实作业。
+    monkeypatch.undo()
+    proc=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'fixture','100',str(int(time.time()+60))],
+                        env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0'),capture_output=True,text=True,timeout=30)
+    assert proc.returncode==0,proc.stdout+proc.stderr
+    assert not (ctl.control/'STOP').exists()
+
+
 def test_heartbeat_missing_fields_and_staleness(tmp_path):
     base=dict(run='r',run_name='r',exec_commit='a'*40,config_sha256='b'*64,controller_job_id='100')
     p=tmp_path/'beat.json'; S.atomic(p,dict(base,time=time.time(),pending=0,moved=0,last_progress=time.time()))
@@ -22,10 +127,27 @@ def test_heartbeat_missing_fields_and_staleness(tmp_path):
     with pytest.raises(KeyError): S.check_heartbeat(p,base,now=time.time())
 
 
+def test_guard_historical_original_remains_but_new_error_is_rejected(tmp_path):
+    import types
+    control=tmp_path/'control'; control.mkdir()
+    base=dict(root=str(tmp_path),run='r',run_name='r',exec_commit='a'*40,config_sha256='b'*64,controller_job_id='100')
+    original=control/'guard-failure-101.json'
+    S.atomic(original,dict(base,gpu_job_id='101',time=time.time(),message='已认可历史故障'))
+    saved=original.read_bytes()
+    c=dict(base,seats=[dict(job_id='101')],historical_errors=[dict(path=str(original),sha256=S.sha(original))])
+    guardians=[dict(job_id='101',process=types.SimpleNamespace(poll=lambda:None))]
+    S.check_guardians(guardians,c)
+    current=control/'guard-failure-101.current-fixture.json'; S.atomic(current,dict(base,gpu_job_id='101',time=time.time(),message='本实例新错误'))
+    with pytest.raises(RuntimeError,match='本实例新错误'): S.check_guardians(guardians,c)
+    assert original.read_bytes()==saved
+    original.write_text('{"error":"同路径改变"}')
+    with pytest.raises(ValueError,match='SHA'): S.check_guardians(guardians,c)
+
+
 def test_gpu_guard_term_with_complete_never_stop_or_cancel(tmp_path):
     control=tmp_path/'control'; control.mkdir()
     base=dict(root=str(tmp_path),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64)
-    S.atomic(control/'launch.ready',base); S.atomic(control/'gpu_work_complete.json',dict(base,expected=4000,published=4000))
+    S.atomic(control/'launch.ready',base); guard_complete(control,base)
     bindir=tmp_path/'bin'; bindir.mkdir(); cancelled=tmp_path/'cancelled'
     scancel=bindir/'scancel'; scancel.write_text('#!/bin/bash\necho "$*" >> '+str(cancelled)+'\n'); scancel.chmod(0o700)
     marker=tmp_path/'python-started'
@@ -90,7 +212,8 @@ def test_supervisor_guard_launch_and_exit_contract(tmp_path,monkeypatch,explicit
     guardians[0]['process'].poll=lambda:0
     with pytest.raises(RuntimeError): S.check_guardians(guardians,c)
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
-    S.atomic(tmp_path/'control/gpu_work_complete.json',base)
+    guard_complete(tmp_path/'control',base)
+    c.update(S.read(tmp_path/'control/terminal-config.json')); c['config_sha256']=S.sha(tmp_path/'control/terminal-config.json')
     guardians[0]['process'].poll=lambda:143
     S.check_guardians(guardians,c)
     for g in guardians: g['log'].close()
@@ -232,7 +355,7 @@ def test_explicit_guard_ready_binds_new_context_without_cancel(tmp_path,kind):
         while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
         assert marker.exists()
         row=S.read(marker); assert row['config_sha256']=='e'*64 and row['exec_commit']=='d'*40
-        S.atomic(control/'gpu_work_complete.json',current); p.terminate()
+        guard_complete(control,current); p.terminate()
     out=p.communicate(timeout=20)[0]
     assert p.returncode==(0 if kind=='new' else 8),out
     assert not cancelled.exists() and not (control/'STOP').exists()
@@ -258,7 +381,7 @@ def test_guard_exit_uses_current_payload_state_not_old_receipt(tmp_path,kind):
             if kind=='healthy_old_receipt': assert receipt.read_bytes()==before
             else: assert S.read(control/'guardian-heartbeat-101.json')['monitor']=='controller'
             # 正常完成标记仅用于结束本夹具，不触及其它作业。
-            S.atomic(control/'gpu_work_complete.json',base); p.terminate()
+            guard_complete(control,base); p.terminate()
         out=p.communicate(timeout=15)[0]
         assert p.returncode==(8 if kind=='wrong_intent' else 0),out
         if kind=='current_intent': assert S.read(receipt)==base and 'phase=intentional_supervisor_stop' in out
@@ -312,7 +435,7 @@ def test_old_five_second_startup_can_stop_fresh_heartbeat_new_isolated_startup_p
             deadline=time.monotonic()+10
             while not (control/'guardian-ready-101.json').exists() and time.monotonic()<deadline: time.sleep(.02)
             assert (control/'guardian-ready-101.json').exists()
-            S.atomic(control/'gpu_work_complete.json',base)
+            guard_complete(control,base)
             out=p.communicate(timeout=15)[0]
             assert p.returncode==0 and not (control/'STOP').exists() and not cancelled.exists(),out
             assert 'phase=python_entered' in out and 'phase=validated' in out and 'payload_rc=0' in out
@@ -356,7 +479,7 @@ def test_filesystem_timeout_retries_only_with_unexpired_verified_heartbeat(tmp_p
             while not (control/'guardian-heartbeat-101.json').exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
             assert (control/'guardian-heartbeat-101.json').exists() and p.poll() is None
             assert S.read(control/'guardian-heartbeat-101.json')['verified_t']==S.read(control/'cpu-heartbeat.json')['t']
-            S.atomic(control/'gpu_work_complete.json',base); p.terminate(); out=p.communicate(timeout=15)[0]
+            guard_complete(control,base); p.terminate(); out=p.communicate(timeout=15)[0]
             assert p.returncode==0 and 'GUARD_NFS_RETRY' in out
         else:
             out=p.communicate(timeout=3)[0]
@@ -440,7 +563,7 @@ def test_guard_legitimate_supervisor_stop_keeps_fresh_controller_guard_alive(tmp
         marker=control/'guardian-heartbeat-101.json'; deadline=time.monotonic()+3
         while not marker.exists() and p.poll() is None and time.monotonic()<deadline: time.sleep(.01)
         assert marker.exists() and p.poll() is None and S.read(marker)['monitor']=='controller'
-        S.atomic(control/'gpu_work_complete.json',base); p.terminate(); out=p.communicate(timeout=15)[0]
+        guard_complete(control,base); p.terminate(); out=p.communicate(timeout=15)[0]
         assert p.returncode==0 and not cancelled.exists() and not (control/'STOP').exists()
         assert (control/'guardian-intent-accepted-101.json').exists() and 'phase=intentional_supervisor_stop' in out
     finally:

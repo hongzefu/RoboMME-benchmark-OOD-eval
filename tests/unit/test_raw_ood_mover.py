@@ -190,7 +190,10 @@ def test_polling_does_not_rehash_delivered_large_files(publication, monkeypatch)
     def tracked_signature(path):
         calls.append(path)
         if len(calls) == 4:
-            MOVER.raw_atomic(stage / "gpu_work_complete.json", {k: row[k] for k in MOVER.RAW_CONTEXT})
+            MOVER.raw_atomic(stage / "gpu_work_complete.json", {**{k: row[k] for k in MOVER.RAW_CONTEXT},
+                "schema":"raw-ood-terminal-v1","status":"COMPLETE","expected":1,"settled":1,"published":1,
+                "infra":0,"unresolved":0,"unattempted":0,"published_identities":[row["identity_key"]],
+                "failure_documents":{},"unresolved_identities":[],"unattempted_identities":[]})
         return signature(path)
     monkeypatch.setattr(MOVER, "raw_tree", tracked_tree)
     monkeypatch.setattr(MOVER, "raw_signature", tracked_signature)
@@ -436,3 +439,93 @@ def test_error_report_write_failure_keeps_original_diagnostic(tmp_path, monkeypa
     assert "RAW_DELIVERY=FAIL error=ValueError message=首因：源 SHA 不符" in output
     assert "RAW_ERROR_WRITE_FAILED" in output and "报告盘不可写" in output
     assert not (tmp_path / "STOP").exists()
+
+
+def test_historical_error_never_masks_new_instance_error(tmp_path):
+    error=tmp_path/'control/mover-error.json'
+    MOVER.raw_atomic(error,{"error":"RuntimeError","message":"原故障"})
+    original=error.read_bytes()
+    context={**CONTEXT,"root":str(tmp_path),"historical_errors":[{"path":str(error),"sha256":MOVER.sha256(error)}]}
+    MOVER.raw_report_error(error,{"error":"ValueError","message":"新错误"},context)
+    assert error.read_bytes()==original
+    current=list(error.parent.glob('mover-error.current-*.json'))
+    assert len(current)==1 and json.loads(current[0].read_text())['message']=='新错误'
+    error.write_text('{"error":"同路径新故障"}')
+    from raw_ood_context import validate_historical_errors
+    with pytest.raises(ValueError): validate_historical_errors(context)
+
+
+@pytest.mark.parametrize('status,success',[('success',1),('fail',0),('timeout',0),('error',0)])
+def test_ordinary_zero_score_with_complete_real_media_is_deliverable(publication,status,success):
+    from robomme_ood_eval import episode as E
+    stage,dest,source,row=publication
+    result=E.EpisodeResult(dataset='ood',task='VideoUnmask',episode=0,source_episode=0,tier='xhard1',seed=0,candidate=None,
+                           spec_sha256=None,key='key',max_steps=1800,strict_cap=True,attempt=1,policy_seed=7,model='smvla',policy_label='smvla')
+    out=E.normalize_play_output(dict(status=status,task_success=success,steps=1,error='模型应答异常' if status=='error' else None,infra=False,infra_reason=None))
+    session=SimpleNamespace(steps=1,step_cap=1,cap_hit=status=='timeout',reset_calls=2,timing={},budget_exhausted=False)
+    E._classify(result,out,session); result.recorder_verify='PASS'
+    MOVER.raw_atomic(source/'result.json',result.to_dict()); row['files']=MOVER.raw_tree(source)
+    receipt=MOVER.raw_move(row,stage,dest,min_free_gib=0)
+    MOVER.raw_validate_receipt(receipt,row,CONTEXT,dest)
+    assert receipt['decoded']=={'front':2,'wrist':2}
+
+
+@pytest.mark.parametrize('corruption',['media','arrays','half_json'])
+def test_preserved_corruption_can_resume_after_bytes_restored(publication,corruption):
+    stage,dest,source,row=publication
+    name=hashlib.sha256(row['identity_key'].encode()).hexdigest()+'.json'
+    manifest=stage/'config.json'
+    MOVER.raw_atomic(manifest,{**{k:v for k,v in CONTEXT.items() if k!='config_sha256'},'root':str(stage),'expected_publications':[name],'expected_identities':[row['identity_key']]})
+    row['config_sha256']=MOVER.sha256(manifest)
+    MOVER.raw_atomic(stage/'published'/name,row)
+    damaged=source/({'media':'front.mkv','arrays':'arrays.npz','half_json':'result.json'}[corruption])
+    original=damaged.read_bytes(); damaged.write_bytes(original[:max(1,len(original)//2)])
+    error=stage/'control/mover-error.json'
+    args=SimpleNamespace(stage=str(stage),dest=str(dest),manifest=str(manifest),min_free_gib=0,heartbeat_file=None,error_file=str(error),stop_file=None,once=True,interval=.01)
+    assert MOVER.raw_main(args)==1
+    saved_error=error.read_bytes(); assert damaged.exists() and not (dest/row['relative_dir']).exists()
+    damaged.write_bytes(original)
+    config=json.loads(manifest.read_text()); config['historical_errors']=[{'path':str(error),'sha256':MOVER.sha256(error)}]
+    MOVER.raw_atomic(manifest,config); row['config_sha256']=MOVER.sha256(manifest); MOVER.raw_atomic(stage/'published'/name,row)
+    assert MOVER.raw_main(args)==0
+    assert error.read_bytes()==saved_error and not (stage/'STOP').exists()
+
+
+def test_real_mixed_terminal_finishes_available_media_without_waiting_for_failed_raw(publication,tmp_path,monkeypatch):
+    import shutil
+    import raw_ood_controller as C
+    from test_raw_ood_controller import watchdog_fixture
+    _,dest,source,row=publication
+    (tmp_path/'controller').mkdir()
+    ctl,_,_,_,_,_=watchdog_fixture(tmp_path/'controller',monkeypatch)
+    cfg=ctl.control/'mover-config.json'; initial=dict(ctl.c); initial.pop('config_sha256'); C.atomic(cfg,initial)
+    ctl.c['config_sha256']=C.sha(cfg); ctl.base['config_sha256']=ctl.c['config_sha256']
+    for path in Path(ctl.c['root']).rglob('*.json'):
+        doc=C.read(path)
+        if isinstance(doc,dict) and 'config_sha256' in doc: doc['config_sha256']=ctl.c['config_sha256']; C.atomic(path,doc)
+    ctl.resume_existing_dispatches('c'*40)
+    identity='smvla:ood:VideoUnmask_xhard1_0'
+    withheld=ctl.published-{identity}
+    for key in sorted(ctl.published):
+        (ctl.gl/'mover/receipts'/C.publication_name(key)).unlink(missing_ok=True)
+    for key in sorted(withheld): (ctl.gl/'published'/C.publication_name(key)).unlink()
+    # 已消费预算、未保留本夹具正常发布的身份明确列为未决，不能洗成未尝试。
+    ctl.published={identity}; ctl.unresolved=set(withheld)
+    result=json.loads((source/'result.json').read_text()); result['key']=identity.split(':',2)[2]
+    MOVER.raw_atomic(source/'result.json',result)
+    trace=[json.loads(line) for line in (source/'trace.jsonl').read_text().splitlines()]; trace[0]['identity']['key']=result['key']
+    (source/'trace.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in trace))
+    relative=row['relative_dir']; target=ctl.gl/relative
+    for path in source.iterdir(): shutil.copy2(path,target/path.name)
+    current={**row,**ctl.base,'identity_key':identity,'files':MOVER.raw_tree(target)}
+    C.atomic(ctl.gl/'published'/C.publication_name(identity),current)
+    for active in ctl.active.values(): active['log'].close()
+    ctl.active.clear(); assert ctl.report()==2
+    # 还原真实媒体工具；共同终态与failure证据均来自生产器，没有终态helper替身。
+    monkeypatch.undo()
+    args=SimpleNamespace(stage=str(ctl.gl),dest=str(dest),manifest=str(cfg),min_free_gib=0,heartbeat_file=None,error_file=None,stop_file=None,once=False,interval=.01)
+    start=time.monotonic(); assert MOVER.raw_main(args)==2
+    assert time.monotonic()-start<30
+    report=json.loads((ctl.gl/'mover/completed.json').read_text())
+    assert report['status']=='INCOMPLETE' and report['expected']==4000 and report['moved']==1 and report['infra']==1 and report['raw_missing']==3999
+    assert not (ctl.gl/'mover/error.json').exists()

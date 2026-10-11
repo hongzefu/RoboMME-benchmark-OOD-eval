@@ -7,24 +7,33 @@ SELF=${SLURM_JOB_ID:?}; : "${BENCH_PY:?必须提供uv管理解释器}"
 HOLD_PID=""
 CACHE_B64=""; RETRY_SLEEP=10
 FAILURE_PHASE=initialization
+CONTEXT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 [[ "$CPU" =~ ^[0-9]+$ && "$SELF" =~ ^[0-9]+$ && "$DEADLINE" =~ ^[0-9]+$ ]] || exit 2
 exec > >(tee -a "$ROOT/control/guard-$SELF.log") 2>&1
 normal_complete() {
   [[ -f "$ROOT/control/gpu_work_complete.json" ]] || return 1
-  timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$READY" <<'PY'
+  timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$READY" "$CONTEXT_DIR" <<'PY'
 import sys,signal
 def expired(*_): raise TimeoutError('完成标记读取超过5秒')
 signal.signal(signal.SIGALRM,expired); signal.alarm(5)
-import json,pathlib
+import json,pathlib,hashlib
+sys.path.insert(0,sys.argv[5])
+from raw_ood_context import validate_terminal_marker
 p=pathlib.Path(sys.argv[1])/'control'; ready=pathlib.Path(sys.argv[4])
 assert ready.is_absolute() and not ready.is_symlink() and ready.resolve().is_relative_to(p.resolve())
 assert '..' not in ready.relative_to(p).parts and not p.is_symlink() and not p.parent.is_symlink()
 assert all(not node.is_symlink() for node in ready.parents if node.is_relative_to(p))
 r=json.loads(ready.read_text()); d=json.loads((p/'gpu_work_complete.json').read_text())
 assert r['root']==sys.argv[1] and r['run']==sys.argv[2] and str(r['controller_job_id'])==sys.argv[3]
-assert d['run']==r['run'] and str(d['controller_job_id'])==sys.argv[3]
-assert d['config_sha256']==r['config_sha256'] and d['exec_commit']==r['exec_commit']
-assert d['expected']==4000 and d['published']==4000
+cfg=pathlib.Path(r['config_path'])
+assert cfg.is_absolute() and cfg.is_relative_to(p.parent) and not cfg.is_symlink()
+assert all(not node.is_symlink() for node in cfg.parents if node.is_relative_to(p.parent))
+raw=cfg.read_bytes(); c=json.loads(raw)
+assert hashlib.sha256(raw).hexdigest()==r['config_sha256']
+c['config_sha256']=r['config_sha256']
+assert all(str(c[k])==str(r[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
+assert c['root']==sys.argv[1]
+validate_terminal_marker(d,c)
 PY
 }
 cleanup() {
@@ -32,8 +41,9 @@ cleanup() {
   trap - EXIT
   [[ -z "$HOLD_PID" ]] || kill "$HOLD_PID" 2>/dev/null || true
   if (( rc == 143 )) && normal_complete; then rc=0; fi
-  if (( rc != 0 )) && [[ ! -f "$ROOT/control/guard-failure-$SELF.json" ]]; then
+  if (( rc != 0 )); then
     failure="$ROOT/control/guard-failure-$SELF.json"
+    [[ ! -f "$failure" ]] || failure="$ROOT/control/guard-failure-$SELF.current-$$-$(date +%s%N).json"
     printf '{"run":"%s","controller_job_id":"%s","gpu_job_id":"%s","component":"guard","exit_code":%s,"payload_rc":null,"phase":"%s","time":%s}\n' \
       "$RUN" "$CPU" "$SELF" "$rc" "$FAILURE_PHASE" "$(date +%s)" > "$failure.$$.tmp"
     mv "$failure.$$.tmp" "$failure"
@@ -164,6 +174,7 @@ except Exception as e:
  print('GUARD_PAYLOAD_FAILURE gpu='+sys.argv[4]+' phase='+phase+' error_kind='+type(e).__name__+' message='+str(e),flush=True)
  if 'json' in locals() and 'pathlib' in locals():
   p=pathlib.Path(sys.argv[1])/'control'; target=p/('guard-failure-'+sys.argv[4]+'.json')
+  if target.exists(): target=p/('guard-failure-'+sys.argv[4]+'.current-'+str(os.getpid())+'-'+str(time.time_ns())+'.json')
   doc=dict(run=sys.argv[2],controller_job_id=sys.argv[3],gpu_job_id=sys.argv[4],component='guard',exit_code=8,payload_rc=1,
            phase=phase,error_kind=type(e).__name__,message=str(e),time=time.time(),pid=int(sys.argv[5]))
   if 'r' in locals():

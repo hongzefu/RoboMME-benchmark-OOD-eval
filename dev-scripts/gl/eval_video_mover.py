@@ -652,7 +652,7 @@ def raw_atomic(path: Path, value: dict) -> None:
     os.replace(temporary, path)
 
 
-def raw_report_error(path: Path, error: dict) -> None:
+def raw_report_error(path: Path, error: dict, context: dict | None = None) -> None:
     """仅发布搬运器首个错误，不写调度 STOP，也不覆盖已保存首因。"""
     print(f"RAW_DELIVERY=FAIL error={error['error']} message={error['message']}", flush=True)
     try:
@@ -661,6 +661,12 @@ def raw_report_error(path: Path, error: dict) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX)
             if path.exists():
                 print(f"RAW_ERROR_PRESERVED path={path}", flush=True)
+                # 被明确认可的历史首因不能遮蔽本实例的新错误。
+                if context is not None:
+                    from raw_ood_context import is_historical_error
+                    if is_historical_error(path, context):
+                        current = path.with_name(f"{path.stem}.current-{os.getpid()}-{uuid.uuid4().hex}.json")
+                        raw_atomic(current, error)
             else:
                 raw_atomic(path, error)
     except OSError as exc:
@@ -749,6 +755,31 @@ def raw_validate_receipt(receipt: dict, publication: dict, context: dict, dest: 
         raise ValueError("回执路径非法")
     if dest is not None and receipt["dest"] != str(Path(dest) / raw_relative(publication["relative_dir"])):
         raise ValueError("回执目的路径不符")
+
+
+def raw_validate_delivery(report: dict, terminal: dict, context: dict) -> dict:
+    """严格读回搬运终态：基础设施失败不冒充合格原始录像。"""
+    from raw_ood_context import match_context, validate_terminal_marker
+    validate_terminal_marker(terminal, context)
+    match_context(report, context)
+    counts = ("expected", "moved", "infra", "unresolved", "unattempted", "raw_missing", "missing", "decode_fail", "sha_mismatch", "pending")
+    required = {"schema", *RAW_CONTEXT, *counts, "status", "moved_identities", "terminal_sha256", "time"}
+    if set(report) != required or report["schema"] != "raw-ood-delivery-v1":
+        raise ValueError("搬运终态缺键或协议不符")
+    if any(type(report[k]) is not int or report[k] < 0 for k in counts):
+        raise ValueError("搬运终态计数类型错误")
+    ids = report["moved_identities"]
+    if not isinstance(ids, list) or len(ids) != len(set(ids)) or set(ids) != set(terminal["published_identities"]):
+        raise ValueError("搬运终态身份集合不符")
+    if report["status"] != terminal["status"] or report["expected"] != terminal["expected"] or report["moved"] != terminal["published"] or report["moved"] != len(ids):
+        raise ValueError("搬运终态规模不符")
+    if any(report[k] != terminal[k] for k in ("infra", "unresolved", "unattempted")):
+        raise ValueError("搬运终态失败计数不符")
+    if report["raw_missing"] != report["expected"] - report["moved"] or report["missing"] != report["raw_missing"] or any(report[k] != 0 for k in ("decode_fail", "sha_mismatch", "pending")):
+        raise ValueError("搬运终态媒体计数不符")
+    if not re.fullmatch(r"[a-f0-9]{64}", report["terminal_sha256"]):
+        raise ValueError("搬运终态原始标记指纹错误")
+    return report
 
 
 def raw_verify_media(directory: Path) -> dict:
@@ -930,8 +961,12 @@ def raw_verify_media(directory: Path) -> dict:
             raise ValueError("轨迹与结果身份不符")
     if type(result["task_success"]) not in (bool, int) or result["task_success"] not in (0, 1):
         raise ValueError("成功字段非法")
-    if result["exec_steps"] != rows[-1]["exec_steps"] or result["error_kind"] is not None:
-        raise ValueError("结果步骤或基础设施状态不符")
+    error_kind=result['error_kind']
+    # EpisodeResult::_classify把明确非infra的模型异常折成fail/error；未知kind不猜成普通失败。
+    ordinary_failure=(error_kind=='error' and result['status']=='fail' and result['task_success']==0
+                      and result['infra_reason'] is None and result['budget_exhausted'] is False and result['run_blocked'] is False)
+    if type(result['exec_steps']) is not int or result["exec_steps"] != rows[-1]["exec_steps"] or (error_kind is not None and not ordinary_failure):
+        raise ValueError("结果步骤或普通失败状态不符")
     return decoded
 
 
@@ -1033,6 +1068,12 @@ def raw_main(args) -> int:
     thread.start()
     verified_receipts = {}
     try:
+        from raw_ood_context import validate_historical_errors, validate_terminal_marker
+        historical = validate_historical_errors(manifest)
+        if error_path.exists() and str(error_path) not in {str(p) for p in historical}:
+            raise RuntimeError("搬运器存在未认可的原始错误")
+        if list(error_path.parent.glob(f"{error_path.stem}.current-*.json")):
+            raise RuntimeError("搬运器存在新的实例错误")
         while True:
             if heartbeat_error:
                 raise RuntimeError(f"心跳写入失败：{heartbeat_error[0]}")
@@ -1081,11 +1122,17 @@ def raw_main(args) -> int:
             status["moved"] = len(list((state / "receipts").glob("*.json")))
             status["pending"] = len(published) - status["moved"]
             if (stage / "gpu_work_complete.json").exists() or args.once:
-                if not args.once:
+                if (stage / "gpu_work_complete.json").exists():
                     marker = json.loads((stage / "gpu_work_complete.json").read_text())
-                    if any(marker[k] != context[k] for k in RAW_CONTEXT):
-                        raise ValueError("GPU完成标记版本不符")
-                if set(published) != set(expected) or status["moved"] != len(expected):
+                    validate_terminal_marker(marker, manifest)
+                elif args.once:
+                    # 单次工具仍可验全正常清单；不从缺失项推断基础设施失败。
+                    marker = {"schema": "raw-ood-terminal-v1", **context, "status": "COMPLETE", "expected": len(expected),
+                              "settled": len(expected), "published": len(expected), "infra": 0, "unresolved": 0, "unattempted": 0,
+                              "published_identities": identities, "failure_documents": {}, "unresolved_identities": [], "unattempted_identities": []}
+                    validate_terminal_marker(marker, manifest)
+                normal = {hashlib.sha256(k.encode()).hexdigest() + ".json" for k in marker["published_identities"]}
+                if set(published) != normal or set(verified_receipts) != normal or status["moved"] != len(normal):
                     raise ValueError("最终发布或回执集合不完整")
                 for path in published.values():
                     row = json.loads(path.read_text())
@@ -1097,14 +1144,21 @@ def raw_main(args) -> int:
                     retained = {k: v for k, v in row["files"].items() if k not in row["delete_files"]}
                     if source_files != retained:
                         raise ValueError("最终源大文件未排空或小文件变化")
-                report = {"schema": RAW_SCHEMA, **context, "expected": len(expected), "moved": len(expected), "missing": 0, "decode_fail": 0, "sha_mismatch": 0, "pending": 0, "time": time.time()}
+                raw_missing = len(expected) - len(normal)
+                marker_sha = sha256(stage / "gpu_work_complete.json") if (stage / "gpu_work_complete.json").exists() else hashlib.sha256(json.dumps(marker, sort_keys=True).encode()).hexdigest()
+                report = {"schema": "raw-ood-delivery-v1", **context, "status": marker["status"], "expected": len(expected), "moved": len(normal),
+                          "infra": marker["infra"], "unresolved": marker["unresolved"], "unattempted": marker["unattempted"], "raw_missing": raw_missing,
+                          "missing": raw_missing, "decode_fail": 0, "sha_mismatch": 0, "pending": 0, "moved_identities": sorted(marker["published_identities"]),
+                          "terminal_sha256": marker_sha, "time": time.time()}
+                raw_validate_delivery(report, marker, manifest)
                 raw_atomic(state / "completed.json", report)
-                print(f"RAW_DELIVERY=PASS expected={len(expected)} moved={len(expected)} missing=0 decode_fail=0 sha_mismatch=0 pending=0", flush=True)
-                return 0
+                outcome = "PASS" if marker["status"] == "COMPLETE" else "INCOMPLETE"
+                print(f"RAW_DELIVERY={outcome} expected={len(expected)} moved={len(normal)} infra={marker['infra']} raw_missing={raw_missing} decode_fail=0 sha_mismatch=0 pending=0", flush=True)
+                return 0 if outcome == "PASS" else 2
             done.wait(min(args.interval, 5))
     except Exception as exc:
         error = {"schema": RAW_SCHEMA, **context, "component": "mover", "error": type(exc).__name__, "message": str(exc), "time": time.time()}
-        raw_report_error(error_path, error)
+        raw_report_error(error_path, error, manifest)
         return 1
     finally:
         done.set()
