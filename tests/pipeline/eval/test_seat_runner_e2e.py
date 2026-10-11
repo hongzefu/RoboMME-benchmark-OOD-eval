@@ -210,7 +210,79 @@ def test_hard_exit_busy_settlement_lock_is_bounded(tmp_path, monkeypatch, capsys
         assert time.monotonic() - started < 3
     assert exits == [75] and aid not in runner.ledger.settled
     text = capsys.readouterr().out
-    assert text.count("SEAT_SETTLE=FAIL") == 6 and "error=settlement_lock_busy" in text
+    assert text.count("SEAT_SETTLE=FAIL") == 6 and "error=settlement_deadline" in text
+
+
+@pytest.mark.parametrize("blocked", ["runner_lock", "ledger_lock", "ledger_append", "fsync", "shared", "result_read"])
+def test_real_hard_exit_cannot_wait_forever_on_locks_or_files(tmp_path, blocked):
+    """实际子进程持锁或阻塞文件写入，生产硬退出仍有限返回75，不能写全结算成功。"""
+    import subprocess
+    import sys
+    script = '''import sys, threading, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import test_seat_runner_e2e as T
+r, c, aid, row, shared = T._pending_settlement(Path(sys.argv[2]))
+r._exit = T.F.env_client().os._exit
+blocked = sys.argv[3]
+def forever(*_a, **_kw):
+    threading.Event().wait()
+if blocked == "runner_lock":
+    r._lock.acquire()
+elif blocked == "ledger_lock":
+    r.ledger._lock.acquire()
+elif blocked == "ledger_append":
+    r.ledger.append = forever
+elif blocked == "fsync":
+    T.F.env_client().os.fsync = forever
+elif blocked == "shared":
+    shared.commit = forever
+else:
+    T.F.env_client().read_json = forever
+started = time.monotonic()
+r._hard_exit(75)
+raise AssertionError("hard exit returned")
+'''
+    started = __import__("time").monotonic()
+    child = subprocess.run([sys.executable, "-c", script, str(Path(__file__).parent), str(tmp_path), blocked],
+                           capture_output=True, text=True, timeout=12)
+    assert child.returncode == 75 and __import__("time").monotonic() - started < 10, child.stdout + child.stderr
+    assert "SEAT_WATCHDOG_EXIT" in child.stdout and "SEAT_SETTLE=FAIL" in child.stdout
+    ledger = F.seat_ledger(tmp_path / "stage", LABEL)
+    assert not any(r["kind"] == "settlement_complete" for r in ledger)
+
+
+def test_actual_identity_failure_recovers_with_release_and_void_claim(tmp_path, monkeypatch):
+    """真实IdentityMismatch生产结果落盘后、_end前断电，恢复仍退回预约并删除作废领取。"""
+    ec = F.env_client()
+    shared = ec.load_sibling("budget_ledger").BudgetLedger(tmp_path / "budget.jsonl")
+    world = F.World()
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), world, budget_ledger=shared)
+    runner._open_shared_budget()
+    c = runner.claim(_ident())
+    with monkeypatch.context() as patch:
+        original = runner.E.make_spec
+        def wrong(*args, **kwargs):
+            spec, identity = original(*args, **kwargs)
+            return spec, dict(identity, seed=identity["seed"] + 1)
+        def crash(*_a, **_kw):
+            raise OSError("生产结果写完后断电")
+        patch.setattr(runner.E, "make_spec", wrong)
+        patch.setattr(runner, "_end", crash)
+        with pytest.raises(OSError):
+            runner.run_claim(runner.fake_policy, c)
+    (start,) = runner.ledger.dangling()
+    produced = json.loads(Path(start["result_path"]).read_text())
+    assert produced["run_blocked"] and produced["error"].startswith("IDENTITY_MISMATCH")
+    again = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), F.World(), budget_ledger=shared)
+    assert again.recover_dangling() == 1
+    assert again.recover_crash_window() == 0
+    assert c.rid in shared.state().releases and c.rid not in shared.state().commits
+    assert shared.state().resets == 2 and not shared.state().claimed
+    assert not c.path.exists() and not again.queue.accepted_path(c.ident).exists()
+    (report,) = F.seat_results(tmp_path / "stage", LABEL)
+    assert report["run_blocked"] and report["void"] and not report["final"]
+    assert report["budget_exhausted"] is False and report["task_success"] is None
 
 
 @pytest.mark.parametrize("phase,reason", [("episode_wall", "episode_wall"), ("first_infer", "deadline_first_infer"),
@@ -284,6 +356,9 @@ def test_faults_have_safe_terminal_state_without_false_success(tmp_path, monkeyp
     assert F.run_rows(runner, [_ident()]) == (6 if fault == "protocol" else 3)
     (report,) = F.seat_results(tmp_path / "stage", LABEL)
     assert report["task_success"] is None and not report["accepted"]
+    assert all(key in report for key in ("budget_exhausted", "run_blocked", "cap_hit", "infra_reason", "exec_steps",
+                                         "result", "attempt_id", "budget_rid", "budget_token", "claim"))
+    assert all(type(report[key]) is bool for key in ("budget_exhausted", "run_blocked", "cap_hit", "infra"))
     assert not list(runner.queue.accepted_path(_ident()).parent.glob("*.json"))
     if fault == "protocol":
         assert report["status"] == "fail" and report["infra_reason"] == "play_contract" and report["infra"]
@@ -518,6 +593,9 @@ def test_retry_archive_rejects_unsafe_previous_raw(tmp_path, damage, capsys):
     assert second_world.envs == []
     state = shared.state()
     assert len(state.reserves) == 2 and len(state.releases) == len(state.commits) == 1
+    report = F.seat_results(stage, LABEL)[-1]
+    assert report["run_blocked"] is True and report["budget_exhausted"] is False
+    assert report["cap_hit"] is False and report["task_success"] is None and report["exec_steps"] is None
     # 2 次预约 × 每次 2 个 reset 计量 = 4；退回预约不能刷新预算。
     assert state.resets == 4
     # 真正进入环境的只有首次 build/reset，第二次归档阻断没有实际 reset。
@@ -690,6 +768,14 @@ def test_seat_runner_scenarios(tmp_path, name):
     assert [x["attempt"] for x in r["results"]] == list(range(1, sc["attempts"] + 1))
     for row in r["results"]:
         assert row["key"] == ident["key"] and row["dataset"] == "ood" and row["policy_seed"] == 7
+        assert all(key in row for key in ("attempt_id", "budget_rid", "budget_token", "claim", "result", "task_success",
+                                         "exec_steps", "budget_exhausted", "run_blocked", "cap_hit", "infra_reason",
+                                         "error_kind", "reset_calls", "final", "accepted", "late", "void"))
+        assert all(type(row[key]) is bool for key in ("budget_exhausted", "run_blocked", "cap_hit", "infra",
+                                                     "final", "accepted", "late", "void"))
+    for end in (x for x in r["ledger"] if x["kind"] == "attempt_end"):
+        assert all(key in end["seat_result"] for key in ("budget_exhausted", "run_blocked", "task_success",
+                                                        "exec_steps", "result", "attempt_id", "budget_rid", "final", "void"))
     if sc["accepted"]:
         acc = json.loads(r["accepted"][0].read_text())
         assert acc["key"] == ident["key"] and acc["status"] == sc["status"] and acc["attempt"] == sc["attempts"]

@@ -407,6 +407,24 @@ raise AssertionError("hard exit returned")
     assert "INFRA_TIMEOUT phase=episode_wall" in child.stdout
 
 
+def test_watchdog_result_write_block_cannot_prevent_real_exit():
+    import subprocess
+    import sys
+    script = '''from types import SimpleNamespace
+import dataclasses, threading
+from robomme_ood_eval import episode as E
+Record = dataclasses.make_dataclass("Record", [("status", str, dataclasses.field(default="fail")),
+                                              ("task_success", object, dataclasses.field(default=None))])
+def forever(*_):
+    threading.Event().wait()
+E._write_result = forever
+E._Watchdog(SimpleNamespace(), SimpleNamespace(key="cpu-fixture"), Record(), {})._fire("episode_wall", 1800)
+raise AssertionError("hard exit returned")
+'''
+    child = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=5)
+    assert child.returncode == 75, child.stdout + child.stderr
+
+
 def test_first_episode_wall_extension():
     p = load_policy("fake", 7)
     assert E.wall_limit(p, True) == E.FALLBACK_WALL_S + 600

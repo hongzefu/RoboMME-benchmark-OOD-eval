@@ -93,6 +93,8 @@ EXIT_BLOCKED = 3
 EXIT_BUDGET = 5
 EXIT_INCOMPLETE = 6
 EXIT_WALL = 75
+#: 硬退出前最多等待结算两秒；所有锁与文件操作都在可丢弃的守护线程内。
+HARD_EXIT_SETTLE_S = 2.0
 DEFAULT_SHUFFLE_SEED = 20260930
 TERMINAL_STATUSES = ("success", "fail", "timeout")
 #: 本轮基础设施重试次数（拆分方案 R5：0 次，失败即停交用户）
@@ -1126,7 +1128,7 @@ class SeatRunner:
                     if previous is not None:
                         report = dict(previous, recovered=True)
                 self._end(self._claim_of_start(st), st["attempt_id"], report,
-                          void=bool(row.get("budget_exhausted") or row.get("run_blocked")))
+                          void=bool(report.get("budget_exhausted") or report.get("run_blocked")))
             else:
                 self.ledger.attempt_end(row)
                 self._settle_shared(st.get("budget_rid"), status=row["status"], infra=row["infra"])
@@ -1310,30 +1312,42 @@ class SeatRunner:
 
     # ── 看门狗退出前的结算（修「墙钟超时只 _finish 不 _settle」的缺口） ───────
     def _hard_exit(self, code: int) -> None:
+        cur, aid = self._current, self._current_attempt_id
+        timeout = getattr(self.E.WATCHDOG_STATE, "result", None)
+        stages: dict[str, str] = {}
+        cancel = threading.Event()
         try:
-            cur, aid = self._current, self._current_attempt_id
             if cur is not None and aid is not None:
-                timeout = getattr(self.E.WATCHDOG_STATE, "result", None)
-                d = timeout.to_dict() if timeout and timeout.key == cur.key and timeout.attempt == cur.attempt else None
-                row = self._result_row(cur, aid, d)
-                row.update(exit_kind="watchdog_hard_exit", exit_code=int(code))
-                if d is None:
-                    row.update(infra_reason="watchdog_exit")
-                acquired = self._lock.acquire(timeout=1.0)
-                if acquired:
+                def settle():
                     try:
-                        self._settle_attempt(cur, aid, row, void=False, best_effort=True)
-                        self._current = self._current_attempt_id = None
-                    finally:
-                        self._lock.release()
-                else:
-                    # 主线程卡在结算锁中时也必须退出；缺阶段由下次恢复补齐。
-                    for stage in ("attempt_end", "shared", "queue_accept", "claim", "report", "complete"):
-                        print(f"SEAT_SETTLE=FAIL stage={stage} key={cur.key} attempt_id={aid} "
-                              f"budget_rid={cur.rid} error=settlement_lock_busy", flush=True)
-                print(f"SEAT_WATCHDOG_EXIT key={cur.key} dataset={cur.ident['dataset']} attempt={cur.attempt} "
-                      f"attempt_id={aid} budget_rid={cur.rid} code={code}", flush=True)
-            sys.stdout.flush()
+                        evidence = timeout.to_dict() if timeout and timeout.key == cur.key and timeout.attempt == cur.attempt else None
+                        row = self._result_row(cur, aid, evidence)
+                        row.update(exit_kind="watchdog_hard_exit", exit_code=int(code))
+                        if evidence is None:
+                            row.update(infra_reason="watchdog_exit")
+                        with self._lock:
+                            self._settle_attempt(cur, aid, row, void=False, best_effort=True,
+                                                 stage_state=stages, cancel=cancel)
+                            self._current = self._current_attempt_id = None
+                    except BaseException as exc:
+                        # 调用线程按实际完成阶段报告未知或失败；此线程不能阻止退出。
+                        stages["_error"] = f"{type(exc).__name__}:{exc}"
+                        return
+                worker = threading.Thread(target=settle, name="seat-hard-exit-settlement", daemon=True)
+                worker.start()
+                worker.join(timeout=HARD_EXIT_SETTLE_S)
+                cancel.set()
+                def diagnostics():
+                    for phase in ("attempt_end", "shared", "queue_accept", "claim", "report", "complete"):
+                        if phase not in stages:
+                            print(f"SEAT_SETTLE=FAIL stage={phase} key={cur.key} attempt_id={aid} "
+                                  f"budget_rid={cur.rid} error={stages.get('_error', 'settlement_deadline')}", flush=True)
+                    print(f"SEAT_WATCHDOG_EXIT key={cur.key} dataset={cur.ident['dataset']} attempt={cur.attempt} "
+                          f"attempt_id={aid} budget_rid={cur.rid} code={code}", flush=True)
+                    sys.stdout.flush()
+                logger = threading.Thread(target=diagnostics, name="seat-hard-exit-diagnostics", daemon=True)
+                logger.start()
+                logger.join(timeout=0.1)
         finally:
             self._exit(code)
 
@@ -1693,11 +1707,20 @@ class SeatRunner:
               f"attempt={c.attempt} status={row['status']} infra={int(bool(row.get('infra')))} final={int(row['final'])} "
               f"accepted={int(row['accepted'])} void={int(void)}", flush=True)
 
-    def _settle_attempt(self, c: Claim, attempt_id: str, row: dict, *, void: bool, best_effort: bool = False) -> None:
+    def _settle_attempt(self, c: Claim, attempt_id: str, row: dict, *, void: bool, best_effort: bool = False,
+                        stage_state: dict | None = None, cancel: threading.Event | None = None) -> None:
         """先持久化完整结果，再逐阶段幂等结算；硬退出逐项留证据，不能把失败写成成功。"""
-        row.setdefault("task_success", None)
-        row.setdefault("exec_steps", None)
-        row.setdefault("result", None)
+        defaults = {"key": c.key, "dataset": c.ident["dataset"], "task": c.ident["task"], "tier": c.ident["tier"],
+                    "builder_episode": c.ident["builder_episode"], "attempt": c.attempt, "attempt_id": attempt_id,
+                    "budget_rid": c.rid, "budget_token": c.token, "claim": str(c.path), "result": None,
+                    "seat": self.seat, "policy": self.args.policy, "policy_seed": self.policy_seed,
+                    "host": socket.gethostname(), "status": "error", "infra": False, "infra_reason": None,
+                    "task_success": None, "exec_steps": None, "cap_hit": False, "reset_calls": None,
+                    "budget_exhausted": False, "run_blocked": False, "late": False, "accepted": False,
+                    "error": None, "error_kind": None, "video": None, "video_error": None, "raw_dir": None,
+                    "t": time.time()}
+        for key, value in defaults.items():
+            row.setdefault(key, value)
         infra = bool(row.get("infra"))
         led_status = "error" if (infra or row.get("run_blocked") or row.get("budget_exhausted")) else row["status"]
         led_row = {"key": c.key, "attempt_id": attempt_id, "attempt_no": c.attempt, "status": led_status,
@@ -1706,17 +1729,27 @@ class SeatRunner:
                    "infra_reason": row.get("infra_reason"), "seat_result": dict(row), "void": void,
                    **{k: row[k] for k in ("recovered", "interrupt", "interrupt_evidence") if k in row}}
         final = AttemptLedger.is_final(led_row)
+        row.update(final=final, void=bool(void))
+        led_row["seat_result"] = dict(row)
         failed = []
         def stage(name, operation):
+            if cancel is not None and cancel.is_set():
+                raise TimeoutError("硬退出结算等待已结束")
             try:
                 value = operation()
             except BaseException as exc:
                 failed.append(name)
+                if stage_state is not None:
+                    stage_state[name] = "FAIL"
                 print(f"SEAT_SETTLE=FAIL stage={name} key={c.key} attempt_id={attempt_id} budget_rid={c.rid} "
                       f"error={type(exc).__name__}:{exc}", flush=True)
                 if not best_effort:
                     raise
                 return None
+            if cancel is not None and cancel.is_set():
+                raise TimeoutError("硬退出结算等待已结束")
+            if stage_state is not None:
+                stage_state[name] = "PASS"
             print(f"SEAT_SETTLE=PASS stage={name} key={c.key} attempt_id={attempt_id} budget_rid={c.rid}", flush=True)
             return value
         def local():

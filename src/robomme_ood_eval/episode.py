@@ -59,6 +59,8 @@ FIRST_EPISODE_EXTRA_S = 600.0
 FIRST_INFER_DEADLINE_S = 1800.0
 MEDIA_DEADLINE_S = 1200.0
 EXIT_WALL = 75
+#: bounded time for timeout result and diagnostic I/O before invoking the hard-exit hook
+WATCHDOG_WRITE_S = 1.0
 #: terminal statuses play may return; only the first three are persisted
 PLAY_STATUSES = ("success", "fail", "timeout", "error")
 TERMINAL_STATUSES = ("success", "fail", "timeout")
@@ -460,12 +462,22 @@ class _Watchdog:
             res.t_end = time.time()
             self.state["timeout_result"] = res
             WATCHDOG_STATE.result = res
-            try:
-                _write_result(res, self.spec)
-            finally:
-                print(f"INFRA_TIMEOUT phase={phase} key={self.spec.key} limit_s={limit:.0f}", flush=True)
-                for srv in _servers_of(self.policy):
-                    print(srv.left_line(), flush=True)
+            errors = []
+            def write_timeout():
+                try:
+                    try:
+                        _write_result(res, self.spec)
+                    finally:
+                        print(f"INFRA_TIMEOUT phase={phase} key={self.spec.key} limit_s={limit:.0f}", flush=True)
+                        for srv in _servers_of(self.policy):
+                            print(srv.left_line(), flush=True)
+                except BaseException as exc:
+                    errors.append(exc)
+            writer = threading.Thread(target=write_timeout, name="episode-timeout-result", daemon=True)
+            writer.start()
+            writer.join(timeout=WATCHDOG_WRITE_S)
+            if errors:
+                raise errors[0]
         finally:
             try:
                 HARD_EXIT(EXIT_WALL)
