@@ -1,0 +1,3 @@
+NOTIFICATION state=submitted event=failure rc=0 delivery_verified=0
+RAW_SUPERVISOR=FAIL cpu_hold=1 gpu_cancel=0 controller_kill=0 notification_established=0 error=Command '['squeue', '-h', '-j', '63664404', '-o', '%T']' timed out after 5 seconds
+SUPERVISOR_EXIT_CODE=1 HOLD_PID=665775

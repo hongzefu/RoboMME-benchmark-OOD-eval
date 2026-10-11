@@ -1,0 +1,3 @@
+SUPERVISOR_EXIT_CODE=1 HOLD_PID=675692
+SLURM_CPU_HOLD=PASS supervisor_rc=1 wrapper_alive=1 child_alive=1 retries=0 gpu_actions=0
+SUPERVISOR_HOLD_MANUAL_TERM pid=675692

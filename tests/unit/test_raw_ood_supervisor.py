@@ -106,7 +106,10 @@ def test_guardians_wait_pending_without_srun_or_duplicate(tmp_path,monkeypatch):
     S.atomic(tmp_path/'control/launch.ready',c)
     guards=S.start_guardians(c); assert len(guards)==3 and not any('--jobid=104' in x for x in launched)
     S.start_guardians(c,guards); assert len(launched)==3
-    state['104']='RUNNING'; S.start_guardians(c,guards); assert len(guards)==4 and len(launched)==4
+    state['104']='RUNNING'
+    cache=S.GUARD_QUERY_FAILURES[(c['root'],c['config_sha256'])]
+    monkeypatch.setattr(S.time,'monotonic',lambda:cache['104']['next_query'])
+    S.start_guardians(c,guards); assert len(guards)==4 and len(launched)==4
     for g in guards: g['log'].close()
 
 
@@ -481,3 +484,22 @@ def test_supervisor_resume_flag_is_only_explicit_cli_passthrough(monkeypatch,res
     assert S.main()==0
     assert calls[0][1]['resume_completed_smokes'] is resume
     assert calls[0][1]['orchestration_commit']==('c'*40 if resume else None)
+
+
+def test_supervisor_existing_flag_only_explicit_passthrough(monkeypatch):
+    calls=[]; monkeypatch.setattr(S,'run',lambda path,**kw:calls.append(kw) or 0)
+    monkeypatch.setattr(sys,'argv',['supervisor','run','--config','fixture.json','--resume-existing-dispatches','--orchestration-commit','c'*40])
+    assert S.main()==0 and calls[0]['resume_existing_dispatches'] is True and calls[0]['resume_completed_smokes'] is False
+
+
+def test_supervisor_unknown_query_cooldown_keeps_guardians_unlaunched(tmp_path,monkeypatch):
+    import types
+    c=mail_config(tmp_path); c.update(python=sys.executable,cpu_end_time=1e12,seats=[{'job_id':'104'}]); S.atomic(tmp_path/'control/launch.ready',c)
+    clock=[0.]; calls=[]; monkeypatch.setattr(S.time,'monotonic',lambda:clock[0])
+    def query(cmd,**kw):
+        calls.append(cmd); raise subprocess.TimeoutExpired(cmd,5)
+    monkeypatch.setattr(S.subprocess,'run',query); monkeypatch.setattr(S.subprocess,'Popen',lambda *a,**kw:pytest.fail('未知席不能启动守卫'))
+    guards=S.start_guardians(c); assert not guards and len(calls)==1
+    clock[0]=4; S.start_guardians(c,guards); assert len(calls)==1
+    clock[0]=30
+    with pytest.raises(RuntimeError,match='SLURM_QUERY_WINDOW'): S.start_guardians(c,guards)

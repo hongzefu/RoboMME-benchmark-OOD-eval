@@ -13,9 +13,10 @@ import sys
 import threading
 import time
 
-from raw_ood_controller import atomic, control_file, legacy_context, load_config, query_gpu, read, sha, validate_config
+from raw_ood_controller import Controller, atomic, control_file, legacy_context, load_config, observed_job_state, query_gpu, read, sha, validate_config
 MAIL_TO='hongzefu@umich.edu'
 MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
+GUARD_QUERY_FAILURES={}
 
 
 def notification_config(c: dict) -> dict:
@@ -94,10 +95,8 @@ def start_guardians(c: dict, guardians: list[dict] | None=None) -> list[dict]:
     for seat in c['seats']:
         job=str(seat['job_id'])
         if job in {g['job_id'] for g in guardians}: continue
-        state=subprocess.run(['squeue','-h','-j',job,'-o','%T'],capture_output=True,text=True,timeout=5)
-        if state.returncode: raise RuntimeError('附加守卫GPU作业查询失败')
-        status=state.stdout.strip()
-        if status in ('PENDING','CONFIGURING'): continue
+        status=observed_job_state(c,job,GUARD_QUERY_FAILURES.setdefault((c['root'],c['config_sha256']),{}),'supervisor')
+        if status is None or status in ('PENDING','CONFIGURING'): continue
         if status!='RUNNING': raise RuntimeError(f'附加守卫GPU状态异常 {job} {status}')
         log=(control/f'guardian-{job}.log').open('a')
         cmd=['srun',f'--jobid={job}','--gres=none','--overlap','--exact','--ntasks=1','--cpus-per-task=1',
@@ -172,7 +171,7 @@ def fail(config: dict, error: BaseException, *, process=None) -> int:
     return 1
 
 
-def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=None) -> int:
+def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispatches=False,orchestration_commit=None) -> int:
     c=load_config(config_path)
     control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
@@ -180,11 +179,13 @@ def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=N
     if int(os.environ.get('SLURM_RESTART_COUNT','0')): raise ValueError('禁止重排队')
     controller=None; guardians=[]; started=time.time(); last_moved=None; last_progress=started; cleanup_settle_started=None
     guard_monitor_stop=threading.Event(); guard_monitor=None
+    cpu_heart_stop=threading.Event(); cpu_heart=None
     def term(signum,*_):
         if signum==signal.SIGUSR1: raise RuntimeError('独立守卫异常: '+(control/'guardian-error.json').read_text())
         raise RuntimeError('CPU监督收到终止信号')
     signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term); signal.signal(signal.SIGUSR1,term)
     try:
+        if resume_completed_smokes and resume_existing_dispatches: raise ValueError('两种手动恢复模式互斥')
         validate_config(c)
         probe_provenance=require_probe(c)
         ready=read(control_file(c,c.get('ready_path',str(control/'launch.ready')))); jobs=read(control/'jobs.json')
@@ -200,6 +201,13 @@ def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=N
         mover_error=Path(c.get('mover_error',control/'mover-error.json'))
         check_heartbeat(mover,base,now=time.time())
         atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),pid=os.getpid()))
+        def heartbeat():
+            while not cpu_heart_stop.is_set():
+                atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),pid=os.getpid(),controller_pid=controller.pid if controller else None))
+                cpu_heart_stop.wait(5)
+        cpu_heart=threading.Thread(target=heartbeat,name='raw-ood-cpu-heartbeat',daemon=True); cpu_heart.start()
+        # 接续先全量只读核验；任何新守卫/控制器子进程均在此门之后启动。
+        if resume_existing_dispatches: Controller(c).resume_existing_dispatches(orchestration_commit,preflight=True)
         def watch_guards():
             while not guard_monitor_stop.wait(1):
                 try: check_guardians(list(guardians),c)
@@ -211,17 +219,18 @@ def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=N
         start_guardians(c,guardians)
         log=(control/'controller.log').open('a')
         controller_command=[c['python'],str(Path(__file__).with_name('raw_ood_controller.py')),'run','--config',str(config_path)]
-        if resume_completed_smokes:
+        if resume_completed_smokes and resume_existing_dispatches: raise ValueError('两种手动恢复模式互斥')
+        if resume_completed_smokes or resume_existing_dispatches:
             import re
             if not re.fullmatch('[0-9a-f]{40}',str(orchestration_commit)): raise ValueError('手动恢复须明确orchestration_commit')
-            controller_command+=['--resume-completed-smokes','--orchestration-commit',orchestration_commit]
+            controller_command+=['--resume-existing-dispatches' if resume_existing_dispatches else '--resume-completed-smokes','--orchestration-commit',orchestration_commit]
             atomic(control/'orchestration-started.json',dict(base,orchestration_commit=orchestration_commit,
-                   resume_completed_smokes=True,time=time.time()))
+                   resume_completed_smokes=resume_completed_smokes,resume_existing_dispatches=resume_existing_dispatches,time=time.time()))
         controller=subprocess.Popen(controller_command,
                                     stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=dict(os.environ,PYTHONUNBUFFERED='1'))
         atomic(control/'supervisor-started.json',dict(base,pid=os.getpid(),controller_pid=controller.pid,time=time.time()))
         while True:
-            now=time.time(); atomic(control/'cpu-heartbeat.json',dict(base,t=now,pid=os.getpid(),controller_pid=controller.pid))
+            now=time.time()
             check_guardians(guardians,c)
             for f in (control/'controller-error.json',control/'guardian-error.json',mover_error,gl/'mover'/'error.json',control/'STOP',gl/'STOP'):
                 if f.exists(): raise RuntimeError(f'已发布错误{f}: {f.read_text()[:3000]}')
@@ -274,6 +283,8 @@ def run(config_path: Path,*,resume_completed_smokes=False,orchestration_commit=N
         if guard_monitor is not None: guard_monitor.join(timeout=2)
         return fail(c,e,process=controller)
     finally:
+        cpu_heart_stop.set()
+        if cpu_heart is not None: cpu_heart.join(timeout=6)
         guard_monitor_stop.set()
         if guard_monitor is not None: guard_monitor.join(timeout=2)
         for g in guardians:
@@ -331,11 +342,11 @@ def self_test(root: Path) -> int:
 def main():
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='command',required=True)
     p=sub.add_parser('run'); p.add_argument('--config',type=Path,required=True)
-    p.add_argument('--resume-completed-smokes',action='store_true'); p.add_argument('--orchestration-commit',default=None)
+    p.add_argument('--resume-completed-smokes',action='store_true'); p.add_argument('--resume-existing-dispatches',action='store_true'); p.add_argument('--orchestration-commit',default=None)
     p=sub.add_parser('self-test'); p.add_argument('--root',type=Path,required=True)
     p=sub.add_parser('notification-probe'); p.add_argument('--config',type=Path,required=True)
     args=ap.parse_args()
     if args.command=='notification-probe': return notification_probe(args.config)
-    return run(args.config,resume_completed_smokes=args.resume_completed_smokes,orchestration_commit=args.orchestration_commit) if args.command=='run' else self_test(args.root)
+    return run(args.config,resume_completed_smokes=args.resume_completed_smokes,resume_existing_dispatches=args.resume_existing_dispatches,orchestration_commit=args.orchestration_commit) if args.command=='run' else self_test(args.root)
 
 if __name__=='__main__': raise SystemExit(main())

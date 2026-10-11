@@ -1,0 +1,27 @@
+{
+  "orchestration_commit": "ae44271248931eb7e1aa9eb9e7ab93dd171b3db7",
+  "worker_exec_commit": "8c3c84575e2a07727931c698b6ca17bedf495bac",
+  "config_sha256": "bbe580d4948cd6e07b4ded82f633b0786b0d1d245c9dfeaa01b7de9b09e0f7f2",
+  "files": {
+    "budget_ledger.py": {
+      "sha256": "06c0b9bbb8418c5cbc29ca9c18c6be40cc89bed8b9e3c470e15dbbd4b13422e9",
+      "bytes": 32269
+    },
+    "raw_ood_controller.py": {
+      "sha256": "a88a1cd3ac41ba5b013550a713469fd93c3725fabb5b73c4c6cd2194ee6be325",
+      "bytes": 47217
+    },
+    "raw_ood_supervisor.py": {
+      "sha256": "a7f045a5cf05fb3d8b7b770906a4ebae380ba0f0bbbe1fd73691b5e3ef52a6a0",
+      "bytes": 23428
+    },
+    "raw_ood_hold_guard.sh": {
+      "sha256": "2ff26011df0c5720196767f785cac8c438519e9456b4634b459b7da2b225aeaf",
+      "bytes": 8092
+    },
+    "raw_ood_supervisor_hold.sh": {
+      "sha256": "412cc5045b69dbc2a2706058c5f0207ab0687d71d053fb91e10f9f33ee4603b9",
+      "bytes": 924
+    }
+  }
+}

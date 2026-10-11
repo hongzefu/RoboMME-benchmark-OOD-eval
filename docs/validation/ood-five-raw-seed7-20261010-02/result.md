@@ -2,15 +2,17 @@
 
 ## 当前结论
 
-原三个正式首局均正常完成并完整核验，控制器第一次接续失败已留存；CPU 和原 GPU 占位保留，没有重跑。修补后的接续正在验证，完整五模型结果尚未完成。
+五个正式首局均完成执行与原始媒体核验，正常任务失败独立记分；原三局复用没有重跑。正式分片已派发，之后控制器／监督器因第四排队GPU的调度查询超时退出，三个正式worker保留运行；附着恢复与真实首步交接待验。CPU与原GPU占位保留，完整五模型结果尚未完成。
 
 | 模型 | 范围 | 实际步数 | task_success | infra |
 | --- | --- | --- | --- | --- |
 | SMVLA | 1任务 VideoUnmask × 1档 xhard1 × 1首试 | 269 | 1 | false |
 | GroundSG QwenVL | 1任务 VideoUnmask × 1档 xhard1 × 1首试 | 440 | 1 | false |
 | PP | 1任务 VideoUnmask × 1档 xhard1 × 1首试 | 276 | 1 | false |
+| GroundSG Oracle | 1任务 VideoUnmask × 1档 xhard1 × 1首试 | 329 | 1 | false |
+| FrameSamp＋Modulation | 1任务 VideoUnmask × 1档 xhard1 × 1首试 | 107 | 0 | false |
 
-新轮当前 3模型 × 1任务 × 1档 × 1首试 = 3轨迹／6 reset；加旧轮 PP × 1任务 × 1档 × 1首试 = 1／2，累计 4／8，上限4001／8002。余下两个模型的正式首局和正式分片尚未起跑；没有额外基础设施轨迹重试。
+首局阶段为新轮5模型 × 1任务 × 1档 × 1首试 = 5轨迹／10 reset；加旧轮 PP × 1任务 × 1档 × 1首试 = 1／2，首局阶段累计6／12，上限4001／8002。正式分片另计在同一获批预算，交接时的完整账本快照见后文；没有额外基础设施轨迹重试。
 
 ## 第一次接续失败
 
@@ -47,3 +49,27 @@
 两个机制已修复：健康守卫忽略历史接受回执，仅由本次严格验证的停止信号返回专用状态10后退出；CPU恢复入口只启动一次监督器，退出后保持srun步骤，以保留控制器。两处均不重跑原三局、不增加reset／轨迹预算、不停止GPU。固定代码 `657db86b29d82f24471d202cbfa2525525a5aaeb` 的 `GUARD_CPU_HOLD_REVIEW=PASS`；10项夹具20.89秒及3项原超时回归35.14秒退出0，资源计数全零。用户主动终止CPU步骤／CPU作业仍会由Slurm清理其子进程，不承诺这类情况下保留控制器。后续真实运行结果另行记录。
 
 主整合定向命令 `uv run --no-sync python -m pytest tests/unit/test_raw_ood_supervisor.py tests/unit/test_raw_ood_controller.py tests/static/test_inventory.py -q` 首次得到99通过、2失败，88.72秒；两项均为新增wrapper在契约总表缺文件索引，控制链路未失败。补齐总表索引和delta后仅复跑该门禁：`11 passed in 4.36s`、退出0，`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。未放宽判据，未重复无关仿真。
+
+## 第二次人工恢复真实起跑
+
+编排提交 `ae44271248931eb7e1aa9eb9e7ab93dd171b3db7` 已推送，独立五文件束在本机／NFS与锁逐SHA匹配：`RECOVERY_BUNDLE=PASS copies=2 files=5 config=1`。真实CPU预检退出0：`RESUME_PREFLIGHT=PASS models=3 identities=3 budget_sha256=3d8b1e492f5538cfbaf5bd33aaba45973757c6cc0b271d5cf3b7a7ab90b56404`。
+
+新CPU步骤 `63664373.12` 在gl3010运行，wrapper PID665775、监督器665797、控制器665851；三个新守卫在gl1505的 `.3` 步骤持续运行，PID2235012／2235028／2235058。原三个已完成首局成功复用发布并获得本机完整媒体搬运回执。Oracle `63664391.4`、FrameSamp `63664392.4` 分别起跑新模型首局；尚未完成，不把健康服务或context_load心跳当推理通过。新搬运PID2794202保持、无活动错误，没有自动重试或资源取消。
+
+随后Oracle329步、FrameSamp107步正常完成，任务成功分别为1／0、infra均false；五份回执均完成SHA、前／腕解码和数组／动作闭环。Oracle前／腕302／339帧，FrameSamp82／117帧；与原三个首局同样不以帧数等同步数。新Oracle `official_source=disabled`，原始交付目录无MP4，符合允许内部临时MP4、仅交付原始录像的用户裁决。FrameSamp正常任务失败保留，不重试。
+
+同CPU真实Slurm纯CPU夹具退出0：`SLURM_CPU_HOLD=PASS supervisor_rc=1 wrapper_alive=1 child_alive=1 retries=0 gpu_actions=0`。夹具未调用仿真、邮件或账本；仅结束自身精确PID，未触碰真实CPU步骤／GPUworker。日志在records。本机夹具和实际Slurm两种证据分开保留。
+
+五首局搬运齐后，控制器自动派发三个正式分片：QwenVL的qwenvl-00、qwenvl-01，SMVLA的smvla-00；第四GPU仍排队。正式首步／交接验收另记，不把已派发当已执行动作。
+
+## 正式派发后的调度查询失败
+
+控制器对第四个排队GPU63664404执行 `squeue -h -j 63664404 -o %T` 超过单次5秒，记录 `TimeoutExpired` 并退出；监督器也退出1并提交故障邮件。CPU步骤仍由wrapper665775保持，不取消任何GPU、不结束现有formal worker。此次证明了与第一次人工恢复不同：监督器退出后，三个正式srun进程仍存活。
+
+真实只读定位：CPU侧srun PID683623／683630／683637均由PID1接管，精确cmdline与dispatch逐项一致；对应GPU步骤为qwenvl-00的63664391.5、qwenvl-01的63664392.5、smvla-00的63664393.4，clientPID2247115／2247129／2247043，均仍存活。观察时全部context_load，不能当作已有动作。预算当时仍只有五首局5reserve／10reset_claim／5commit。
+
+15个明确活动失败／守卫回执已逐文件原字节移存至运行根 `control/attempts/resume-02-query-failure/`，原派发、progress、结果、账本及CPU旧wrapper不动：`QUERY_FAILURE_ARCHIVE=PASS files=15 original_bytes=preserved active_dispatches=preserved`。恢复不得重新走首局发布或重新启动现有三个正式分片，须附着其现有进程，重新构建发布／完成／待派发状态，并保持查询超时不把未知状态当可派发。
+
+在途接管代码固定 `b0861b2c4d7bf5369a5df7b9187173ca4eceb5e6`，独立 `EXISTING_DISPATCHES_REVIEW=PASS`；113项回归86.65秒和最终30项定向3.78秒退出0、资源全零。新增只读预检与明确接管入口，严格复用已有发布和原派发，附着仅监测；单次查询5秒保持，连续查询失败观察最长30秒并冷却，未知状态不派发。真实gl3010预检与接管结果另行追加。
+
+主整合控制器／监督器／契约门禁真实回归：`126 passed in 91.21s`、退出0，`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。无需仿真，未消耗运行预算。

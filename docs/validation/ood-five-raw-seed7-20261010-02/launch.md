@@ -56,3 +56,25 @@ UV_CACHE_DIR=/home/hongzefu/.cache/uv timeout 120s uv run --no-sync python -m py
 tmux new-session -d -s ev-ood-five-raw-mover-20261010-02 'bash /data/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/mover-run.sh'
 UV_CACHE_DIR=/home/hongzefu/.cache/uv uv run --no-sync python artifacts/ood-five-raw-seed7-20261010-02/publish_ready.py
 ```
+
+## 实际接续的版本与入口
+
+用户确认已收到探针后，原启动已执行；前三首局完成，首次控制器接续及随后人工监督失败均保留在result与records。用户追加：「可以再次启动这个CPU的任务。你可以随意地启动CPU的任务，不需要每次都问用户。」以及录像裁决：「只交付原始录像，允许内部临时 MP4」。前述准备命令仅还原首次启动，禁止重复发布旧ready或重起旧搬运。
+
+后续worker快照为 `runtime-code-resume-01/ @8c3c84575e2a07727931c698b6ca17bedf495bac`，新增配置 `control/run-config-resume-01.json` 的SHA为 `bbe580d4948cd6e07b4ded82f633b0786b0d1d245c9dfeaa01b7de9b09e0f7f2`；其 `legacy_source` 绑定三个已完成首局的656／5cc，身份、预算、权重、解释器与原GPU作业不变。原冻结快照与配置禁止覆盖。
+
+私有编排从已推送 `ae44271248931eb7e1aa9eb9e7ab93dd171b3db7` 导出五个控制文件至 `orchestration-recovery-02/`，逐文件SHA在运行根 `control/orchestration-lock-recovery-02.json`。新搬运会话为 `ev-ood-five-raw-mover-resume-20261010-02`；新CPU启动会话为 `ev-ood-five-raw-supervisor-resume-02-20261010-02`，日志为本机运行根 `control/supervisor-resume-02.log`。这两项是当前会话的精确清单，三个既有网站会话不属于本轮。
+
+确定CPU恢复命令如下；外部detached tmux持有SSH/srun，wrapper仅执行一次监督器并在退出后继续hold，禁止自动重启监督器。手动停止CPU步骤仍会触发Slurm清理其子进程。
+
+```bash
+srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none \
+  bash /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-02/raw_ood_supervisor_hold.sh \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02 \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/.venv/bin/python \
+  /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-02/raw_ood_supervisor.py run \
+  --config /nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/control/run-config-resume-01.json \
+  --resume-completed-smokes --orchestration-commit ae44271248931eb7e1aa9eb9e7ab93dd171b3db7
+```
+
+CPU只读预检、实际新步骤／PID及交接判定回写result；这里只固定已提交源码和真实参数，不把命令准备视为运行成功。

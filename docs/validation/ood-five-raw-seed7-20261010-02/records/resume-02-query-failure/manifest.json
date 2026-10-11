@@ -1,0 +1,65 @@
+{
+  "reason": "第四GPU排队查询超过5秒；三个正式worker保留",
+  "files": {
+    "controller-error.json": {
+      "sha256": "d4faab5be08d962fcecbe908bde02d4edafaef7b75988c84c6135a98687b47c5",
+      "bytes": 444
+    },
+    "supervisor-failure.json": {
+      "sha256": "7aa497221e8c39faab42d0ee5cd906f226d3274a408f23d18444d5453c3f2ad8",
+      "bytes": 1203
+    },
+    "notification-failure.json": {
+      "sha256": "07a41667255c051e9184127b5d2e68f0dd273c2dd53008e26b7db2b3beda5463",
+      "bytes": 612
+    },
+    "intentional-supervisor-stop.json": {
+      "sha256": "c5f4b4f2ff6a8b1bb562e25d918108512c311ae5112af89a1b44719304f9e2da",
+      "bytes": 618
+    },
+    "cpu-heartbeat.json": {
+      "sha256": "8579e4d9a6f5f0f1ca4ff0c8a93c45485e1f34e09e588006aa9b36bfadf97b2e",
+      "bytes": 330
+    },
+    "controller-heartbeat.json": {
+      "sha256": "e78a3020c65cf5a224df4503f8f6e02f26aab4bb67527d3aa3915c2120738c17",
+      "bytes": 318
+    },
+    "guardian-launches.json": {
+      "sha256": "0211c4bf18083d5398d936ddae1f17d560e81c13688a715cc4cf85d9588ec4d6",
+      "bytes": 2374
+    },
+    "supervisor-started.json": {
+      "sha256": "2eaeec61753c079069268d5f6b1c94cdd5042e757b71580d412ff34cb6231e31",
+      "bytes": 334
+    },
+    "orchestration-started.json": {
+      "sha256": "41516db7a8378eb991b19e9fa92401addb004b6aa715f03ed53719a34b99bcb5",
+      "bytes": 394
+    },
+    "guardian-ready-63664391.json": {
+      "sha256": "8b1a9123c9da8c8397ef06d285501a39cb9ecd91f33579a4a68ef244cc73d19a",
+      "bytes": 348
+    },
+    "guardian-intent-accepted-63664391.json": {
+      "sha256": "dfcdd93582afb1eafe16a4d2e6b8271edc9b44d842d56d6d8cd2dc20b34b38c8",
+      "bytes": 617
+    },
+    "guardian-ready-63664392.json": {
+      "sha256": "98425df3eae3a1f73006f735dc6fd77e2c85324f739918a84cfe02e67513b45b",
+      "bytes": 350
+    },
+    "guardian-intent-accepted-63664392.json": {
+      "sha256": "dfcdd93582afb1eafe16a4d2e6b8271edc9b44d842d56d6d8cd2dc20b34b38c8",
+      "bytes": 617
+    },
+    "guardian-ready-63664393.json": {
+      "sha256": "815eae7322b0645fc5bce6284924ffd63d671eda80ba87d14d6a804892216dcf",
+      "bytes": 350
+    },
+    "guardian-intent-accepted-63664393.json": {
+      "sha256": "dfcdd93582afb1eafe16a4d2e6b8271edc9b44d842d56d6d8cd2dc20b34b38c8",
+      "bytes": 617
+    }
+  }
+}
