@@ -139,3 +139,41 @@ ssh -o ControlPath=/home/hongzefu/.ssh/cm2-%r@%h:%p -o ControlMaster=no -o Batch
 唯一实际搬运器会话为 `ev-ood-five-raw-mover-resume-03-20261010-02`，使用本机完整 891 的 `dev-scripts/gl/eval_video_mover.py --layout raw-ood --stage <本轮NFS根>/gl --dest <本轮本机根>/gl --manifest <本轮NFS根>/control/run-config-resume-03.json --interval 30 --min-free-gib 50`，心跳、错误和 STOP 槽继续原运行根。旧 mover02 只按清单精确删除该会话，删前后差集恰一项，原 PID 已消失；没有第二个搬运器并发。
 
 这次另登记的会话 `ev-ood-five-raw-supervisor-resume-11-20261010-02`、`ev-ood-five-raw-supervisor-resume-12-20261010-02`、`ev-ood-five-raw-supervisor-resume-13-20261010-02` 保留各自 CPU hold。独立验证会话 `ev-ood-failure-final-validation-1011` 已自然结束。准备和加载失败原证据分别在 `control/resume-11-startup-failure/`、`resume-12-load-failure/`、`resume-13-heartbeat-failure/`；模型加载前拒绝的一次重载没有任何预约或 reset，原目录已原字节移存。未清理用户站点或其他会话，未关闭 SSH master。GPU／CPU 不自动取消；失败通知沿已实收探针确认的 sendmail 通道，新失败的发送零退出仅记提交成功。
+
+## 简化续跑（2026-10-11，最简四卡方案）
+
+按根目录计划 [`1011-ood-simple-four-gpu-plan.html`](../../../1011-ood-simple-four-gpu-plan.html) 执行。用户原话（2026-10-11）：「codex 把问题搞得太复杂了」「我只是我还是想eval这些内容 规模不变 给出一个最简单的方式我需要分配在4个GPU上」「同意授权 写入计划」「起跑的时候不提交备用job」「NFS 大文件清理是跑完单独确认」「设计一个起跑的opus的监控它需要做最小化的监控每过几个小时去唤醒他一次」；开工令「开始 …1011-ood-simple-four-gpu-plan.html 一路修改修改完了开始长期eval」；排空期间「同意stop文件」「同意清理你来做」。
+
+### 口径（编号同计划第一部分 §二）
+
+1. 规模不变：5 模型 × 16 任务 × 50 局 = 4000 首试，每局 2 次 reset 计量 = 8000；旧轮 PP 1 局另计，原上限 4001／8002。已完成的局原样复用。
+2. 参数逐字取自 `control/run-config-resume-03.json`（SHA256 `cecdacdd…cda02`），执行副本仍为 NFS `runtime-code-resume-03/`（exec_commit `891b462726bf018c439a2fce9657aa85199d9f77`）。
+3. 只交付原始录像：`--no-render` + `--cfg groundsg_keep_official=false`。
+4. 正常失败不重跑，基础设施失败零重试；已写 result.json 的 infra 局续跑自动跳过。
+5. 占位 job 不停；6. 不含 Astra、MemER；7. PP 上下文溢出由汇总脚本重分类为模型失败 0，并给出重分类前后两组数字。
+8. 中断重跑授权：只覆盖被基础设施中断、没有 result.json 的局；每分片封顶 3 局，四分片合计 12，累计上限 4013 轨迹／8026 reset。
+
+### 旧编排排空（S1）
+
+起跑前实测（15:55 EDT）：旧控制器早已崩溃，四个 GPU job 只剩一个 worker 步 `63664404.8`（qwenvl-03），其余三卡空占。15:56:39 建 `control/STOP`（用户同意）；该 worker 跑完在跑局 `ButtonUnmaskSwap_xhard2_18701903`（status=timeout，infra=0）后 15:57:41 以 `GL_SEAT_DONE outcome=fail rc=6` 自行退出；搬运器 `ev-ood-five-raw-mover-resume-03-20261010-02` 见 STOP 以 6 自退（`MOVER_PAUSED=PASS moved=361`），会话自然消失。本机 10 个旧监督器会话 `ev-ood-five-raw-supervisor-resume-{02,06,07,08,09,10,11,12,13,14}-20261010-02` 逐个按精确名结束，每次删前删后 diff 只少目标；用户站点会话与 `claude` 未动。CPU job 63664373 残留 bash 步 `.12 .20 .24 .25 .26 .29 .31 .33 .34 .37` 经用户同意按步号逐个 `scancel`，只剩 batch/extern。五个 job 均未取消。排空时 NFS 已完成：qwenvl 278、pp 100、smvla 23、oracle 1、framesamp 1，无半截目录。
+
+`OLD_DRAINED=PASS gpu_steps=0 inflight_done=1 cpu_steps=0`
+
+### 分片与启动命令
+
+| 分片 | 任务 | 端口基 | GPU job | tmux（gl-login1） |
+|---|---|---|---|---|
+| g1 | PickHighlight, SwingXtimes, StopCube, VideoUnmaskSwap | 22400 | 63664391 | `ev-ood-simple-g1` |
+| g2 | BinFill, VideoUnmask, ButtonUnmaskSwap, VideoRepick | 22500 | 63664392 | `ev-ood-simple-g2` |
+| g3 | MoveCube, PickXtimes, RouteStick, VideoPlaceButton | 22600 | 63664393 | `ev-ood-simple-g3` |
+| g4 | InsertPeg, ButtonUnmask, PatternLock, VideoPlaceOrder | 22700 | 63664404 | `ev-ood-simple-g4` |
+
+分片脚本 `dev-scripts/gl/simple/run_shard.sh`（sha256 `f674e7837abb482ee56d3d58211ff71cccf45dded1bca0d74f27514010426ce2`；计划正文记的 `0daffdf…` 是 1.140 加行尾「历史目录名」注释前的版本）复制到 NFS `simple/run_shard.sh`。每个分片的启动命令（gN／job 按上表替换），在 gl-login1 执行：
+
+```bash
+tmux new-session -d -s ev-ood-simple-g1 "srun --jobid=63664391 --job-name=ood-simple-g1 --overlap --exact --ntasks=1 --cpus-per-task=1 --gpu_cmode=shared bash $N/simple/run_shard.sh g1 > $N/simple/logs/srun-g1.log 2>&1; echo SRUN_EXIT=\$? >> $N/simple/logs/srun-g1.log"
+```
+
+其中 `$N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02`。日志：`$N/simple/logs/shard-gN.log`、`srun-gN.log`、`reattempts-gN.log`、`restarts.log`；半截目录移存 `$N/simple/halfdone/gN/`。g1 先起即冒烟，首个 infra=false 新结果出现后再起 g2～g4。
+
+### 回执（起跑后追加）
