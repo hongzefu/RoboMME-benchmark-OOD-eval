@@ -17,6 +17,7 @@ from raw_ood_controller import Controller, atomic, control_file, ledger_snapshot
 MAIL_TO='hongzefu@umich.edu'
 MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
 GUARD_QUERY_FAILURES={}
+NOTIFICATION_INSTANCE=f'{os.getpid()}-{time.time_ns()}'
 
 
 def notification_config(c: dict) -> dict:
@@ -30,7 +31,8 @@ def notification_config(c: dict) -> dict:
 def notify(c: dict, event: str, body: dict) -> dict:
     """只提交一次，不重试；submitted只说明本机MTA接纳，不代表邮箱收到。"""
     if event not in ('probe','failure','completed'): raise ValueError('未知通知事件')
-    control=Path(c['root'])/'control'; target=control/f'notification-{event}.json'
+    control=Path(c['root'])/'control'; canonical=control/f'notification-{event}.json'
+    target=canonical if event=='probe' else control/'notifications'/NOTIFICATION_INSTANCE/f'{event}.json'
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     if target.exists():
         old=read(target)
@@ -40,6 +42,9 @@ def notify(c: dict, event: str, body: dict) -> dict:
     subject=f"RoboMME {c['run']} {event} CPU {c['controller_job_id']} {c['config_sha256'][:12]}"
     record=dict(base,event=event,to=MAIL_TO,subject=subject,time=time.time(),state='disabled',rc=None,stderr='',stdout='',
                 delivery_verified=False,notification_established=False)
+    if event!='probe':
+        record.update(supervisor_instance=NOTIFICATION_INSTANCE,receipt_path=str(target))
+        subject+=' supervisor '+NOTIFICATION_INSTANCE; record['subject']=subject
     if cfg['enabled']:
         message=EmailMessage(); message['To']=MAIL_TO; message['Subject']=subject
         message.set_content(json.dumps(body,ensure_ascii=False,sort_keys=True,indent=2))
@@ -56,6 +61,10 @@ def notify(c: dict, event: str, body: dict) -> dict:
         except (OSError,subprocess.TimeoutExpired) as e:
             record.update(state='failed',error_kind=type(e).__name__,stderr=str(e))
     atomic(target,record)
+    if event!='probe':
+        # 原canonical完整回执不覆盖；另设最新实例导航，并保留各实例原始回执。
+        if not canonical.exists(): atomic(canonical,record)
+        atomic(control/f'notification-latest-{event}.json',dict(base,supervisor_instance=NOTIFICATION_INSTANCE,receipt_path=str(target),time=time.time()))
     print(f"NOTIFICATION state={record['state']} event={event} rc={record['rc']} delivery_verified=0",flush=True)
     return record
 
@@ -214,14 +223,17 @@ def attach_controller(c,config_path,pid,source,manifest_path,expected_manifest_s
     if not re.fullmatch('[0-9a-f]{64}',str(expected_manifest_sha)) or sha(manifest_path)!=expected_manifest_sha: raise ValueError('附着原源码锁SHA不符')
     manifest=read(manifest_path); origin=read(control/'orchestration-started.json'); started=read(control/'supervisor-started.json')
     if any(str(origin[k])!=str(v) or str(started[k])!=str(v) for k,v in base.items()) or int(started['controller_pid'])!=int(pid): raise ValueError('附着原启动证明身份/PID不符')
-    if origin['resume_existing_dispatches'] is not True or origin['resume_completed_smokes'] is not False or manifest['orchestration_commit']!=origin['orchestration_commit'] or manifest['worker_exec_commit']!=c['exec_commit'] or manifest['config_sha256']!=c['config_sha256']:
+    existing=origin['resume_existing_dispatches']
+    # 旧existing证明没有paused键；仅明确existing=True时兼容，缺键不单独构成合法模式。
+    paused=origin['resume_paused'] if 'resume_paused' in origin else False
+    if type(existing) is not bool or type(paused) is not bool or existing==paused or origin['resume_completed_smokes'] is not False or manifest['orchestration_commit']!=origin['orchestration_commit'] or manifest['worker_exec_commit']!=c['exec_commit'] or manifest['config_sha256']!=c['config_sha256']:
         raise ValueError('附着原编排来源不符')
     info=manifest['files']['raw_ood_controller.py']
     if source.stat().st_size!=info['bytes'] or sha(source)!=info['sha256']: raise ValueError('附着控制器源码不符原锁')
     heartbeat=check_heartbeat(control/'controller-heartbeat.json',base,now=time.time(),timeout=120)
     if int(heartbeat['pid'])!=int(pid): raise ValueError('附着心跳PID不符')
     proc=process_identity(pid)
-    expected=[c['python'],str(source),'run','--config',str(config_path),'--resume-existing-dispatches','--orchestration-commit',origin['orchestration_commit']]
+    expected=[c['python'],str(source),'run','--config',str(config_path),'--resume-paused' if paused else '--resume-existing-dispatches','--orchestration-commit',origin['orchestration_commit']]
     if proc is None or proc['state']=='Z' or proc['command']!=expected or not re.search(r'job[_/-]'+re.escape(str(c['controller_job_id']))+r'(?:/|$)',proc['cgroup']): raise ValueError('附着PID命令/CPU作业不符或不存在')
     if abs(proc['start_time']-float(started['time']))>5: raise ValueError('附着PID创建时间与原启动证明不符')
     proof=dict(base,controller_pid=int(pid),source=str(source),source_sha256=info['sha256'],manifest_sha256=expected_manifest_sha,
@@ -247,6 +259,8 @@ def fail(config: dict, error: BaseException, *, process=None) -> int:
 
 def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispatches=False,resume_paused=False,orchestration_commit=None,
         attach_controller_pid=None,attach_controller_source=None,attach_controller_manifest=None,attach_manifest_sha256=None) -> int:
+    global NOTIFICATION_INSTANCE
+    NOTIFICATION_INSTANCE=f'{os.getpid()}-{time.time_ns()}'
     c=load_config(config_path)
     control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}

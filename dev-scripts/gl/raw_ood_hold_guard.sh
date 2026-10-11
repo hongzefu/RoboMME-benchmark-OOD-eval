@@ -50,25 +50,27 @@ if [[ -z "${SLURM_STEP_ID:-}" || "$SLURM_STEP_ID" == batch ]]; then
   # GPU batch应只sleep；误用也保持allocation，不因监视器退出结束工作负载。
   while :; do sleep 3600 & HOLD_PID=$!; wait "$HOLD_PID" || true; done
 fi
-QUERY_FAIL_SINCE=-1
+UNVERIFIED_QUERY_SINCE=""
 while :; do
   FAILURE_PHASE=slurm_cpu_query
-  (( QUERY_FAIL_SINCE < 0 || SECONDS - QUERY_FAIL_SINCE < 30 )) || exit 7
   if [[ -f "$ROOT/control/gpu_work_complete.json" ]]; then
     normal_complete && exit 0
     exit 4
   fi
   [[ ! -f "$ROOT/control/STOP" ]] || echo "GUARD_PAUSE_DRAINING gpu=$SELF gpu_action=none"
-  QUERY_START=$SECONDS
   if [[ -f "$ROOT/control/intentional-supervisor-stop.json" ]]; then
     echo "GUARD_INTENT_PENDING_VALIDATE gpu=$SELF"
   elif STATE=$(timeout --kill-after=.2s 5s squeue -h -j "$CPU" -o '%T' 2>/dev/null); then
-    QUERY_FAIL_SINCE=-1
+    UNVERIFIED_QUERY_SINCE=""
     FAILURE_PHASE=slurm_cpu_state
     [[ "$STATE" == PENDING || "$STATE" == CONFIGURING || "$STATE" == RUNNING ]] || exit 6
   else
-    (( QUERY_FAIL_SINCE >= 0 )) || QUERY_FAIL_SINCE=$QUERY_START
-    (( SECONDS - QUERY_FAIL_SINCE < 30 )) || exit 7
+    echo "GUARD_CPU_QUERY state=UNKNOWN gpu=$SELF heartbeat_authority=payload"
+    # 已验证心跳的真实t/loop_t决定失效，不用另一个RPC失败期限误停健康守卫。
+    if [[ -z "$CACHE_B64" ]]; then
+      [[ -n "$UNVERIFIED_QUERY_SINCE" ]] || UNVERIFIED_QUERY_SINCE=$(date +%s)
+      (( $(date +%s) - UNVERIFIED_QUERY_SINCE < 120 )) || exit 7
+    fi
   fi
   if [[ -f "$READY" || -n "$CACHE_B64" ]]; then
     FAILURE_PHASE=ready_heartbeat_payload
