@@ -364,7 +364,7 @@ def existing_fixture(tmp_path,monkeypatch):
         row=json.loads((Path(ctl.c['gl_root'])/'seats'/ctl.c['models'][model]['label']/'seed7'/f"{seat['seat']}-{model}-00-smoke"/'seat-results.jsonl').read_text())
         a=dict(model=model,shard=model+'-00',rows=ctl.shards[model+'-00']['rows'][:1],smoke=True)
         doc=ctl.prepare_publication(a,row); C.atomic(ctl.gl/'published'/C.publication_name(doc['identity_key']),doc)
-        C.atomic(ctl.gl/'mover/receipts'/C.publication_name(doc['identity_key']),dict(doc,result='moved',decoded=True,trace_checked=True))
+        C.atomic(ctl.gl/'mover/receipts'/C.publication_name(doc['identity_key']),dict(doc,result='moved',decoded={'front':1,'wrist':1},trace_checked=True))
     metadata={}; account={}
     for index,shard in enumerate(('qwenvl-00','qwenvl-01','smvla-00')):
         seat=ctl.c['seats'][index]; ctl.start(seat,shard); inv=ctl.control/'invocations'/(shard+'-full')
@@ -398,6 +398,50 @@ def test_existing_dispatch_preflight_and_attach_do_not_replay_or_republish(tmp_p
     ctl.scan(); ctl.dispatch()
     assert Path(ctl.c['budget_ledger']).read_bytes()==ledger
     for a in ctl.active.values(): a['log'].close()
+
+
+@pytest.mark.parametrize('kind',['valid','bool','zero','missing_camera','extra_camera','bool_count','wrong_field','trace_false'])
+def test_production_mover_receipt_serialization_is_consumed_strictly(tmp_path,monkeypatch,kind):
+    import shutil
+    import eval_video_mover as mover
+    spec=importlib.util.spec_from_file_location('receipt_media_fixture',Path(__file__).with_name('test_raw_ood_mover.py'))
+    fixture=importlib.util.module_from_spec(spec); spec.loader.exec_module(fixture)
+    real_root=tmp_path/'real-media'; real_root.mkdir()
+    stage,dest,source,unused=fixture.publication.__wrapped__(real_root)
+    (tmp_path/'controller').mkdir()
+    ctl,metadata,account=existing_fixture(tmp_path/'controller',monkeypatch)
+    ident=ctl.shards['smvla-00']['rows'][0]
+    value=mover.json.loads((source/'result.json').read_text()); value.update({k:ident[k] for k in ('dataset','task','tier','seed','key')})
+    mover.raw_atomic(source/'result.json',value)
+    trace=[json.loads(x) for x in (source/'trace.jsonl').read_text().splitlines()]; trace[0]['identity']={k:ident[k] for k in ('dataset','task','tier','seed','key')}
+    (source/'trace.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in trace))
+    target=ctl.gl/'rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1'
+    for path in source.iterdir(): shutil.copy2(path,target/path.name)
+    doc=dict(ctl.base,schema='raw-ood-v1',model='smvla',shard_id='smvla-00',identity_key=C.identity('smvla',ident),
+             relative_dir=str(target.relative_to(ctl.gl)),files=mover.raw_tree(target),delete_files=['front.mkv','wrist.mkv','arrays.npz'],worker_exec_commit=ctl.c['exec_commit'])
+    C.atomic(ctl.gl/'published'/C.publication_name(doc['identity_key']),doc)
+    # 使用生产搬运函数、真实AV1解码与删除链路生成回执，再序列化供控制器读取。
+    monkeypatch.undo()
+    receipt=mover.raw_move(doc,ctl.gl,dest,min_free_gib=0)
+    monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid))
+    def query(cmd,**kw):
+        if cmd[0]=='sacct': return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]],stderr='')
+        return types.SimpleNamespace(returncode=0,stdout=''.join(' '.join(x.strip().split('|')[:3])+'\n' for x in account.values()),stderr='')
+    monkeypatch.setattr(C.subprocess,'run',query)
+    assert receipt['decoded']=={'front':1,'wrist':1}
+    if kind=='bool': receipt['decoded']=True
+    elif kind=='zero': receipt['decoded']['front']=0
+    elif kind=='missing_camera': del receipt['decoded']['wrist']
+    elif kind=='extra_camera': receipt['decoded']['extra']=1
+    elif kind=='bool_count': receipt['decoded']['front']=True
+    elif kind=='wrong_field': receipt['worker_exec_commit']='f'*40
+    elif kind=='trace_false': receipt['trace_checked']=False
+    mover.raw_atomic(ctl.gl/'mover/receipts'/C.publication_name(doc['identity_key']),receipt)
+    if kind=='valid':
+        assert len(ctl.existing_publications())==5
+        assert ctl.resume_existing_dispatches('c'*40,preflight=True)['active']==3
+    else:
+        with pytest.raises(ValueError): ctl.existing_publications()
 
 
 @pytest.mark.parametrize('kind',['command','cgroup','time','tick','unknown','infra','publication','receipt','directory','identities','context','missing_pid'])
@@ -515,6 +559,22 @@ def test_existing_adapter_real_pid_disappearance_requires_true_terminal_accounti
         assert adapter.poll()==0
     finally:
         if child.poll() is None: child.kill(); child.wait(timeout=2)
+
+
+def test_real_process_identity_preserves_empty_gpu_argument(tmp_path):
+    import subprocess,time
+    ready=tmp_path/'ready'
+    command=[sys.executable,'-c',"import pathlib,time,sys; pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(60)",str(ready),'--gpus','','--tail','value']
+    child=subprocess.Popen(command)
+    try:
+        deadline=time.monotonic()+2
+        while not ready.exists() and time.monotonic()<deadline: time.sleep(.01)
+        assert ready.exists()
+        proc=C.process_identity(child.pid)
+        assert proc['command']==command
+        i=proc['command'].index('--gpus'); assert proc['command'][i+1]==''
+        assert C.ExistingProcess(child.pid,proc,'101.5','raw-ood-worker-qwenvl-00-full').poll() is None
+    finally: child.kill(); child.wait(timeout=2)
 
 
 def test_existing_resume_validation_runs_inside_real_heartbeat_thread(tmp_path,monkeypatch):

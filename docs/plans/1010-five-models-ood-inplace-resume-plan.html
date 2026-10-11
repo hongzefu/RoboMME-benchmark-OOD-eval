@@ -61,4 +61,7 @@ srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none
 <p>新增只读 <code>existing-dispatches-preflight</code> 和显式 <code>--resume-existing-dispatches</code>。逐个核同配置的publication／媒体回执／小result与预算、原派发完整命令／身份、CPU进程创建时间／cmdline／cgroup、精确GPUstep与进度；验证完成再重建已发布、在途、已完成和待派发集合。现有srun仅附着监测，PID消失必须查真实Slurm终态，不能当成功；不重复启动、领取、发布，允许worker按原预算继续追加账本。</p>
 <p>单次调度查询仍5秒；临时未知状态用最长30秒观察窗，unknown至少5秒、PENDING至少10秒后再查，不向未知席位派发；持续失败保留原错误退出，心跳120秒及明确异常终态不放宽。新私有编排冻结于 <code>orchestration-recovery-03/</code>，新入口会话为 <code>ev-ood-five-raw-supervisor-resume-03-20261010-02</code>；旧CPU步骤12与其wrapper665775继续保持原三个srun所在cgroup，禁止为清理旧监督会话而结束它。搬运和worker快照8c3／配置bbe保持。</p>
 <p>固定b0861b2的 <code>EXISTING_DISPATCHES_REVIEW=PASS</code>；代码代理113项86.65秒、最终30项3.78秒退出0、资源计数零。真正启动前按确定提交核私有源码SHA，并在原gl3010 CPU作业运行只读预检；实际附着后以新监督／控制心跳、原三个srun继续存活、五媒体回执和首正式真实动作证据完成交接。完整4000局另待最终报告，不将首局或交接等同全量结果。</p>
+<h2>九、生产回执与冻结依赖闭包</h2>
+<p>03真实CPU预检发现五文件束缺eval_video_mover模块，主另建六文件束04并验证导入，原失败束保留。04真实预检发现decoded实际为双摄像头帧数字典而消费者误要求布尔True。修复仅要求front／wrist两键非布尔正整数，trace_checked与其余身份／SHA约束不变；原回执不改。另将/proc/cmdline解析改为只删最后终结NUL，保留合法空参数，与原dispatch中--gpus空值准确对应。</p>
+<p>生产raw_move真媒体／数组／动作验证、回执JSON写读及真实子PID空argv链路29项10.22秒退出0，固定22c5cb56的 <code>CONSUMER_ARGV_REVIEW=PASS</code>。主整合97项17.91秒退出0、资源零。最终接管束为 <code>orchestration-recovery-05/</code> 的六个确定提交文件，独立导入闭包后核两端SHA；会话改为 <code>ev-ood-five-raw-supervisor-resume-05-20261010-02</code>。worker8c3／配置bbe、旧CPUstep12与三个formal srun、搬运保持；03／04均仅预检失败，未启动监督器，不存在需要取消的新增GPU步骤。</p>
 </body></html>

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-04/raw_ood_controller.py", line 911, in <module>
+    if __name__=='__main__': raise SystemExit(main())
+                                              ^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-04/raw_ood_controller.py", line 903, in main
+    controller.resume_existing_dispatches(args.orchestration_commit,preflight=True); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-04/raw_ood_controller.py", line 552, in resume_existing_dispatches
+    pubs=self.existing_publications(); smoke_keys={identity(m,self.shards[m+'-00']['rows'][0]) for m in MODELS}
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-04/raw_ood_controller.py", line 540, in existing_publications
+    raise ValueError('已有搬运回执与发布冲突')
+ValueError: 已有搬运回执与发布冲突
+srun: error: gl3010: task 0: Exited with exit code 1

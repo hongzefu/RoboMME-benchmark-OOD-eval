@@ -73,3 +73,9 @@
 在途接管代码固定 `b0861b2c4d7bf5369a5df7b9187173ca4eceb5e6`，独立 `EXISTING_DISPATCHES_REVIEW=PASS`；113项回归86.65秒和最终30项定向3.78秒退出0、资源全零。新增只读预检与明确接管入口，严格复用已有发布和原派发，附着仅监测；单次查询5秒保持，连续查询失败观察最长30秒并冷却，未知状态不派发。真实gl3010预检与接管结果另行追加。
 
 主整合控制器／监督器／契约门禁真实回归：`126 passed in 91.21s`、退出0，`TEST_RESOURCE=PASS native_reset=0 gpu_init=0 weights=0 network=0 violations=0 not_verified=0`。无需仿真，未消耗运行预算。
+
+两次真实接管预检均拒绝，未启动新监督器：03私有文件束漏列控制器新增依赖eval_video_mover，报ModuleNotFoundError；主保留原五文件束，另从同7d60ab6提交导出包含该依赖的六文件束04，独立导入闭包通过。04随后发现消费者把真实 `decoded={front:帧数,wrist:帧数}` 错读为布尔True；已有五媒体回执全为合法计数字典，不能改回执迁就消费者，须修消费者并用生产回执序列化补验证。两次预检日志保留，未重启GPU、未重领轨迹或reset。
+
+补充修复固定 `22c5cb56e088bdb7239bef511d793f64f435313c`：decoded必须是正好front／wrist两键、各为非布尔正整数，trace_checked仍必须True；其余字段严格绑定保持。同时修正 `/proc/cmdline` 解析仅剔除末尾NUL、保留 `--gpus ''` 的合法内部空参数，不改原派发或对比规则。生产搬运生成真AV1／NPZ／trace、rsync核验删除、原子JSON写读再预检的正负链路，以及真实CPU子PID空argv验证，29项10.22秒通过；独立 `CONSUMER_ARGV_REVIEW=PASS` 直接核对生产协议。主整合控制器及契约门禁 `97 passed in 17.91s`、退出0、资源计数全零。下一私有文件束05完整包含六文件并验证独立导入，真实CPU再预检，不覆盖03／04失败束。
+
+提交1.112前的默认diff检查报告观察日志四行末尾空格；该命令序列没有及时阻止提交，不应表述为当时默认diff检查通过。此处已将Git内该日志副本四行末尾空格去掉，原日志字节仍在运行根control完整保留（26333字节、SHA256 `192482a0215aa92acc64867316b91b21a40f40bb9a71135a284881be3ceb5c5c`），JSON／失败回执不改；本次 `git diff --check` 退出0。没有改写已有提交或原始运行证据。
