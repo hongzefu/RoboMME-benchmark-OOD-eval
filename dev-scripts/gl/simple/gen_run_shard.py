@@ -119,6 +119,11 @@ finish "$overall"
 """
 
 
+#: ckpt 磁盘真实路径里的旧目录段；含它的 run_model 行在行尾追加下面的注释（bash 语义不变）
+LEGACY_DIR_SEG = "/mme/"  # 历史目录名：ckpt 磁盘真实路径
+LEGACY_DIR_NOTE = " # 历史目录名：ckpt 磁盘真实路径"
+
+
 def die(msg: str) -> None:
     print(f"SHARD_SCRIPT=FAIL reason={msg}")
     sys.exit(1)
@@ -185,7 +190,11 @@ def render(cfg: dict, config_name: str, expected_tasks: set[str] | None) -> str:
         if m["policy"] == "groundsg":
             args += list(GROUNDSG_EXTRA)
         argv = [m["label"], m["env"]["BENCH_PY"], "--model", m["policy"], *args]
-        lines.append("run_model " + " ".join(safe(a) for a in argv) + " || overall=$?")
+        line = "run_model " + " ".join(safe(a) for a in argv) + " || overall=$?"
+        if any(LEGACY_DIR_SEG in a for a in argv):
+            # 行尾 bash 注释不改语义，只为让官方名残留检查（tests/static/test_official_names.py）按「历史目录名」放行
+            line += LEGACY_DIR_NOTE
+        lines.append(line)
 
     text = HEAD + BODY
     for key, val in (

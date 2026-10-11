@@ -4144,6 +4144,30 @@
   "dev-scripts/release/public-manifest.txt": {
    "category": "发布工具（只供实跑）",
    "reason": "只在 dev 的公开拆分发布工具（2026-10-09）：公开 main 的逐文件清单（数据，非代码），由 check_manifest.py 与 sync_to_main.sh 每次实跑核对。"
+  },
+  "dev-scripts/gl/simple/gen_run_shard.py": {
+   "category": "冻结配置（只供实跑）",
+   "reason": "最简四卡方案的运维脚本：由 run-config JSON 机械生成单卡分片脚本 run_shard.sh，末行 SHARD_SCRIPT=PASS sha256=；以「生成结果与仓库 run_shard.sh 逐字节 diff 为零」覆盖，需真实 run-config，不在 CPU 门禁内（见根目录计划 1011-ood-simple-four-gpu-plan.html）。"
+  },
+  "dev-scripts/gl/simple/run_shard.sh": {
+   "category": "冻结配置（只供实跑）",
+   "reason": "最简四卡方案的运维脚本：gen_run_shard.py 的产出（单卡分片运行脚本，含 NFS 解释器与 ckpt 绝对路径），只在 GL 占位 job 内实跑；控制流由 shard_fixture.sh 夹具 7 个场景覆盖，内容由生成器 diff 钉死（见根目录计划 1011-ood-simple-four-gpu-plan.html）。"
+  },
+  "dev-scripts/gl/simple/shard_fixture.sh": {
+   "category": "仓级闸门脚本（只供实跑）",
+   "reason": "最简四卡方案的运维脚本：run_shard.sh 控制流夹具（桩 evaluate.py、不跑仿真与模型），末行 SHARD_FIXTURE=PASS cases=7；需 NFS 挂载上的解释器、耗时 1～2 分钟，不在 CPU 门禁内（见根目录计划 1011-ood-simple-four-gpu-plan.html）。"
+  },
+  "dev-scripts/gl/simple/shard_fixture_stub_evaluate.py": {
+   "category": "仓级闸门脚本（只供实跑）",
+   "reason": "最简四卡方案的运维脚本：shard_fixture.sh 复制进临时目录的桩 scripts/evaluate.py，只用标准库模拟入口的退出路径，随夹具实跑（见根目录计划 1011-ood-simple-four-gpu-plan.html）。"
+  },
+  "dev-scripts/gl/simple/simple_check.sh": {
+   "category": "仓级闸门脚本（只供实跑）",
+   "reason": "最简四卡方案的运维脚本：只读巡检（ssh 查作业步、读 NFS 日志与 result.json），末行 CHECK= 判定行；需集群与 NFS，不在 CPU 门禁内（见根目录计划 1011-ood-simple-four-gpu-plan.html）。"
+  },
+  "dev-scripts/checks/ood_simple_summary.py": {
+   "category": "一次性出图／留档脚本",
+   "reason": "最简四卡方案的运维脚本：五模型 OOD 简化续跑的只读汇总（覆盖核对、成功率表、infra 单列、可选录像解码校验与 NFS 删除清单），读真实 rollouts 产物，结果写入留档（见根目录计划 1011-ood-simple-four-gpu-plan.html）。"
   }
  },
  "file_notes": {
