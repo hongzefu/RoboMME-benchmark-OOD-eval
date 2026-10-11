@@ -12,7 +12,7 @@ import signal
 import subprocess
 import threading
 import time
-from raw_ood_context import CORE, match_context, read_pause_snapshot, source_configs, trusted_contexts, validate_failure_document, validate_terminal_marker, validate_historical_errors, read_budget_rows
+from raw_ood_context import CORE, match_context, read_pause_snapshot, source_configs, trusted_contexts, validate_failure_document, validate_terminal_marker, validate_historical_errors, read_budget_rows, validate_pause_proof, legacy_watchdog_progress
 
 MODELS = ('qwenvl', 'smvla', 'pp', 'oracle', 'framesamp')
 SECONDS = dict(qwenvl=311.428, smvla=152.526, pp=138.695, oracle=130.485, framesamp=86.518)
@@ -305,8 +305,8 @@ def worker_account(step,name,*,allow_drained=False,allow_watchdog=False,evidence
     if p.returncode or len(rows)!=1 or rows[0][1]!=name: raise ValueError('已有worker记账身份或状态未知 '+step)
     state,code=rows[0][2:]
     if state=='RUNNING' and code=='0:0': return None
-    if state=='COMPLETED' and code=='0:0': return 0
-    if allow_drained and state in ('FAILED','COMPLETED') and code=='6:0': return 6
+    if state=='COMPLETED' and code=='0:0': return dict(id=step,name=name,state=state,exit_code=code) if evidence else 0
+    if allow_drained and state in ('FAILED','COMPLETED') and code=='6:0': return dict(id=step,name=name,state=state,exit_code=code) if evidence else 6
     if allow_watchdog and state in ('FAILED','COMPLETED') and code=='75:0':
         return dict(id=step,name=name,state=state,exit_code=code) if evidence else 75
     raise ValueError('已有worker异常终态或未知退出 '+str(rows[0]))
@@ -651,6 +651,7 @@ class Controller:
                  dispatch=dict(path=str(dispatch),sha256=sha(dispatch)),progress=dict(path=str(a['progress']),sha256=sha(a['progress'])),
                  queue=dict(path=str(claim),sha256=sha(claim)),step=step_proof)
         validate_failure_document(doc,self.c)
+        a['legacy_terminal_progress']=p['phase']=='episode' and legacy_watchdog_progress(d,row,self.c)
         return doc
 
     def record_failure(self,doc):
@@ -810,7 +811,13 @@ class Controller:
             else:
                 listed=known_steps.pop(step,None)
                 if listed is not None and listed!=name: raise ValueError('已有终态与全步骤清单冲突')
-                if progress['phase']!='finished' or progress['rc']!=rc: raise ValueError('已有终态缺finished/对应退出码证据')
+                legacy_terminal=False
+                if rc==75 and progress['phase']=='episode':
+                    report=self.gl/'seats'/self.c['models'][model]['label']/'seed7'/progress['seat']/'seat-results.jsonl'
+                    content=report.read_text()
+                    candidates=[json.loads(x) for x in content.splitlines() if x.strip()] if content.endswith('\n') else []
+                    legacy_terminal=any(r.get('key')==progress['key'] and legacy_watchdog_progress(d,r,self.c) for r in candidates)
+                if not legacy_terminal and (progress['phase']!='finished' or progress.get('rc')!=rc): raise ValueError('已有终态缺finished/对应退出码证据')
                 if rc==6:
                     observed=next((r for r in pause_snapshot['workers'] if r['invocation']==str(path.parent)),None)
                     stop_time=float(observed['stop_time']) if observed is not None and 'stop_time' in observed else float(pause_snapshot['stop_time'])
@@ -866,6 +873,8 @@ class Controller:
             elif rc in (6,75):
                 if rc==75 and not (a['read_seen']&set(failure_docs)): raise ValueError('真实75缺闭合失败报告')
                 a['history_until']=float(progress['t'])
+                if rc==75:
+                    a['history_until']=max(a['history_until'],*(max(float(failure_docs[key]['budget']['commit']['t']),float(json.loads(failure_docs[key]['report_line']).get('t',0))) for key in a['read_seen']&set(failure_docs)))
                 self.validate_drained_prefix(a,a['read_seen']|prior_completed)
                 drained.append(a)
             else: gathered.append(a)
@@ -924,27 +933,41 @@ class Controller:
             for row in old['workers']:
                 value=dict(row); value.setdefault('stop_time',old['stop_time']); workers.append(value)
         for path in (self.control/'STOP',self.gl/'STOP'):
-            if path.exists(): stop_refs.append(dict(path=str(path),sha256=sha(path)))
+            if path.exists():
+                saved=self.control/'pause-stops'/f'{os.getpid()}-{time.time_ns()}-{path.parent.name}.stop'
+                saved.parent.mkdir(parents=True,exist_ok=True); saved.write_bytes(path.read_bytes())
+                stop_refs.append(dict(path=str(saved),sha256=sha(saved)))
         existing={r['invocation'] for r in workers}
         for path in sorted((self.control/'invocations').glob('*-full/dispatch.json')):
             if str(path.parent) in existing: continue
             d=read(path); p=read(path.parent/'progress.json'); step=str(d['gpu_job_id'])+'.'+str(p['slurm_step_id'])
-            name='raw-ood-worker-'+path.parent.name; rc=worker_account(step,name,allow_drained=True,allow_watchdog=True)
-            if rc not in (0,6,75) or p['phase']!='finished' or p['rc']!=rc: raise ValueError('暂停时worker终态未知')
+            name='raw-ood-worker-'+path.parent.name; account=worker_account(step,name,allow_drained=True,allow_watchdog=True,evidence=True)
+            rc=int(account['exit_code'].split(':')[0]) if isinstance(account,dict) else None
+            legacy_terminal=False
+            if rc==75 and p['phase']=='episode':
+                for ref in self.failures.values():
+                    failure=read(ref['path'])
+                    if failure['dispatch']['path']==str(path):
+                        validate_failure_document(failure,self.c); legacy_terminal=legacy_watchdog_progress(d,json.loads(failure['report_line']),self.c)
+            if rc not in (0,6,75) or not legacy_terminal and (p['phase']!='finished' or p.get('rc')!=rc): raise ValueError('暂停时worker终态未知')
             model=d['model']; seat=next(s for s in self.c['seats'] if str(s['job_id'])==str(d['gpu_job_id']))
             report=self.gl/'seats'/self.c['models'][model]['label']/'seed7'/p['seat']/'seat-results.jsonl'
             workers.append(dict(invocation=str(path.parent),dispatch_sha256=sha(path),progress_sha256=sha(path.parent/'progress.json'),
-                report_sha256=sha(report) if report.exists() else None,step_id=step,job_name=name,state='FAILED' if rc in (6,75) else 'COMPLETED',
+                report_sha256=sha(report) if report.exists() else None,step_id=step,job_name=name,state=account['state'],
                 exit_code=f'{rc}:0',stop_time=stop_time,drained=rc==6))
         ledger,digest=ledger_snapshot(Path(self.c['budget_ledger']))
         if ledger.trajectories!=len(self.settled()) or len(ledger.commits)!=len(ledger.reserves) or ledger.releases:
             raise ValueError('暂停全轮预约与闭合终态不齐')
         claims=sum(ledger.claimed.values())+ledger.orphan_claims
         doc=dict(self.base,schema='raw-ood-pause-v1',root=str(self.root),stop_time=stop_time,stop_files=stop_refs,workers=workers,
+                 pause_contract='settled-v1',published_identities=sorted(self.published),failure_documents=dict(self.failures),
                  expected=4000,accepted=len(self.published),infra=len(self.failures),settled=len(self.settled()),remaining=4000-len(self.settled()),drained=True,
                  trajectories=ledger.trajectories,reset_claims=claims,unsettled=0,budget_sha256=digest,time=time.time())
+        doc['budget_bytes']=Path(self.c['budget_ledger']).stat().st_size
+        validate_pause_proof(doc,self.c)
         path=self.control/f'paused-{os.getpid()}-{time.time_ns()}.json'; atomic(path,doc)
-        atomic(self.control/'paused.json',dict(self.base,proof_path=str(path),proof_sha256=sha(path),accepted=len(self.published),remaining=4000-len(self.published),time=time.time()))
+        atomic(self.control/'paused.json',dict(self.base,schema='raw-ood-pause-pointer-v1',proof_path=str(path),proof_sha256=sha(path),
+              expected=4000,accepted=len(self.published),infra=len(self.failures),settled=len(self.settled()),remaining=4000-len(self.settled()),drained=True,time=time.time()))
         return doc
 
     def poll_ack(self, a: dict):
@@ -1009,9 +1032,11 @@ class Controller:
                 if not a['progress'].exists():
                     return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
                 progress=read(a['progress'])
-                if progress['phase']!='finished':
+                d=read(a['progress'].parent/'dispatch.json')
+                legacy_terminal=progress['phase']=='episode' and progress['key']==row['key'] and legacy_watchdog_progress(d,row,self.c)
+                if not legacy_terminal and progress['phase']!='finished':
                     return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
-                if progress['rc']!=75: raise ValueError('看门狗报告与finished退出码矛盾')
+                if not legacy_terminal and progress.get('rc')!=75: raise ValueError('看门狗报告与finished退出码矛盾')
                 step=str(a['seat']['job_id'])+'.'+str(progress['slurm_step_id'])
                 if worker_account(step,a['worker_name'],allow_watchdog=True) is None:
                     return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
@@ -1036,7 +1061,7 @@ class Controller:
         expected={identity(a['model'],r) for r in a['rows']}
         progress=read(a['progress']) if a['progress'].exists() else None
         if progress is not None and progress['phase']=='finished' and progress['rc']!=rc: raise ValueError('终态finished退出码与进程矛盾')
-        progress_ready=progress is not None and progress['phase']=='finished' and progress['rc']==rc
+        progress_ready=progress is not None and progress['phase']=='finished' and progress['rc']==rc or rc==75 and a.get('legacy_terminal_progress') is True
         required=expected
         if rc in (6,75):
             ledger,_=ledger_snapshot(Path(self.c['budget_ledger']))
@@ -1211,7 +1236,8 @@ class Controller:
                 return self._run_locked(resume_completed_smokes=resume_completed_smokes,resume_existing_dispatches=resume_existing_dispatches,
                                         resume_paused=resume_paused,orchestration_commit=orchestration_commit,pause_on_stop=pause_on_stop)
             except BaseException as e:
-                atomic(self.control/'controller-error.json',dict(self.base,component='controller',pid=os.getpid(),error=type(e).__name__,message=str(e),time=time.time()))
+                path=self.control/f'controller-error.current-{os.getpid()}-{time.time_ns()}.json'
+                atomic(path,dict(self.base,component='controller',pid=os.getpid(),error=type(e).__name__,message=str(e),time=time.time()))
                 raise
 
     def _run_locked(self,*,resume_completed_smokes=False,resume_existing_dispatches=False,resume_paused=False,orchestration_commit=None,pause_on_stop=True):

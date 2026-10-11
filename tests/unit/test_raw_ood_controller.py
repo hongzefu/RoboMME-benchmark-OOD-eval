@@ -793,6 +793,120 @@ def test_mixed_watchdog_recovery_is_read_only_then_settles_once_and_requeues_tai
     for a in ctl.active.values(): a['log'].close()
 
 
+def paused_watchdog_fixture(tmp_path,monkeypatch):
+    """实际走生产暂停写入器：正常6、失败1，其余未尝试且两运行段已排空。"""
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40); ctl.pausing=True; ctl.pause_started=C.time.time()-1
+    (ctl.control/'STOP').write_text('本夹具已请求暂停')
+    for a in ctl.active.values():
+        p=C.read(a['progress']); p.update(phase='finished',rc=6,t=C.time.time()); C.atomic(a['progress'],p)
+        step=str(a['seat']['job_id'])+'.'+str(p['slurm_step_id']); account[step]=step+'|'+a['worker_name']+'|FAILED|6:0\n'; metadata.pop(a['process'].pid)
+    ctl.scan(); assert not ctl.active
+    proof=ctl.write_paused(); pointer=C.read(ctl.control/'paused.json')
+    return ctl,metadata,account,planned,failure,proof,pointer
+
+
+def sealed_legacy_episode_fixture(tmp_path,monkeypatch):
+    """用独立原字节配置来源锁模拟33旧生产器；进度保留真实episode，不伪造finished。"""
+    import raw_ood_context as context
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.c['prior_work']=None; old=dict(ctl.c); old.pop('config_sha256'); old['exec_commit']='3'*40
+    config_path=ctl.control/'locked-old-config.json'; C.atomic(config_path,old); digest=C.sha(config_path)
+    core=dict(ctl.base,exec_commit=old['exec_commit'],config_sha256=digest)
+    for path in [ctl.control/'shards.json',*(ctl.control/'invocations').glob('*/dispatch.json'),*(ctl.gl/'published').glob('*.json'),*(ctl.gl/'mover/receipts').glob('*.json')]:
+        doc=C.read(path); doc.update(core)
+        if 'worker_exec_commit' in doc: doc['worker_exec_commit']=old['exec_commit']
+        C.atomic(path,doc)
+    manifest=ctl.control/'sources.json'; C.atomic(manifest,dict(schema='raw-ood-sources-v1',run=ctl.c['run'],run_name=ctl.c['run_name'],sources=[dict(config=str(config_path),sha256=digest)]))
+    ctl.c['prior_sources_manifest']=dict(path=str(manifest),sha256=C.sha(manifest))
+    monkeypatch.setattr(context,'LEGACY_WATCHDOG_SOURCE',(old['exec_commit'],digest))
+    progress=ctl.control/'invocations/qwenvl-00-full/progress.json'; doc=C.read(progress)
+    budget,_=C.ledger_snapshot(Path(ctl.c['budget_ledger'])); reserve=budget.reserves[failure['budget_rid']]; commit=budget.commits[failure['budget_rid']]
+    doc.update(phase='episode',key=failure['key'],t=(float(reserve['t'])+float(commit['t']))/2); doc.pop('rc'); C.atomic(progress,doc)
+    fresh=C.Controller(ctl.c); fresh.shards=ctl.shards
+    return fresh,metadata,account,planned,report,failure,progress
+
+
+def test_only_sealed_legacy_sparse75_accepts_episode_progress_without_rewriting_it(tmp_path,monkeypatch):
+    ctl,metadata,account,planned,report,failure,progress=sealed_legacy_episode_fixture(tmp_path,monkeypatch)
+    before=progress.read_bytes(); budget_before=Path(ctl.c['budget_ledger']).read_bytes(); monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('历史接管不启动worker'))
+    proof=ctl.resume_existing_dispatches('c'*40,preflight=True); assert proof['infra']==1 and progress.read_bytes()==before
+    ctl.resume_existing_dispatches('c'*40)
+    doc=C.read(ctl.failures[C.identity('qwenvl',failure)]['path']); assert C.read(doc['progress']['path'])['phase']=='episode' and 'rc' not in C.read(doc['progress']['path'])
+    assert progress.read_bytes()==before and Path(ctl.c['budget_ledger']).read_bytes()==budget_before
+    for a in ctl.active.values(): a['log'].close()
+
+
+@pytest.mark.parametrize('mutation',['unknown_source','different_phase','full_new_row','completed75'])
+def test_legacy_episode_compatibility_does_not_relax_unknown_sources_or_new_full_rows(tmp_path,monkeypatch,mutation):
+    import raw_ood_context as context
+    ctl,metadata,account,planned,report,failure,progress=sealed_legacy_episode_fixture(tmp_path,monkeypatch)
+    if mutation=='unknown_source': monkeypatch.setattr(context,'LEGACY_WATCHDOG_SOURCE',('9'*40,'9'*64))
+    elif mutation=='different_phase':
+        doc=C.read(progress); doc['phase']='context_load'; C.atomic(progress,doc)
+    elif mutation=='completed75': account['101.5']=account['101.5'].replace('FAILED','COMPLETED')
+    else:
+        failure.update(status='fail',exit_kind='watchdog_hard_exit',exit_code=75,infra_reason='episode_wall',task_success=None,exec_steps=None,result=None,
+                       final=False,accepted=False,void=False,budget_exhausted=False,run_blocked=False,budget_token='groundsg/ground-sg-qwenvl/seed7/new|'+failure['key']+'|a1')
+        report.write_text(json.dumps(failure)+'\n')
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    with pytest.raises(ValueError): ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+
+
+@pytest.mark.parametrize('paused',[False,True])
+def test_pause_producer_roundtrip_failure_counts_and_both_resume_paths(tmp_path,monkeypatch,paused):
+    from raw_ood_context import validate_pause_pointer,validate_pause_proof
+    ctl,metadata,account,planned,failure,proof,pointer=paused_watchdog_fixture(tmp_path,monkeypatch)
+    assert validate_pause_pointer(json.loads(json.dumps(pointer)),ctl.c)==proof
+    assert (proof['accepted'],proof['infra'],proof['settled'],proof['remaining'])==(6,1,7,3993)
+    assert {k:pointer[k] for k in ('accepted','infra','settled','remaining')}=={k:proof[k] for k in ('accepted','infra','settled','remaining')}
+    ctl.c['pause_snapshot']=dict(path=pointer['proof_path'],sha256=pointer['proof_sha256'])
+    original=(ctl.control/'STOP').read_bytes(); (ctl.control/'STOP').unlink()
+    proof_path=Path(pointer['proof_path']); locked=C.read(proof_path)
+    assert Path(locked['stop_files'][0]['path']).read_bytes()==original
+    restarted=C.Controller(ctl.c); restarted.shards=ctl.shards
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('暂停恢复只重排，不启动已有身份'))
+    result=restarted.resume_existing_dispatches('d'*40,paused=paused,preflight=True)
+    assert result['active']==0 and result['infra']==1 and {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+    restarted.resume_existing_dispatches('d'*40,paused=paused)
+    failed=C.identity('qwenvl',failure); assert failed in restarted.failures and failed not in restarted.published and restarted.resume_rows['qwenvl-00']==[planned[3]]
+    assert validate_pause_proof(locked,restarted.c)==locked
+
+
+def test_pause_rejects_unclosed_reserve_and_pointer_count_or_failure_sha_changes(tmp_path,monkeypatch):
+    from raw_ood_context import validate_pause_pointer
+    import budget_ledger
+    ctl,metadata,account,planned,failure,proof,pointer=paused_watchdog_fixture(tmp_path,monkeypatch)
+    for name in ('infra','settled','remaining'):
+        changed=dict(pointer); changed[name]+=1
+        with pytest.raises(ValueError): validate_pause_pointer(changed,ctl.c)
+    missing=dict(pointer); del missing['infra']
+    with pytest.raises(ValueError): validate_pause_pointer(missing,ctl.c)
+    failure_path=Path(next(iter(proof['failure_documents'].values()))['path']); raw=failure_path.read_bytes(); failure_path.write_bytes(raw+b' ')
+    with pytest.raises(ValueError): validate_pause_pointer(pointer,ctl.c)
+    failure_path.write_bytes(raw)
+    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    route='groundsg/ground-sg-qwenvl/seed7/new'; key=planned[3]['key']; led.reserve(resets=2,route=route,key=key,token=route+'|'+key+'|a1',kind_of_try='first',attempt_no=1)
+    old_pointer=(ctl.control/'paused.json').read_bytes()
+    with pytest.raises(ValueError,match='暂停全轮预约'): ctl.write_paused()
+    assert (ctl.control/'paused.json').read_bytes()==old_pointer
+
+
+@pytest.mark.parametrize('message',['未知基础设施原行','CONTROLLER_FILESYSTEM=FAIL elapsed_s=120'])
+def test_new_controller_errors_never_overwrite_locked_original_cause(tmp_path,monkeypatch,message):
+    ctl=C.Controller(config(tmp_path)); old=ctl.control/'controller-error.json'; C.atomic(old,dict(ctl.base,error='旧首因',message='原字节必须保留'))
+    raw=old.read_bytes(); ctl.c['historical_errors']=[dict(path=str(old),sha256=C.sha(old))]
+    def fail(**kwargs): raise RuntimeError(message)
+    monkeypatch.setattr(ctl,'_run_locked',fail)
+    with pytest.raises(RuntimeError,match=message): ctl.run()
+    current=list(ctl.control.glob('controller-error.current-*.json'))
+    assert old.read_bytes()==raw and len(current)==1 and C.read(current[0])['message']==message
+    from raw_ood_context import validate_historical_errors
+    assert validate_historical_errors(ctl.c)=={str(old)} and str(current[0]) not in validate_historical_errors(ctl.c)
+
+
 @pytest.mark.parametrize('kind',['commit','route','token','queue','rc','reason','zero','repeat'])
 def test_watchdog_evidence_rejects_corrupt_binding_before_any_publication(tmp_path,monkeypatch,kind):
     ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)

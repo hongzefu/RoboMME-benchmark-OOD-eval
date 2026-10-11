@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 CORE=('run','run_name','exec_commit','config_sha256','controller_job_id')
+LEGACY_WATCHDOG_SOURCE=('33bef4f485ca95b6c43017369220eec7eb7fd668','6eb5cdcdf6c0de32df2323f28231b9b25278377be8cac677dce87f186737028e')
 
 
 def _entity(root,path):
@@ -77,7 +78,60 @@ def read_pause_snapshot(c):
     for ref in value['stop_files']:
         path=_entity(c['root'],ref['path'])
         if hashlib.sha256(path.read_bytes()).hexdigest()!=ref['sha256']: raise ValueError('暂停STOP证据原字节改变')
+    if 'pause_contract' in value: validate_pause_proof(value,c)
     return value
+
+
+def validate_pause_proof(doc,c):
+    """新暂停证明按正常和独立失败集合闭合；未闭合预约不可伪称排空。"""
+    try:
+        match_context(doc,c)
+        if doc['schema']!='raw-ood-pause-v1' or doc['pause_contract']!='settled-v1' or doc['root']!=c['root']: raise ValueError('暂停协议或运行根不符')
+        counts=('expected','accepted','infra','settled','remaining','trajectories','reset_claims','unsettled','budget_bytes')
+        if any(type(doc[k]) is not int or doc[k]<0 for k in counts): raise ValueError('暂停缺显式非负计数')
+        published=doc['published_identities']; failures=doc['failure_documents']
+        if not isinstance(published,list) or not isinstance(failures,dict) or len(published)!=len(set(published)): raise ValueError('暂停身份集合类型或重复不符')
+        settled=set(published)|set(failures)
+        if set(published)&set(failures) or not settled<=set(c['expected_identities']): raise ValueError('暂停正常与失败身份交叠或越界')
+        if doc['expected']!=len(c['expected_identities']) or doc['accepted']!=len(published) or doc['infra']!=len(failures) or doc['settled']!=len(settled) or doc['settled']!=doc['accepted']+doc['infra'] or doc['settled']+doc['remaining']!=doc['expected']:
+            raise ValueError('暂停正常、失败及剩余计数不闭合')
+        if doc['trajectories']!=doc['settled'] or doc['unsettled']!=0 or doc['drained'] is not True or doc['reset_claims']>8000: raise ValueError('暂停预算未闭合或伪称排空')
+        if not doc['workers'] or not doc['stop_files'] or float(doc['stop_time'])<=0: raise ValueError('暂停缺实际停止证据')
+        for ref in doc['stop_files']:
+            path=_entity(c['root'],ref['path'])
+            if set(ref)!={'path','sha256'} or hashlib.sha256(path.read_bytes()).hexdigest()!=ref['sha256']: raise ValueError('暂停STOP证据改变')
+        for key,ref in failures.items():
+            failure=_read_locked(c['root'],ref)
+            if failure['identity_key']!=key or Path(ref['path'])!=Path(c['gl_root'])/'failures'/(hashlib.sha256(key.encode()).hexdigest()+'.json'): raise ValueError('暂停失败引用身份不符')
+            validate_failure_document(failure,c)
+        from budget_ledger import BudgetState
+        rows,digest=read_budget_rows(_entity(c['root'],c['budget_ledger']),prefix_bytes=doc['budget_bytes']); state=BudgetState(rows)
+        if digest!=doc['budget_sha256'] or state.bad_rows or state.trajectories!=doc['trajectories'] or len(state.reserves)!=len(state.commits) or state.releases or sum(state.claimed.values())+state.orphan_claims!=doc['reset_claims']:
+            raise ValueError('暂停预算原字节或结算不符')
+        actual=set(); actual_infra=set()
+        for rid,reserve in state.reserves.items():
+            models=[m for m in c['models'] if reserve['route']==c['models'][m]['policy']+('/'+{'qwenvl':'ground-sg-qwenvl','oracle':'ground-sg-oracle'}[m] if m in ('qwenvl','oracle') else '')+'/seed7/new']
+            if len(models)!=1 or reserve['kind_of_try']!='first' or type(reserve['attempt_no']) is not int or reserve['attempt_no']!=1 or reserve['token']!=reserve['route']+'|'+reserve['key']+'|a1': raise ValueError('暂停首试路线绑定不符')
+            key=models[0]+':ood:'+reserve['key']; commit=state.commits[rid]
+            if key in actual or type(commit['infra']) is not bool: raise ValueError('暂停重复身份或未知infra')
+            actual.add(key)
+            if commit['infra']: actual_infra.add(key)
+        if actual!=settled or actual_infra!=set(failures): raise ValueError('暂停预算身份与正常/失败集合不符')
+    except (KeyError,TypeError,json.JSONDecodeError) as e: raise ValueError('暂停证明缺必需字段') from e
+    return doc
+
+
+def validate_pause_pointer(pointer,c):
+    """指针锁定原证明SHA，所有显式计数和上下文须与证明严格一致。"""
+    try:
+        match_context(pointer,c)
+        if pointer['schema']!='raw-ood-pause-pointer-v1': raise ValueError('暂停指针协议不符')
+        proof=_read_locked(c['root'],dict(path=pointer['proof_path'],sha256=pointer['proof_sha256']))
+        validate_pause_proof(proof,c)
+        for key in (*CORE,'expected','accepted','infra','settled','remaining','drained'):
+            if type(pointer[key]) is not type(proof[key]) or pointer[key]!=proof[key]: raise ValueError('暂停指针与证明字段冲突 '+key)
+    except (KeyError,TypeError,json.JSONDecodeError) as e: raise ValueError('暂停指针缺必需字段') from e
+    return proof
 
 
 def validate_historical_errors(c):
@@ -96,7 +150,7 @@ def is_historical_error(path,c):
     return str(path) in validate_historical_errors(c)
 
 
-def read_budget_rows(path):
+def read_budget_rows(path,*,prefix_bytes=None):
     """共享锁下读取原预算，消费者不创建锁、不触发配置升级。"""
     import fcntl,time
     path=Path(path); lock=path.with_name(path.name+'.lock')
@@ -110,8 +164,18 @@ def read_budget_rows(path):
                     time.sleep(.05)
             raw=path.read_bytes()
     else: raw=path.read_bytes()
+    if prefix_bytes is not None:
+        if type(prefix_bytes) is not int or not 0<prefix_bytes<=len(raw): raise ValueError('暂停预算原字节长度不符')
+        raw=raw[:prefix_bytes]
     if raw and not raw.endswith(b'\n'): raise ValueError('预算原账本半行')
     return [json.loads(x) for x in raw.decode().splitlines() if x.strip()],hashlib.sha256(raw).hexdigest()
+
+
+def legacy_watchdog_progress(dispatch,row,c):
+    """只允许独立SHA锁定的33旧生产器稀疏75，不能推广到任意未finished版本。"""
+    source=match_context(dispatch,c)
+    required={'key','dataset','attempt','attempt_id','status','infra','infra_reason','budget_rid','t'}
+    return (source['exec_commit'],source['config_sha256'])==LEGACY_WATCHDOG_SOURCE and set(row)==required and row['status']=='error' and row['infra'] is True and row['infra_reason']=='watchdog_exit' and type(row['attempt']) is int and row['attempt']==1
 
 
 def validate_failure_document(doc,c):
@@ -147,9 +211,12 @@ def validate_failure_document(doc,c):
         if report!=expected_report or Path(doc['queue']['path'])!=expected_claim or Path(doc['progress']['path'])!=Path(doc['dispatch']['path']).parent/'progress.json': raise ValueError('失败证据路径绑定不符')
         identities=[json.loads(x) for x in _entity(c['root'],str(Path(doc['dispatch']['path']).parent/'identities.jsonl')).read_text().splitlines()]
         if len([r for r in identities if r['key']==key and r['dataset']=='ood'])!=1: raise ValueError('失败不在原派发身份清单')
-        if progress['phase']!='finished' or progress['rc']!=75 or str(progress['slurm_job_id'])!=str(seat['job_id']) or progress['seat']!=seat['seat']+'-'+tag: raise ValueError('失败进度终态不符')
+        legacy=not full and legacy_watchdog_progress(dispatch,row,c) and progress['phase']=='episode' and progress['key']==key
+        finished=progress['phase']=='finished' and progress.get('rc')==75
+        if not (finished or legacy) or str(progress['slurm_job_id'])!=str(seat['job_id']) or progress['seat']!=seat['seat']+'-'+tag: raise ValueError('失败进度终态不符')
         step=doc['step']
         if step['id']!=str(seat['job_id'])+'.'+str(progress['slurm_step_id']) or step['name']!='raw-ood-worker-'+tag or step['state'] not in ('FAILED','COMPLETED') or step['exit_code']!='75:0': raise ValueError('失败真实步骤不符')
+        if legacy and step['state']!='FAILED': raise ValueError('旧稀疏75须真实FAILED状态')
         budget=doc['budget']; rid=budget['rid']; reserve=budget['reserve']; commit=budget['commit']
         rows,_=read_budget_rows(_entity(c['root'],c['budget_ledger']))
         state=BudgetState(rows)
