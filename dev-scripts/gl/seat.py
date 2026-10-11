@@ -1837,7 +1837,7 @@ def cmd_run(args) -> int:
         rc = runner.run(rows)
     finally:
         runner.close()
-    runner.progress("finished", rc=rc)
+    runner.progress("finished", rc=rc, drained=(rc == 6))
     print(f"全部完成 policy={args.policy} seat={runner.seat} episodes={runner.episodes_done} rc={rc}", flush=True)
     return rc
 

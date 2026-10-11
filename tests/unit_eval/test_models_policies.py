@@ -144,6 +144,7 @@ class FakeSmvlaConn:
         if kind == "reset":
             fakes.EVENTS.append("server.reset")
             reply["rng"] = "r"
+            reply.update(reset_finished=True, episode_key=body["episode_key"], rng_matches_ref=True)
         elif kind == "observe":
             fr = body["frames"]
             reply.update(n=len(fr), observe_time_ms=0.1,

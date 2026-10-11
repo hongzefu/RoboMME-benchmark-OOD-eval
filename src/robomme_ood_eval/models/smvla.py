@@ -685,6 +685,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
            "hard_bound": hb, "timing": timing, "server_meta": None,
            "protocol": {"messages": 0, "frames_sent": 0, "sha_mismatch": 0}}
     proto = out["protocol"]
+    success = False
     frame_idx = {"front": 0, "wrist": 0}
     own_conn = conn is None
     # per-episode trace (enabled=False without a location, in which case all recording calls below are no-ops and
@@ -791,6 +792,10 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
                 timing["connect_s"] = round(time.monotonic() - t0, 3)
             out["server_meta"] = getattr(conn, "metadata", None)
             reply = call("reset", {"reset": {"episode_key": episode_key(identity)}})
+            if (reply.get("reset_finished") is not True or
+                    reply.get("episode_key") != episode_key(identity) or
+                    reply.get("rng_matches_ref") is not True):
+                raise ProtocolError("reset acknowledgement, episode identity or reference RNG mismatch")
             rec.add_event({"kind": "server_rng", "rng": reply.get("rng")})
             instruction = r["instruction"]
             start_chunk()
@@ -924,7 +929,7 @@ def run_episode(session, identity: dict, conn_info: dict, recorder=None, *, conn
     timing["step_env_s"] = round(timing["step_env_s"], 3)
     timing["episode_s"] = round(time.monotonic() - t_start, 3)
     attach_policy_timing(timing, timer, gpu_name=(out["server_meta"] or {}).get("gpu_name"), model_kind="smvla")
-    out.update(status=status, task_success=status == "success", steps=steps, error=error)
+    out.update(status=status, task_success=success, steps=steps, error=error)
     rec.add_event({"kind": "episode_end", "status": status, "steps": steps, "error": error,
                    "decisions": out["decisions"]})
     if trace.enabled:  # C2, C3, C8: strict-cap follows the session's cap_hit and records timeout (same basis as the outer _classify)

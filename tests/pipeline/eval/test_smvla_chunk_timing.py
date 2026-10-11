@@ -79,6 +79,26 @@ def test_chunk_per_decision():
     print(f"CHUNK_TIMING=PASS model=smvla decisions=3 missing=0 expected=3 min_wall_ms={minimum:.3f} min_wall_ok=1 first_includes_observe=1")
 
 
+@pytest.mark.parametrize("field,value", [("reset_finished", None), ("reset_finished", False),
+                                       ("episode_key", "wrong"), ("rng_matches_ref", None),
+                                       ("rng_matches_ref", False)])
+def test_bad_reset_stops_before_observe(field, value):
+    """错误确认、身份与随机状态不能沿用旧缓存，且不执行任何动作。"""
+    class BadReset(Conn):
+        def call(self, msg):
+            reply, raw, rep_raw = super().call(msg)
+            if "reset" in msg:
+                if value is None:
+                    reply.pop(field)
+                else:
+                    reply[field] = value
+            return reply, raw, rep_raw
+    out, conn = episode(conn=BadReset())
+    assert out["status"] == "error" and out["infra"] is True
+    assert out["task_success"] is False and out["steps"] == 0
+    assert conn.observes == conn.infers == 0
+
+
 def test_first_decision_starts_before_reset_observe():
     out, _ = episode(conn=Conn(first_obs=.2))
     first, second = out["timing"]["chunks"][:2]

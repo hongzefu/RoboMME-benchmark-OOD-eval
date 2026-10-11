@@ -46,6 +46,7 @@ class Transport:
         self.n = 0
         self.bad, self.missing, self.decode_delay = bad, missing, decode_delay
         self._last_recv_t = None
+        self._last_ready_t = None
         self._ws = None
         if not missing:
             self._last_rtt, self._last_server_timing = {}, None
@@ -70,6 +71,7 @@ class Transport:
                 raise RuntimeError("transport failure")
             return {"foo": 1} if self.bad == "dict" else None
         time.sleep(self.decode_delay)
+        self._last_ready_t = time.perf_counter()
         return {"actions": np.zeros((16, 7)), M.AUDIT_KEY: {"channels": []}}
 
 
@@ -262,12 +264,58 @@ def test_missing_transport_fields_tolerated(tmp_path):
     assert chunk["decision_wall_ms"] >= 60
 
 
-def test_receive_timestamp_excludes_decode(tmp_path):
+def test_ready_timestamp_includes_decode(tmp_path):
     res, _, _, clients = run_case(tmp_path, F.ORACLE, decode_delay=.040)
     chunk = res["timing"]["chunks"][0]
     assert clients[0]._last_recv_t is not None
-    assert 30 <= chunk["decision_wall_ms"] < 60
-    assert res["timing"]["episode_s"] * 1000 >= chunk["decision_wall_ms"] + 35
+    assert clients[0]._last_ready_t > clients[0]._last_recv_t
+    assert chunk["decision_wall_ms"] >= 70
+
+
+@pytest.mark.parametrize("failure", [OSError(28, "disk full"), OSError(5, "I/O error"), BrokenPipeError("pipe")])
+@pytest.mark.parametrize("terminal", ["success", "fail"])
+def test_native_video_io_preserves_terminal(tmp_path, monkeypatch, failure, terminal):
+    """官方写视频失败按异常类型归基础设施，任务证据独立保留。"""
+    original = M.run_official_episode
+    def invoke(ctx, runner, tap, **kwargs):
+        def evaluate(r, predictor, video_dir):
+            tap.on_step(np.zeros(7), (F.frame(1), F.frame(2), np.zeros(8)), True,
+                        terminal, True, False)
+            raise failure
+        ctx["evaluator"].eval_each_episode = evaluate
+        return original(ctx, runner, tap, **kwargs)
+    monkeypatch.setattr(M, "run_official_episode", invoke)
+    res, _, _, _ = run_case(tmp_path, F.ORACLE)
+    assert res["status"] == "error" and res["infra"] is True
+    assert res["infra_reason"] == "system_io" and res["task_success"] == int(terminal == "success")
+
+
+def test_normal_fail_is_not_infrastructure(tmp_path, monkeypatch):
+    """正常任务失败不变成基础设施故障。"""
+    original = M.run_official_episode
+    def invoke(ctx, runner, tap, **kwargs):
+        def evaluate(r, predictor, video_dir):
+            tap.on_step(np.zeros(7), (F.frame(1), F.frame(2), np.zeros(8)), True, "fail", True, False)
+            return "fail"
+        ctx["evaluator"].eval_each_episode = evaluate
+        return original(ctx, runner, tap, **kwargs)
+    monkeypatch.setattr(M, "run_official_episode", invoke)
+    res, _, _, _ = run_case(tmp_path, F.ORACLE)
+    assert res["status"] == "fail" and res["task_success"] == 0 and res["infra"] is False
+
+
+def test_salvage_media_error_is_infrastructure(tmp_path, monkeypatch):
+    """收尾媒体验证异常也走相同分类，保留成功终态。"""
+    original = M.run_official_episode
+    def invoke(ctx, runner, tap, **kwargs):
+        return original(ctx, runner, tap, keep_official=True, **kwargs)
+    def reject(*args, **kwargs):
+        raise M.OfficialVideoRejected("salvage write failed")
+    monkeypatch.setattr(M, "run_official_episode", invoke)
+    monkeypatch.setattr(M, "_finish_official", reject)
+    res, _, _, _ = run_case(tmp_path, F.ORACLE)
+    assert res["status"] == "error" and res["task_success"] == 1
+    assert res["infra"] is True and res["infra_reason"] == "media_system"
 
 
 def test_step_cap_retains_received_chunk(tmp_path):
@@ -327,9 +375,11 @@ def test_present_server_timing_none_is_not_missing():
 
     class Client:
         _last_rtt, _last_server_timing = {}, None
+        _last_ready_t = None
 
         def infer(self, obs):
             self._last_rtt = {"infer": 0}
+            self._last_ready_t = time.perf_counter()
             return {"actions": np.zeros((16, 7))}
 
     summary = {}

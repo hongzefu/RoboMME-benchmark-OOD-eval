@@ -276,6 +276,8 @@ class EpisodeTap:
 
     def on_step(self, action: Any, obs3: tuple, stop: bool, flag: str, terminated: Any, truncated: Any,
                 reason: str | None = None) -> None:
+        if stop and flag in NORMAL:
+            self.task_success = int(flag == "success")
         self.steps += 1
         img, wrist, state = obs3
         if img is None:
@@ -329,7 +331,8 @@ class TracingClient:
         if hasattr(self._inner, "_last_audit"):
             self._inner._last_audit = None
         if self._timer is not None:
-            for name, value in (("_last_rtt", {}), ("_last_server_timing", None), ("_last_recv_t", None)):
+            for name, value in (("_last_rtt", {}), ("_last_server_timing", None), ("_last_recv_t", None),
+                                ("_last_ready_t", None)):
                 if hasattr(self._inner, name):
                     setattr(self._inner, name, value)
         try:
@@ -346,11 +349,11 @@ class TracingClient:
             rtts = getattr(self._inner, "_last_rtt", {})
             rtt = rtts.get("infer") if isinstance(rtts, dict) else None
             server = getattr(self._inner, "_last_server_timing", None)
-            missing = rtt is None or not hasattr(self._inner, "_last_server_timing")
+            ready_t = getattr(self._inner, "_last_ready_t", None)
+            missing = rtt is None or not hasattr(self._inner, "_last_server_timing") or ready_t is None
             if missing and self._timing is not None:
                 self._timing["timing_missing"] = self._timing.get("timing_missing", 0) + 1
-            recv_t = getattr(self._inner, "_last_recv_t", None)
-            self._timer.close(t=recv_t if recv_t is not None else t_ret,
+            self._timer.close(t=ready_t if ready_t is not None else t_ret,
                               decision=self._tap.decisions - 1, env_step=self._tap.steps,
                               action_rtt_ms=rtt,
                               server_infer_ms=server.get("infer_ms") if isinstance(server, dict) else None)
@@ -1174,6 +1177,7 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
     timed = _TimedPredictor(predictor, timer, variant=ctx.get("variant"), counter=counter, tap=tap)
     error = None
     exc_name = None
+    caught_exception = None
     flag = None
     captured: dict[str, Any] = {}
     official: dict[str, Any] = {}
@@ -1194,6 +1198,7 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
     try:
         flag = evaluator.eval_each_episode(runner, timed, video_dir)
     except Exception as e:  # noqa: BLE001 recorded as error, same as the episode-level catch-all of the official evaluate
+        caught_exception = e
         exc_name = type(e).__name__
         print(f"Error evaluating episode {episode_tag}: {e}")
         flag, error = "error", f"{exc_name}: {e}"[:800]
@@ -1215,14 +1220,26 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
             counts = episode_counts(tap, flag, exc_name, getattr(ctx.get("args"), "max_steps", None))
             prov = dict(official_provenance) if isinstance(official_provenance, dict) else {}
             prov.setdefault("official_sha256", dict(ctx.get("official_sha256") or {}))
-            official = _finish_official(captured, runner, tap, video_dir, archive_dir, flag=flag, error=error,
-                                        exc_name=exc_name, counts=counts, provenance=prov)
+            try:
+                official = _finish_official(captured, runner, tap, video_dir, archive_dir, flag=flag, error=error,
+                                            exc_name=exc_name, counts=counts, provenance=prov)
+            except (OSError, OfficialVideoRejected) as e:
+                if not hasattr(tap, "task_success") and flag in NORMAL:
+                    tap.task_success = int(flag == "success")
+                caught_exception = e
+                exc_name = type(e).__name__
+                error = f"{exc_name}: {e}"[:800]
+                flag = "error"
         shutil.rmtree(video_dir, ignore_errors=True)  # the official overlay mp4 is not delivered (with keep it was already moved into official/)
     wall = time.perf_counter() - t0
     status, error = _status_of(flag, error, exc_name)
     env_exc = getattr(runner, "last_exception", None)
     env_exc_s = None if env_exc is None else f"{type(env_exc).__name__}: {env_exc}"[:800]
     infra = classify_infra(error, env_exc_s) if status == "error" else None
+    if isinstance(caught_exception, (OSError, OfficialVideoRejected)):
+        infra = "media_system" if isinstance(caught_exception, OfficialVideoRejected) else "system_io"
+    elif isinstance(env_exc, OSError):
+        infra = "env_system_io"
     timing = dict(ctx["episode"].get("timing") or {})
     if "per_msg" in timing:  # per-message timing of the new-side recording client: summarized on the same basis as framesamp_modul_client
         timing = load_sibling("framesamp_modul_client").summarize_timing(timing)
@@ -1232,7 +1249,8 @@ def run_official_episode(ctx: dict, runner: Any, tap: EpisodeTap, *, dataset: st
                                      gpu_name=cuda.get_device_name(0) if cuda is not None else None,
                                      model_kind="serial")
     ctx["episode"] = None
-    res = {"status": status, "task_success": status == "success", "steps": tap.steps, "error": error,
+    res = {"status": status, "task_success": getattr(tap, "task_success", int(flag == "success")),
+           "steps": tap.steps, "error": error,
            "success_flag": flag, "decisions": tap.decisions, "infra": infra is not None, "infra_reason": infra,
            "env_exception": env_exc_s, "exception": exc_name, "qwen_log": qlog, "timing": timing,
            "official_sha256": dict(ctx.get("official_sha256") or {})}
