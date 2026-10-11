@@ -962,8 +962,8 @@ def raw_verify_media(directory: Path) -> dict:
     if type(result["task_success"]) not in (bool, int) or result["task_success"] not in (0, 1):
         raise ValueError("成功字段非法")
     error_kind=result['error_kind']
-    # EpisodeResult::_classify把明确非infra的模型异常折成fail/error；未知kind不猜成普通失败。
-    ordinary_failure=(error_kind=='error' and result['status']=='fail' and result['task_success']==0
+    # EpisodeResult::_classify把明确非infra的模型异常折成fail/error；独立成功位不因此降为零，未知kind不猜成普通失败。
+    ordinary_failure=(error_kind=='error' and result['status']=='fail'
                       and result['infra_reason'] is None and result['budget_exhausted'] is False and result['run_blocked'] is False)
     if type(result['exec_steps']) is not int or result["exec_steps"] != rows[-1]["exec_steps"] or (error_kind is not None and not ordinary_failure):
         raise ValueError("结果步骤或普通失败状态不符")

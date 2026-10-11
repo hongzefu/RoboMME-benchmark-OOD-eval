@@ -455,19 +455,32 @@ def test_historical_error_never_masks_new_instance_error(tmp_path):
     with pytest.raises(ValueError): validate_historical_errors(context)
 
 
-@pytest.mark.parametrize('status,success',[('success',1),('fail',0),('timeout',0),('error',0)])
+@pytest.mark.parametrize('status,success',[('success',1),('fail',0),('timeout',0),('error',0),('timeout',1),('error',1)])
 def test_ordinary_zero_score_with_complete_real_media_is_deliverable(publication,status,success):
     from robomme_ood_eval import episode as E
     stage,dest,source,row=publication
     result=E.EpisodeResult(dataset='ood',task='VideoUnmask',episode=0,source_episode=0,tier='xhard1',seed=0,candidate=None,
                            spec_sha256=None,key='key',max_steps=1800,strict_cap=True,attempt=1,policy_seed=7,model='smvla',policy_label='smvla')
     out=E.normalize_play_output(dict(status=status,task_success=success,steps=1,error='模型应答异常' if status=='error' else None,infra=False,infra_reason=None))
-    session=SimpleNamespace(steps=1,step_cap=1,cap_hit=status=='timeout',reset_calls=2,timing={},budget_exhausted=False)
+    session=SimpleNamespace(steps=1,step_cap=1,cap_hit=status=='timeout',reset_calls=2,timing={},budget_exhausted=False,info={'success':bool(success)})
     E._classify(result,out,session); result.recorder_verify='PASS'
     MOVER.raw_atomic(source/'result.json',result.to_dict()); row['files']=MOVER.raw_tree(source)
     receipt=MOVER.raw_move(row,stage,dest,min_free_gib=0)
     MOVER.raw_validate_receipt(receipt,row,CONTEXT,dest)
     assert receipt['decoded']=={'front':2,'wrist':2}
+
+
+@pytest.mark.parametrize('mutation',['unknown_kind','kind_bool','unknown_success','infra_success'])
+def test_unknown_or_infrastructure_result_cannot_be_washed_into_normal_raw(publication,mutation):
+    _,_,source,_=publication
+    result=json.loads((source/'result.json').read_text())
+    result.update(status='fail',infra_reason=None,budget_exhausted=False,run_blocked=False)
+    if mutation=='unknown_kind': result['error_kind']='unknown_service_error'
+    elif mutation=='kind_bool': result['error_kind']=True
+    elif mutation=='unknown_success': result['task_success']=None
+    else: result.update(infra=True,task_success=1,error_kind='error',infra_reason='play_contract')
+    MOVER.raw_atomic(source/'result.json',result)
+    with pytest.raises(ValueError): MOVER.raw_verify_media(source)
 
 
 @pytest.mark.parametrize('corruption',['media','arrays','half_json'])
