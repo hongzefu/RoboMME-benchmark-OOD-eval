@@ -365,6 +365,7 @@ class Controller:
         self.active={}; self.published=set(); self.smoked=set(); self.completed=set(); self.formal=False
         self.initial_dispatched=set(); self.started=time.time()
         self.query_failures={}
+        self.publication_writes={}
         self.loop_t=time.time(); self.loop_phase='initialization'; self.pausing=False; self.paused=set(); self.resume_rows={}; self.segment_numbers={}
         self.base={k:config[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
         self.sources=source_configs(config)
@@ -378,6 +379,19 @@ class Controller:
         with (self.control/'events.jsonl').open('a') as f: f.write(json.dumps(row)+'\n')
 
     def advance(self,phase): self.loop_t=time.time(); self.loop_phase=phase
+
+    def retry_filesystem(self,operation,*args,**kwargs):
+        """只重试明确瞬态errno，最多120秒，不改worker真实t或声明完成。"""
+        started=time.monotonic()
+        while True:
+            try: return operation(*args,**kwargs)
+            except OSError as e:
+                if e.errno not in (5,121,116): raise
+                elapsed=time.monotonic()-started
+                if elapsed>=120: raise RuntimeError(f'CONTROLLER_FILESYSTEM=FAIL errno={e.errno} elapsed_s={elapsed}') from e
+                self.loop_phase='filesystem_retry'
+                print(f'CONTROLLER_FILESYSTEM=RETRY errno={e.errno} elapsed_s={elapsed}',flush=True)
+                time.sleep(min(1,120-elapsed))
 
     def source_of(self,row):
         if not set(CORE)<=row.keys(): raise ValueError('已有记录缺core字段')
@@ -448,14 +462,22 @@ class Controller:
         return doc
 
     def publish(self, a: dict, row: dict, *, prepared=None):
-        doc=self.prepare_publication(a,row) if prepared is None else prepared
+        key=identity(a['model'],row)
+        doc=prepared if prepared is not None else self.publication_writes.get(key)
+        if doc is None: doc=self.prepare_publication(a,row)
         key=doc['identity_key']
         if key in self.published: raise ValueError('重复完成身份')
-        atomic(self.gl/'published'/publication_name(key),doc); self.published.add(key)
+        self.publication_writes[key]=doc
+        target=self.gl/'published'/publication_name(key)
+        if target.exists():
+            if read(target)!=doc: raise ValueError('已有发布原字节内容冲突')
+        else: atomic(target,doc)
+        self.published.add(key)
         self.event('published',identity_key=key,task_success=row['task_success'])
         if not a['smoke'] and not a['acked'] and row['exec_steps']>=1 and a.get('step_id') and a['progress'].exists():
             p=read(a['progress'])
             self.write_ack(a,key,p['pid'],row['exec_steps'],str(row['result']))
+        self.publication_writes.pop(key,None)
 
     def resume_completed_smokes(self,orchestration_commit,*,preflight=False):
         """手动复用原三个已结算首局；先完整验证全部输入，再发布，绝不启动worker。"""
@@ -587,9 +609,10 @@ class Controller:
         attempted=set(); seen=set()
         for rid,reserve in ledger.reserves.items():
             if reserve['route']!=route or reserve['key'] not in keys: continue
+            if 'history_until' in a and float(reserve['t'])>a['history_until']: continue
             if reserve['key'] in seen: raise ValueError('暂停前缀重复预约身份')
             seen.add(reserve['key']); commit=ledger.commits.get(rid)
-            if not commit or commit['infra'] or rid in ledger.releases or ledger.claimed.get(rid,0)!=2:
+            if not commit or commit['infra'] or rid in ledger.releases or ledger.claimed.get(rid,0)!=2 or 'history_until' in a and float(commit['t'])>a['history_until']:
                 raise ValueError('暂停存在未结算/基础设施失败/不足2reset半局')
             attempted.add(identity(model,reserve))
         expected_done={identity(model,r) for r in a['rows']} & done
@@ -662,7 +685,8 @@ class Controller:
         ledger,ledger_sha=ledger_snapshot(Path(self.c['budget_ledger']))
         if ledger.retries or ledger.recovery_used or ledger.astra or any(r['infra'] for r in ledger.commits.values()): raise ValueError('已有预算含重试、基础设施失败或非本计划路线')
         gathered=[]; terminal=[]; drained=[]; newpub=[]; used_jobs=set(); dispatched=set(); reported=set(smoke_keys)
-        history={s:set() for s in self.shards}; segments={}; pause_snapshot=read_pause_snapshot(self.c) if paused else None
+        history={s:set() for s in self.shards}; segments={}; pause_snapshot=read_pause_snapshot(self.c) if self.c.get('pause_snapshot') is not None else None
+        if paused and pause_snapshot is None: raise ValueError('暂停恢复缺已锁快照')
         if paused and ((self.control/'STOP').exists() or (self.gl/'STOP').exists()) and not preflight: raise ValueError('STOP仍有效，只允许只读暂停预检，移存由主门禁负责')
         paths=sorted((self.control/'invocations').glob('*-full/dispatch.json'))
         if not paths: raise ValueError('缺少已有正式派发')
@@ -690,7 +714,8 @@ class Controller:
             progress=read(path.parent/'progress.json'); name='raw-ood-worker-'+tag
             if str(progress['slurm_job_id'])!=job or progress['slurm_step_id'] is None or progress['label']!=self.c['models'][model]['label'] or progress['seat']!=seat['seat']+'-'+tag or progress['policy_seed']!=7:
                 raise ValueError('已有正式progress身份冲突')
-            step=job+'.'+str(progress['slurm_step_id']); rc=worker_account(step,name,allow_drained=paused)
+            observed=next((r for r in pause_snapshot['workers'] if r['invocation']==str(path.parent)),None) if pause_snapshot is not None else None
+            step=job+'.'+str(progress['slurm_step_id']); rc=worker_account(step,name,allow_drained=observed is not None)
             pid=int(d['srun_pid']); proc=process_identity(pid)
             if rc is None:
                 if paused: raise ValueError('暂停恢复不能接管仍在途worker')
@@ -755,7 +780,8 @@ class Controller:
                 if not expected<=set(pubs)|a['read_seen']: raise ValueError('已有终态缺完成身份')
                 terminal.append(a)
             elif rc==6:
-                self.validate_drained_prefix(a,set(pubs)|reported)
+                a['history_until']=float(progress['t'])
+                self.validate_drained_prefix(a,a['read_seen']|prior_completed)
                 drained.append(a)
             else: gathered.append(a)
             if history[shard]&a['read_seen']: raise ValueError('不同续段重复预算身份')
@@ -877,6 +903,7 @@ class Controller:
                 self.validate_settled_row(a,row,ledger,read(self.gl/'published'/publication_name(key)))
             else: self.publish(a,row)
             seen.add(key); a['offset']+=1
+            self.publication_writes.pop(key,None)
         return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial)
 
     def final_confirmation(self,a,rc,read_info,identity_valid):
@@ -1025,29 +1052,33 @@ class Controller:
         self.control.mkdir(parents=True,exist_ok=True)
         manifest=dict(self.base,shards=self.shards)
         stop_beat=threading.Event()
+        heartbeat_error=[]
         def heartbeat():
             while not stop_beat.is_set():
                 proc=process_identity(os.getpid())
-                atomic(self.control/'controller-heartbeat.json',dict(self.base,t=time.time(),loop_t=self.loop_t,phase=self.loop_phase,
-                      pid=os.getpid(),start_ticks=proc['start_ticks'],active=len(self.active)))
+                try:
+                    self.retry_filesystem(atomic,self.control/'controller-heartbeat.json',dict(self.base,t=time.time(),loop_t=self.loop_t,phase=self.loop_phase,
+                          pid=os.getpid(),start_ticks=proc['start_ticks'],active=len(self.active)))
+                except BaseException as e: heartbeat_error.append(e); return
                 stop_beat.wait(5)
         beat=threading.Thread(target=heartbeat,name='raw-ood-controller-heartbeat',daemon=True); beat.start()
         try:
             if sum((resume_completed_smokes,resume_existing_dispatches,resume_paused))>1: raise ValueError('手动恢复模式互斥')
-            if resume_paused: self.resume_existing_dispatches(orchestration_commit,paused=True)
-            elif resume_existing_dispatches: self.resume_existing_dispatches(orchestration_commit)
+            if resume_paused: self.retry_filesystem(self.resume_existing_dispatches,orchestration_commit,paused=True)
+            elif resume_existing_dispatches: self.retry_filesystem(self.resume_existing_dispatches,orchestration_commit)
             elif resume_completed_smokes:
                 old=legacy_context(self.c); oldmanifest=dict({k:old[k] for k in self.base},shards=self.shards)
                 if read(self.control/'shards.json')!=oldmanifest: raise ValueError('原分片manifest冲突')
                 self.resume_completed_smokes(orchestration_commit)
             else: atomic(self.control/'shards.json',manifest)
             while True:
+                if heartbeat_error: raise RuntimeError('控制器心跳写入失败') from heartbeat_error[0]
                 if (self.control/'STOP').exists() or (self.gl/'STOP').exists():
                     if not pause_on_stop: raise RuntimeError('全局STOP（显式关闭暂停排空）')
                     if not self.pausing:
                         self.pausing=True; self.pause_started=time.time(); self.event('pause_requested')
                 self.advance('scanning')
-                self.scan()
+                self.retry_filesystem(self.scan)
                 if self.pausing:
                     if not self.active:
                         self.write_paused(); print(f'CONTROLLER_PAUSED=PASS accepted={len(self.published)} remaining={4000-len(self.published)}',flush=True); return 6
@@ -1064,7 +1095,7 @@ class Controller:
                 elif not self.active and (self.pending or not self.formal): raise RuntimeError('已安全排空，剩余身份不重跑')
                 if self.formal and not self.pending and not self.active:
                     if len(self.published)!=4000 or len(self.completed)!=40: raise ValueError('4000终态不齐')
-                    self.report()
+                    self.retry_filesystem(self.report)
                     doc=dict(self.base,expected=4000,published=4000,time=time.time())
                     atomic(self.gl/'gpu_work_complete.json',doc); atomic(self.control/'gpu_work_complete.json',doc)
                     atomic(self.control/'gpu-cleanup.json',cancel_gpu(self.c)); return 0

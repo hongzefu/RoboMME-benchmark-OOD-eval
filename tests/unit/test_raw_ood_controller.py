@@ -646,13 +646,13 @@ def test_controller_lease_is_exclusive_across_real_processes(tmp_path):
         release.write_text('release'); child.wait(timeout=3)
 
 
-def test_paused_complete_prefix_restores_only_unattempted_new_segment(tmp_path,monkeypatch):
+def paused_history_fixture(tmp_path,monkeypatch):
     ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv,report,row=formal_report_fixture(ctl)
     planned=C.make_shards(ctl.rows)['qwenvl-00']['rows'][:3]; ctl.shards['qwenvl-00']['rows']=planned
     (inv/'identities.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in planned)); C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
     stop=ctl.control/'preserved-STOP'; stop.write_text('本夹具暂停'); workers=[]; stop_time=C.time.time()-1
     for path in sorted((ctl.control/'invocations').glob('*-full/dispatch.json')):
-        d=C.read(path); p=path.parent/'progress.json'; progress=C.read(p); progress.update(phase='finished',rc=6); C.atomic(p,progress)
+        d=C.read(path); p=path.parent/'progress.json'; progress=C.read(p); progress.update(phase='finished',rc=6,t=C.time.time()); C.atomic(p,progress)
         step=str(d['gpu_job_id'])+'.'+progress['slurm_step_id']; name='raw-ood-worker-'+path.parent.name
         account[step]=step+'|'+name+'|FAILED|6:0\n'; metadata.pop(d['srun_pid'])
         results=ctl.gl/'seats'/ctl.c['models'][d['model']]['label']/'seed7'/progress['seat']/'seat-results.jsonl'
@@ -660,7 +660,13 @@ def test_paused_complete_prefix_restores_only_unattempted_new_segment(tmp_path,m
                             step_id=step,job_name=name,state='FAILED',exit_code='6:0'))
     snapshot=ctl.control/'snapshot.json'; C.atomic(snapshot,dict(schema='raw-ood-pause-v1',run=ctl.c['run'],run_name=ctl.c['run_name'],root=str(tmp_path),stop_time=stop_time,
                    stop_files=[dict(path=str(stop),sha256=C.sha(stop))],workers=workers))
-    ctl.c['pause_snapshot']=dict(path=str(snapshot),sha256=C.sha(snapshot)); ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
+    ctl.c['pause_snapshot']=dict(path=str(snapshot),sha256=C.sha(snapshot))
+    return ctl,metadata,account,planned
+
+
+def test_paused_complete_prefix_restores_only_unattempted_new_segment(tmp_path,monkeypatch):
+    ctl,metadata,account,planned=paused_history_fixture(tmp_path,monkeypatch)
+    ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes()
     source_before={p:p.read_bytes() for p in (ctl.control/'invocations').rglob('*') if p.is_file()}
     proof=ctl.resume_existing_dispatches('c'*40,paused=True,preflight=True)
     assert proof['accepted']==6 and not ctl.published and ledger.read_bytes()==before
@@ -673,6 +679,76 @@ def test_paused_complete_prefix_restores_only_unattempted_new_segment(tmp_path,m
     assert '--job-name=raw-ood-worker-qwenvl-00-resume-1-full' in captured[0] and ledger.read_bytes()==before
     assert all(p.read_bytes()==raw for p,raw in source_before.items())
     ctl.active['101']['log'].close()
+
+
+@pytest.mark.parametrize('unknown_history',[False,True])
+def test_locked_drained_history_and_four_running_segments_existing_preflight(tmp_path,monkeypatch,unknown_history):
+    import budget_ledger
+    ctl,metadata,account,planned=paused_history_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40,paused=True)
+    next_pid=[9900]
+    def popen(cmd,**kw):
+        pid=next_pid[0]; next_pid[0]+=1; return types.SimpleNamespace(pid=pid)
+    monkeypatch.setattr(C.subprocess,'Popen',popen)
+    for seat,shard in zip(ctl.c['seats'],('qwenvl-00','qwenvl-01','smvla-00','pp-00')):
+        ctl.start(seat,shard); a=ctl.active[str(seat['job_id'])]; d=C.read(a['progress'].parent/'dispatch.json'); tag=a['inv_tag']; step=str(seat['job_id'])+'.6'
+        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),label=ctl.c['models'][a['model']]['label'],slurm_job_id=seat['job_id'],slurm_step_id='6',seat=seat['seat']+'-'+tag,policy_seed=7,pid=d['srun_pid']))
+        account[step]=step+'|raw-ood-worker-'+tag+'|RUNNING|0:0\n'
+        metadata[d['srun_pid']]=dict(state='S',start_ticks=d['srun_pid'],start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
+    old_identity=C.process_identity
+    monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid) if 9900<=pid<=9903 else old_identity(pid))
+    # 新续段正在进行的预约不属于旧暂停前缀，不得误判旧历史半局。
+    ledger=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    rid=ledger.reserve(resets=2,route='groundsg/ground-sg-qwenvl/seed7/new',key=planned[2]['key'],token='当前未完成预约',kind_of_try='first',attempt_no=1,slurm_job_id='101')
+    ledger.claim_reset(rid,'build'); ledger.claim_reset(rid,'reset')
+    if unknown_history:
+        snapshot=Path(ctl.c['pause_snapshot']['path']); doc=C.read(snapshot); doc['workers']=doc['workers'][1:]; C.atomic(snapshot,doc); ctl.c['pause_snapshot']['sha256']=C.sha(snapshot)
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('接管禁止重复模型'))
+    try:
+        if unknown_history:
+            with pytest.raises(ValueError): ctl.resume_existing_dispatches('c'*40,preflight=True)
+        else:
+            proof=ctl.resume_existing_dispatches('c'*40,preflight=True); assert proof['active']==4 and proof['drained']==3
+        assert {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+    finally:
+        for a in ctl.active.values(): a['log'].close()
+
+
+def test_scan_transient_io_and_uncertain_publish_are_idempotent(tmp_path,monkeypatch):
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch); inv,report,row=formal_report_fixture(ctl)
+    seat=ctl.c['seats'][0]; a=dict(process=types.SimpleNamespace(poll=lambda:None),seat=seat,shard='qwenvl-00',model='qwenvl',smoke=False,progress=inv/'progress.json',
+        results=report,rows=ctl.shards['qwenvl-00']['rows'],offset=0,started=C.time.time(),acked=True,phase_key=None,phase_start=C.time.time(),step_id='101.5',worker_name='raw-ood-worker-qwenvl-00-full',log=(inv/'worker.log').open('a'))
+    ctl.active['101']=a; ctl.published=set(ctl.existing_publications()); ledger=Path(ctl.c['budget_ledger']); before=ledger.read_bytes(); progress_before=a['progress'].read_bytes()
+    original_read=Path.read_text; read_once=[False]
+    def read(path,*args,**kw):
+        if path==a['progress'] and not read_once[0]: read_once[0]=True; raise OSError(121,'瞬态读取')
+        return original_read(path,*args,**kw)
+    monkeypatch.setattr(Path,'read_text',read); atomic=C.atomic; published=[]
+    def write(path,obj):
+        atomic(path,obj)
+        if path.parent==ctl.gl/'published':
+            published.append(path)
+            if len(published)==1: raise OSError(5,'rename完成后不确定回执')
+    monkeypatch.setattr(C,'atomic',write)
+    try:
+        ctl.retry_filesystem(ctl.scan)
+        assert a['offset']==1 and len(ctl.published)==6 and len(published)==1
+        assert ledger.read_bytes()==before and a['progress'].read_bytes()==progress_before
+        ctl.scan(); assert a['offset']==1 and len(published)==1
+    finally: a['log'].close()
+
+
+def test_filesystem_retry_has_120_bound_without_killing_existing_child(tmp_path,monkeypatch):
+    import subprocess
+    ctl=C.Controller(config(tmp_path)); child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)']); clock=[0.]
+    monkeypatch.setattr(C.time,'monotonic',lambda:clock[0]); monkeypatch.setattr(C.time,'sleep',lambda n:clock.__setitem__(0,clock[0]+n))
+    def failed(): raise OSError(116,'持续失联')
+    try:
+        with pytest.raises(RuntimeError,match='CONTROLLER_FILESYSTEM'): ctl.retry_filesystem(failed)
+        assert clock[0]==120 and child.poll() is None
+        with pytest.raises(ValueError): ctl.retry_filesystem(lambda:(_ for _ in ()).throw(ValueError('坏schema')))
+    finally: child.terminate(); child.wait(timeout=3)
 
 
 def test_existing_resume_validation_runs_inside_real_heartbeat_thread(tmp_path,monkeypatch):
