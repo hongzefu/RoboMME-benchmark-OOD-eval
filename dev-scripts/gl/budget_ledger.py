@@ -10,7 +10,7 @@
 
 * ``reserve``：预约一局（一条轨迹）与 ``resets`` 次 reset 计量；字段 ``rid``／``route``／``key``／``astra``；
 * ``commit``：该局收尾；可带实际 reset 次数 ``resets``（不带时按预约数与实领数取大）；
-* ``release``：该局未进入执行（如开局前被拒），轨迹名额退回；已实领的 reset 仍计入；
+* ``release``：该局未进入执行的结束记录；轨迹与预约 reset 额度不退款，防止重复预约绕上限；
 * ``reset_claim``：新侧 ``EnvSession._claim`` 每次实际 build／reset 记一行（挂在某个 ``rid`` 下）；
 * ``retry_claim``：基础设施重试名额；``interrupt`` ∈ {``infra``，``expired``}，分别计数——``infra`` 占共享 infra
   额度，``expired``（有 Slurm 到期证据）占到期续跑额度；同一 ``route``+``key`` 默认至多 1 次重试，显式上限至多 19 次。
@@ -53,6 +53,11 @@ shared_infra=<used>/<cap>``（格式不变；第三阶段的到期接续、恢�
 """
 from __future__ import annotations
 
+# 当前模式为 schema4：所有计量上限含 Astra 都锁进配置。历史 schema3 的只读
+# BudgetState 保留未知上限；写入方须显式 legacy_astra_cap，与其余配置逐项一致后
+# 只追加 config_upgrade，不改历史字节。无 rid 的历史 reset_claim 独立计入总量，
+# 非空未知 rid、冲突收尾、坏数字或未知 kind 均使账本拒绝继续写入。
+
 import argparse
 import fcntl
 import json
@@ -82,9 +87,9 @@ ENV_LEDGER = "SGEVAL_BUDGET_LEDGER"
 EXIT_BUDGET = 5
 EXIT_BLOCKED = 3
 #: 第三阶段账本模式（config 行的 schema）
-SCHEMA = "sgeval-budget/3"
+SCHEMA = "sgeval-budget/4"
 #: config 行里比对的构造参数（接口冻结说明第三节第 1 条；拆仓验收加 reset_cap）
-CONFIG_KEYS = ("trajectory_cap", "reset_cap", "shared_infra_cap", "expired_cap", "planned_first_tries")
+CONFIG_KEYS = ("trajectory_cap", "reset_cap", "astra_cap", "shared_infra_cap", "expired_cap", "planned_first_tries")
 #: reserve 的尝试性质：首试或恢复（infra 重试／到期接续）
 KINDS_OF_TRY = ("first", "recovery")
 _SHARD_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -122,6 +127,13 @@ class LeaseHeld(RuntimeError):
 
 def _dumps(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False)
+
+
+def _nonnegative(value: Any, name: str) -> int:
+    """计量只接受非负整数，拒绝布尔值及隐式截断。"""
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{name} 必须为非负整数")
+    return value
 
 
 def make_token(route: str, key: str, attempt_no: int) -> str:
@@ -164,6 +176,58 @@ class BudgetState:
         for row in rows:
             kind = row.get("kind")
             rid = row.get("rid")
+            try:
+                if row.get("token") is not None and (not isinstance(row["token"], str) or not row["token"]):
+                    raise ValueError("非法 token")
+                if kind == "config":
+                    if row.get("schema") not in (SCHEMA, "sgeval-budget/3"):
+                        raise ValueError("未知配置模式")
+                    if self.config is not None:
+                        raise ValueError("重复配置")
+                    for field in CONFIG_KEYS:
+                        if field == "astra_cap" and field not in row:
+                            if row.get("schema") != "sgeval-budget/3":
+                                raise ValueError("新模式缺 Astra 上限")
+                            continue  # 历史配置须由打开方显式声明兼容口径
+                        if field == "planned_first_tries" and row.get(field) is None:
+                            continue
+                        _nonnegative(row.get(field), field)
+                elif kind == "config_upgrade":
+                    if self.config is None or "astra_cap" in self.config:
+                        raise ValueError("非法升级")
+                    _nonnegative(row.get("astra_cap"), "astra_cap")
+                    if row.get("schema") != SCHEMA:
+                        raise ValueError("非法升级模式")
+                    self.config = {**self.config, "astra_cap": row["astra_cap"], "schema": SCHEMA}
+                    continue
+                elif kind == "reserve":
+                    if not isinstance(rid, str) or not rid or rid in self.reserves:
+                        raise ValueError("非法或重复预约")
+                    _nonnegative(row.get("resets"), "resets")
+                    if row.get("token") and any(r.get("token") == row["token"] for r in self.reserves.values()):
+                        raise ValueError("重复预约 token")
+                    if type(row.get("astra")) is not bool or row.get("kind_of_try") not in (None, *KINDS_OF_TRY):
+                        raise ValueError("非法预约性质")
+                elif kind in ("commit", "release"):
+                    if not isinstance(rid, str) or rid not in self.reserves or rid in self.commits or rid in self.releases:
+                        raise ValueError("无预约或重复收尾")
+                    if kind == "commit" and row.get("resets") is not None:
+                        _nonnegative(row["resets"], "resets")
+                elif kind == "reset_claim":
+                    if rid is not None and (not isinstance(rid, str) or rid not in self.reserves):
+                        raise ValueError("未知预约")
+                elif kind == "retry_claim":
+                    if row.get("interrupt") not in INTERRUPTS:
+                        raise ValueError("非法重试性质")
+                    if "max_attempts" in row and (type(row["max_attempts"]) is not int or not 1 <= row["max_attempts"] <= 20):
+                        raise ValueError("非法重试次数")
+                    if row.get("token") and row["token"] in self.retry_tokens:
+                        raise ValueError("重复重试 token")
+                else:
+                    raise ValueError("未知类型")
+            except (ValueError, TypeError):
+                self.bad_rows += 1
+                continue
             if kind == "config":
                 if self.config is None:
                     self.config = row
@@ -197,12 +261,12 @@ class BudgetState:
 
     @property
     def trajectories(self) -> int:
-        """未退回的预约数（进行中 + 已收尾）。"""
-        return sum(self.live(r) for r in self.reserves)
+        """累计预约数（包括退回记录，额度不刷新）。"""
+        return len(self.reserves)
 
     def tries_of(self, kind_of_try: str) -> int:
         """未退回、带该 ``kind_of_try`` 的预约数。"""
-        return sum(self.live(r) and row.get("kind_of_try") == kind_of_try for r, row in self.reserves.items())
+        return sum(row.get("kind_of_try") == kind_of_try for row in self.reserves.values())
 
     @property
     def first_started(self) -> int:
@@ -216,7 +280,7 @@ class BudgetState:
 
     @property
     def astra(self) -> int:
-        return sum(self.live(r) and bool(row.get("astra")) for r, row in self.reserves.items())
+        return sum(bool(row.get("astra")) for row in self.reserves.values())
 
     def resets_if_claimed(self, rid: str | None) -> int:
         """假如对 ``rid`` 再记一次实领，计量总数会是多少（预约数之内的实领不增加总数）。"""
@@ -231,13 +295,13 @@ class BudgetState:
         return self.resets + (after - before)
 
     def resets_of(self, rid: str) -> int:
-        """单局 reset 计量：退回的只计实领；收尾带实际数的取实际数与实领数之大；其余取预约数与实领数之大。"""
+        """单局计量取预约、收尾实际数与实领数之大；退回不能刷新额度。"""
         claimed = self.claimed.get(rid, 0)
         if rid in self.releases:
-            return claimed
+            return max(self.reserves[rid]["resets"], claimed)
         com = self.commits.get(rid)
         if com is not None and com.get("resets") is not None:
-            return max(int(com["resets"]), claimed)
+            return max(self.reserves[rid]["resets"], com["resets"], claimed)
         return max(int(self.reserves[rid].get("resets") or 0), claimed)
 
     @property
@@ -258,16 +322,25 @@ class BudgetLedger:
 
     def __init__(self, path: Path | str, *, trajectory_cap: int = TRAJECTORY_CAP, reset_cap: int | None = None,
                  reset_soft_cap: int | None = None, astra_cap: int = ASTRA_CAP, shared_infra_cap: int = SHARED_INFRA_CAP,
-                 expired_cap: int = EXPIRED_CAP, planned_first_tries: int | None = None, warn_stream=None):
+                 expired_cap: int = EXPIRED_CAP, planned_first_tries: int | None = None, warn_stream=None,
+                 legacy_astra_cap: int | None = None):
         self.path = Path(path)
         self.lock_path = self.path.with_name(self.path.name + ".lock")
-        self.trajectory_cap = int(trajectory_cap)
+        self.trajectory_cap = _nonnegative(trajectory_cap, "trajectory_cap")
         self.reset_cap = int(reset_cap if reset_cap is not None else
                              (reset_soft_cap if reset_soft_cap is not None else RESET_CAP))
         self.astra_cap = int(astra_cap)
         self.shared_infra_cap = int(shared_infra_cap)
         self.expired_cap = int(expired_cap)
         self.planned_first_tries = None if planned_first_tries is None else int(planned_first_tries)
+        for field, value in (("reset_cap", reset_cap if reset_cap is not None else reset_soft_cap),
+                             ("astra_cap", astra_cap), ("shared_infra_cap", shared_infra_cap),
+                             ("expired_cap", expired_cap), ("planned_first_tries", planned_first_tries)):
+            if value is not None:
+                _nonnegative(value, field)
+        self.legacy_astra_cap = legacy_astra_cap
+        if legacy_astra_cap is not None:
+            _nonnegative(legacy_astra_cap, "legacy_astra_cap")
         if self.planned_first_tries is not None and not 0 <= self.planned_first_tries <= self.trajectory_cap:
             raise ValueError(f"planned_first_tries={self.planned_first_tries} 须在 0..{self.trajectory_cap}")
         self.warn_stream = warn_stream
@@ -275,7 +348,7 @@ class BudgetLedger:
     def config(self) -> dict:
         """本对象应有的 config 行内容（不含 t／host 等元字段）。"""
         return {"kind": "config", "trajectory_cap": self.trajectory_cap, "reset_cap": self.reset_cap,
-                "shared_infra_cap": self.shared_infra_cap,
+                "astra_cap": self.astra_cap, "shared_infra_cap": self.shared_infra_cap,
                 "expired_cap": self.expired_cap, "planned_first_tries": self.planned_first_tries, "schema": SCHEMA}
 
     @property
@@ -338,9 +411,22 @@ class BudgetLedger:
         st = BudgetState(self._read())
         if st.bad_rows:
             raise LedgerCorrupt(f"ledger={self.path} bad_rows={st.bad_rows}（坏行即拒，须人工核对后修复）")
+        if (st.trajectories > self.trajectory_cap or st.resets > self.reset_cap or st.astra > self.astra_cap
+                or st.retries_of("infra") > self.shared_infra_cap or st.retries_of("expired") > self.expired_cap):
+            raise LedgerCorrupt("历史计量已超配置上限，禁止继续写入")
         if st.config is None:
+            if st.reserves or st.retries or st.orphan_claims:
+                raise BudgetConfigMismatch("非空历史账本缺配置，须人工核对，禁止补默认配置")
             st.config = self._append(self.config())
         else:
+            if "astra_cap" not in st.config:
+                if self.legacy_astra_cap != self.astra_cap or st.astra > self.astra_cap:
+                    raise BudgetConfigMismatch("历史配置缺 astra_cap，须显式 legacy_astra_cap 声明并核对")
+                candidate = {**st.config, "astra_cap": self.astra_cap, "schema": SCHEMA}
+                st.config = candidate
+                if self._config_diff(st):
+                    raise BudgetConfigMismatch("历史配置与当前上限不一致")
+                self._append({"kind": "config_upgrade", "astra_cap": self.astra_cap, "schema": SCHEMA})
             diff = self._config_diff(st)
             if diff:
                 raise BudgetConfigMismatch(f"ledger={self.path} config 行与构造参数不一致（账本值, 构造值）={diff}")
@@ -409,7 +495,13 @@ class BudgetLedger:
 
         ``token``：同 token 已有未退回的预约时返回同一 rid、不写新行（崩溃后续跑不重复扣额）。
         ``kind_of_try="recovery"``：另受首试保留额度与恢复合计约束（见模块文档）。"""
-        resets = int(resets)
+        resets = _nonnegative(resets, "resets")
+        if type(astra) is not bool:
+            raise ValueError("astra 必须为布尔值")
+        if token is not None and (not isinstance(token, str) or not token):
+            raise ValueError("token 必须为非空字符串")
+        if set(extra) & {"kind", "rid", "resets", "astra", "route", "key", "token", "kind_of_try"}:
+            raise ValueError("附加字段不得覆盖预算字段")
         if resets < 0:
             raise ValueError("resets 不能为负")
         if kind_of_try is not None and kind_of_try not in KINDS_OF_TRY:
@@ -417,8 +509,14 @@ class BudgetLedger:
         with self._locked():
             st = self._load()
             if token:
+                if any(row.get("token") == token and rid in st.releases for rid, row in st.reserves.items()):
+                    raise ValueError("已退回 token 不可重新预约")
                 rid = st.live_rid_of(token)
                 if rid is not None:
+                    old = st.reserves[rid]
+                    if any(old.get(k) != v for k, v in {"resets": resets, "route": route, "key": key,
+                                                        "astra": astra, "kind_of_try": kind_of_try}.items()):
+                        raise ValueError("同 token 预约参数冲突")
                     return rid
             if st.trajectories >= self.trajectory_cap:
                 raise BudgetExhausted(f"trajectories={st.trajectories}/{self.trajectory_cap}", reason="trajectory_cap")
@@ -446,26 +544,44 @@ class BudgetLedger:
             raise KeyError(f"未知 rid={rid}")
 
     def commit(self, rid: str, *, resets: int | None = None, **extra) -> None:
+        if resets is not None:
+            _nonnegative(resets, "resets")
+        if set(extra) & {"kind", "rid", "resets"}:
+            raise ValueError("附加字段不得覆盖预算字段")
         with self._locked():
             st = self._load()
             self._need_rid(st, rid)
             if rid in st.commits or rid in st.releases:
-                return  # 重复收尾：幂等
+                if rid in st.releases or st.commits[rid].get("resets") != resets:
+                    raise ValueError("收尾冲突")
+                return  # 相同收尾幂等
+            total = st.resets - st.resets_of(rid) + max(st.reserves[rid]["resets"], resets or 0, st.claimed.get(rid, 0))
+            self._check_resets(total)
             self._append({"kind": "commit", "rid": rid, "resets": None if resets is None else int(resets), **extra})
 
     def release(self, rid: str, **extra) -> None:
+        if set(extra) & {"kind", "rid"}:
+            raise ValueError("附加字段不得覆盖预算字段")
         with self._locked():
             st = self._load()
             self._need_rid(st, rid)
-            if rid in st.commits or rid in st.releases:
+            if rid in st.commits:
+                raise ValueError("已收尾预约不能退回")
+            if rid in st.releases:
                 return
             self._append({"kind": "release", "rid": rid, **extra})
 
     def claim_reset(self, rid: str | None, what: str, **extra) -> None:
         """记一次实际 build／reset；记完后计量总数会超过 ``reset_cap`` 即抛 ``BudgetExhausted(reason="reset_cap")``、
-        不写行（预约数之内的实领不增加总数，不会被拒）。"""
+        不写行。历史无预约模式只允许显式 ``rid=None``，每条独立计量；空字符串或未知非空预约一律拒绝。"""
         with self._locked():
             st = self._load()
+            if rid is not None:
+                self._need_rid(st, rid)
+                if rid in st.commits or rid in st.releases:
+                    raise ValueError("已结束预约不能领取 reset")
+            if set(extra) & {"kind", "rid"}:
+                raise ValueError("附加字段不得覆盖预算字段")
             self._check_resets(st.resets_if_claimed(rid))
             self._append({"kind": "reset_claim", "rid": rid, "what": what, **extra})
 
@@ -476,12 +592,20 @@ class BudgetLedger:
         返回 False（不写行）。``token`` 已领过时直接返回 True、不写新行。"""
         if interrupt not in INTERRUPTS:
             raise ValueError(f"interrupt={interrupt!r} 不是 {INTERRUPTS} 之一")
+        if token is not None and (not isinstance(token, str) or not token):
+            raise ValueError("token 必须为非空字符串")
         if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or not 1 <= max_attempts <= 20:
             raise ValueError("max_attempts 必须是 1 至 20 的整数")
+        if set(extra) & {"kind", "route", "key", "interrupt", "max_attempts", "token"}:
+            raise ValueError("附加字段不得覆盖预算字段")
         cap = self.shared_infra_cap if interrupt == "infra" else self.expired_cap
         with self._locked():
             st = self._load()
             if token and token in st.retry_tokens:
+                old = next(row for row in st.retries if row.get("token") == token)
+                if any(old.get(k) != v for k, v in {"route": route, "key": key, "interrupt": interrupt,
+                                                    "max_attempts": max_attempts}.items()):
+                    raise ValueError("同 token 重试参数冲突")
                 return True
             if st.retries_of(interrupt) >= cap:
                 return False
@@ -502,6 +626,8 @@ class BudgetLedger:
         with self._locked():
             st = BudgetState(self._read())
         problems = []
+        if st.config is None:
+            problems.append("config_absent")
         if st.config is not None and self._config_diff(st):
             problems.append("config_mismatch")
         if st.trajectories > self.trajectory_cap:
