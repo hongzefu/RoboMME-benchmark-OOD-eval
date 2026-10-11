@@ -199,7 +199,7 @@ def test_guardian_step_does_not_hide_worker_first_step(tmp_path,monkeypatch):
         return types.SimpleNamespace(returncode=0,stdout=f"101.1 raw-ood-lifecycle-guard\n101.2 {a['worker_name']}\n",stderr='')
     monkeypatch.setattr(C.subprocess,'run',run)
     row=a['rows'][1]
-    C.atomic(a['progress'],dict(label=c['models']['qwenvl']['label'],phase='episode',key=row['key'],pid=250,t=time.time(),slurm_job_id='101',slurm_step_id='2'))
+    C.atomic(a['progress'],dict(label=c['models']['qwenvl']['label'],phase='episode',key=row['key'],pid=250,t=time.time(),t_progress=time.time(),t_heartbeat=time.time(),slurm_job_id='101',slurm_step_id='2'))
     ep=Path(c['gl_root'])/'rollouts'/c['models']['qwenvl']['label']/'ood/seed7/progress.json'
     C.atomic(ep,dict(key=row['key'],pid=250,step=1))
     controller.check_worker(a); controller.poll_ack(a)
@@ -264,7 +264,7 @@ def scan_fixture(tmp_path,*,rc=0,status='success'):
     inv=tmp_path/'control/invocations/pp-00-smoke'; inv.mkdir(parents=True)
     progress=inv/'progress.json'; results=Path(c['gl_root'])/'seats/pp/seed7/s3-pp-00-smoke/seat-results.jsonl'
     results.parent.mkdir(parents=True)
-    C.atomic(progress,dict(label='pp',phase='finished',rc=rc,key=None,pid=1000,t=time.time()-300,slurm_job_id='103',slurm_step_id='1'))
+    C.atomic(progress,dict(label='pp',phase='finished',rc=rc,key=None,pid=1000,t=time.time()-300,t_progress=time.time()-300,t_heartbeat=time.time()-300,slurm_job_id='103',slurm_step_id='1'))
     directory=Path(c['gl_root'])/'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
     for name in ('front.mkv','wrist.mkv','arrays.npz','trace.jsonl','meta.json','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'):
         (directory/name).write_text('fixture')
@@ -445,7 +445,7 @@ def existing_fixture(tmp_path,monkeypatch):
         seat=ctl.c['seats'][index]; ctl.start(seat,shard); inv=ctl.control/'invocations'/(shard+'-full')
         d=C.read(inv/'dispatch.json'); d['srun_pid']=9000+index; C.atomic(inv/'dispatch.json',d)
         model=ctl.shards[shard]['model']; step=str(seat['job_id'])+'.5'
-        C.atomic(inv/'progress.json',dict(phase='context_load',key=None,t=time.time(),label=ctl.c['models'][model]['label'],
+        C.atomic(inv/'progress.json',dict(phase='context_load',key=None,t=time.time(),t_progress=time.time(),t_heartbeat=time.time(),label=ctl.c['models'][model]['label'],
                   slurm_job_id=seat['job_id'],slurm_step_id='5',seat=f"{seat['seat']}-{shard}-full",policy_seed=7,pid=2000+index))
         metadata[9000+index]=dict(state='S',start_ticks=3000+index,start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
         account[step]=f'{step}|raw-ood-worker-{shard}-full|RUNNING|0:0\n'
@@ -475,6 +475,53 @@ def test_existing_dispatch_preflight_and_attach_do_not_replay_or_republish(tmp_p
     ctl.scan(); ctl.dispatch()
     assert Path(ctl.c['budget_ledger']).read_bytes()==ledger
     for a in ctl.active.values(): a['log'].close()
+
+
+def seat_heartbeat_fixture(tmp_path,monkeypatch):
+    """固定891真实Seat生产器：progress写真实进展，heartbeat_once仅刷新心跳。"""
+    import threading
+    from tests._support.dev_loaders import load_script
+    seat_module=load_script('eval-official/env_client.py')
+    ctl,metadata,account=existing_fixture(tmp_path,monkeypatch)
+    path=ctl.control/'invocations/qwenvl-00-full/progress.json'; now=C.time.time(); clock=[now-197]
+    monkeypatch.setattr(seat_module.time,'time',lambda:clock[0]); monkeypatch.setenv('SLURM_JOB_ID','101'); monkeypatch.setenv('SLURM_STEP_ID','5')
+    runner=seat_module.SeatRunner.__new__(seat_module.SeatRunner)
+    runner.args=types.SimpleNamespace(policy='groundsg',progress_file=str(path)); runner.progress_path=path
+    runner._current=None; runner._lock=threading.Lock(); runner._progress_lock=threading.Lock(); runner._last_episode_progress=None
+    runner.seat='s101-qwenvl-00-full'; runner.label=ctl.c['models']['qwenvl']['label']; runner.policy_seed=7; runner.episodes_done=0
+    runner.progress('context_load'); initial=C.read(path); clock[0]=now; runner.heartbeat_once(); produced=C.read(path)
+    assert produced['t']==produced['t_progress']==initial['t'] and produced['t_heartbeat']==now
+    active=dict(seat=ctl.c['seats'][0],progress=path,model='qwenvl',phase_key=('context_load',None),phase_start=now-197,step_id='101.5',started=now-197)
+    return ctl,active,clock,produced
+
+
+def test_true_seat_heartbeat_survives_old_progress_in_check_and_existing_preflight(tmp_path,monkeypatch):
+    ctl,active,clock,produced=seat_heartbeat_fixture(tmp_path,monkeypatch)
+    assert clock[0]-produced['t']==197 and ctl.check_worker(active)
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    proof=ctl.resume_existing_dispatches('c'*40,preflight=True)
+    assert proof['active']==3 and {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+    active['phase_start']=clock[0]-3601
+    with pytest.raises(RuntimeError,match='阶段超时'): ctl.check_worker(active)
+
+
+@pytest.mark.parametrize('bad',[None,True,'1',float('nan'),float('inf'),'missing','future','stale'])
+def test_explicit_heartbeat_invalid_missing_future_or_stale_never_falls_back(tmp_path,monkeypatch,bad):
+    ctl,active,clock,produced=seat_heartbeat_fixture(tmp_path,monkeypatch); produced['t']=clock[0]
+    if bad=='missing': produced.pop('t_heartbeat')
+    elif bad=='future': produced['t_heartbeat']=clock[0]+6
+    elif bad=='stale': produced['t_heartbeat']=clock[0]-121
+    else: produced['t_heartbeat']=bad
+    C.atomic(active['progress'],produced)
+    with pytest.raises(RuntimeError,match='心跳'): ctl.check_worker(active)
+    with pytest.raises(ValueError,match='心跳'): ctl.resume_existing_dispatches('c'*40,preflight=True)
+
+
+def test_t_only_heartbeat_requires_exact_old_source_lock(tmp_path):
+    source=dict(exec_commit=C.LEGACY_WATCHDOG_SOURCE[0],config_sha256=C.LEGACY_WATCHDOG_SOURCE[1])
+    C.check_heartbeat({'t':1000},source,1000)
+    with pytest.raises(ValueError): C.check_heartbeat({'t':1000},dict(source,exec_commit='f'*40),1000)
+    with pytest.raises(ValueError): C.check_heartbeat({'t':1000,'t_progress':1000},source,1000)
 
 
 @pytest.mark.parametrize('kind',['valid','bool','zero','missing_camera','extra_camera','bool_count','wrong_field','trace_false'])
@@ -738,7 +785,7 @@ def test_exact_mixed_history_three_locked6_two_qwen_running_pp100_and_qwen75(tmp
     current=[]
     for seat,shard in zip(ctl.c['seats'],('qwenvl-00','qwenvl-01','pp-00','qwenvl-02')):
         ctl.start(seat,shard); a=ctl.active[str(seat['job_id'])]; d=C.read(a['progress'].parent/'dispatch.json'); step=seat['job_id']+'.9'
-        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),label=ctl.c['models'][a['model']]['label'],slurm_job_id=seat['job_id'],slurm_step_id='9',seat=seat['seat']+'-'+a['inv_tag'],policy_seed=7,pid=d['srun_pid']))
+        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),t_progress=C.time.time(),t_heartbeat=C.time.time(),label=ctl.c['models'][a['model']]['label'],slurm_job_id=seat['job_id'],slurm_step_id='9',seat=seat['seat']+'-'+a['inv_tag'],policy_seed=7,pid=d['srun_pid']))
         account[step]=step+'|'+a['worker_name']+'|RUNNING|0:0\n'
         metadata[d['srun_pid']]=dict(state='S',start_ticks=d['srun_pid'],start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
         current.append(a)
@@ -822,7 +869,7 @@ def sealed_legacy_episode_fixture(tmp_path,monkeypatch):
     monkeypatch.setattr(context,'LEGACY_WATCHDOG_SOURCE',(old['exec_commit'],digest))
     progress=ctl.control/'invocations/qwenvl-00-full/progress.json'; doc=C.read(progress)
     budget,_=C.ledger_snapshot(Path(ctl.c['budget_ledger'])); reserve=budget.reserves[failure['budget_rid']]; commit=budget.commits[failure['budget_rid']]
-    doc.update(phase='episode',key=failure['key'],t=(float(reserve['t'])+float(commit['t']))/2); doc.pop('rc'); C.atomic(progress,doc)
+    doc.update(phase='episode',key=failure['key'],t=(float(reserve['t'])+float(commit['t']))/2); doc.pop('rc'); doc.pop('t_heartbeat',None); doc.pop('t_progress',None); C.atomic(progress,doc)
     fresh=C.Controller(ctl.c); fresh.shards=ctl.shards
     return fresh,metadata,account,planned,report,failure,progress
 
@@ -1116,7 +1163,7 @@ def test_locked6_running_resume1_watchdog_launches_resume2_then_reattaches(tmp_p
     old_identity=C.process_identity; monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid) if 7700<=pid<=7701 else old_identity(pid))
     def bind_active(owner,step_number):
         a=owner.active['101']; d=C.read(a['progress'].parent/'dispatch.json'); seat=a['seat']; step='101.'+str(step_number)
-        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),label=owner.c['models']['qwenvl']['label'],slurm_job_id='101',slurm_step_id=str(step_number),seat=seat['seat']+'-'+a['inv_tag'],policy_seed=7,pid=d['srun_pid']))
+        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),t_progress=C.time.time(),t_heartbeat=C.time.time(),label=owner.c['models']['qwenvl']['label'],slurm_job_id='101',slurm_step_id=str(step_number),seat=seat['seat']+'-'+a['inv_tag'],policy_seed=7,pid=d['srun_pid']))
         metadata[d['srun_pid']]=dict(state='S',start_ticks=d['srun_pid'],start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
         account[step]=step+'|'+a['worker_name']+'|RUNNING|0:0\n'
         return a
@@ -1151,7 +1198,7 @@ def test_locked_drained_history_and_four_running_segments_existing_preflight(tmp
     monkeypatch.setattr(C.subprocess,'Popen',popen)
     for seat,shard in zip(ctl.c['seats'],('qwenvl-00','qwenvl-01','smvla-00','pp-00')):
         ctl.start(seat,shard); a=ctl.active[str(seat['job_id'])]; d=C.read(a['progress'].parent/'dispatch.json'); tag=a['inv_tag']; step=str(seat['job_id'])+'.6'
-        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),label=ctl.c['models'][a['model']]['label'],slurm_job_id=seat['job_id'],slurm_step_id='6',seat=seat['seat']+'-'+tag,policy_seed=7,pid=d['srun_pid']))
+        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),t_progress=C.time.time(),t_heartbeat=C.time.time(),label=ctl.c['models'][a['model']]['label'],slurm_job_id=seat['job_id'],slurm_step_id='6',seat=seat['seat']+'-'+tag,policy_seed=7,pid=d['srun_pid']))
         account[step]=step+'|raw-ood-worker-'+tag+'|RUNNING|0:0\n'
         metadata[d['srun_pid']]=dict(state='S',start_ticks=d['srun_pid'],start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
     old_identity=C.process_identity
