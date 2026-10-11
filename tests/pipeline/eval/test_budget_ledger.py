@@ -29,6 +29,63 @@ def bl_mod():
     return load_script("eval-official/budget_ledger.py")
 
 
+def test_semantic_invalid_rows_and_unknown_claim(tmp_path):
+    """真实序列化的未知预约与坏数字不得漏计。"""
+    import json
+    bm = bl_mod()
+    path = tmp_path / "semantic.jsonl"
+    led = bm.BudgetLedger(path, reset_cap=2)
+    rid = led.reserve(resets=2)
+    original = path.read_bytes()
+    with pytest.raises(KeyError):
+        led.claim_reset("unknown", "reset")
+    for bad in (-1, True, 1.5, "2"):
+        with pytest.raises(ValueError):
+            led.commit(rid, resets=bad)
+    with pytest.raises(bm.BudgetExhausted):
+        led.commit(rid, resets=3)
+    assert path.read_bytes() == original
+    for row in ({"kind": "reset_claim", "rid": "unknown"},
+                {"kind": "commit", "rid": rid, "resets": -1},
+                {"kind": "retry_claim", "interrupt": "wrong"}):
+        path.write_bytes(original + (json.dumps(row) + "\n").encode())
+        with pytest.raises(bm.LedgerCorrupt):
+            led.state()
+        assert led.report_lines()[0] is False
+
+
+def test_legacy_cap_requires_explicit_append_only_declaration(tmp_path):
+    """缺失上限不可默认为成功；兼容声明只追加，历史字节不改。"""
+    import json
+    bm = bl_mod()
+    path = tmp_path / "legacy.jsonl"
+    led = bm.BudgetLedger(path, astra_cap=0)
+    config = led.config()
+    del config["astra_cap"]
+    config["schema"] = "sgeval-budget/3"
+    original = (json.dumps(config) + "\n").encode()
+    path.write_bytes(original)
+    with pytest.raises(bm.BudgetConfigMismatch):
+        led.state()
+    assert path.read_bytes() == original
+    bm.BudgetLedger(path, astra_cap=0, legacy_astra_cap=0).check()
+    assert path.read_bytes().startswith(original)
+    led.check()
+    with pytest.raises(bm.BudgetConfigMismatch):
+        bm.BudgetLedger(path, astra_cap=1).check()
+
+
+def test_release_cannot_refund_consumed_budget(tmp_path):
+    """结束记录不能刷新任何已预约额度。"""
+    bm = bl_mod()
+    led = bm.BudgetLedger(tmp_path / "norefund.jsonl", trajectory_cap=1, reset_cap=2)
+    rid = led.reserve(resets=2)
+    led.release(rid)
+    assert led.state().trajectories == 1 and led.state().resets == 2
+    with pytest.raises(bm.BudgetExhausted):
+        led.reserve(resets=0)
+
+
 def _cli(ledger: Path, *argv: str, env_extra: dict | None = None) -> subprocess.CompletedProcess:
     env = dict(os.environ, **(env_extra or {}))
     env.pop("SGEVAL_BUDGET_LEDGER", None)
@@ -126,7 +183,7 @@ def test_reset_cap_is_hard(tmp_path, capsys):
     rows = F.read_jsonl(path)
     assert [r["kind"] for r in rows].count("reserve") == 1 and [r["kind"] for r in rows].count("reset_claim") == 5
     config = next(r for r in rows if r["kind"] == "config")
-    assert config["reset_cap"] == 5 and config["schema"] == "sgeval-budget/3"
+    assert config["reset_cap"] == 5 and config["schema"] == "sgeval-budget/4"
     with pytest.raises(bm.BudgetConfigMismatch):
         bm.BudgetLedger(path, reset_cap=60).check()  # 入口口径不一致即拒
     ok, lines = bm.BudgetLedger(path, reset_soft_cap=5).report_lines()
@@ -155,15 +212,14 @@ def test_astra_third_episode_rejected(tmp_path):
     assert last == "BUDGET_ENFORCEMENT=PASS trajectories=3/6366 resets=6/141430 astra=2/2 shared_infra=0/50"
 
 
-def test_release_returns_trajectory_but_keeps_claimed_resets(tmp_path):
+def test_release_keeps_trajectory_and_reserved_resets(tmp_path):
     bm = bl_mod()
     led = bm.BudgetLedger(tmp_path / "b.jsonl", trajectory_cap=1)
     rid = led.reserve(resets=6)
     led.claim_reset(rid, "build")
     led.release(rid)
     st = led.state()
-    assert st.trajectories == 0 and st.resets == 1
-    led.reserve(resets=2)  # 名额已退回
+    assert st.trajectories == 1 and st.resets == 6
     with pytest.raises(bm.BudgetExhausted):
         led.reserve(resets=2)
 
@@ -183,7 +239,7 @@ def test_cli_reserve_commit_release_report(tmp_path):
     rep = _cli(path, "report")
     assert rep.returncode == 0
     assert rep.stdout.strip().splitlines()[-1] == (
-        "BUDGET_ENFORCEMENT=PASS trajectories=2/6366 resets=10/141430 astra=0/2 shared_infra=1/50")
+        "BUDGET_ENFORCEMENT=PASS trajectories=3/6366 resets=12/141430 astra=0/2 shared_infra=1/50")
 
 
 def test_report_fails_on_torn_row(tmp_path):
