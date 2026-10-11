@@ -672,6 +672,7 @@ def budget_caps(args) -> dict | None:
     out = {k: int(v) for k, v in vals.items()}
     if getattr(args, "reset_cap", None) is not None:
         out["reset_cap"] = int(args.reset_cap)
+    out["astra_cap"] = int(getattr(args, "astra_cap", 2))
     return out
 
 
@@ -1781,6 +1782,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--budget-ledger", default=None, help="共享预算账本（budget_ledger.py 格式，NFS 上本轮一份）")
     g.add_argument("--trajectory-cap", type=int, default=None)
     g.add_argument("--reset-cap", type=int, default=None)
+    g.add_argument("--astra-cap", type=int, default=2, help="共享 Astra 尝试上限；旧调用缺省沿用 2，新批次显式给定")
     g.add_argument("--shared-infra-cap", type=int, default=None)
     g.add_argument("--expired-cap", type=int, default=None)
     g.add_argument("--planned-first-tries", type=int, default=None)
@@ -1837,7 +1839,7 @@ def cmd_run(args) -> int:
         rc = runner.run(rows)
     finally:
         runner.close()
-    runner.progress("finished", rc=rc)
+    runner.progress("finished", rc=rc, drained=(rc == 6))
     print(f"全部完成 policy={args.policy} seat={runner.seat} episodes={runner.episodes_done} rc={rc}", flush=True)
     return rc
 

@@ -283,8 +283,25 @@ def normalize_play_output(out: Any) -> dict:
     missing = [k for k in PLAY_REQUIRED if k not in out]
     if missing:
         raise PlayContractError(f"PlayOutput is missing required fields {missing}")
-    if out["status"] not in PLAY_STATUSES:
+    if not isinstance(out["status"], str) or out["status"] not in PLAY_STATUSES:
         raise PlayContractError(f"PlayOutput.status={out['status']!r} is not in {PLAY_STATUSES}")
+    success = out["task_success"]
+    if type(success) not in (bool, int) or success not in (0, 1):
+        raise PlayContractError("PlayOutput.task_success must be a boolean or integer 0/1")
+    if type(out["steps"]) is not int or out["steps"] < 0:
+        raise PlayContractError("PlayOutput.steps must be a nonnegative integer")
+    if type(out["infra"]) is not bool:
+        raise PlayContractError("PlayOutput.infra must be a boolean")
+    for key in ("error", "infra_reason"):
+        if out[key] is not None and not isinstance(out[key], str):
+            raise PlayContractError(f"PlayOutput.{key} must be a string or None")
+    if out["infra"] and not out["infra_reason"]:
+        raise PlayContractError("Infrastructure failure requires infra_reason")
+    if not out["infra"] and out["infra_reason"] is not None:
+        raise PlayContractError("Non-infrastructure outcome cannot carry infra_reason")
+    if ((out["status"] == "success" and success != 1) or
+            (out["status"] == "fail" and success != 0)):
+        raise PlayContractError("Terminal status contradicts independent task_success")
     return dict(out)
 
 
@@ -569,6 +586,9 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
             except RecorderError as e:
                 out = {"status": "error", "error": f"RecorderError: {e}"[:800], "infra": True,
                        "infra_reason": "recorder"}
+            except PlayContractError as e:
+                out = {"status": "error", "task_success": 0, "error": f"PlayContractError: {e}", "infra": True,
+                       "infra_reason": "play_contract"}
             except Exception as e:  # noqa: BLE001 ordinary model-side exception: record error, still finalize; the Policy moves on to the next episode
                 if session.budget_exhausted:
                     budget_exc = e
@@ -663,7 +683,7 @@ def _classify(result: EpisodeResult, out: dict, session: EnvSession) -> None:
         result.status, result.error_kind = "fail", "error"
     else:
         result.status = status
-    result.task_success = int(result.status == "success")
+    result.task_success = int(out.get("task_success", 0))
 
 
 __all__ = ["EpisodeSpec", "EpisodeResult", "run_episode", "make_spec", "result_path", "run_dir", "builder_for",

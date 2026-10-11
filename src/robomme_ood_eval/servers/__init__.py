@@ -448,17 +448,17 @@ class ServedPolicy(Policy):
                 "rec_dir": str(spec.out_dir)}
 
     def _finish_play(self, res: dict) -> dict:
-        """Model ``run_episode`` result -> ``PlayOutput``: ``task_success`` becomes 0/1 and required fields are
-        filled in; the first episode in the process also carries ``policy_load`` in ``timing`` (server readiness and
+        """Validate the model result without replacing independent success evidence; the first episode in the
+        process also carries ``policy_load`` in ``timing`` (server readiness and
         warm-up time)."""
         out = dict(res)
         status = out.get("status", "error")
         out["status"] = status
-        out["task_success"] = int(status == "success")
-        out["steps"] = int(out.get("steps") or 0)
         out.setdefault("error", None)
-        out["infra"] = bool(out.get("infra"))
+        out.setdefault("infra", False)
         out.setdefault("infra_reason", None)
+        from robomme_ood_eval.episode import normalize_play_output
+        out = normalize_play_output(out)
         if not self._load_reported:
             timing = dict(out.get("timing") or {})
             timing["policy_load"] = dict(self.load_info)

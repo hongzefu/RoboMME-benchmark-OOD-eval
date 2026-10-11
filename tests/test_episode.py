@@ -97,7 +97,8 @@ def test_builder_cached_per_task_dataset(tmp_path):
 
 
 def test_play_output_contract_required_fields():
-    out = {k: None for k in PLAY_REQUIRED} | {"status": "success"}
+    out = {k: None for k in PLAY_REQUIRED} | {"status": "success", "task_success": 1,
+                                           "steps": 0, "infra": False}
     assert E.normalize_play_output(out)["status"] == "success"
     for k in PLAY_REQUIRED:
         bad = dict(out)
@@ -108,6 +109,34 @@ def test_play_output_contract_required_fields():
         E.normalize_play_output(dict(out, status="weird"))
     with pytest.raises(E.PlayContractError):
         E.normalize_play_output(["not", "a", "dict"])
+
+
+@pytest.mark.parametrize("key,value", [("task_success", None), ("task_success", 2),
+                                     ("task_success", "1"), ("steps", None), ("steps", -1),
+                                     ("steps", True), ("infra", 1), ("error", []),
+                                     ("infra_reason", 1), ("task_success", 0)])
+def test_play_output_rejects_invalid_values(key, value):
+    """独立成功、步数与基础设施字段必须遵循严格类型契约。"""
+    out = dict(status="success", task_success=1, steps=0, error=None, infra=False, infra_reason=None)
+    with pytest.raises(E.PlayContractError):
+        E.normalize_play_output(out | {key: value})
+
+
+def test_independent_success_survives_error_serialization(tmp_path):
+    """媒体失败仍保留已取得的成功证据，实际写入再读回核对。"""
+    import json
+    out = E.normalize_play_output(dict(status="error", task_success=1, steps=4, error="disk full",
+                                       infra=True, infra_reason="media_system"))
+    result = run(load_policy("fake", 7), out=tmp_path)
+    session = type("Session", (), dict(steps=4, cap_hit=False, reset_calls=1, timing={}, budget_exhausted=False))()
+    E._classify(result, out, session)
+    path = tmp_path / "independent.json"
+    path.write_text(json.dumps(vars(result)))
+    saved = json.loads(path.read_text())
+    assert saved["status"] == "fail" and saved["task_success"] == 1 and saved["infra"] is True
+    session.cap_hit = True
+    E._classify(result, out, session)
+    assert result.status == "timeout" and result.task_success == 1 and result.infra is True
 
 
 # ── Call order and residency ───────────────────────────────────────────────────────────

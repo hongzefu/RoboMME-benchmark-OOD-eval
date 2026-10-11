@@ -327,7 +327,8 @@ class FakeSmvlaConn:
         kind = next(iter(msg))
         if kind == "reset":
             self.server.reset(msg["reset"]["episode_key"])
-            rep = {"reset_finished": True, "rng": {"fake": True}}
+            rep = {"reset_finished": True, "rng": {"fake": True},
+                   "episode_key": msg["reset"]["episode_key"], "rng_matches_ref": True}
         elif kind == "observe":
             frs = msg["observe"]["frames"]
             shas = [{k: srv.frame_sha(v) for k, v in sorted(f.items())} for f in frs]
