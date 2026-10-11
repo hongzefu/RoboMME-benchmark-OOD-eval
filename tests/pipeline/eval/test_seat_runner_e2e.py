@@ -85,6 +85,19 @@ def _pending_settlement(tmp_path, **kwargs):
     return runner, c, aid, runner._result_row(c, aid, result), shared
 
 
+@pytest.mark.parametrize("override", [{"exit_code": 0}, {"exit_code": True}, {"exit_code": "75"},
+                                    {"exit_kind": "other"}, {"infra": False}, {"status": "success"},
+                                    {"infra_reason": "other"}])
+def test_result_row_rejects_malformed_watchdog_exit_markers(tmp_path, override):
+    """非法出口标记不得降级为可恢复的普通结果或伪造合法75。"""
+    runner, c, aid, row, shared = _pending_settlement(tmp_path)
+    record = dict(status="fail", infra=True, infra_reason="episode_wall", exit_kind="watchdog_hard_exit", exit_code=75)
+    record.update(override)
+    with pytest.raises(ValueError, match="看门狗退出"):
+        runner._result_row(c, aid, record)
+    assert len(shared.state().reserves) == 1 and not shared.state().commits
+
+
 @pytest.mark.parametrize("boundary", ["attempt_end", "accept", "shared", "queue_accept", "claim", "report", "complete"])
 @pytest.mark.parametrize("after", [False, True])
 @pytest.mark.parametrize("terminal", ["success", "fail", "timeout"])
