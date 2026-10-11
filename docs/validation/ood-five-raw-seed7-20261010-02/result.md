@@ -79,3 +79,7 @@
 补充修复固定 `22c5cb56e088bdb7239bef511d793f64f435313c`：decoded必须是正好front／wrist两键、各为非布尔正整数，trace_checked仍必须True；其余字段严格绑定保持。同时修正 `/proc/cmdline` 解析仅剔除末尾NUL、保留 `--gpus ''` 的合法内部空参数，不改原派发或对比规则。生产搬运生成真AV1／NPZ／trace、rsync核验删除、原子JSON写读再预检的正负链路，以及真实CPU子PID空argv验证，29项10.22秒通过；独立 `CONSUMER_ARGV_REVIEW=PASS` 直接核对生产协议。主整合控制器及契约门禁 `97 passed in 17.91s`、退出0、资源计数全零。下一私有文件束05完整包含六文件并验证独立导入，真实CPU再预检，不覆盖03／04失败束。
 
 提交1.112前的默认diff检查报告观察日志四行末尾空格；该命令序列没有及时阻止提交，不应表述为当时默认diff检查通过。此处已将Git内该日志副本四行末尾空格去掉，原日志字节仍在运行根control完整保留（26333字节、SHA256 `192482a0215aa92acc64867316b91b21a40f40bb9a71135a284881be3ceb5c5c`），JSON／失败回执不改；本次 `git diff --check` 退出0。没有改写已有提交或原始运行证据。
+
+05实际CPU预检继续拒绝，未启动监督器：步骤清单使用了作业状态字段 `%T`，但当前Slurm步骤模式不支持它。主实查 `squeue --steps -o '%i %j %T'` 给出stderr错误且退出0，stdout第三列为字面 `%T`，不能用于状态判定。改用受支持的 `%i %j` 两列清单，stderr空、合法登记StepID与唯一名称均必检；实际RUNNING／COMPLETED／退出码继续严格取精确sacct，不从列表推断状态。原三个formal仍运行，未重复启动或领取预算；05失败日志保留。
+
+步骤格式补充修复固定 `52b5b2f43d597ed8ae51ab9a5f4b524b95fbe545`，`SLURM_STEP_FORMAT_REVIEW=PASS`；主整合控制器及契约门禁 `108 passed in 18.68s`、退出0，资源守卫全零。旧首局和新在途恢复共用正确步骤清单，原预算／来源／进程绑定不放宽。

@@ -64,4 +64,7 @@ srun --jobid=63664373 --overlap --exact --ntasks=1 --cpus-per-task=1 --gres=none
 <h2>九、生产回执与冻结依赖闭包</h2>
 <p>03真实CPU预检发现五文件束缺eval_video_mover模块，主另建六文件束04并验证导入，原失败束保留。04真实预检发现decoded实际为双摄像头帧数字典而消费者误要求布尔True。修复仅要求front／wrist两键非布尔正整数，trace_checked与其余身份／SHA约束不变；原回执不改。另将/proc/cmdline解析改为只删最后终结NUL，保留合法空参数，与原dispatch中--gpus空值准确对应。</p>
 <p>生产raw_move真媒体／数组／动作验证、回执JSON写读及真实子PID空argv链路29项10.22秒退出0，固定22c5cb56的 <code>CONSUMER_ARGV_REVIEW=PASS</code>。主整合97项17.91秒退出0、资源零。最终接管束为 <code>orchestration-recovery-05/</code> 的六个确定提交文件，独立导入闭包后核两端SHA；会话改为 <code>ev-ood-five-raw-supervisor-resume-05-20261010-02</code>。worker8c3／配置bbe、旧CPUstep12与三个formal srun、搬运保持；03／04均仅预检失败，未启动监督器，不存在需要取消的新增GPU步骤。</p>
+<h2>十、Slurm步骤格式的实测纠正</h2>
+<p>05真实预检拒绝了步骤状态：当前Slurm的 <code>squeue --steps -o '%i %j %T'</code> 不支持%T，stderr报错但退出0，stdout仍写字面%T。已实测受支持两列 <code>%i %j</code>。新旧恢复共用严格步骤清单解析，stderr／返回码／非法登记StepID／重复均拒绝；状态与退出码依旧由精确sacct核实，不能把存在于步骤表等同RUNNING或成功。</p>
+<p>固定52b5b2的 <code>SLURM_STEP_FORMAT_REVIEW=PASS</code>；52项11.41秒及最终12项1.01秒退出0、资源零。后续使用完整六文件 <code>orchestration-recovery-06/</code> 及会话 <code>ev-ood-five-raw-supervisor-resume-06-20261010-02</code>，绑定新的已提交编排SHA。03／04／05均只读预检失败，未启动新监督器；原worker、旧CPUstep12、配置bbe和搬运仍保持。最终预检及首步交接须实测，失败记录不改成成功。</p>
 </body></html>

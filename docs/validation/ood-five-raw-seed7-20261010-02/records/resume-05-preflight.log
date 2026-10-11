@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-05/raw_ood_controller.py", line 918, in <module>
+    if __name__=='__main__': raise SystemExit(main())
+                                              ^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-05/raw_ood_controller.py", line 910, in main
+    controller.resume_existing_dispatches(args.orchestration_commit,preflight=True); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02/orchestration-recovery-05/raw_ood_controller.py", line 609, in resume_existing_dispatches
+    if known_steps.pop(step,None)!=[name,'RUNNING']: raise ValueError('运行worker与全步骤清单冲突')
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: 运行worker与全步骤清单冲突
+srun: error: gl3010: task 0: Exited with exit code 1
