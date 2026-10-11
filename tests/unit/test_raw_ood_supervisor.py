@@ -194,6 +194,108 @@ def test_guard_historical_original_remains_but_new_error_is_rejected(tmp_path):
     with pytest.raises(ValueError,match='SHA'): S.check_guardians(guardians,c)
 
 
+@pytest.mark.parametrize('bad',[None,'mover_count','pointer_count','new_error'])
+def test_actual_infra_stop_mover_pause_supervisor_guard_and_resume(tmp_path,monkeypatch,bad):
+    """实际失败→STOP→两个6排空→双生产暂停JSON→监督/守卫→仅未尝试恢复。"""
+    import json,shutil,types
+    import raw_ood_controller as C
+    from test_raw_ood_controller import watchdog_fixture
+    from test_raw_ood_mover import publication as real_publication, MOVER
+    from raw_ood_context import validate_pause_pointer
+    actual_run,actual_popen=subprocess.run,subprocess.Popen
+    raw_root=tmp_path/'real-raw'; raw_root.mkdir()
+    _,dest,source,row=real_publication.__wrapped__(raw_root)
+    root=tmp_path/'controller'; root.mkdir()
+    ctl,metadata,account,planned,_,failed_row=watchdog_fixture(root,monkeypatch)
+    cfg=ctl.control/'pause-config.json'; content=dict(ctl.c); content.pop('config_sha256'); C.atomic(cfg,content)
+    ctl.c['config_sha256']=C.sha(cfg); ctl.base['config_sha256']=ctl.c['config_sha256']
+    for path in root.rglob('*.json'):
+        doc=C.read(path)
+        if isinstance(doc,dict) and 'config_sha256' in doc: doc['config_sha256']=ctl.c['config_sha256']; C.atomic(path,doc)
+    # 五首局的真实回执是控制器已有恢复门禁；复用一个CPU帧夹具，五份分别真实校验。
+    for model in C.MODELS:
+        ident=ctl.shards[model+'-00']['rows'][0]; key=C.identity(model,ident)
+        result=MOVER.json.loads((source/'result.json').read_text())
+        result.update(key=ident['key'],task_success=1,status='success',model=ctl.c['models'][model]['policy'],policy_label=ctl.c['models'][model]['label'])
+        MOVER.raw_atomic(source/'result.json',result)
+        meta=MOVER.json.loads((source/'meta.json').read_text()); meta.update(identity=ident,pid=1000); MOVER.raw_atomic(source/'meta.json',meta)
+        trace=[json.loads(x) for x in (source/'trace.jsonl').read_text().splitlines()]; trace[0]['identity']['key']=ident['key']
+        (source/'trace.jsonl').write_text(''.join(json.dumps(x)+'\n' for x in trace))
+        old=C.read(ctl.gl/'published'/C.publication_name(key)); target=ctl.gl/old['relative_dir']
+        for path in source.iterdir(): shutil.copy2(path,target/path.name)
+        actual={**old,**ctl.base,'files':MOVER.raw_tree(target)}; C.atomic(ctl.gl/'published'/C.publication_name(key),actual)
+        with monkeypatch.context() as actual_media:
+            actual_media.setattr(subprocess,'run',actual_run); actual_media.setattr(subprocess,'Popen',actual_popen)
+            receipt=MOVER.raw_move(actual,ctl.gl,dest,min_free_gib=0)
+        MOVER.raw_atomic(ctl.gl/'mover/receipts'/C.publication_name(key),receipt)
+    ctl.resume_existing_dispatches('c'*40)
+    assert len(ctl.published)==6 and len(ctl.failures)==1 and len(ctl.active)==2
+    stop=ctl.control/'STOP'; stop.write_text('本夹具请求人工暂停'); original_stop=stop.read_bytes()
+    ctl.pausing=True; ctl.pause_started=time.time()
+    for active in ctl.active.values():
+        progress=C.read(active['progress']); progress.update(phase='finished',rc=6,t=time.time()); C.atomic(active['progress'],progress)
+        step=str(active['seat']['job_id'])+'.'+str(progress['slurm_step_id'])
+        account[step]=step+'|'+active['worker_name']+'|FAILED|6:0\n'; metadata.pop(active['process'].pid)
+    ctl.scan(); assert not ctl.active
+    proof=ctl.write_paused(); pointer=C.read(ctl.control/'paused.json')
+    assert validate_pause_pointer(pointer,ctl.c)==proof
+    assert (proof['accepted'],proof['infra'],proof['settled'],proof['remaining'])==(6,1,7,3993)
+    budget_before=Path(ctl.c['budget_ledger']).read_bytes(); proof_before=Path(pointer['proof_path']).read_bytes()
+    monkeypatch.undo()  # 下游只用真实媒体与真实JSON消费者，禁继承元数据/资源查询替身。
+    args=types.SimpleNamespace(stage=str(ctl.gl),dest=str(dest),manifest=str(cfg),min_free_gib=0,
+        heartbeat_file=str(ctl.control/'mover-heartbeat.json'),error_file=str(ctl.control/'mover-error.json'),stop_file=str(stop),once=False,interval=.01)
+    assert MOVER.raw_main(args)==6
+    paused=MOVER.json.loads((ctl.gl/'mover/paused.json').read_text())
+    assert (paused['expected'],paused['published'],paused['moved'],paused['pending'],paused['missing'])==(4000,6,5,1,3995)
+    assert not (ctl.control/'mover-error.json').exists() and stop.read_bytes()==original_stop
+    if bad=='mover_count':
+        paused['pending']=0; MOVER.raw_atomic(ctl.gl/'mover/paused.json',paused)
+    elif bad=='pointer_count':
+        pointer['infra']=0; C.atomic(ctl.control/'paused.json',pointer)
+    elif bad=='new_error':
+        (dest/actual['relative_dir']/'arrays.npz').write_bytes('本夹具新增真实字节故障'.encode())
+        assert MOVER.raw_main(args)==1
+        assert C.read(ctl.control/'mover-error.json')['component']=='mover'
+    # 暂停后心跳可自然不再更新；移除本夹具心跳模拟缺失，只有严格暂停证明可接管。
+    (ctl.control/'mover-heartbeat.json').unlink(missing_ok=True)
+    C.atomic(ctl.control/'launch.ready',dict(ctl.base,root=str(root),config_path=str(cfg)))
+    C.atomic(ctl.control/'jobs.json',dict(run='fixture',controller_job_id='100',gpu_job_ids=['101','102','103','104']))
+    hold=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],start_new_session=True)
+    try:
+        with monkeypatch.context() as isolated:
+            isolated.setenv('SLURM_JOB_ID','100'); isolated.setattr(S,'start_guardians',lambda c,guardians=None:[])
+            isolated.setattr(S.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=123,poll=lambda:6))
+            isolated.setattr(S.subprocess,'run',lambda *a,**kw:pytest.fail('不得查询或取消真实资源'))
+            assert S.run(cfg)==(6 if bad is None else 1)
+        assert hold.poll() is None and stop.read_bytes()==original_stop
+        if bad is None:
+            outcome=C.read(ctl.control/'supervisor-paused.json')
+            assert (outcome['accepted'],outcome['infra'],outcome['settled'],outcome['remaining'])==(6,1,7,3993)
+        # CPU壳查询完全在本夹具替身中，任何scancel均留证并失败。
+        bindir=root/'fixture-bin'; bindir.mkdir(); cancelled=root/'unexpected-cancel'
+        for name,body in [('squeue','echo RUNNING'),('scancel','echo called > '+str(cancelled)+'\nexit 99')]:
+            path=bindir/name; path.write_text('#!/bin/bash\n'+body+'\n'); path.chmod(0o700)
+        guard=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(root),'fixture','100',str(int(time.time()+60))],
+            env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0',PATH=str(bindir)+':'+os.environ['PATH']),capture_output=True,text=True,timeout=15)
+        assert guard.returncode==(8 if bad=='pointer_count' else 0),guard.stdout+guard.stderr
+        assert not cancelled.exists() and hold.poll() is None
+        if bad is None:
+            ctl.c['pause_snapshot']={'path':pointer['proof_path'],'sha256':pointer['proof_sha256']}
+            stop.unlink()  # 只移除本夹具活STOP；生产器已另存不可变原字节。
+            restarted=C.Controller(ctl.c); restarted.shards=ctl.shards
+            def query(cmd,**kw):
+                return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]] if cmd[0]=='sacct' else '',stderr='')
+            with monkeypatch.context() as isolated:
+                isolated.setattr(C.subprocess,'run',query); isolated.setattr(C,'process_identity',lambda pid:metadata.get(pid))
+                isolated.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('暂停恢复不可重领或重启已完成身份'))
+                restarted.resume_existing_dispatches('d'*40,paused=True,preflight=True)
+                restarted.resume_existing_dispatches('d'*40,paused=True)
+            assert C.identity('qwenvl',failed_row) in restarted.failures and restarted.resume_rows['qwenvl-00']==[planned[3]]
+            assert Path(ctl.c['budget_ledger']).read_bytes()==budget_before and Path(pointer['proof_path']).read_bytes()==proof_before
+    finally:
+        hold.terminate(); hold.wait(timeout=5)
+
+
 def test_gpu_guard_term_with_complete_never_stop_or_cancel(tmp_path):
     control=tmp_path/'control'; control.mkdir()
     base=dict(root=str(tmp_path),run='r',run_name='r',controller_job_id='100',exec_commit='a'*40,config_sha256='b'*64)

@@ -87,7 +87,7 @@ while :; do
     FAILURE_PHASE=ready_heartbeat_payload
     echo "GUARD_CHECK_BEGIN gpu=$SELF time=$(date +%s) startup_deadline_s=30 read_deadline_s=5"
     RETRY_SLEEP=10
-    if payload_output=$(timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$SELF" "$$" "$READY" "$CACHE_B64" <<'PY'
+    if payload_output=$(timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$SELF" "$$" "$READY" "$CACHE_B64" "$CONTEXT_DIR" <<'PY'
 import sys
 print('GUARD_PHASE gpu='+sys.argv[4]+' phase=python_entered',flush=True)
 print('GUARD_PHASE gpu='+sys.argv[4]+' phase=startup_standard_library',flush=True)
@@ -116,15 +116,20 @@ try:
  if cached is not None: assert all(cached['ready'][k]==r[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
  intent=p/'intentional-supervisor-stop.json'
  paused=p/'paused.json'
- if (p/'STOP').exists() and paused.exists():
+ if paused.exists():
   import hashlib
-  pointer=json.loads(paused.read_text()); proof_path=pathlib.Path(pointer['proof_path'])
-  assert proof_path.is_relative_to(p) and not proof_path.is_symlink()
-  raw=proof_path.read_bytes(); proof=json.loads(raw)
-  assert hashlib.sha256(raw).hexdigest()==pointer['proof_sha256']
-  assert all(proof[k]==r[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
-  assert proof['expected']==4000 and proof['accepted']+proof['remaining']==4000 and proof['unsettled']==0 and proof['drained'] is True
-  raise SystemExit(12)
+  sys.path.insert(0,sys.argv[8])
+  from raw_ood_context import validate_pause_pointer
+  cfg=pathlib.Path(r['config_path'])
+  assert cfg.is_absolute() and cfg.is_relative_to(p.parent) and not cfg.is_symlink()
+  assert all(not node.is_symlink() for node in cfg.parents if node.is_relative_to(p.parent))
+  raw=cfg.read_bytes(); c=json.loads(raw)
+  assert hashlib.sha256(raw).hexdigest()==r['config_sha256']; c['config_sha256']=r['config_sha256']
+  assert all(str(c[k])==str(r[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
+  if (p/'STOP').exists() or (pathlib.Path(c['gl_root'])/'STOP').exists():
+   proof=validate_pause_pointer(json.loads(paused.read_text()),c)
+   print('GUARD_PAUSED accepted='+str(proof['accepted'])+' infra='+str(proof['infra'])+' settled='+str(proof['settled'])+' remaining='+str(proof['remaining']),flush=True)
+   raise SystemExit(12)
  monitor='supervisor'
  if intent.exists():
   phase='intentional_supervisor_stop'; stop=json.loads(intent.read_text())

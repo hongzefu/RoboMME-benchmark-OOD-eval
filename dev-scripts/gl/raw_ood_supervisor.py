@@ -14,8 +14,8 @@ import threading
 import time
 
 from raw_ood_controller import Controller, atomic, control_file, ledger_snapshot, legacy_context, load_config, observed_job_state, process_identity, query_gpu, read, sha, validate_config
-from raw_ood_context import is_historical_error, validate_historical_errors, validate_terminal_marker
-from eval_video_mover import raw_validate_delivery
+from raw_ood_context import is_historical_error, validate_historical_errors, validate_terminal_marker, validate_pause_pointer
+from eval_video_mover import raw_validate_delivery, raw_validate_pause
 MAIL_TO='hongzefu@umich.edu'
 MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
 GUARD_QUERY_FAILURES={}
@@ -146,10 +146,8 @@ def check_guardians(guardians: list[dict], c: dict) -> None:
         validate_terminal_marker(d,c)
         normal=True  # 合法不完整终态也允许守卫结束自身，allocation仍保留。
     paused=Path(c['root'])/'control/paused.json'
-    if paused.exists() and (Path(c['root'])/'control/STOP').exists():
-        pointer=read(paused); path=control_file(c,pointer['proof_path']); proof=read(path)
-        if any(proof[k]!=c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')) or sha(path)!=pointer['proof_sha256'] or proof['unsettled']!=0 or proof['drained'] is not True:
-            raise ValueError('守卫暂停释放证明不符')
+    if paused.exists() and ((Path(c['root'])/'control/STOP').exists() or (Path(c.get('gl_root',c['root']))/'STOP').exists()):
+        validate_pause_pointer(read(paused),c)
         normal=True
     for g in guardians:
         rc=g['process'].poll()
@@ -174,6 +172,15 @@ def check_heartbeat(path: Path, base: dict, *, now: float, timeout: float=120) -
     t=d['time'] if 'time' in d else d['t']
     if now-float(t)>timeout or float(t)>now+30: raise RuntimeError(f'心跳失效{path}')
     return d
+
+
+def mover_status(c: dict, base: dict, *, now: float) -> dict:
+    """有效人工暂停可结束搬运心跳；其余状态仍须真实新鲜心跳。"""
+    control=Path(c['root'])/'control'; gl=Path(c['gl_root']); paused=gl/'mover/paused.json'
+    if paused.exists() and ((control/'STOP').exists() or (gl/'STOP').exists()):
+        report=raw_validate_pause(read(paused),c,gl)
+        return dict(pending=report['pending'],moved=report['moved'],last_progress=report['time'],_validated_pause=True)
+    return dict(check_heartbeat(Path(c.get('mover_heartbeat',control/'mover-heartbeat.json')),base,now=now),_validated_pause=False)
 
 
 def controller_terminal_proof(c,base):
@@ -305,7 +312,7 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
             atomic(control/'notification-probe-reused.json',dict(base,**probe_provenance,time=time.time()))
         mover=Path(c.get('mover_heartbeat',control/'mover-heartbeat.json'))
         mover_error=Path(c.get('mover_error',control/'mover-error.json'))
-        check_heartbeat(mover,base,now=time.time())
+        mover_status(c,base,now=time.time())
         if attach_controller_pid is not None:
             controller,attach_proof=attach_controller(c,config_path,attach_controller_pid,attach_controller_source,attach_controller_manifest,attach_manifest_sha256)
             atomic(control/f'controller-attach-{os.getpid()}.json',dict(attach_proof,new_orchestration_commit=orchestration_commit))
@@ -344,16 +351,17 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
         while True:
             now=time.time()
             check_guardians(guardians,c)
-            for f in (control/'controller-error.json',control/'guardian-error.json',mover_error,gl/'mover'/'error.json',control/'STOP',gl/'STOP'):
+            # STOP是控制器排空输入；继续验真实心跳，直到rc6与严格暂停证明齐备。
+            for f in (control/'controller-error.json',control/'guardian-error.json',mover_error,gl/'mover'/'error.json'):
                 if f.exists() and not is_historical_error(f,c): raise RuntimeError(f'已发布错误{f}: {f.read_text()[:3000]}')
                 for current in f.parent.glob(f'{f.stem}.current-*.json'):
                     if not is_historical_error(current,c): raise RuntimeError(f'新实例错误{current}: {current.read_text()[:3000]}')
-            h=check_heartbeat(mover,base,now=now)
+            h=mover_status(c,base,now=now)
             # 零值必须实际写入JSON；缺键属于错误，不能默认成功。
             pending=int(h['pending']); moved=int(h['moved']); progress=float(h['last_progress'])
             if pending<0 or moved<0: raise ValueError('搬运计数负数')
             if moved!=last_moved or progress>last_progress: last_progress=now; last_moved=moved
-            if not pending: last_progress=now
+            if h['_validated_pause'] or not pending: last_progress=now
             elif now-last_progress>1800: raise RuntimeError('搬运积压30分钟无进展')
             if now>=float(c['cpu_end_time'])-120: raise RuntimeError('CPU到期前清理')
             rc=controller.poll()
@@ -364,11 +372,9 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
                     if d['pid']!=controller.pid or now-float(d['loop_t'])>=120: raise RuntimeError('控制器主循环无进展或PID错误')
                 elif now-started>120: raise RuntimeError('控制器未建立心跳')
             elif rc==6:
-                d=read(control/'paused.json'); proof=read(Path(d['proof_path']))
-                if any(proof[k]!=v or d[k]!=v for k,v in base.items()) or sha(Path(d['proof_path']))!=d['proof_sha256'] or proof['unsettled']!=0 or proof['drained'] is not True or proof['accepted']+proof['remaining']!=4000:
-                    raise ValueError('控制器暂停证明不完整')
-                atomic(control/'supervisor-paused.json',dict(base,controller_pid=controller.pid,accepted=proof['accepted'],remaining=proof['remaining'],paused_proof=d,time=now))
-                print('SUPERVISOR_PAUSED=PASS accepted='+str(proof['accepted'])+' remaining='+str(proof['remaining']),flush=True); return 6
+                d=read(control/'paused.json'); proof=validate_pause_pointer(d,c)
+                atomic(control/'supervisor-paused.json',dict(base,controller_pid=controller.pid,accepted=proof['accepted'],infra=proof['infra'],settled=proof['settled'],remaining=proof['remaining'],paused_proof=d,time=now))
+                print('SUPERVISOR_PAUSED=PASS accepted='+str(proof['accepted'])+' infra='+str(proof['infra'])+' settled='+str(proof['settled'])+' remaining='+str(proof['remaining']),flush=True); return 6
             elif rc not in (0,2): raise RuntimeError(f'控制器退出{rc}')
             else:
                 complete=gl/'mover'/'completed.json'

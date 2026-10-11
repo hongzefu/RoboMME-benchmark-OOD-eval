@@ -54,6 +54,7 @@ import glob
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -782,6 +783,44 @@ def raw_validate_delivery(report: dict, terminal: dict, context: dict) -> dict:
     return report
 
 
+def raw_validate_pause(report: dict, context: dict, stage: Path | None = None) -> dict:
+    """人工暂停仅证明搬运已停；明确已验证回执和积压，不冒充完整交付。"""
+    from raw_ood_context import match_context
+    match_context(report,context)
+    counts=('expected','published','moved','receipts_present','pending','missing')
+    required={'schema',*RAW_CONTEXT,*counts,'status','stage','publications','receipts','stop','time'}
+    if set(report)!=required or report['schema']!='raw-ood-mover-pause-v1' or report['status']!='PAUSED':
+        raise ValueError('搬运暂停协议缺键或状态不符')
+    if any(type(report[k]) is not int or report[k]<0 for k in counts): raise ValueError('搬运暂停缺明确非负计数')
+    if type(report['time']) not in (int,float) or not math.isfinite(report['time']) or not 0<report['time']<=time.time()+30:
+        raise ValueError('搬运暂停时间非法')
+    stage=Path(stage if stage is not None else context.get('gl_root',report['stage']))
+    if not stage.is_absolute() or report['stage']!=str(stage): raise ValueError('搬运暂停暂存根不符')
+    expected=set(context['expected_identities'])
+    pubs=report['publications']; receipts=report['receipts']
+    if not isinstance(pubs,dict) or not isinstance(receipts,dict) or not set(receipts)<=set(pubs)<=expected:
+        raise ValueError('搬运暂停身份集合不符')
+    if report['expected']!=len(expected) or report['published']!=len(pubs) or report['moved']!=len(receipts) or report['receipts_present']!=len(receipts):
+        raise ValueError('搬运暂停计数不符')
+    if report['pending']!=len(pubs)-len(receipts) or report['missing']!=len(expected)-len(receipts): raise ValueError('搬运暂停积压或缺失计数不符')
+    def locked(ref, target=None):
+        if not isinstance(ref,dict) or set(ref)!={'path','sha256'} or not re.fullmatch('[a-f0-9]{64}',ref['sha256']): raise ValueError('暂停引用格式错误')
+        path=Path(ref['path']); roots=(stage,Path(context.get('root',stage)))
+        if not path.is_absolute() or not any(path.is_relative_to(root) for root in roots) or target is not None and path!=target: raise ValueError('暂停引用路径越界')
+        if path.is_symlink() or not path.is_file() or any(p.is_symlink() for p in path.parents): raise ValueError('暂停引用不是实体文件')
+        if sha256(path)!=ref['sha256']: raise ValueError('暂停引用原字节改变')
+        return path
+    locked(report['stop'])
+    for key,ref in pubs.items():
+        name=hashlib.sha256(key.encode()).hexdigest()+'.json'; path=locked(ref,stage/'published'/name)
+        publication=json.loads(path.read_text()); raw_validate_publication(publication,context)
+        if publication['identity_key']!=key: raise ValueError('暂停发布身份不符')
+        if key in receipts:
+            path=locked(receipts[key],stage/'mover/receipts'/name)
+            raw_validate_receipt(json.loads(path.read_text()),publication,context)
+    return report
+
+
 def raw_verify_media(directory: Path) -> dict:
     """完整解码并核帧索引与动作原字节，不启动仿真。"""
     import numpy as np
@@ -1077,13 +1116,7 @@ def raw_main(args) -> int:
         while True:
             if heartbeat_error:
                 raise RuntimeError(f"心跳写入失败：{heartbeat_error[0]}")
-            if stop_path.exists():
-                paused = {"schema": RAW_SCHEMA, **context, "paused": True, "expected": len(expected),
-                          "moved": len(verified_receipts),
-                          "receipts_present": len(list((state / "receipts").glob("*.json"))), "time": time.time()}
-                paused["unfinished"] = len(expected) - paused["moved"]
-                raw_atomic(state / "paused.json", paused)
-                raise RuntimeError("收到人工 STOP，停止搬运")
+            pause_requested=stop_path.exists()
             published = {p.name: p for p in (stage / "published").glob("*.json")}
             if set(published) - set(expected):
                 raise ValueError("出现非权威发布项")
@@ -1091,6 +1124,7 @@ def raw_main(args) -> int:
             if receipts - set(published):
                 raise ValueError("回执存在非发布身份")
             status["pending"] = 0
+            publication_refs={}; receipt_refs={}
             for name, path in sorted(published.items()):
                 row = json.loads(path.read_text())
                 raw_validate_publication(row, manifest)
@@ -1098,8 +1132,10 @@ def raw_main(args) -> int:
                     raise ValueError("发布身份不在权威清单")
                 if name != hashlib.sha256(row["identity_key"].encode()).hexdigest() + ".json":
                     raise ValueError("发布文件名与身份不符")
+                if pause_requested: publication_refs[row['identity_key']]={'path':str(path),'sha256':sha256(path)}
                 receipt = state / "receipts" / name
                 if receipt.exists():
+                    if pause_requested: receipt_refs[row['identity_key']]={'path':str(receipt),'sha256':sha256(receipt)}
                     target = dest / raw_relative(row["relative_dir"])
                     signature = (sha256(path), sha256(receipt), raw_signature(target))
                     if name in verified_receipts:
@@ -1114,6 +1150,7 @@ def raw_main(args) -> int:
                     verified_receipts[name] = signature
                     continue
                 status["pending"] += 1
+                if pause_requested: continue  # STOP后只读核验已有回执，不新增拷贝或删除。
                 result = raw_move(row, stage, dest, min_free_gib=args.min_free_gib)
                 raw_validate_receipt(result, row, manifest, dest)
                 raw_atomic(receipt, result)
@@ -1121,6 +1158,14 @@ def raw_main(args) -> int:
                 status["last_progress"] = time.time()
             status["moved"] = len(list((state / "receipts").glob("*.json")))
             status["pending"] = len(published) - status["moved"]
+            if pause_requested:
+                paused={'schema':'raw-ood-mover-pause-v1',**context,'status':'PAUSED','stage':str(stage),
+                        'expected':len(expected),'published':len(published),'moved':status['moved'],'receipts_present':status['moved'],
+                        'pending':status['pending'],'missing':len(expected)-status['moved'],
+                        'publications':publication_refs,'receipts':receipt_refs,'stop':{'path':str(stop_path),'sha256':sha256(stop_path)},'time':time.time()}
+                raw_validate_pause(paused,manifest,stage); raw_atomic(state/'paused.json',paused)
+                print(f"MOVER_PAUSED=PASS expected={len(expected)} moved={status['moved']} pending={status['pending']} missing={paused['missing']} exit_code=6",flush=True)
+                return 6
             if (stage / "gpu_work_complete.json").exists() or args.once:
                 if (stage / "gpu_work_complete.json").exists():
                     marker = json.loads((stage / "gpu_work_complete.json").read_text())

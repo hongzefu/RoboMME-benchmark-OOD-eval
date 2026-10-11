@@ -303,12 +303,12 @@ def test_manual_stop_is_preserved_as_input(publication):
     stop_bytes = stop.read_bytes()
     args = SimpleNamespace(stage=str(stage), dest=str(dest), manifest=str(manifest), min_free_gib=0,
                            heartbeat_file=None, error_file=None, stop_file=str(stop), once=True, interval=.01)
-    assert MOVER.raw_main(args) == 1
+    assert MOVER.raw_main(args) == 6
     assert stop.read_bytes() == stop_bytes
     assert (source / "front.mkv").exists()
-    assert "人工 STOP" in json.loads((stage / "mover/error.json").read_text())["message"]
+    assert not (stage / 'mover/error.json').exists()
     paused = json.loads((stage / "mover/paused.json").read_text())
-    assert paused["paused"] is True and paused["unfinished"] == 1
+    assert paused['status']=='PAUSED' and paused['missing']==1 and paused['pending']==0
     assert not (stage / "mover/completed.json").exists()
 
 
