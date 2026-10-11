@@ -177,3 +177,10 @@ tmux new-session -d -s ev-ood-simple-g1 "srun --jobid=63664391 --job-name=ood-si
 其中 `$N=/nfs/turbo/coe-chaijy-unreplicated/hongzefu/RoboMME-benchmark-OOD-eval/artifacts/ood-five-raw-seed7-20261010-02`。日志：`$N/simple/logs/shard-gN.log`、`srun-gN.log`、`reattempts-gN.log`、`restarts.log`；半截目录移存 `$N/simple/halfdone/gN/`。g1 先起即冒烟，首个 infra=false 新结果出现后再起 g2～g4。
 
 ### 回执（起跑后追加）
+
+- 1.139～1.141 已推送；起跑 HEAD `2a5e77896d780862b7ae209e16f6c6437204d4ba`，工作区干净；执行副本 exec_commit 仍为 `891b462726bf018c439a2fce9657aa85199d9f77`。NFS `simple/run_shard.sh` sha256 `f674e78…` 与仓库一致：`SHARD_SCRIPT=PASS`。
+- g1 于 2026-10-11 16:38:04 EDT 起跑，作业步 `63664391.18`，节点 gl1505。首局 `PickHighlight_ep0_xhard1`（oracle，status=timeout，exec_steps=1800，infra=false）于 16:52:18 写出：`SMOKE=PASS group=g1 first_result=PickHighlight_ep0_xhard1`。
+- g2／g3／g4 于 16:52:28 起跑，作业步分别为 `63664392.15`、`63664393.16`、`63664404.10`。gl-login1 上的新 tmux 会话清单：`ev-ood-simple-g1`～`ev-ood-simple-g4`。没有提交备用 job。
+- 本机为四份 `shard-gN.log` 各挂一个 Monitor，过滤词按计划 §五。
+- 定时巡检：会话级 CronCreate 任务 `2fccbc06`，规则 `17 */3 * * *`，首次触发约 18:17 EDT，7 天后过期：`CRON_UP=PASS id=2fccbc06 every=3h`。
+- 承诺边界（P4）：分片在计算节点上独立运行；巡检与 Monitor 只在本会话存活期间有效，会话关闭后没有人负责重起。
