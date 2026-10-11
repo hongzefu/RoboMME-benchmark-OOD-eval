@@ -29,7 +29,7 @@ pytest.importorskip("websockets", reason="Not verified: websockets not installed
 ACTION_ROWS = 50  # action rows returned per inference by the fake server (more than the execution segment of 16)
 
 
-def test_就绪时间包含真实消息解码(monkeypatch):
+def test_ready_time_includes_real_message_decode(monkeypatch):
     from openpi_client import msgpack_numpy
     from openpi_client.websocket_client_policy import MMEVLAWebsocketClientPolicy
 
@@ -37,7 +37,7 @@ def test_就绪时间包含真实消息解码(monkeypatch):
     packed = msgpack_numpy.Packer().pack({"actions": np.zeros((1, 8)), "infer_time_ms": 0})
     original_unpack = msgpack_numpy.unpackb
 
-    class 通信:
+    class Transport:
         def send(self, payload):
             pass
 
@@ -45,16 +45,16 @@ def test_就绪时间包含真实消息解码(monkeypatch):
             time.sleep(.01)
             return packed
 
-    def 初始化(self, *args):
-        self._ws = 通信()
+    def initialize(self, *args):
+        self._ws = Transport()
         self._packer = msgpack_numpy.Packer()
 
-    def 慢解码(payload):
+    def slow_decode(payload):
         time.sleep(.025)
         return original_unpack(payload)
 
-    monkeypatch.setattr(MMEVLAWebsocketClientPolicy, "__init__", 初始化)
-    monkeypatch.setattr(msgpack_numpy, "unpackb", 慢解码)
+    monkeypatch.setattr(MMEVLAWebsocketClientPolicy, "__init__", initialize)
+    monkeypatch.setattr(msgpack_numpy, "unpackb", slow_decode)
     client = mc.make_recording_client("unused", 0, None, {})
     started = time.perf_counter()
     client._roundtrip({"observation/image": np.zeros((2, 2, 3)),
