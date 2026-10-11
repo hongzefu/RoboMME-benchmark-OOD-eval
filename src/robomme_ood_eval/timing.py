@@ -112,6 +112,62 @@ def _percentile(values, q):
     return values[lo] + (values[hi] - values[lo]) * (pos - lo)
 
 
+def validate_timing(policy_timing):
+    """Validate every raw chunk, including warmup, independently of success."""
+    errors = []
+    chunks = policy_timing.get("chunks")
+    if not isinstance(chunks, list) or not chunks:
+        errors.append("missing_raw_chunks")
+        chunks = []
+    for i, chunk in enumerate(chunks):
+        if not isinstance(chunk, dict):
+            errors.append(f"chunk:{i}:invalid")
+            continue
+        for key in CHUNK_FIELDS:
+            value = chunk.get(key)
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value < 0):
+                errors.append(f"chunk:{i}:{key}")
+        evidence = policy_timing.get("conservation")
+        model_kind = evidence.get("kind") if isinstance(evidence, dict) else None
+        default_metric = "pp_s2_composite" if model_kind == "pp" else "decision_wall"
+        if chunk.get("metric_kind", default_metric) != "decision_wall":
+            errors.append(f"chunk:{i}:unverified_window")
+        if not any(e.startswith(f"chunk:{i}:") for e in errors):
+            wall, rtt, infer, lang = (chunk[k] for k in CHUNK_FIELDS)
+            evidence = policy_timing.get("conservation")
+            kind = evidence.get("kind") if isinstance(evidence, dict) else None
+            if kind == "smvla":
+                obs = chunk.get("observe_rtt_ms")
+                if (isinstance(obs, bool) or not isinstance(obs, (int, float))
+                        or not math.isfinite(obs) or obs < 0):
+                    errors.append(f"chunk:{i}:observe_rtt_ms")
+                elif wall < obs + rtt - 1 or lang > infer + 1 or infer > rtt + 1:
+                    errors.append(f"chunk:{i}:conservation")
+            elif kind in ("serial", "pp"):
+                if ((abs(wall - rtt - lang) > PP_TOL_MS if kind == "pp"
+                     else wall < rtt + lang - 1) or infer > rtt + 1):
+                    errors.append(f"chunk:{i}:conservation")
+            else:
+                errors.append(f"chunk:{i}:unknown_kind")
+    conservation = policy_timing.get("conservation")
+    if not isinstance(conservation, dict):
+        errors.append("missing_conservation")
+    else:
+        for key in ("expected", "checked", "violations", "missing_fields"):
+            value = conservation.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                errors.append(f"conservation:{key}")
+        if conservation.get("expected") != len(chunks) or conservation.get("checked") != len(chunks):
+            errors.append("incomplete_conservation")
+        if conservation.get("violations") != 0 or conservation.get("missing_fields") != 0:
+            errors.append("failed_conservation")
+    if policy_timing.get("dangling_start") is not False:
+        errors.append("dangling_or_missing_start")
+    return {"verdict": "UNVERIFIED" if errors else "PASS", "errors": errors,
+            "expected": len(chunks), "checked": len(chunks)}
+
+
 def _field_summary(chunks, field):
     vals = [c[field] for c in chunks if c.get(field) is not None]
     if not vals:
@@ -203,6 +259,7 @@ def attach_policy_timing(timing, timer, *, gpu_name, model_kind):
                 "conservation": _conservation(timer, model_kind)}
         if model_kind == "smvla":
             data["lang_split_available"] = data["conservation"]["lang_split_available"]
+        data["timing_complete"] = validate_timing(data)
         timer._attached = copy.deepcopy(data)
     timing.update(copy.deepcopy(timer._attached))
     return timing

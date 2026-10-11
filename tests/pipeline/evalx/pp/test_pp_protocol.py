@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import time
 import os
 import subprocess
 import sys
@@ -28,6 +30,31 @@ SRC, SEED = 7, 123457
 XH = {"task": TASK, "tier": "xhard0", "seed": SEED, "source_episode": SRC, "builder_episode": 1,
       "key": f"{TASK}_xhard0_{SEED}", "candidate": None, "spec_sha256": None}
 SID = f"{TASK}|{SRC}|{SEED}"
+
+
+def test_真实客户端多回复跨度不含环境时间():
+    from robomme_ood_eval.timing import attach_policy_timing
+
+    class 通信:
+        def __init__(self):
+            self.n = 0
+
+        async def act(self, obs):
+            await asyncio.sleep(.015)
+            self.n += 1
+            return {"actions": np.zeros(8), "_sgeval_audit": {"pp_timing": {
+                "s2_infer_ms": 2, "s2_fired": True, "chunk_fresh": self.n == 2,
+                "n_s1_fires": int(self.n == 2), "s1_infer_ms": 1, "n_s2_fires": self.n}}}
+
+    conn = pp.TracedConnection(通信())
+    asyncio.run(conn.act({}))
+    time.sleep(.1)  # 模拟两次 RPC 之间的环境执行，不能进入客户端活跃时段。
+    asyncio.run(conn.act({}))
+    chunk = conn.timer.chunks[0]
+    assert 30 <= chunk["client_rpc_active_ms"] < 100
+    assert chunk["client_rpc_active_ms"] == pytest.approx(sum(x["client_rpc_ms"] for x in conn.client_rpc_spans), abs=.001)
+    assert chunk["pp_s2_composite_ms"] == chunk["decision_wall_ms"]
+    assert attach_policy_timing({}, conn.timer, gpu_name=None, model_kind="pp")["timing_complete"]["verdict"] == "UNVERIFIED"
 
 
 def run_new(env: FakeEnv, *, max_steps: int, ident: dict = XH, conn: FakeConn | None = None, step_cap=None,
