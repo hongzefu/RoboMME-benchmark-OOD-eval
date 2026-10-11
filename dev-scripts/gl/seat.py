@@ -1646,6 +1646,9 @@ class SeatRunner:
         try:
             res = E.run_episode(policy, ds, task, ep, self.out, expect=ident, attempt=c.attempt, ledger=meter,
                                 **self._episode_kw())
+        except E.WatchdogExitPending as e:
+            print(f"RUN_BLOCKED reason=watchdog_exit_pending key={c.key} attempt_id={attempt_id}", flush=True)
+            raise SeatStop(EXIT_WALL, "watchdog_exit_pending") from e
         except E.IdentityMismatch as e:
             row = dict(base, status="error", run_blocked=True, infra=False, error=f"IDENTITY_MISMATCH {e}"[:800])
             self._end(c, attempt_id, row, void=True)
@@ -1666,6 +1669,9 @@ class SeatRunner:
             print(f"RESET_BUDGET_EXHAUSTED policy={self.args.policy} seat={self.seat} key={c.key} detail={e}", flush=True)
             raise SeatStop(EXIT_BUDGET, "reset_budget") from e
         d = res.to_dict()
+        if d.get("exit_kind") == "watchdog_hard_exit":
+            # 生产钩子不会返回；非退出测试钩子完成后仍必须停止，不能重复_end或领取下一身份。
+            raise SeatStop(EXIT_WALL, "watchdog_exit")
         infra = bool(d.get("infra"))
         row = dict(self._result_row(c, attempt_id, d), status=d["status"], task_success=d.get("task_success"), infra=infra,
                    infra_reason=d.get("infra_reason"), error=d.get("error"), error_kind=d.get("error_kind"),

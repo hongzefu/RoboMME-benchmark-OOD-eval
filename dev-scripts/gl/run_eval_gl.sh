@@ -121,6 +121,36 @@ except (OSError, ValueError, TypeError):
   echo "${t%%.*}"
 }
 
+record_client_exit() {  # 真实wait返回75后，核PID/job/step再补专属终态，不改局数或身份。
+  [[ "$2" == 75 && -n "$PROGRESS_FILE" ]] || return 0
+  if timeout 5s "$BENCH_PY" -c 'import json, os, sys, time, uuid
+from pathlib import Path
+p = Path(sys.argv[1]); pid = int(sys.argv[2]); rc = int(sys.argv[3])
+row = json.loads(p.read_text(encoding="utf-8"))
+if type(row.get("pid")) is not int or row["pid"] != pid:
+    raise ValueError("progress client PID mismatch")
+for key, env in (("slurm_job_id", "SLURM_JOB_ID"), ("slurm_step_id", "SLURM_STEP_ID")):
+    if row.get(key) != os.environ.get(env):
+        raise ValueError("progress Slurm identity mismatch")
+if row.get("phase") not in ("episode", "done", "finished"):
+    raise ValueError("progress missing episode identity")
+if row.get("phase") == "finished" and row.get("rc") != rc:
+    raise ValueError("progress terminal exit contradiction")
+row.update(phase="finished", rc=rc, drained=False, exit_confirmed=True, terminal_source="waitpid", t=time.time())
+tmp = p.with_name("." + p.name + "." + uuid.uuid4().hex + ".tmp")
+try:
+    with tmp.open("x", encoding="utf-8") as out:
+        json.dump(row, out, ensure_ascii=False, sort_keys=True); out.write("\n"); out.flush(); os.fsync(out.fileno())
+    os.replace(tmp, p)
+finally:
+    if tmp.exists(): tmp.unlink()
+print("GL_PROGRESS_EXIT=PASS pid=" + str(pid) + " rc=" + str(rc))' "$PROGRESS_FILE" "$1" "$2"; then
+    return 0
+  fi
+  echo "GL_PROGRESS_EXIT=FAIL pid=$1 rc=$2"
+  return 1
+}
+
 stop_left_servers() {  # $1 = 客户端日志：按 SERVER_LEFT／SERVER_START 行定位元数据，停残留服务端
   local log="$1" meta
   [[ -f "$log" ]] || return 0
@@ -271,6 +301,7 @@ for pol in "${POLS[@]}"; do
       fi
     done
     wait "$CLIENT_PID" 2>/dev/null; rc=$?
+    record_client_exit "$CLIENT_PID" "$rc"
     CLIENT_PID=""
     if (( killed == 1 )); then rc=124; noprog=$((noprog + 1)); fi
     echo "GL_CLIENT_EXIT policy=$lab rc=$rc restart=$restarts $(ts_iso)"

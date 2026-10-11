@@ -395,7 +395,8 @@ def test_watchdog_real_process_exits_75_on_failed_result_write(failure):
 import dataclasses
 from robomme_ood_eval import episode as E
 Record = dataclasses.make_dataclass("Record", [("status", str, dataclasses.field(default="fail")),
-                                              ("task_success", object, dataclasses.field(default=None))])
+                                              ("task_success", object, dataclasses.field(default=None)),
+                                              ("extra", dict, dataclasses.field(default_factory=dict))])
 def fail(*_):
     raise FAILURE("result write failed")
 E._write_result = fail
@@ -414,7 +415,8 @@ def test_watchdog_result_write_block_cannot_prevent_real_exit():
 import dataclasses, threading
 from robomme_ood_eval import episode as E
 Record = dataclasses.make_dataclass("Record", [("status", str, dataclasses.field(default="fail")),
-                                              ("task_success", object, dataclasses.field(default=None))])
+                                              ("task_success", object, dataclasses.field(default=None)),
+                                              ("extra", dict, dataclasses.field(default_factory=dict))])
 def forever(*_):
     threading.Event().wait()
 E._write_result = forever
@@ -423,6 +425,74 @@ raise AssertionError("hard exit returned")
 '''
     child = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=5)
     assert child.returncode == 75, child.stdout + child.stderr
+
+
+def test_delayed_timeout_construction_cannot_overwrite_completed_episode(tmp_path, monkeypatch):
+    import threading
+    entered, release, play_return = threading.Event(), threading.Event(), threading.Event()
+    timer = []
+    original = E.dataclasses.replace
+    def delayed(value, **kw):
+        if isinstance(value, E.EpisodeResult):
+            timer.append(threading.current_thread())
+            entered.set()
+            assert release.wait(3)
+        return original(value, **kw)
+    monkeypatch.setattr(E.dataclasses, "replace", delayed)
+    exits = []
+    monkeypatch.setattr(E, "HARD_EXIT", exits.append)
+    p = load_policy("fake", 7)
+    p.episodes_run = 1
+    def play(session, *_):
+        session.reset()
+        assert play_return.wait(3)
+        return dict(status="fail", task_success=0, steps=0, error=None, infra=False, infra_reason=None)
+    monkeypatch.setattr(p, "play", play)
+    result, errors = [], []
+    def execute():
+        try: result.append(run(p, out=tmp_path, wall_s=.02))
+        except BaseException as exc: errors.append(exc)
+    worker = threading.Thread(target=execute)
+    worker.start()
+    try:
+        assert entered.wait(2)
+        play_return.set()
+        worker.join(2)
+        assert not worker.is_alive() and not errors
+        assert result[0].status == "fail" and not result[0].infra
+    finally:
+        release.set()
+        worker.join(3)
+        for t in timer: t.join(3)
+    assert exits == []
+    saved = list((tmp_path / "rollouts/fake/ood/seed7/results.jsonl").read_text().splitlines())
+    assert len(saved) == 1 and json.loads(saved[0])["infra"] is False
+    assert "exit_kind" not in json.loads(saved[0])
+
+
+def test_pending_exit_hook_cannot_return_timeout_as_completed(tmp_path, monkeypatch):
+    import threading
+    p = load_policy("fake", 7)
+    spec, _ = E.make_spec(p, "ood", "MoveCube", 0, tmp_path)
+    state = {}
+    dog = E._Watchdog(p, spec, E.EpisodeResult.from_spec(spec, p), state)
+    entered, release = threading.Event(), threading.Event()
+    def blocked(_code):
+        entered.set()
+        assert release.wait(3)
+    monkeypatch.setattr(E, "HARD_EXIT", blocked)
+    monkeypatch.setattr(E, "_write_result", lambda *_: None)
+    monkeypatch.setattr(E, "WATCHDOG_EXIT_WAIT_S", .05)
+    worker = threading.Thread(target=dog._fire, args=("episode_wall", 1800))
+    worker.start()
+    try:
+        assert entered.wait(2)
+        with pytest.raises(E.WatchdogExitPending):
+            dog.completed_timeout()
+    finally:
+        release.set()
+        worker.join(3)
+    assert dog.completed_timeout() is state["timeout_result"]
 
 
 def test_first_episode_wall_extension():

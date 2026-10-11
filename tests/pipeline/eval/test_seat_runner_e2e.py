@@ -285,6 +285,65 @@ def test_actual_identity_failure_recovers_with_release_and_void_claim(tmp_path, 
     assert report["budget_exhausted"] is False and report["task_success"] is None
 
 
+def test_play_return_during_timeout_write_waits_for_original_exit_and_stops(tmp_path, monkeypatch):
+    """看门狗写入阻塞时play返回：钩子未完成不能普通_end，完成后仍返回75且不领取下一身份。"""
+    import threading
+    writer_entered, writer_release, play_release = threading.Event(), threading.Event(), threading.Event()
+    exit_entered, exit_release = threading.Event(), threading.Event()
+    exits, end_calls, outcome, errors = [], [], [], []
+    def exit_hook(code):
+        exits.append(code)
+        exit_entered.set()
+        assert exit_release.wait(4)
+    shared = F.env_client().load_sibling("budget_ledger").BudgetLedger(tmp_path / "budget.jsonl")
+    world = F.World()
+    runner = F.make_runner(tmp_path / "stage", LABEL, F.fake_seat_policy(), world,
+                           hard_exit=exit_hook, budget_ledger=shared, infra_retries=0)
+    runner.fake_policy.episodes_run = 1
+    runner.episode_kwargs["wall_s"] = .02
+    first = _ident()
+    task, tier = F.v9_cells_sorted()[1]
+    second = F.packaged_identity(task, tier, 0)
+    original_write = runner.E._write_result
+    def delayed(result, spec):
+        if result.extra.get("exit_kind") == "watchdog_hard_exit":
+            writer_entered.set()
+            assert writer_release.wait(4)
+        return original_write(result, spec)
+    monkeypatch.setattr(runner.E, "_write_result", delayed)
+    def play(session, *_):
+        session.reset()
+        assert play_release.wait(4)
+        return dict(status="fail", task_success=0, steps=0, error=None, infra=False, infra_reason=None)
+    monkeypatch.setattr(runner.fake_policy, "play", play)
+    original_end = runner._end
+    def ordinary_end(*args, **kw):
+        end_calls.append(True)
+        return original_end(*args, **kw)
+    monkeypatch.setattr(runner, "_end", ordinary_end)
+    def execute():
+        try: outcome.append(F.run_rows(runner, [first, second]))
+        except BaseException as exc: errors.append(exc)
+    worker = threading.Thread(target=execute)
+    worker.start()
+    try:
+        assert writer_entered.wait(2)
+        play_release.set()
+        assert exit_entered.wait(3)
+        assert worker.is_alive() and not end_calls
+        starts = [r for rows in runner.ledger.starts.values() for r in rows]
+        assert len(starts) == 1 and starts[0]["key"] == first["key"]
+        (report,) = F.seat_results(tmp_path / "stage", LABEL)
+        assert report["key"] == first["key"] and report["attempt_id"] == starts[0]["attempt_id"]
+    finally:
+        exit_release.set()
+        writer_release.set()
+        worker.join(4)
+    assert not worker.is_alive() and not errors and outcome == [75] and exits == [75]
+    assert not end_calls and len(shared.state().reserves) == 1
+    assert len(F.seat_results(tmp_path / "stage", LABEL)) == 1
+
+
 @pytest.mark.parametrize("phase,reason", [("episode_wall", "episode_wall"), ("first_infer", "deadline_first_infer"),
                                         ("media_finalize", "deadline_media_finalize")])
 @pytest.mark.parametrize("observed_success", [None, 0, 1])
