@@ -23,26 +23,37 @@ CONTEXT = {"run": "fixture", "run_name": "fixture", "exec_commit": "a" * 40,
 def publication(tmp_path):
     stage, dest = tmp_path / "stage", tmp_path / "dest"
     episode = stage / "rollouts/smvla/ood/seed7/raw/VideoUnmask_ep0_xhard1"
-    episode.mkdir(parents=True)
     dest.mkdir()
-    # 真 AV1 单帧解码，而非用文件存在代替解码。
-    proc = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=black:s=16x16:r=30", "-frames:v", "1", "-c:v", "libaom-av1", "-cpu-used", "8", "-pix_fmt", "yuv444p", str(episode / "front.mkv")], capture_output=True)
-    assert proc.returncode == 0, proc.stderr
-    (episode / "wrist.mkv").write_bytes((episode / "front.mkv").read_bytes())
-    MOVER.raw_atomic(episode / "meta.json", {"raw_codec": "av1-yuv444p", "level": 0})
-    for stream in ("front", "wrist"):
-        (episode / f"frames-{stream}.jsonl").write_text("\n".join(json.dumps({"idx": i, "enc": 0, "sha256": "c" * 64, "tag": tag}) for i, tag in enumerate(("reset", "step0"))) + "\n")
+    # 真实生产器生成非重复帧、原数组和序列化轨迹，全程不创建环境。
+    def load(name, filename):
+        spec = importlib.util.spec_from_file_location(name, ROOT / "src/robomme_ood_eval/record" / filename)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+    recorder_module = load("fixture_recorder", "recorder.py")
+    trace_module = load("fixture_trace", "trace_writer.py")
+    recorder = recorder_module.EpisodeRecorder(episode, {}, encode_async=False, free_gib_fn=lambda _: 1000)
     action = np.zeros(8, dtype=np.float32)
-    np.savez(episode / "arrays.npz", exec_action__00000=action)
+    state = np.arange(5, dtype=np.float64)
     identity = {"dataset": "ood", "task": "VideoUnmask", "tier": "xhard1", "seed": 0, "key": "key"}
-    rows = [{"kind": "header", "schema": "sgeval-trace/1", "identity": identity}, {"kind": "demo", "frames": 1, "front_sha256": ["d"*64], "wrist_sha256": ["d"*64]},
-            {"kind": "step", "step": 1, "front_sha256": "d"*64, "wrist_sha256": "d"*64, "action": {"dtype": action.dtype.str, "shape": [8], "sha256": hashlib.sha256(action.tobytes()).hexdigest(), "f32hex": action.tobytes().hex()}},
-            {"kind": "end", "exec_steps": 1}]
-    (episode / "trace.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    trace = trace_module.TraceWriter(episode / "trace.jsonl", route="fixture", identity=identity, max_steps=1)
+    reset_frame = np.zeros((16, 16, 3), dtype=np.uint8)
+    step_frame = np.full((16, 16, 3), 170, dtype=np.uint8)
+    trace.log_demo([reset_frame], [reset_frame], states=[state])
+    trace.log_step(step=1, front=step_frame, wrist=step_frame, state=state, action=action,
+                   subgoal=None, terminated=False, truncated=False, status=None)
+    trace.close(status="done")
+    for stream in ("front", "wrist"):
+        recorder.add_frames(stream, reset_frame, tag="reset")
+        recorder.add_frames(stream, step_frame, tag="step0")
+    recorder.add_array("reset_state", state, step=0)
+    recorder.add_array("exec_action", action, step=0)
+    recorder.add_array("exec_state", state, step=0)
+    recorder.add_event({"kind": "env_reset", "frames": 1, "front": [hashlib.sha256(reset_frame.tobytes()).hexdigest()], "wrist": [hashlib.sha256(reset_frame.tobytes()).hexdigest()]})
+    recorder.add_event({"kind": "env_step", "step": 0, "front": [hashlib.sha256(step_frame.tobytes()).hexdigest()], "wrist": [hashlib.sha256(step_frame.tobytes()).hexdigest()]})
+    recorder.close({})
     MOVER.raw_atomic(episode / "result.json", {**identity, "task_success": False, "exec_steps": 1, "error_kind": None, "infra": False, "recorder_verify": "PASS", "demo_frames": 0, "model": "smvla", "policy_label": "smvla", "policy_seed": 7, "episode": 0})
-    events = [{"kind": "env_reset", "frames": 1, "front": ["c"*64], "wrist": ["c"*64]}, {"kind": "env_step", "step": 0, "front": ["c"*64], "wrist": ["c"*64]}]
-    (episode / "events.jsonl").write_text("\n".join(json.dumps(r) for r in events) + "\n")
-    MOVER.raw_atomic(episode / "summary.json", {"RECORDER_VERIFY": "PASS", "frames": 4, "encoded_frames": 2, "decode_mismatch": 0, "dropped": 0, "reordered": 0, "discarded_after_writer_error": 0, "errors": [], "streams": {s: {"frames": 2, "encoded": 1, "decoded": 1, "mismatch": 0, "error": None, "timestamps_ok": True} for s in ("front", "wrist")}})
     row = {"schema": MOVER.RAW_SCHEMA, **CONTEXT, "model": "smvla", "shard_id": "0", "identity_key": "smvla:ood:key", "relative_dir": str(episode.relative_to(stage)), "files": MOVER.raw_tree(episode), "delete_files": ["front.mkv", "wrist.mkv", "arrays.npz"]}
     return stage, dest, episode, row
 
@@ -51,7 +62,7 @@ def test_real_move_retains_small_files_and_recovers_delete_window(publication):
     stage, dest, source, row = publication
     MOVER.raw_validate_publication(row, CONTEXT)
     receipt = MOVER.raw_move(row, stage, dest, min_free_gib=0)
-    assert receipt["decoded"] == {"front": 1, "wrist": 1}
+    assert receipt["decoded"] == {"front": 2, "wrist": 2}
     assert MOVER.raw_tree(dest / row["relative_dir"]) == row["files"]
     assert set(MOVER.raw_tree(source)) == set(row["files"]) - set(row["delete_files"])
     assert MOVER.raw_move(row, stage, dest, min_free_gib=0)["result"] == "moved"
@@ -88,7 +99,7 @@ def test_incomplete_decode_and_action_corruption(publication):
         MOVER.raw_verify_media(source)
     (source / "front.mkv").write_bytes((source / "wrist.mkv").read_bytes())
     np.savez(source / "arrays.npz", exec_action__00000=np.ones(8, dtype=np.float32))
-    with pytest.raises(ValueError, match="动作"):
+    with pytest.raises(ValueError, match="数组"):
         MOVER.raw_verify_media(source)
 
 
@@ -212,7 +223,7 @@ def test_summary_failure_and_both_views_missing_tail(publication):
     for stream in ("front", "wrist"):
         path = source / f"frames-{stream}.jsonl"
         path.write_text(path.read_text().splitlines()[0] + "\n")
-    with pytest.raises(ValueError, match="图像事件不符"):
+    with pytest.raises(ValueError, match="图像事件不符|视频帧数"):
         MOVER.raw_verify_media(source)
 
 
@@ -293,6 +304,127 @@ def test_manual_stop_is_preserved_as_input(publication):
     assert stop.read_bytes() == stop_bytes
     assert (source / "front.mkv").exists()
     assert "人工 STOP" in json.loads((stage / "mover/error.json").read_text())["message"]
+    paused = json.loads((stage / "mover/paused.json").read_text())
+    assert paused["paused"] is True and paused["unfinished"] == 1
+    assert not (stage / "mover/completed.json").exists()
+
+
+@pytest.mark.parametrize("mutation", ["index_missing", "state_missing", "state_changed", "unknown_key", "summary_error", "summary_count", "missing_unknown", "demo_state_changed", "enc_collision", "enc_order"])
+def test_complete_arrays_and_encoded_frame_bijection(publication, mutation):
+    _, _, source, _ = publication
+    if mutation == "index_missing":
+        (source / "arrays-index.jsonl").unlink()
+    elif mutation in ("state_missing", "state_changed", "unknown_key"):
+        with np.load(source / "arrays.npz") as existing:
+            payload = {k: existing[k] for k in existing.files}
+        if mutation == "state_missing":
+            payload.pop("exec_state__00000")
+        elif mutation == "state_changed":
+            payload["exec_state__00000"] = np.ones(5, dtype=np.float64)
+        else:
+            payload["unknown__00000"] = np.zeros(1)
+        np.savez(source / "arrays.npz", **payload)
+    elif mutation.startswith("enc_"):
+        path = source / "frames-front.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        if mutation == "enc_collision":
+            rows[1]["enc"] = 0
+        else:
+            rows[0]["enc"], rows[1]["enc"] = 1, 0
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    else:
+        path = source / "trace.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        if mutation == "summary_error":
+            rows[-1]["arrays"]["error"] = "原数组写入失败"
+        elif mutation == "summary_count":
+            rows[-1]["arrays"]["state_keys"] = 0
+        elif mutation == "demo_state_changed":
+            next(r for r in rows if r["kind"] == "demo")["states"][0]["sha256"] = "f" * 64
+        else:
+            rows[-1]["arrays"]["missing_state_steps"] = [1]
+        path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    with pytest.raises((ValueError, FileNotFoundError)):
+        MOVER.raw_verify_media(source)
+
+
+def test_explicit_missing_state_is_distinct_from_complete_state(publication, capsys):
+    _, _, source, _ = publication
+    MOVER.raw_verify_media(source)
+    assert "level=complete_state" in capsys.readouterr().out
+    with np.load(source / "arrays.npz") as existing:
+        payload = {k: existing[k] for k in existing.files if k != "exec_state__00000"}
+    np.savez(source / "arrays.npz", **payload)
+    index_path = source / "arrays-index.jsonl"
+    entries = [json.loads(line) for line in index_path.read_text().splitlines()]
+    index_path.write_text("\n".join(json.dumps(r) for r in entries if r["name"] != "exec_state") + "\n")
+    path = source / "trace.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    next(r for r in rows if r["kind"] == "step")["state"] = None
+    rows[-1]["arrays"].update(state_keys=0, missing_state_steps=[1])
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    MOVER.raw_verify_media(source)
+    assert "level=declared_missing_state" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mutation", ["schema", "bytes_bool", "decoded_bool", "trace_false", "extra", "dest"])
+def test_shared_receipt_validator_rejects_malformed_delivery(publication, mutation):
+    stage, dest, _, row = publication
+    receipt = MOVER.raw_move(row, stage, dest, min_free_gib=0)
+    if mutation == "schema":
+        receipt["schema"] = "wrong"
+    elif mutation == "bytes_bool":
+        receipt["bytes"] = True
+    elif mutation == "decoded_bool":
+        receipt["decoded"]["front"] = True
+    elif mutation == "trace_false":
+        receipt["trace_checked"] = False
+    elif mutation == "extra":
+        receipt["unknown"] = 1
+    else:
+        receipt["dest"] = str(dest / "wrong")
+    with pytest.raises(ValueError):
+        MOVER.raw_validate_receipt(receipt, row, CONTEXT, dest)
+
+
+def test_crash_between_large_file_deletions_resumes_without_recopy(publication, monkeypatch):
+    stage, dest, source, row = publication
+    original = Path.unlink
+    def interrupted(path, *args, **kwargs):
+        if path == source / "wrist.mkv":
+            raise OSError("模拟删除窗口中断")
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, "unlink", interrupted)
+    with pytest.raises(OSError, match="中断"):
+        MOVER.raw_move(row, stage, dest, min_free_gib=0)
+    assert not (source / "front.mkv").exists()
+    assert (source / "wrist.mkv").exists() and (source / "arrays.npz").exists()
+    target = dest / row["relative_dir"]
+    signature = MOVER.raw_signature(target)
+    monkeypatch.setattr(Path, "unlink", original)
+    receipt = MOVER.raw_move(row, stage, dest, min_free_gib=0)
+    MOVER.raw_validate_receipt(receipt, row, CONTEXT, dest)
+    assert MOVER.raw_signature(target) == signature
+    assert MOVER.raw_tree(source) == {k: v for k, v in row["files"].items() if k not in row["delete_files"]}
+
+
+def test_mover_forwards_complete_manifest_to_shared_context_helper(publication, monkeypatch):
+    import raw_ood_context
+    stage, dest, _, row = publication
+    name = hashlib.sha256(row["identity_key"].encode()).hexdigest() + ".json"
+    manifest = stage / "config.json"
+    MOVER.raw_atomic(manifest, {**{k: v for k, v in CONTEXT.items() if k != "config_sha256"}, "expected_publications": [name], "expected_identities": [row["identity_key"]], "full_config_marker": "必须保留"})
+    row["config_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    MOVER.raw_atomic(stage / "published" / name, row)
+    original, calls = raw_ood_context.match_context, []
+    def checked(publication, context):
+        assert context["full_config_marker"] == "必须保留"
+        calls.append(context)
+        return original(publication, context)
+    monkeypatch.setattr(raw_ood_context, "match_context", checked)
+    args = SimpleNamespace(stage=str(stage), dest=str(dest), manifest=str(manifest), min_free_gib=0,
+                           heartbeat_file=None, error_file=None, stop_file=None, once=True, interval=.01)
+    assert MOVER.raw_main(args) == 0 and len(calls) >= 3
 
 
 def test_error_report_write_failure_keeps_original_diagnostic(tmp_path, monkeypatch, capsys):

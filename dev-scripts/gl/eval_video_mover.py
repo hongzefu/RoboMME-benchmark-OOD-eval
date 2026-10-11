@@ -66,6 +66,8 @@ import fcntl
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -706,8 +708,8 @@ def raw_validate_publication(row: dict, context: dict) -> None:
     required = {"schema", *RAW_CONTEXT, "model", "shard_id", "identity_key", "relative_dir", "files", "delete_files"}
     if not required <= row.keys() or row["schema"] != RAW_SCHEMA:
         raise ValueError("发布项缺键或协议不符")
-    if any(row[k] != context[k] for k in RAW_CONTEXT):
-        raise ValueError("发布项版本或运行身份不符")
+    from raw_ood_context import match_context
+    match_context(row, context)
     raw_relative(row["relative_dir"])
     if not all(isinstance(row[k], str) and row[k] for k in ("model", "shard_id", "identity_key")):
         raise ValueError("发布项身份为空")
@@ -730,12 +732,31 @@ def raw_validate_publication(row: dict, context: dict) -> None:
             raise ValueError("删除清单含小文件或非发布文件")
 
 
+def raw_validate_receipt(receipt: dict, publication: dict, context: dict, dest: Path | None = None) -> None:
+    """新回执与恢复回执共享同一契约；先核身份，再核严格类型与交付字段。"""
+    raw_validate_publication(publication, context)
+    required = set(publication) | {"dest", "bytes", "decoded", "trace_checked", "result"}
+    if not isinstance(receipt, dict) or set(receipt) != required or any(receipt[k] != v for k, v in publication.items()):
+        raise ValueError("回执缺键、额外键或发布内容不符")
+    raw_validate_publication(receipt, context)
+    if receipt["result"] != "moved" or receipt["trace_checked"] is not True:
+        raise ValueError("回执交付或轨迹验收不符")
+    if type(receipt["bytes"]) is not int or receipt["bytes"] != sum(v["size"] for v in publication["files"].values()):
+        raise ValueError("回执字节数不符")
+    if not isinstance(receipt["decoded"], dict) or set(receipt["decoded"]) != {"front", "wrist"} or any(type(n) is not int or n <= 0 for n in receipt["decoded"].values()):
+        raise ValueError("回执解码计数非法")
+    if not isinstance(receipt["dest"], str) or not Path(receipt["dest"]).is_absolute():
+        raise ValueError("回执路径非法")
+    if dest is not None and receipt["dest"] != str(Path(dest) / raw_relative(publication["relative_dir"])):
+        raise ValueError("回执目的路径不符")
+
+
 def raw_verify_media(directory: Path) -> dict:
     """完整解码并核帧索引与动作原字节，不启动仿真。"""
     import numpy as np
     raw = directory / "raw" if (directory / "raw").is_dir() else directory
     meta = json.loads((raw / "meta.json").read_text())
-    if meta["raw_codec"] != "av1-yuv444p" or meta["level"] > 1:
+    if meta["raw_codec"] != "av1-yuv444p" or type(meta["level"]) is not int or meta["level"] not in (0, 1):
         raise ValueError("录像编码或退化档不符")
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
@@ -745,13 +766,23 @@ def raw_verify_media(directory: Path) -> dict:
     frame_indices = {}
     for stream in ("front", "wrist"):
         rows = [json.loads(line) for line in (raw / f"frames-{stream}.jsonl").read_text().splitlines()]
-        if not rows or [r["idx"] for r in rows] != list(range(len(rows))) or any(type(r["enc"]) is not int or r["enc"] < 0 for r in rows):
+        if not rows or [r["idx"] for r in rows] != list(range(len(rows))) or any(type(r["idx"]) is not int or type(r["enc"]) is not int or r["enc"] < 0 for r in rows):
             raise ValueError("帧索引不连续或缺失")
         encoded = max(r["enc"] for r in rows) + 1
         if set(r["enc"] for r in rows) != set(range(encoded)):
             raise ValueError("编码帧索引缺口")
         if any(not re.fullmatch(r"[a-f0-9]{64}", r["sha256"]) for r in rows):
             raise ValueError("帧索引哈希非法")
+        enc_to_sha, sha_to_enc = {}, {}
+        for row in rows:
+            enc, digest = row["enc"], row["sha256"]
+            if enc in enc_to_sha and enc_to_sha[enc] != digest:
+                raise ValueError("同一编码帧对应不同原图哈希")
+            if digest in sha_to_enc and sha_to_enc[digest] != enc:
+                raise ValueError("重复原图编码索引不稳定")
+            if enc not in enc_to_sha and enc != len(enc_to_sha):
+                raise ValueError("编码帧首次出现顺序不符")
+            enc_to_sha[enc], sha_to_enc[digest] = digest, enc
         frame_indices[stream] = rows
         video = raw / f"{stream}.mkv"
         proc = subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-xerror", "-i", str(video), "-map", "0:v:0", "-f", "null", "-"], capture_output=True, text=True, timeout=1800)
@@ -776,14 +807,77 @@ def raw_verify_media(directory: Path) -> dict:
     if len(frame_indices["front"]) != len(frame_indices["wrist"]):
         raise ValueError("双视角逻辑帧数不符")
     with np.load(raw / "arrays.npz", allow_pickle=False) as arrays:
+        index = [json.loads(line) for line in (raw / "arrays-index.jsonl").read_text().splitlines()]
+        indexed = set()
+        counts = {}
+        for entry in index:
+            if set(entry) != {"key", "name", "k", "step", "dtype", "shape", "sha256"} or not isinstance(entry["name"], str) or type(entry["k"]) is not int:
+                raise ValueError("数组索引字段非法")
+            name, k, key = entry["name"], entry["k"], entry["key"]
+            if k != counts.get(name, 0) or key != f"{name}__{k:05d}" or key in indexed or key not in arrays.files or (entry["step"] is not None and type(entry["step"]) is not int):
+                raise ValueError("数组索引键或顺序不符")
+            counts[name] = k + 1
+            indexed.add(key)
+            if name == "exec_action" and entry["step"] != k:
+                raise ValueError("执行动作索引步骤不符")
+            value = np.ascontiguousarray(arrays[key])
+            h = hashlib.sha256(value.tobytes())
+            h.update(value.dtype.str.encode())
+            h.update(repr(tuple(value.shape)).encode())
+            if entry["dtype"] != value.dtype.str or not isinstance(entry["shape"], list) or any(type(n) is not int for n in entry["shape"]) or entry["shape"] != list(value.shape) or entry["sha256"] != h.hexdigest():
+                raise ValueError("数组索引与原数组指纹不符")
+        expected_keys = set(indexed)
+        actions, states, missing = 0, 0, []
         for row in rows:
             if row["kind"] != "step":
                 continue
-            action = arrays[f"exec_action__{row['step'] - 1:05d}"]
-            expected = row["action"]
-            actual = module.array_record(action)
-            if any(actual[k] != expected[k] for k in ("dtype", "shape", "sha256")):
-                raise ValueError("动作数组与轨迹不符")
+            for field in ("action", "state"):
+                if field not in row:
+                    raise ValueError("轨迹缺动作或状态字段")
+                key = f"exec_{field}__{row['step'] - 1:05d}"
+                expected = row[field]
+                if expected is None:
+                    if field != "state" or key in arrays.files:
+                        raise ValueError("缺失状态记录与数组不符")
+                    missing.append(row["step"])
+                    continue
+                if key not in arrays.files:
+                    raise ValueError("动作或状态原数组缺失")
+                if field == "action" and key not in indexed:
+                    raise ValueError("执行动作缺原数组索引")
+                if not isinstance(expected, dict) or not {"dtype", "shape", "sha256"} <= expected.keys() or not isinstance(expected["shape"], list) or any(type(n) is not int for n in expected["shape"]):
+                    raise ValueError("轨迹数组指纹字段非法")
+                expected_keys.add(key)
+                actual = module.array_record(arrays[key])
+                if any(actual[k] != expected[k] for k in ("dtype", "shape", "sha256")):
+                    raise ValueError("动作或状态数组与轨迹不符")
+                if field == "action":
+                    actions += 1
+                else:
+                    states += 1
+        if set(arrays.files) != expected_keys or len(arrays.files) != len(set(arrays.files)):
+            raise ValueError("原数组存在未知键或重复键")
+        demo = next(r for r in rows if r["kind"] == "demo")
+        demo_states = demo.get("states")
+        if not isinstance(demo_states, list):
+            raise ValueError("演示状态声明缺失")
+        if demo_states:
+            if len(demo_states) != demo["frames"]:
+                raise ValueError("演示状态数量与帧数不符")
+            candidates = [arrays[key] for key in arrays.files if re.fullmatch(r"reset_state__[0-9]{5}", key)]
+            if "reset_joint_state__00000" in arrays.files and "reset_gripper_state__00000" in arrays.files:
+                joints, grips = arrays["reset_joint_state__00000"], arrays["reset_gripper_state__00000"]
+                if len(joints) != demo["frames"] or len(grips) != demo["frames"]:
+                    raise ValueError("演示原状态数量不符")
+                candidates = [np.concatenate([joint, grip[:1]], dtype=np.float32) for joint, grip in zip(joints, grips)]
+            if len(candidates) != len(demo_states) or any(any(module.array_record(value)[key] != expected[key] for key in ("dtype", "shape", "sha256")) for value, expected in zip(candidates, demo_states)):
+                raise ValueError("演示状态数组与轨迹不符")
+        end_arrays = rows[-1].get("arrays")
+        if not isinstance(end_arrays, dict) or not {"path", "action_keys", "state_keys", "missing_state_steps"} <= end_arrays.keys() or set(end_arrays) - {"path", "action_keys", "state_keys", "missing_state_steps", "error"} or end_arrays.get("error") is not None:
+            raise ValueError("轨迹数组汇总缺失或写入失败")
+        if end_arrays["path"] != "arrays.npz" or type(end_arrays["action_keys"]) is not int or type(end_arrays["state_keys"]) is not int or end_arrays["action_keys"] != actions or end_arrays["state_keys"] != states or end_arrays["missing_state_steps"] != missing or any(type(n) is not int for n in end_arrays["missing_state_steps"]):
+            raise ValueError("轨迹数组汇总计数或缺失状态不符")
+        print(f"RAW_ARRAYS=PASS level={'declared_missing_state' if missing else 'complete_state'} action_keys={actions} state_keys={states} missing_state_steps={missing}", flush=True)
     result = json.loads((directory / "result.json").read_text())
     summary = json.loads((raw / "summary.json").read_text())
     if result["infra"] is not False or result["recorder_verify"] != "PASS" or summary["RECORDER_VERIFY"] != "PASS":
@@ -943,6 +1037,11 @@ def raw_main(args) -> int:
             if heartbeat_error:
                 raise RuntimeError(f"心跳写入失败：{heartbeat_error[0]}")
             if stop_path.exists():
+                paused = {"schema": RAW_SCHEMA, **context, "paused": True, "expected": len(expected),
+                          "moved": len(verified_receipts),
+                          "receipts_present": len(list((state / "receipts").glob("*.json"))), "time": time.time()}
+                paused["unfinished"] = len(expected) - paused["moved"]
+                raw_atomic(state / "paused.json", paused)
                 raise RuntimeError("收到人工 STOP，停止搬运")
             published = {p.name: p for p in (stage / "published").glob("*.json")}
             if set(published) - set(expected):
@@ -953,7 +1052,7 @@ def raw_main(args) -> int:
             status["pending"] = 0
             for name, path in sorted(published.items()):
                 row = json.loads(path.read_text())
-                raw_validate_publication(row, context)
+                raw_validate_publication(row, manifest)
                 if row["identity_key"] not in identities:
                     raise ValueError("发布身份不在权威清单")
                 if name != hashlib.sha256(row["identity_key"].encode()).hexdigest() + ".json":
@@ -968,14 +1067,14 @@ def raw_main(args) -> int:
                         continue
                     prior = json.loads(receipt.read_text())
                     raw_verify_identity(row, target)
-                    if any(prior[k] != row[k] for k in row) or prior["result"] != "moved" or prior["trace_checked"] is not True or raw_tree(dest / raw_relative(row["relative_dir"])) != row["files"]:
+                    raw_validate_receipt(prior, row, manifest, dest)
+                    if raw_tree(target) != row["files"]:
                         raise ValueError("已有回执内容或本机副本不符")
-                    if prior["dest"] != str(dest / raw_relative(row["relative_dir"])) or prior["bytes"] != sum(v["size"] for v in row["files"].values()) or set(prior["decoded"]) != {"front", "wrist"} or any(type(n) is not int or n <= 0 for n in prior["decoded"].values()):
-                        raise ValueError("已有回执路径、字节数或解码计数不符")
                     verified_receipts[name] = signature
                     continue
                 status["pending"] += 1
                 result = raw_move(row, stage, dest, min_free_gib=args.min_free_gib)
+                raw_validate_receipt(result, row, manifest, dest)
                 raw_atomic(receipt, result)
                 verified_receipts[name] = (sha256(path), sha256(receipt), raw_signature(dest / raw_relative(row["relative_dir"])))
                 status["last_progress"] = time.time()
