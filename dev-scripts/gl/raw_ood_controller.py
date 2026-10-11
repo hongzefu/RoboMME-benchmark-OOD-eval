@@ -265,7 +265,11 @@ def process_identity(pid):
     proc=Path('/proc')/str(int(pid))
     try:
         stat=(proc/'stat').read_text().rsplit(')',1)[1].split()
-        args=[x.decode() for x in (proc/'cmdline').read_bytes().split(b'\0') if x]
+        raw=(proc/'cmdline').read_bytes()
+        if not raw: return None
+        if not raw.endswith(b'\0'): raise ValueError('进程命令行缺少终结NUL')
+        # 只去掉终结NUL；--gpus的合法空参数必须逐字保留。
+        args=[x.decode() for x in raw.split(b'\0')[:-1]]
     except FileNotFoundError: return None
     boot=int(next(x.split()[1] for x in Path('/proc/stat').read_text().splitlines() if x.startswith('btime ')))
     return dict(state=stat[0],start_ticks=int(stat[19]),start_time=boot+int(stat[19])/os.sysconf('SC_CLK_TCK'),command=args,
@@ -536,7 +540,10 @@ class Controller:
             receipt=self.gl/'mover'/'receipts'/path.name
             if receipt.exists():
                 r=read(receipt)
-                if any(r[k]!=doc[k] for k in (*self.base,'identity_key','model','shard_id','relative_dir','files','worker_exec_commit')) or r['result']!='moved' or r['decoded'] is not True or r['trace_checked'] is not True:
+                decoded=r['decoded']
+                if not isinstance(decoded,dict) or set(decoded)!={'front','wrist'} or any(type(n) is not int or n<=0 for n in decoded.values()):
+                    raise ValueError('已有搬运回执解码计数不符')
+                if any(r[k]!=doc[k] for k in (*self.base,'identity_key','model','shard_id','relative_dir','files','worker_exec_commit')) or r['result']!='moved' or r['trace_checked'] is not True:
                     raise ValueError('已有搬运回执与发布冲突')
             pubs[key]=doc
         return pubs
