@@ -258,7 +258,7 @@ def test_cross_round_budget_rejects_tamper_omission_and_overage(tmp_path,kind):
     with pytest.raises((ValueError,KeyError)): C.validate_config(c)
 
 
-def scan_fixture(tmp_path,*,rc=0):
+def scan_fixture(tmp_path,*,rc=0,status='success'):
     import time,budget_ledger
     c=config(tmp_path); ctl=C.Controller(c); ident=ctl.shards['pp-00']['rows'][0]
     inv=tmp_path/'control/invocations/pp-00-smoke'; inv.mkdir(parents=True)
@@ -268,14 +268,15 @@ def scan_fixture(tmp_path,*,rc=0):
     directory=Path(c['gl_root'])/'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
     for name in ('front.mkv','wrist.mkv','arrays.npz','trace.jsonl','meta.json','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'):
         (directory/name).write_text('fixture')
-    result=directory/'result.json'; C.atomic(result,dict(key=ident['key'],dataset='ood',infra=False,task_success=1))
+    success=int(status=='success')
+    result=directory/'result.json'; C.atomic(result,dict(key=ident['key'],dataset='ood',infra=False,task_success=success,exec_steps=276,status=status))
     led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
     route='pp/seed7/new'; token=route+'|'+ident['key']+'|a1'
     rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id='103')
-    led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id='103')
+    led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status=status,infra=False,slurm_job_id='103')
     row=dict(key=ident['key'],infra=False,final=True,accepted=True,result=str(result),exec_steps=276,
-             task_success=1,budget_exhausted=False,run_blocked=False,dataset='ood',attempt=1,seat='s103-pp-00-smoke',policy='pp',policy_seed=7,
-             budget_rid=rid,budget_token=token,status='success')
+             task_success=success,budget_exhausted=False,run_blocked=False,dataset='ood',attempt=1,seat='s103-pp-00-smoke',policy='pp',policy_seed=7,
+             budget_rid=rid,budget_token=token,status=status)
     a=dict(process=types.SimpleNamespace(poll=lambda:rc),log=(inv/'worker.log').open('a'),seat=c['seats'][2],shard='pp-00',
            smoke=True,model='pp',progress=progress,results=results,rows=[ident],offset=0,started=time.time()-300,
            acked=False,phase_key=None,phase_start=time.time()-300,step_id='103.1',worker_name='raw-ood-worker-pp-00-smoke')
@@ -289,6 +290,45 @@ def test_terminal_single_lf_report_is_read_once_despite_stale_heartbeat(tmp_path
     assert 'pp' in ctl.smoked and not ctl.active and a['offset']==1
     proof=C.read(a['progress'].parent/'final-confirmation.json')
     assert proof['state']=='confirmed' and proof['rc']==0 and proof['consumed_lines']==1 and proof['missing_identities']==[]
+
+
+@pytest.mark.parametrize('status',['success','fail','timeout'])
+def test_normal_success_failure_and_step_timeout_all_publish_and_continue(tmp_path,status):
+    ctl,a,row=scan_fixture(tmp_path,status=status); a['results'].write_text(json.dumps(row)+'\n')
+    before=Path(ctl.c['budget_ledger']).read_bytes(); ctl.scan()
+    assert len(ctl.published)==1 and not ctl.failures and not ctl.active and ctl.smoked=={'pp'}
+    result=C.read(row['result']); assert result['task_success']==int(status=='success') and result['infra'] is False
+    assert Path(ctl.c['budget_ledger']).read_bytes()==before
+
+
+@pytest.mark.parametrize('reason',['env_build','server_dead','protocol_error'])
+def test_unapproved_infrastructure_preserves_original_unknown_values_and_stops(tmp_path,reason):
+    ctl,a,row=scan_fixture(tmp_path); row=dict(key=row['key'],infra=True,infra_reason=reason,task_success=None,exec_steps=None)
+    a['results'].write_text(json.dumps(row)+'\n')
+    with pytest.raises(RuntimeError,match='已留'): ctl.scan()
+    evidence=C.read(a['progress'].parent/'unclassified-infra.json')
+    assert json.loads(evidence['report_line'])['task_success'] is None and not ctl.published and not ctl.failures and a['offset']==0
+    a['log'].close()
+
+
+def test_budget_binding_error_does_not_advance_and_fixed_report_can_resume(tmp_path):
+    ctl,a,row=scan_fixture(tmp_path); bad=dict(row,budget_token='伪token'); a['results'].write_text(json.dumps(bad)+'\n')
+    before=Path(ctl.c['budget_ledger']).read_bytes()
+    with pytest.raises(ValueError): ctl.scan()
+    assert a['offset']==0 and not ctl.published
+    a['results'].write_text(json.dumps(row)+'\n'); ctl.scan()
+    assert len(ctl.published)==1 and not ctl.active and Path(ctl.c['budget_ledger']).read_bytes()==before
+
+
+@pytest.mark.parametrize('reason,flag',[('ServerDead','run_blocked'),('ProtocolError','run_blocked'),('IdentityMismatch','run_blocked'),('RESET_BUDGET_EXHAUSTED','budget_exhausted')])
+def test_blocked_terminal_classifies_before_normal_score_or_missing_media(tmp_path,reason,flag):
+    ctl,a,row=scan_fixture(tmp_path)
+    row.update({flag:True,'task_success':None,'exec_steps':None,'result':None,'error':reason,'status':'error','final':False,'accepted':False})
+    a['results'].write_text(json.dumps(row)+'\n')
+    with pytest.raises(RuntimeError,match=reason): ctl.scan()
+    evidence=C.read(a['progress'].parent/'blocked-terminal.json')
+    assert evidence['reason']==reason and evidence['task_success'] is None and evidence['exec_steps'] is None and not ctl.published
+    a['log'].close()
 
 
 def test_terminal_file_appears_late_without_relaunch_or_republish(tmp_path,monkeypatch):
@@ -553,6 +593,113 @@ def watchdog_fixture(tmp_path,monkeypatch):
     account['101.5']='101.5|raw-ood-worker-qwenvl-00-full|FAILED|75:0\n'; metadata.pop(9000)
     ctl.c['failure_policy']={'continue_reasons':['watchdog_exit']}
     return ctl,metadata,account,planned,report,failure
+
+
+def future_watchdog(ctl,a,metadata,account):
+    """将已接管运行段真实序列化为75，保持原派发与身份文件。"""
+    import budget_ledger
+    row=a['rows'][0]; model=a['model']; seat=a['seat']; route=ctl.c['models'][model]['policy']+('/'+C.ROUTES[model][2] if C.ROUTES[model][2] else '')+'/seed7/new'; token=route+'|'+row['key']+'|a1'
+    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    rid=led.reserve(resets=2,route=route,key=row['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id=seat['job_id'])
+    led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='fail',infra=True,slurm_job_id=seat['job_id'])
+    report=dict(key=row['key'],dataset='ood',attempt=1,attempt_id='future-watchdog',infra=True,status='error',infra_reason='watchdog_exit',budget_rid=rid)
+    a['results'].parent.mkdir(parents=True,exist_ok=True); a['results'].write_text(json.dumps(report)+'\n')
+    queue=ctl.gl/'queue'/ctl.c['models'][model]['label']/'seed7/claims'/('ood__'+row['key']+'.a1.json')
+    C.atomic(queue,dict(key=row['key'],dataset='ood',rid=rid,attempt=1,route=route,token=token,seat=seat['seat']+'-'+a['inv_tag'],ended=True,end_status='infra_timeout',exit_code=75))
+    p=C.read(a['progress']); p.update(phase='finished',rc=75,key=row['key'],t=C.time.time()); C.atomic(a['progress'],p)
+    step=str(seat['job_id'])+'.'+str(p['slurm_step_id']); account[step]=step+'|'+a['worker_name']+'|FAILED|75:0\n'
+    metadata.pop(a['process'].pid)
+    return report
+
+
+def test_running_worker_future_75_settles_without_repeating_reserved_identity(tmp_path,monkeypatch):
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40); active=ctl.active['102']; newfailure=future_watchdog(ctl,active,metadata,account)
+    before=Path(ctl.c['budget_ledger']).read_bytes(); monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('scan不得启动worker'))
+    ctl.scan()
+    assert '102' not in ctl.active and len(ctl.failures)==2 and C.identity('qwenvl',newfailure) in ctl.failures
+    assert ctl.resume_rows['qwenvl-01']==active['rows'][1:] and ctl.segment_numbers['qwenvl-01']==1
+    assert Path(ctl.c['budget_ledger']).read_bytes()==before
+    for a in ctl.active.values(): a['log'].close()
+
+
+@pytest.mark.parametrize('claims,reason,success,steps',[(0,'episode_wall',None,None),(1,'deadline_first_infer',None,None),(2,'deadline_media_finalize',1,27)])
+def test_full_watchdog_preserves_actual_partial_reset_and_observed_success(tmp_path,monkeypatch,claims,reason,success,steps):
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40); a=ctl.active['102']; row=future_watchdog(ctl,a,metadata,account)
+    row.update(status='fail',exit_kind='watchdog_hard_exit',exit_code=75,infra_reason=reason,task_success=success,exec_steps=steps,result=None,final=False,accepted=False,
+               budget_token='groundsg/ground-sg-qwenvl/seed7/new|'+row['key']+'|a1',budget_exhausted=False,run_blocked=False,void=False)
+    a['results'].write_text(json.dumps(row)+'\n')
+    path=Path(ctl.c['budget_ledger']); rows=[json.loads(x) for x in path.read_text().splitlines()]; count=0; kept=[]
+    for r in rows:
+        if r.get('kind')=='reset_claim' and r.get('rid')==row['budget_rid']:
+            count+=1
+            if count>claims: continue
+        kept.append(r)
+    path.write_text(''.join(json.dumps(x)+'\n' for x in kept)); before=path.read_bytes()
+    ctl.scan(); doc=C.read(ctl.failures[C.identity('qwenvl',row)]['path'])
+    assert doc['infra_reason']==reason and doc['task_success']==success and doc['exec_steps']==steps and len(doc['budget']['reset_claims'])==claims
+    assert path.read_bytes()==before and C.identity('qwenvl',row) not in ctl.published
+    for active in ctl.active.values(): active['log'].close()
+
+
+def test_unowned_reserved_tail_is_unresolved_and_never_queued(tmp_path,monkeypatch):
+    import budget_ledger
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    route='groundsg/ground-sg-qwenvl/seed7/new'; key=planned[3]['key']
+    led.reserve(resets=2,route=route,key=key,token=route+'|'+key+'|a1',kind_of_try='first',attempt_no=1,slurm_job_id='101')
+    before=Path(ctl.c['budget_ledger']).read_bytes()
+    proof=ctl.resume_existing_dispatches('c'*40,preflight=True); assert proof['unresolved']==1
+    ctl.resume_existing_dispatches('c'*40)
+    assert ctl.resume_rows['qwenvl-00']==[] and 'qwenvl-00' not in ctl.pending and C.identity('qwenvl',planned[3]) in ctl.unresolved
+    assert ctl.report()==2 and C.read(ctl.gl/'gpu_work_complete.json')['unresolved']==1 and Path(ctl.c['budget_ledger']).read_bytes()==before
+    for a in ctl.active.values(): a['log'].close()
+
+
+def test_exact_mixed_history_three_locked6_two_qwen_running_pp100_and_qwen75(tmp_path,monkeypatch):
+    """按现场组合序列化：旧三锁6、两Qwen运行、PP一片100终态、新Qwen75。"""
+    import budget_ledger,shutil
+    ctl,metadata,account,planned=paused_history_fixture(tmp_path,monkeypatch)
+    ctl.c['failure_policy']={'continue_reasons':['watchdog_exit']}; ctl.resume_existing_dispatches('c'*40,paused=True)
+    counter=[11000]
+    def popen(cmd,**kw):
+        pid=counter[0]; counter[0]+=1; return types.SimpleNamespace(pid=pid)
+    monkeypatch.setattr(C.subprocess,'Popen',popen)
+    current=[]
+    for seat,shard in zip(ctl.c['seats'],('qwenvl-00','qwenvl-01','pp-00','qwenvl-02')):
+        ctl.start(seat,shard); a=ctl.active[str(seat['job_id'])]; d=C.read(a['progress'].parent/'dispatch.json'); step=seat['job_id']+'.9'
+        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),label=ctl.c['models'][a['model']]['label'],slurm_job_id=seat['job_id'],slurm_step_id='9',seat=seat['seat']+'-'+a['inv_tag'],policy_seed=7,pid=d['srun_pid']))
+        account[step]=step+'|'+a['worker_name']+'|RUNNING|0:0\n'
+        metadata[d['srun_pid']]=dict(state='S',start_ticks=d['srun_pid'],start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
+        current.append(a)
+    original=C.process_identity; monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid) if 11000<=pid<=11003 else original(pid))
+    led=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    pp=current[2]; smoke=ctl.gl/'seats/pp/seed7/s103-pp-00-smoke/seat-results.jsonl'; seed_row=json.loads(smoke.read_text()); source=Path(seed_row['result']).parent
+    records=[]
+    for ident in pp['rows']:
+        route='pp/seed7/new'; token=route+'|'+ident['key']+'|a1'; directory=source.with_name(ident['key']); shutil.copytree(source,directory)
+        data=C.read(directory/'result.json'); data.update(ident); C.atomic(directory/'result.json',data)
+        C.atomic(directory/'meta.json',dict(identity=ident)); (directory/'trace.jsonl').write_text(json.dumps(dict(kind='header',identity=ident))+'\n'+json.dumps(dict(kind='end',exec_steps=1))+'\n')
+        rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id='103')
+        led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id='103')
+        records.append(dict(seed_row,key=ident['key'],seat=pp['seat']['seat']+'-'+pp['inv_tag'],result=str(directory/'result.json'),budget_rid=rid,budget_token=token))
+    pp['results'].parent.mkdir(parents=True,exist_ok=True); pp['results'].write_text(''.join(json.dumps(r)+'\n' for r in records))
+    p=C.read(pp['progress']); p.update(phase='finished',rc=0,t=C.time.time()); C.atomic(pp['progress'],p)
+    account['103.9']='103.9|'+pp['worker_name']+'|COMPLETED|0:0\n'; metadata.pop(pp['process'].pid)
+    future_watchdog(ctl,current[3],metadata,account)
+    for a in ctl.active.values(): a['log'].close()
+    recovered=C.Controller(ctl.c); recovered.shards=ctl.shards; C.atomic(recovered.control/'shards.json',dict(recovered.base,shards=recovered.shards))
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('预检与接管不能重复派发'))
+    proof=recovered.resume_existing_dispatches('d'*40,preflight=True)
+    assert proof['active']==2 and proof['completed']==1 and proof['drained']==4 and proof['infra']==1
+    assert {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+    recovered.resume_existing_dispatches('d'*40)
+    assert set(recovered.active)=={'101','102'} and 'pp-00' in recovered.completed
+    assert 'qwenvl-00' not in recovered.pending and 'qwenvl-01' not in recovered.pending
+    assert recovered.resume_rows['qwenvl-02']==current[3]['rows'][1:] and len([k for k in recovered.published if k.startswith('pp:')])==100
+    for a in recovered.active.values(): a['log'].close()
 
 
 def test_mixed_watchdog_recovery_is_read_only_then_settles_once_and_requeues_tail(tmp_path,monkeypatch):
@@ -853,8 +1000,10 @@ def test_existing_resume_validation_runs_inside_real_heartbeat_thread(tmp_path,m
 
 
 def test_delayed_fourth_seat_does_not_request_exhausted_initial_model(tmp_path,monkeypatch):
+    import budget_ledger
     ctl=C.Controller(config(tmp_path)); ctl.formal=True; ctl.pending=['oracle-07']; ctl.initial_dispatched={'101','102','103'}
-    ctl.active={str(s['job_id']):{} for s in ctl.c['seats'][:3]}
+    budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000).check()
+    ctl.active={str(s['job_id']):dict(model='pp',rows=[]) for s in ctl.c['seats'][:3]}
     seat=ctl.c['seats'][3]; C.atomic(ctl.control/'guardian-heartbeat-104.json',dict(ctl.base,gpu_job_id='104',pid=123,t=C.time.time(),monitor_t=C.time.time(),step_id='1'))
     monkeypatch.setattr(C.subprocess,'run',lambda cmd,**k:types.SimpleNamespace(returncode=0,stdout='104.1 raw-ood-lifecycle-guard\n' if '--steps' in cmd else 'RUNNING',stderr=''))
     launched=[]; monkeypatch.setattr(ctl,'start',lambda seat,shard:launched.append(shard))
