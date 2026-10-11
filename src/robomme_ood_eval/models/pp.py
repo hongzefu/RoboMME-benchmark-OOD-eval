@@ -476,6 +476,8 @@ class TracedConnection:
         self.timer = ChunkTimer()
         self.step_rtt_ms: list[float] = []
         self._bucket_ms = 0.0
+        self._rpc_active_ms = 0.0
+        self.client_rpc_spans = []
         self._n_fresh = 0
         self._last_n_s1 = 0
         self.gpu_name = None
@@ -646,6 +648,10 @@ class TracedConnection:
         # pop the server wrapper audit key before actions reach the environment (it only goes to the language ledger)
         self.last_audit = action.pop(AUDIT_KEY, None) if isinstance(action, dict) else None
         rtt = (time.perf_counter() - t0) * 1000
+        # This interval contains transport codecs and waiting, but no Env step.
+        # The sum across hold replies is active RPC time, not continuous wall.
+        self.client_rpc_spans.append({"env_step": step, "client_rpc_ms": rtt})
+        self._rpc_active_ms += rtt
         self.step_rtt_ms.append(rtt)
         self._account(step, rtt)
         self.actions_received += 1
@@ -697,9 +703,13 @@ class TracedConnection:
             self.timer.close(decision=self._n_fresh, env_step=step, action_rtt_ms=rtt - s2,
                              server_infer_ms=pt["s1_infer_ms"], decision_wall_ms=rtt + self._bucket_ms,
                              extra={"step_rtt_ms": rtt, "s2_infer_ms_at_fresh": s2,
+                                    "metric_kind": "pp_s2_composite",
+                                    "pp_s2_composite_ms": rtt + self._bucket_ms,
+                                    "client_rpc_active_ms": self._rpc_active_ms,
                                     "bucket_ms": self._bucket_ms, "n_s2_fires": pt["n_s2_fires"]})
             self._n_fresh += 1
             self._bucket_ms = 0.0
+            self._rpc_active_ms = 0.0
             self._last_n_s1 = pt["n_s1_fires"]
         else:
             self._bucket_ms += s2
@@ -917,6 +927,8 @@ async def _run_episode_async(session, identity: dict, conn_info: dict, recorder,
             pass
     timing["episode_s"] = time.perf_counter() - t_start
     attach_policy_timing(timing, tconn.timer, gpu_name=tconn.gpu_name, model_kind="pp")
+    timing["client_rpc_spans"] = tconn.client_rpc_spans
+    timing["unassigned_client_rpc_ms"] = tconn._rpc_active_ms
     timing.update(step_rtt_ms=tconn.step_rtt_ms, pp_timing_missing=tconn.timing_missing,
                   reconnect_steps=tconn.reconnect_steps, reconnected=bool(tconn.reconnect_steps),
                   fresh_mismatch=tconn.fresh_mismatch)

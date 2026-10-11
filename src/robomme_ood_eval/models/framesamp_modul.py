@@ -225,7 +225,7 @@ def run_loop(client, runner: EnvRunnerShim, reset_fn: Callable[[], dict], progre
             if timer is not None:
                 rtt = getattr(client, "_last_rtt", {})
                 server_timing = getattr(client, "_last_server_timing", None) or {}
-                timer.close(t=getattr(client, "_last_recv_t", None), decision=progress.decisions,
+                timer.close(t=getattr(client, "_last_ready_t", None), decision=progress.decisions,
                             env_step=epstate.count, action_rtt_ms=rtt.get("infer"),
                             server_infer_ms=server_timing.get("infer_ms"),
                             extra={"add_buffer_rtt_ms": rtt.get("add_buffer"), "gpu": server_timing.get("gpu")})
@@ -359,6 +359,7 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
             self._last_audit = None  # server wrapper audit block popped from the most recent reply
             self._last_rtt = {}
             self._last_recv_t = None
+            self._last_ready_t = None
             self._last_server_timing = None
             super().__init__(host, port)
 
@@ -401,6 +402,7 @@ def make_recording_client(host: str, port: int, recorder, timing: dict):
             self._last_audit = out.pop(AUDIT_KEY, None) if isinstance(out, dict) else None
             self._last_server_timing = self._last_audit.get("server_timing") if isinstance(self._last_audit, dict) else None
             t3 = time.perf_counter()
+            self._last_ready_t = t3
             dig = payload_digest(obj)
             rdig = response_digest(out)
             server_ms = rdig.get("server_ms", rdig.get("infer_time_ms", 0.0))

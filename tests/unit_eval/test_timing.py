@@ -5,7 +5,48 @@ from pathlib import Path
 
 import pytest
 
-from robomme_ood_eval.timing import ChunkTimer, attach_policy_timing, merge_summaries, summarize_chunks
+from robomme_ood_eval.timing import ChunkTimer, attach_policy_timing, merge_summaries, summarize_chunks, validate_timing
+
+
+@pytest.mark.parametrize("bad", [None, float("nan"), -1, float("inf"), True])
+@pytest.mark.parametrize("field", ["decision_wall_ms", "action_rtt_ms", "server_infer_ms", "lang_ms"])
+def test_完整性逐个检查预热字段(field, bad):
+    timer = ChunkTimer()
+    for _ in range(4):
+        record(timer)
+    data = attach(timer)
+    assert validate_timing(data)["verdict"] == "PASS"
+    data["chunks"][0][field] = bad
+    assert validate_timing(data)["verdict"] == "UNVERIFIED"
+
+
+def test_完整性拒绝缺项及伪造守恒():
+    timer = ChunkTimer()
+    record(timer)
+    data = attach(timer)
+    del data["chunks"][0]["lang_ms"]
+    assert validate_timing(data)["verdict"] == "UNVERIFIED"
+    data = attach(timer)
+    data["chunks"][0]["decision_wall_ms"] = 0
+    assert validate_timing(data)["verdict"] == "UNVERIFIED"
+    data = attach(timer)
+    data["dangling_start"] = True
+    assert validate_timing(data)["verdict"] == "UNVERIFIED"
+
+
+@pytest.mark.parametrize("missing", ["chunks", "conservation", "dangling_start"])
+def test_完整性拒绝丢失整段证据(missing):
+    timer = ChunkTimer()
+    record(timer)
+    data = attach(timer)
+    del data[missing]
+    assert validate_timing(data)["verdict"] == "UNVERIFIED"
+
+
+def test_历史PP合成计时不能冒充完整时段():
+    timer = ChunkTimer()
+    record(timer, wall=100, rtt=80, lang=20)
+    assert validate_timing(attach(timer, "pp"))["verdict"] == "UNVERIFIED"
 
 
 def record(timer, wall=100, rtt=80, lang=0, **extra):
