@@ -754,6 +754,92 @@ while True:
     assert not _alive(row["pid"])
 
 
+def test_real_watchdog_exit_flows_through_shell_and_fixed_failure_consumer(rig, gl_repo, monkeypatch):
+    """真实生产看门狗os_exit75→真实shell wait→finished75→固定B分类与完整证据校验。"""
+    import types
+    fixed = "f2d429115a9b55e0e6994b0b26aa197df59f84f4"
+    shutil.copytree(F.REPO / "src/robomme_ood_eval", gl_repo / "src/robomme_ood_eval", dirs_exist_ok=True)
+    inv = rig["tmp"] / "invocations" / "pp-00-full"
+    inv.mkdir(parents=True)
+    progress = inv / "progress.json"
+    task, tier = F.v9_cells_sorted()[0]
+    ident = F.packaged_identity(task, tier, 0)
+    ids = inv / "identities.jsonl"
+    ids.write_text(json.dumps(ident) + "\n")
+    rig["ids"] = ids
+    rig["env"].update(SLURM_JOB_ID="16391", SLURM_STEP_ID="4")
+    worker = rig["tmp"] / "real-watchdog-worker.py"
+    worker.write_text('''import sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1]); sys.path.insert(0, str(Path(sys.argv[1]).parents[2])); argv = sys.argv[2:]
+import eval_fakes_dev as F
+def arg(name): return argv[argv.index(name) + 1]
+rows = F.read_jsonl(Path(arg("--identities")))
+shared = F.env_client().load_sibling("budget_ledger").BudgetLedger(Path(arg("--budget-ledger")))
+p = F.fake_seat_policy(); p.episodes_run = 1
+def play(session, *_):
+    session.reset(); time.sleep(3)
+    return dict(status="fail", task_success=0, steps=0, error=None, infra=False, infra_reason=None)
+p.play = play
+r = F.make_runner(Path(arg("--out")), "pp", p, F.World(), seat_dir=arg("--seat"), budget_ledger=shared,
+                  progress_file=arg("--progress-file"), infra_retries=0, hard_exit=__import__("os")._exit,
+                  trajectory_cap=4000, reset_cap=8000, planned_first_tries=4000)
+r.episode_kwargs["wall_s"] = .05
+raise SystemExit(F.run_rows(r, rows))
+''')
+    original = rig["fakepy"].read_text()
+    old = f'*seat.py) shift; exec "{sys.executable}" "{ENGINE}" seat "$@";;'
+    replacement = f'*seat.py) shift; exec "{sys.executable}" "{worker}" "{Path(__file__).parent}" "$@";;'
+    assert old in original
+    rig["fakepy"].write_text(original.replace(old, replacement))
+    out = gl_repo / "artifacts/R/gl"
+    command = _gl_cmd(rig, gl_repo, "--seat", "S1-pp-00-full", "--progress-file", str(progress),
+                       "--trajectory-cap", "4000", "--reset-cap", "8000", "--planned-first-tries", "4000")
+    core = dict(run="R", run_name="R", exec_commit=fixed, config_sha256="b" * 64, controller_job_id="cpu-fixture")
+    dispatch = dict(core, gpu_job_id="16391", model="pp", shard_id="pp-00", smoke=False, command=command)
+    (inv / "dispatch.json").write_text(json.dumps(dispatch))
+    rc, stdout = _run(command, rig["env"], timeout=20)
+    assert rc == 75 and "GL_PROGRESS_EXIT=PASS" in stdout, stdout
+    observed = json.loads(progress.read_text())
+    assert observed["phase"] == "finished" and observed["rc"] == 75 and observed["exit_confirmed"] is True
+    assert observed["terminal_source"] == "waitpid" and observed["episodes_done"] == 0
+    assert observed["key"] == ident["key"] and observed["slurm_job_id"] == "16391" and observed["slurm_step_id"] == "4"
+    report = out / "seats/pp/seed7/S1-pp-00-full/seat-results.jsonl"
+    lines = report.read_text().splitlines()
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+    # 只读加载B已提交的精确字节，不修改B源码或跳过其校验函数。
+    modules = {}
+    for name in ("raw_ood_context", "raw_ood_controller"):
+        source = subprocess.check_output(["git", "-C", str(F.REPO), "show", fixed + ":dev-scripts/gl/" + name + ".py"], text=True)
+        module = types.ModuleType(name)
+        module.__file__ = str(F.REPO / "dev-scripts/gl" / (name + ".py"))
+        monkeypatch.setitem(sys.modules, name, module)
+        exec(compile(source, module.__file__, "exec"), module.__dict__)
+        modules[name] = module
+    assert modules["raw_ood_controller"].failure_category(row) == "watchdog_exit"
+    budget_path = rig["tmp"] / "budget/budget-ledger.jsonl"
+    raw_budget, _ = modules["raw_ood_context"].read_budget_rows(budget_path)
+    state = F.env_client().load_sibling("budget_ledger").BudgetState(raw_budget)
+    rid = row["budget_rid"]
+    def ref(path): return dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+    c = dict(core, root=str(rig["tmp"]), gl_root=str(out), budget_ledger=str(budget_path),
+             models={"pp": dict(policy="pp", label="pp")}, seats=[dict(job_id="16391", seat="S1")],
+             expected_identities=["pp:ood:" + ident["key"]])
+    claim = out / "queue/pp/seed7/claims" / ("ood__" + ident["key"] + ".a1.json")
+    doc = dict(core, schema="raw-ood-failure-v1", identity_key=c["expected_identities"][0], model="pp",
+               shard_id="pp-00", reason="watchdog_exit", infra_reason=row["infra_reason"], task_success=row["task_success"],
+               exec_steps=row["exec_steps"], report_path=str(report), report_line=lines[0],
+               report_line_sha256=hashlib.sha256(lines[0].encode()).hexdigest(),
+               budget=dict(rid=rid, reserve=state.reserves[rid], commit=state.commits[rid],
+                           reset_claims=[r for r in raw_budget if r.get("kind") == "reset_claim" and r.get("rid") == rid]),
+               dispatch=ref(inv / "dispatch.json"), progress=ref(progress), queue=ref(claim),
+               step=dict(id="16391.4", name="raw-ood-worker-pp-00-full", state="FAILED", exit_code=str(rc) + ":0"))
+    assert modules["raw_ood_context"].validate_failure_document(doc, c) is doc
+    assert len(state.reserves) == len(state.commits) == 1 and not state.releases
+    assert row["exit_kind"] == "watchdog_hard_exit" and row["exit_code"] == 75
+
+
 def test_gl_term_finalizes_once(rig, gl_repo):
     rig["env"]["FAKE_CLIENT_CODES"] = "-1"
     p = _popen(_gl_cmd(rig, gl_repo), rig["env"])

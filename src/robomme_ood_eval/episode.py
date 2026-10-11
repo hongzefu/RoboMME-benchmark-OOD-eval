@@ -61,6 +61,8 @@ MEDIA_DEADLINE_S = 1200.0
 EXIT_WALL = 75
 #: bounded time for timeout result and diagnostic I/O before invoking the hard-exit hook
 WATCHDOG_WRITE_S = 1.0
+#: the exit hook has its own bounded settlement; tests must finish it before returning a timeout
+WATCHDOG_EXIT_WAIT_S = 5.0
 #: terminal statuses play may return; only the first three are persisted
 PLAY_STATUSES = ("success", "fail", "timeout", "error")
 TERMINAL_STATUSES = ("success", "fail", "timeout")
@@ -78,6 +80,10 @@ WATCHDOG_STATE = threading.local()
 class IdentityMismatch(RuntimeError):
     """The identity resolved by the builder does not match the queue identity row: the result has been written and
     the caller stops the whole batch."""
+
+
+class WatchdogExitPending(RuntimeError):
+    """The watchdog exit hook has not completed; the caller must stop without finalizing another episode."""
 
 
 class PlayContractError(ValueError):
@@ -420,6 +426,7 @@ class _Watchdog:
     def __init__(self, policy, spec: EpisodeSpec, result: EpisodeResult, state: dict):
         self.policy, self.spec, self.result, self.state = policy, spec, result, state
         self.lock = threading.Lock()
+        self.exit_done = threading.Event()
         self.timers: dict[str, threading.Timer] = {}
 
     def arm(self, phase: str, limit: float | None) -> None:
@@ -446,10 +453,11 @@ class _Watchdog:
         with self.lock:
             if self.state.get(f"{phase}_done") or self.state.get("fired"):
                 return
-            self.state["fired"] = phase
+        published = False
         try:
             sess = self.state.get("session")
             res = dataclasses.replace(self.result)
+            res.extra = dict(res.extra)
             res.status, res.error_kind = "fail", "error"
             if res.task_success is None and sess is not None:
                 res.task_success = sess.task_success
@@ -460,7 +468,12 @@ class _Watchdog:
             res.cap_hit = bool(getattr(sess, "cap_hit", False))
             res.demo_frames = int(((getattr(sess, "timing", None) or {}).get("demo_frames")) or 0)
             res.t_end = time.time()
-            self.state["timeout_result"] = res
+            res.extra.update(exit_kind="watchdog_hard_exit", exit_code=EXIT_WALL)
+            with self.lock:
+                if self.state.get(f"{phase}_done") or self.state.get("fired"):
+                    return
+                self.state.update(fired=phase, timeout_result=res)
+                published = True
             WATCHDOG_STATE.result = res
             errors = []
             def write_timeout():
@@ -479,11 +492,22 @@ class _Watchdog:
             if errors:
                 raise errors[0]
         finally:
-            try:
-                HARD_EXIT(EXIT_WALL)
-            finally:
-                # Non-exiting test hooks must not leak evidence into a later episode.
-                WATCHDOG_STATE.result = None
+            if published:
+                try:
+                    HARD_EXIT(EXIT_WALL)
+                finally:
+                    # Non-exiting hooks release the episode only after their settlement finishes.
+                    WATCHDOG_STATE.result = None
+                    self.exit_done.set()
+
+    def completed_timeout(self) -> EpisodeResult | None:
+        with self.lock:
+            if not self.state.get("fired"):
+                return None
+            result = self.state["timeout_result"]
+        if not self.exit_done.wait(timeout=WATCHDOG_EXIT_WAIT_S):
+            raise WatchdogExitPending("WATCHDOG_EXIT_PENDING: do not finalize or claim another episode")
+        return result
 
 
 def _servers_of(policy) -> list:
@@ -629,8 +653,9 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
     finally:
         dog.disarm("first_infer")
         dog.disarm("episode_wall")
-    if state.get("fired"):
-        return state["timeout_result"]
+    timeout_result = dog.completed_timeout()
+    if timeout_result is not None:
+        return timeout_result
     wall = time.perf_counter() - t0
     # (5) finalize: session.close -> recorder.close -> video -> result.json
     close_error = None
@@ -654,8 +679,9 @@ def run_episode(policy, dataset: str, task: str, episode: int, out_dir: str | Pa
     if render:
         _render(spec, result, official_root)
     dog.disarm("media_finalize")
-    if state.get("fired"):
-        return state["timeout_result"]
+    timeout_result = dog.completed_timeout()
+    if timeout_result is not None:
+        return timeout_result
     result.timing = {"episode_wall_s": round(wall, 3), "first_episode_in_process": first,
                      "env": dict(session.timing), "policy": out.get("timing"), "recorder": rsum}
     result.task_goal = session.task_goal
