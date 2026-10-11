@@ -6,6 +6,7 @@ import argparse
 from collections import Counter
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -13,6 +14,7 @@ import subprocess
 import threading
 import time
 from raw_ood_context import CORE, match_context, read_pause_snapshot, source_configs, trusted_contexts, validate_failure_document, validate_terminal_marker, validate_historical_errors, read_budget_rows, validate_pause_proof, legacy_watchdog_progress
+from raw_ood_context import LEGACY_WATCHDOG_SOURCE
 
 MODELS = ('qwenvl', 'smvla', 'pp', 'oracle', 'framesamp')
 SECONDS = dict(qwenvl=311.428, smvla=152.526, pp=138.695, oracle=130.485, framesamp=86.518)
@@ -166,6 +168,14 @@ def failure_category(row):
         if row.get('infra_reason') in ('watchdog_exit','episode_wall','deadline_first_infer','deadline_media_finalize'): return 'watchdog_exit'
     if row.get('infra_reason')=='watchdog_exit' and 'exit_kind' not in row: return 'watchdog_exit'
     return row.get('infra_reason')
+
+
+def check_heartbeat(progress,source,now):
+    """现代显式心跳与旧锁定来源分开；真实进展时间不充当现代心跳。"""
+    if 't_heartbeat' in progress: beat=progress['t_heartbeat']
+    elif 't_progress' not in progress and source is not None and (source['exec_commit'],source['config_sha256'])==LEGACY_WATCHDOG_SOURCE: beat=progress['t']
+    else: raise ValueError('席位心跳缺显式字段或旧来源锁')
+    if type(beat) not in (int,float) or not now-120<=beat<=now+5 or not math.isfinite(beat): raise ValueError('席位心跳数值无效、过期或来自未来')
 
 
 def validate_config(config: dict) -> list[dict]:
@@ -805,7 +815,7 @@ class Controller:
                 if d.get('srun_start_ticks') is not None:
                     if proc['start_ticks']!=d['srun_start_ticks']: raise ValueError('已有srun创建tick冲突')
                 elif abs(proc['start_time']-float(d['time']))>5: raise ValueError('旧dispatch srun创建时间不符')
-                if time.time()-float(progress['t'])>120: raise ValueError('已有运行席位心跳失效')
+                check_heartbeat(progress,source,time.time())
                 if job in used_jobs: raise ValueError('同席有多个在途正式worker')
                 used_jobs.add(job)
             else:
@@ -998,7 +1008,10 @@ class Controller:
             if a['step_id'] is not None and a['step_id']!=exact: raise ValueError('客户端SLURM StepID与调度回执冲突')
             a['step_id']=exact
             if p['label']!=self.c['models'][a['model']]['label']: raise ValueError('专属进度标签错误')
-            if not exited and now-float(p['t'])>120: raise RuntimeError('专属席位心跳失效')
+            if not exited:
+                source=self.source_of(read(a['progress'].parent/'dispatch.json')) if 't_heartbeat' not in p and 't_progress' not in p else None
+                try: check_heartbeat(p,source,now)
+                except ValueError as e: raise RuntimeError('专属席位心跳失效 '+str(e)) from e
             if phase!=a['phase_key']: a['phase_key']=phase; a['phase_start']=now
             limits=self.c.get('phase_limits',{'context_load':3600,'claim':120,'episode':3600,'done':300,'finished':120})
             if not exited and now-a['phase_start']>float(limits[p['phase']]): raise RuntimeError(f"席位阶段超时{phase}")
