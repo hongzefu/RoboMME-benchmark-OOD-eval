@@ -114,6 +114,7 @@ def test_real_terminal_producer_delivery_guard_and_attached_consume(tmp_path,mon
     proc=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(tmp_path),'fixture','100',str(int(time.time()+60))],
                         env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0'),capture_output=True,text=True,timeout=30)
     assert proc.returncode==0,proc.stdout+proc.stderr
+    assert 'GUARD_TERMINAL status='+terminal['status'] in proc.stdout
     assert not (ctl.control/'STOP').exists()
 
 

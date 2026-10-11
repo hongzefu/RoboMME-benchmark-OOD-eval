@@ -34,6 +34,7 @@ c['config_sha256']=r['config_sha256']
 assert all(str(c[k])==str(r[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
 assert c['root']==sys.argv[1]
 validate_terminal_marker(d,c)
+print('GUARD_TERMINAL status='+d['status']+' expected='+str(d['expected'])+' published='+str(d['published'])+' infra='+str(d['infra'])+' raw_missing='+str(d['expected']-d['published']),flush=True)
 PY
 }
 cleanup() {
