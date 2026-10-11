@@ -754,10 +754,12 @@ while True:
     assert not _alive(row["pid"])
 
 
-def test_real_watchdog_exit_flows_through_shell_and_fixed_failure_consumer(rig, gl_repo, monkeypatch):
+@pytest.mark.parametrize("phase,observed_success,recover", [("episode_wall", None, False), ("episode_wall", None, True),
+                                                          ("first_infer", 0, True), ("media_finalize", 1, True)])
+def test_real_watchdog_exit_flows_through_shell_and_fixed_failure_consumer(rig, gl_repo, monkeypatch, phase, observed_success, recover):
     """真实生产看门狗os_exit75→真实shell wait→finished75→固定B分类与完整证据校验。"""
     import types
-    fixed = "f2d429115a9b55e0e6994b0b26aa197df59f84f4"
+    fixed = "60428653bda8a03843b98e422ad7d038cd6bd67e"
     shutil.copytree(F.REPO / "src/robomme_ood_eval", gl_repo / "src/robomme_ood_eval", dirs_exist_ok=True)
     inv = rig["tmp"] / "invocations" / "pp-00-full"
     inv.mkdir(parents=True)
@@ -768,8 +770,9 @@ def test_real_watchdog_exit_flows_through_shell_and_fixed_failure_consumer(rig, 
     ids.write_text(json.dumps(ident) + "\n")
     rig["ids"] = ids
     rig["env"].update(SLURM_JOB_ID="16391", SLURM_STEP_ID="4")
+    rig["env"].update(CPU_WATCH_PHASE=phase, CPU_WATCH_SUCCESS=json.dumps(observed_success), CPU_WATCH_RECOVER=str(int(recover)))
     worker = rig["tmp"] / "real-watchdog-worker.py"
-    worker.write_text('''import sys, time
+    worker.write_text('''import sys, time, os, json
 from pathlib import Path
 sys.path.insert(0, sys.argv[1]); sys.path.insert(0, str(Path(sys.argv[1]).parents[2])); argv = sys.argv[2:]
 import eval_fakes_dev as F
@@ -777,14 +780,33 @@ def arg(name): return argv[argv.index(name) + 1]
 rows = F.read_jsonl(Path(arg("--identities")))
 shared = F.env_client().load_sibling("budget_ledger").BudgetLedger(Path(arg("--budget-ledger")))
 p = F.fake_seat_policy(); p.episodes_run = 1
+phase = os.environ["CPU_WATCH_PHASE"]; observed_success = json.loads(os.environ["CPU_WATCH_SUCCESS"])
+recover = os.environ["CPU_WATCH_RECOVER"] == "1"
+original_reset = F.FakeEnv.reset
+def observed_reset(env):
+    obs, info = original_reset(env)
+    if observed_success is not None: info["success"] = bool(observed_success)
+    return obs, info
+F.FakeEnv.reset = observed_reset
 def play(session, *_):
-    session.reset(); time.sleep(3)
-    return dict(status="fail", task_success=0, steps=0, error=None, infra=False, infra_reason=None)
+    session.reset()
+    if phase != "media_finalize":
+        if recover: r.ledger._lock.acquire()
+        time.sleep(3)
+    return dict(status="fail", task_success=observed_success or 0, steps=0, error=None, infra=False, infra_reason=None)
 p.play = play
+class Recorder(F.FakeRecorder):
+    def close(self, summary):
+        if phase == "media_finalize":
+            r.ledger._lock.acquire(); time.sleep(3)
+        return super().close(summary)
 r = F.make_runner(Path(arg("--out")), "pp", p, F.World(), seat_dir=arg("--seat"), budget_ledger=shared,
                   progress_file=arg("--progress-file"), infra_retries=0, hard_exit=__import__("os")._exit,
+                  recorder_factory=lambda raw, meta: Recorder(raw, meta),
                   trajectory_cap=4000, reset_cap=8000, planned_first_tries=4000)
-r.episode_kwargs["wall_s"] = .05
+r.episode_kwargs.update(wall_s=.05 if phase == "episode_wall" else 0,
+                        first_infer_s=.05 if phase == "first_infer" else 0,
+                        media_s=.05 if phase == "media_finalize" else 0)
 raise SystemExit(F.run_rows(r, rows))
 ''')
     original = rig["fakepy"].read_text()
@@ -805,6 +827,31 @@ raise SystemExit(F.run_rows(r, rows))
     assert observed["terminal_source"] == "waitpid" and observed["episodes_done"] == 0
     assert observed["key"] == ident["key"] and observed["slurm_job_id"] == "16391" and observed["slurm_step_id"] == "4"
     report = out / "seats/pp/seed7/S1-pp-00-full/seat-results.jsonl"
+    budget_path = rig["tmp"] / "budget/budget-ledger.jsonl"
+    budget_module = F.env_client().load_sibling("budget_ledger")
+    before = budget_module.BudgetLedger(budget_path).state()
+    if recover:
+        assert not report.exists() and len(before.reserves) == 1 and not before.commits
+        ledger = F.seat_ledger(out, "pp", seat="S1-pp-00-full")
+        starts = [r for r in ledger if r.get("kind") == "attempt_start"]
+        assert len(starts) == 1 and not any(r.get("kind") == "attempt_end" for r in ledger)
+        producer_path = Path(starts[0]["result_path"])
+        producer_bytes = producer_path.read_bytes()
+        producer = json.loads(producer_bytes)
+        assert producer["exit_kind"] == "watchdog_hard_exit" and producer["exit_code"] == 75
+        assert producer["task_success"] == observed_success
+        with monkeypatch.context() as patch:
+            patch.setenv("SLURM_JOB_ID", "16391"); patch.setenv("SLURM_STEP_ID", "4")
+            runner = F.make_runner(out, "pp", F.fake_seat_policy(), F.World(), seat_dir="S1-pp-00-full",
+                                   budget_ledger=budget_module.BudgetLedger(budget_path),
+                                   progress_file=str(progress), infra_retries=0,
+                                   trajectory_cap=4000, reset_cap=8000, planned_first_tries=4000)
+            assert runner.recover_dangling() == 1
+            assert runner.recover_dangling() == runner.recover_crash_window() == 0
+        assert producer_path.read_bytes() == producer_bytes
+        after = runner.ledger.shared.state()
+        assert after.reserves == before.reserves and after.claimed == before.claimed
+        assert len(after.commits) == 1 and after.resets == before.resets == 2
     lines = report.read_text().splitlines()
     assert len(lines) == 1
     row = json.loads(lines[0])
@@ -818,7 +865,6 @@ raise SystemExit(F.run_rows(r, rows))
         exec(compile(source, module.__file__, "exec"), module.__dict__)
         modules[name] = module
     assert modules["raw_ood_controller"].failure_category(row) == "watchdog_exit"
-    budget_path = rig["tmp"] / "budget/budget-ledger.jsonl"
     raw_budget, _ = modules["raw_ood_context"].read_budget_rows(budget_path)
     state = F.env_client().load_sibling("budget_ledger").BudgetState(raw_budget)
     rid = row["budget_rid"]
@@ -838,6 +884,9 @@ raise SystemExit(F.run_rows(r, rows))
     assert modules["raw_ood_context"].validate_failure_document(doc, c) is doc
     assert len(state.reserves) == len(state.commits) == 1 and not state.releases
     assert row["exit_kind"] == "watchdog_hard_exit" and row["exit_code"] == 75
+    assert row["infra_reason"] == {"episode_wall": "episode_wall", "first_infer": "deadline_first_infer",
+                                   "media_finalize": "deadline_media_finalize"}[phase]
+    assert row["task_success"] == observed_success
 
 
 def test_gl_term_finalizes_once(rig, gl_repo):

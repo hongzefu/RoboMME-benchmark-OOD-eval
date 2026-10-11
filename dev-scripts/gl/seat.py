@@ -1180,6 +1180,12 @@ class SeatRunner:
                       "cap_hit", "reset_calls", "budget_exhausted", "run_blocked", "video", "video_error", "raw_dir"):
             if field in d:
                 row[field] = d[field]
+        if "exit_kind" in d or "exit_code" in d:
+            if d.get("exit_kind") != "watchdog_hard_exit" or type(d.get("exit_code")) is not int or d["exit_code"] != EXIT_WALL \
+                    or d.get("status") != "fail" or d.get("infra") is not True or d.get("infra_reason") not in \
+                    ("watchdog_exit", "episode_wall", "deadline_first_infer", "deadline_media_finalize"):
+                raise ValueError("结果中的看门狗退出标记或原始原因不合法")
+            row.update(exit_kind=d["exit_kind"], exit_code=d["exit_code"])
         st = next((s for s in self.ledger.starts.get(c.key, []) if s["attempt_id"] == aid), {})
         path = st.get("result_path")
         if path:
