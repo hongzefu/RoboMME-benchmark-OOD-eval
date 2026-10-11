@@ -12,6 +12,26 @@ sys.path.insert(0,str(HERE))
 import raw_ood_controller as C
 
 
+def test_shared_terminal_requires_explicit_zero_and_exact_disjoint_coverage(tmp_path):
+    from raw_ood_context import validate_terminal_marker,validate_historical_errors
+    c=config(tmp_path)
+    doc=dict({k:c[k] for k in C.CORE},schema='raw-ood-terminal-v1',expected=4000,settled=4000,published=4000,infra=0,unresolved=0,unattempted=0,
+             status='COMPLETE',published_identities=c['expected_identities'],failure_documents={},unresolved_identities=[],unattempted_identities=[])
+    assert validate_terminal_marker(json.loads(json.dumps(doc)),c)==doc
+    for mutation in ('zero','dup','missing','status'):
+        bad=json.loads(json.dumps(doc))
+        if mutation=='zero': del bad['infra']
+        if mutation=='dup': bad['unresolved_identities']=[bad['published_identities'][0]]
+        if mutation=='missing': bad['published_identities'].pop()
+        if mutation=='status': bad['status']='INCOMPLETE'
+        with pytest.raises(ValueError): validate_terminal_marker(bad,c)
+    old=tmp_path/'old-error.json'; old.write_text('{"error":"历史"}')
+    c['historical_errors']=[dict(path=str(old),sha256=C.sha(old))]
+    assert validate_historical_errors(c)=={str(old)}
+    old.write_text('{"error":"改变"}')
+    with pytest.raises(ValueError): validate_historical_errors(c)
+
+
 def identities():
     rows=[]
     for task,counts in C.TASK_COUNTS.items():
@@ -239,7 +259,7 @@ def test_cross_round_budget_rejects_tamper_omission_and_overage(tmp_path,kind):
 
 
 def scan_fixture(tmp_path,*,rc=0):
-    import time
+    import time,budget_ledger
     c=config(tmp_path); ctl=C.Controller(c); ident=ctl.shards['pp-00']['rows'][0]
     inv=tmp_path/'control/invocations/pp-00-smoke'; inv.mkdir(parents=True)
     progress=inv/'progress.json'; results=Path(c['gl_root'])/'seats/pp/seed7/s3-pp-00-smoke/seat-results.jsonl'
@@ -249,8 +269,13 @@ def scan_fixture(tmp_path,*,rc=0):
     for name in ('front.mkv','wrist.mkv','arrays.npz','trace.jsonl','meta.json','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'):
         (directory/name).write_text('fixture')
     result=directory/'result.json'; C.atomic(result,dict(key=ident['key'],dataset='ood',infra=False,task_success=1))
+    led=budget_ledger.BudgetLedger(c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+    route='pp/seed7/new'; token=route+'|'+ident['key']+'|a1'
+    rid=led.reserve(resets=2,route=route,key=ident['key'],token=token,kind_of_try='first',attempt_no=1,slurm_job_id='103')
+    led.claim_reset(rid,'build'); led.claim_reset(rid,'reset'); led.commit(rid,status='success',infra=False,slurm_job_id='103')
     row=dict(key=ident['key'],infra=False,final=True,accepted=True,result=str(result),exec_steps=276,
-             task_success=1,budget_exhausted=False,run_blocked=False)
+             task_success=1,budget_exhausted=False,run_blocked=False,dataset='ood',attempt=1,seat='s103-pp-00-smoke',policy='pp',policy_seed=7,
+             budget_rid=rid,budget_token=token,status='success')
     a=dict(process=types.SimpleNamespace(poll=lambda:rc),log=(inv/'worker.log').open('a'),seat=c['seats'][2],shard='pp-00',
            smoke=True,model='pp',progress=progress,results=results,rows=[ident],offset=0,started=time.time()-300,
            acked=False,phase_key=None,phase_start=time.time()-300,step_id='103.1',worker_name='raw-ood-worker-pp-00-smoke')
