@@ -93,6 +93,8 @@ EXIT_BLOCKED = 3
 EXIT_BUDGET = 5
 EXIT_INCOMPLETE = 6
 EXIT_WALL = 75
+#: 硬退出前最多等待结算两秒；所有锁与文件操作都在可丢弃的守护线程内。
+HARD_EXIT_SETTLE_S = 2.0
 DEFAULT_SHUFFLE_SEED = 20260930
 TERMINAL_STATUSES = ("success", "fail", "timeout")
 #: 本轮基础设施重试次数（拆分方案 R5：0 次，失败即停交用户）
@@ -280,6 +282,7 @@ class AttemptLedger:
         self.starts: dict[str, list[dict]] = {}
         self.ended: dict[str, dict] = {}
         self.accepted: dict[str, str] = {}
+        self.settled: set[str] = set()
         self._lock = threading.Lock()
         for row in read_results(self.path):
             self._apply(row)
@@ -302,6 +305,8 @@ class AttemptLedger:
             self.ended[row["attempt_id"]] = row
         elif kind == "accept":
             self.accepted.setdefault(row["key"], row["accepted_attempt_id"])
+        elif kind == "settlement_complete":
+            self.settled.add(row["attempt_id"])
 
     def _void(self, attempt_id: str) -> bool:
         end = self.ended.get(attempt_id)
@@ -472,11 +477,18 @@ class AttemptLedger:
     def attempt_end(self, record: dict) -> bool:
         """写 attempt_end；最终结局且本账本里该身份尚无 accept 时再写 accept。返回 late。"""
         key, status = record["key"], record.get("status")
+        previous = self.ended.get(record["attempt_id"])
+        if previous is not None:
+            if self.is_final(previous) and not previous.get("late") and key not in self.accepted:
+                self.recover_accept(previous)
+            return bool(previous.get("late"))
         late = self.is_late(record)
         base = {"key": key, "attempt_id": record["attempt_id"], "attempt_no": record["attempt_no"]}
         self.append({"kind": "attempt_end", **base, "status": status, "infra": bool(record.get("infra")),
                      "cap_hit": bool(record.get("cap_hit")), "exec_steps": record.get("exec_steps"),
                      "budget_exhausted": bool(record.get("budget_exhausted")), "late": late,
+                     **({"seat_result": record["seat_result"], "void": bool(record.get("void"))}
+                        if "seat_result" in record else {}),
                      **({"run_blocked": True} if record.get("run_blocked") else {}),
                      **({"infra_reason": record["infra_reason"]} if record.get("infra_reason") else {}),
                      **({"recovered": True} if record.get("recovered") else {}),
@@ -830,20 +842,27 @@ class DynamicQueue:
         write_json_atomic(path, doc)
 
     def accept(self, ident: dict, *, attempt: int, status: str, result: str | None, **extra) -> bool:
-        """``accepted/<队列键>.json``（O_EXCL，第一份即权威）；已存在返回 False。"""
+        """先完整写临时文件，再独占链接到接受标记；写入失败不能留下半份权威标记。"""
         p = self.accepted_path(ident)
         doc = {"key": key_of(ident), "dataset": ident["dataset"], "attempt": int(attempt), "status": status,
                "result": result, "seat": self.seat, "host": socket.gethostname(), "pid": os.getpid(),
                "t": self.now(), **extra}
+        payload = dumps(doc) + "\n"
+        tmp = p.with_name(f".{p.name}.{uuid.uuid4().hex}.tmp")
         try:
-            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-        except FileExistsError:
-            return False
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(dumps(doc) + "\n")
-            fh.flush()
-            os.fsync(fh.fileno())
-        return True
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            try:
+                os.link(tmp, p)
+            except FileExistsError:
+                return False
+            return True
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                tmp.unlink()
 
     def create_claim(self, ident: dict, n: int, **extra) -> Path | None:
         p = self.claim_path(ident, n)
@@ -961,6 +980,7 @@ class SeatRunner:
         self._lock = threading.Lock()
         self._progress_lock = threading.Lock()
         self._last_progress: dict | None = None
+        self._last_episode_progress: tuple | None = None
         self._lease_cm = None
         self._hb_stop = threading.Event()
         self._hb_thread: threading.Thread | None = None
@@ -976,7 +996,8 @@ class SeatRunner:
             doc = {"pid": os.getpid(), "host": socket.gethostname(), "seat": self.seat, "policy": self.args.policy,
                    "label": self.label, "policy_seed": self.policy_seed, "phase": phase,
                    "key": cur.key if cur else None, "dataset": cur.ident["dataset"] if cur else None,
-                   "attempt_no": cur.attempt if cur else None, "episodes_done": self.episodes_done, "t": time.time(),
+                   "attempt_no": cur.attempt if cur else None, "episodes_done": self.episodes_done,
+                   "t": time.time(), "t_progress": time.time(), "t_heartbeat": time.time(),
                    **extra}
             if getattr(self.args, "progress_file", None):
                 doc.update(slurm_job_id=os.environ.get("SLURM_JOB_ID"), slurm_step_id=os.environ.get("SLURM_STEP_ID"))
@@ -1074,6 +1095,13 @@ class SeatRunner:
         rid 一律结算（commit 幂等），领取文件记收尾。"""
         n = 0
         for st in self.ledger.dangling():
+            previous_report = next((r for r in read_results(self.results_path)
+                                    if r.get("attempt_id") == st["attempt_id"] and r.get("key") == st["key"]), None)
+            if previous_report is not None and self._ident_of_start(st) is not None:
+                self._end(self._claim_of_start(st), st["attempt_id"], dict(previous_report, recovered=True),
+                          void=bool(previous_report.get("void")))
+                n += 1
+                continue
             res = read_json(Path(st["result_path"])) if st.get("result_path") else None
             row = {"key": st["key"], "attempt_id": st["attempt_id"], "attempt_no": st["attempt_no"],
                    "status": "error", "infra": True, "exec_steps": None, "recovered": True}
@@ -1085,33 +1113,81 @@ class SeatRunner:
             elif self.ledger.shared is not None:
                 interrupt, evidence = self.ledger.classify_interrupt(st)
                 row.update(interrupt=interrupt, interrupt_evidence=evidence)
-            self.ledger.attempt_end(row)
-            self._settle_shared(st.get("budget_rid"), status=row["status"], infra=row["infra"])
             ident = self._ident_of_start(st)
             if ident is not None:
-                if AttemptLedger.is_final(row):
-                    self.queue.accept(ident, attempt=st["attempt_no"], status=row["status"],
-                                      result=st.get("result_path"), recovered=True)
-                if st.get("claim"):
-                    self.queue.end_claim(Path(st["claim"]), "recovered" if AttemptLedger.is_final(row) else "interrupted")
+                report = self._result_row(self._claim_of_start(st), st["attempt_id"], res
+                                          if res and res.get("attempt") == st["attempt_no"] and res.get("key") == st["key"]
+                                          else None)
+                report.update({k: v for k, v in row.items() if k != "attempt_no"})
+                if res and res.get("attempt") == st["attempt_no"] and res.get("key") == st["key"]:
+                    report["status"] = res.get("status")
+                    report["task_success"] = res.get("task_success")
+                else:
+                    previous = next((r for r in read_results(self.results_path)
+                                     if r.get("attempt_id") == st["attempt_id"] and r.get("key") == st["key"]), None)
+                    if previous is not None:
+                        report = dict(previous, recovered=True)
+                self._end(self._claim_of_start(st), st["attempt_id"], report,
+                          void=bool(report.get("budget_exhausted") or report.get("run_blocked")))
+            else:
+                self.ledger.attempt_end(row)
+                self._settle_shared(st.get("budget_rid"), status=row["status"], infra=row["infra"])
             print(f"LEDGER_RECOVER key={st['key']} attempt_id={st['attempt_id']} status={row.get('status')}", flush=True)
             n += 1
         return n
 
     def recover_crash_window(self) -> int:
-        """「attempt_end 已写、accept 未写」时崩溃：补写本地 accept 与队列 accepted 标记。"""
+        """按尝试编号补全部缺失结算阶段，已写本地 accept 也不能掩盖共享、队列或报告缺口。"""
         n = 0
-        for end in self.ledger.final_without_accept():
-            self.ledger.recover_accept(end)
+        for end in list(self.ledger.ended.values()):
+            if end["attempt_id"] in self.ledger.settled:
+                continue
             st = next((s for s in self.ledger.starts.get(end["key"], []) if s["attempt_id"] == end["attempt_id"]), {})
             ident = self._ident_of_start(st)
             if ident is not None:
-                self.queue.accept(ident, attempt=end.get("attempt_no"), status=end.get("status"),
-                                  result=st.get("result_path"), recovered=True)
+                c = self._claim_of_start(st)
+                existing = next((r for r in read_results(self.results_path)
+                                 if r.get("attempt_id") == end["attempt_id"] and r.get("key") == end["key"]), None)
+                row = end.get("seat_result") or existing or self._result_row(c, end["attempt_id"], None)
+                if not end.get("seat_result") and existing is None:
+                    row.update({k: v for k, v in end.items() if k in
+                                ("status", "infra", "infra_reason", "exec_steps", "cap_hit", "budget_exhausted", "run_blocked")})
+                    row["recovered"] = True
+                self._end(c, end["attempt_id"], dict(row),
+                          void=bool(end.get("void") or end.get("budget_exhausted") or end.get("run_blocked")))
+            elif AttemptLedger.is_final(end) and end["key"] not in self.ledger.accepted:
+                self.ledger.recover_accept(end)
             print(f"LEDGER_RECOVER_ACCEPT key={end['key']} attempt_id={end['attempt_id']} status={end.get('status')}",
                   flush=True)
             n += 1
         return n
+
+    def _claim_of_start(self, st: dict) -> Claim:
+        return Claim(ident=dict(st["identity"]), attempt=st["attempt_no"],
+                     path=Path(st["claim"]) if st.get("claim") else self.queue.claim_path(st["identity"], st["attempt_no"]),
+                     token=st.get("token"), rid=st.get("budget_rid"), retry=bool(st.get("retry")))
+
+    def _result_row(self, c: Claim, aid: str, result: dict | None = None) -> dict:
+        """所有出口共用结果契约；未观测执行步、成功标志和结果路径显式为 null。"""
+        d = result or {}
+        row = {"key": c.key, "dataset": c.ident["dataset"], "task": c.ident["task"], "tier": c.ident["tier"],
+               "builder_episode": c.ident["builder_episode"], "attempt": c.attempt, "attempt_id": aid,
+               "budget_rid": c.rid, "budget_token": c.token, "claim": str(c.path), "result": None,
+               "seat": self.seat, "policy": self.args.policy, "policy_seed": self.policy_seed,
+               "host": socket.gethostname(), "status": "error", "infra": True,
+               "infra_reason": "interrupted", "task_success": None, "exec_steps": None}
+        for field in ("status", "infra", "infra_reason", "error", "error_kind", "task_success", "exec_steps",
+                      "cap_hit", "reset_calls", "budget_exhausted", "run_blocked", "video", "video_error", "raw_dir"):
+            if field in d:
+                row[field] = d[field]
+        st = next((s for s in self.ledger.starts.get(c.key, []) if s["attempt_id"] == aid), {})
+        path = st.get("result_path")
+        if path:
+            saved = read_json(Path(path))
+            if result is not None and saved and saved.get("attempt") == c.attempt and saved.get("key") == c.key and \
+                    saved.get("status") == d.get("status") and saved.get("infra") == d.get("infra"):
+                row["result"] = path
+        return row
 
     # ── 领取 ────────────────────────────────────────────────────────────
     def token_of(self, key: str, attempt_no: int) -> str:
@@ -1210,7 +1286,17 @@ class SeatRunner:
             # 阶段更新与心跳同锁：心跳只能刷新当前版本，不能把旧phase/key覆盖回去。
             with self._progress_lock:
                 if self._last_progress is not None:
-                    self._last_progress = {**self._last_progress, "t": time.time()}
+                    doc = {**self._last_progress, "t_heartbeat": time.time()}
+                    path = doc.get("episode_progress_file")
+                    ep = read_json(Path(path)) if path else None
+                    if ep and ep.get("pid") == os.getpid() and ep.get("key") == doc.get("key") and \
+                            ep.get("dataset") == doc.get("dataset") and ep.get("attempt") == doc.get("attempt_no"):
+                        observed = (ep.get("phase"), ep.get("step"))
+                        if observed != self._last_episode_progress:
+                            doc["t_progress"] = ep["t"]
+                            doc.update(episode_phase=ep.get("phase"), exec_steps=ep.get("step"))
+                            self._last_episode_progress = observed
+                    self._last_progress = doc
                     write_json_atomic(self.progress_path, self._last_progress)
 
     def _start_heartbeat(self) -> None:
@@ -1226,28 +1312,44 @@ class SeatRunner:
 
     # ── 看门狗退出前的结算（修「墙钟超时只 _finish 不 _settle」的缺口） ───────
     def _hard_exit(self, code: int) -> None:
-        with self._lock:
-            cur, aid = self._current, self._current_attempt_id
+        cur, aid = self._current, self._current_attempt_id
+        timeout = getattr(self.E.WATCHDOG_STATE, "result", None)
+        stages: dict[str, str] = {}
+        cancel = threading.Event()
+        try:
             if cur is not None and aid is not None:
-                with contextlib.suppress(Exception):
-                    self.ledger.attempt_end({"key": cur.key, "attempt_id": aid, "attempt_no": cur.attempt,
-                                             "status": "error", "infra": True, "infra_reason": "watchdog_exit",
-                                             "exec_steps": None})
-                with contextlib.suppress(Exception):
-                    self._settle_shared(cur.rid, status="fail", infra=True)
-                with contextlib.suppress(Exception):
-                    self.queue.end_claim(cur.path, "infra_timeout", exit_code=int(code))
-                with contextlib.suppress(Exception):
-                    append_result(self.results_path, {"key": cur.key, "dataset": cur.ident["dataset"],
-                                                      "attempt": cur.attempt, "attempt_id": aid,
-                                                      "status": "error", "infra": True,
-                                                      "infra_reason": "watchdog_exit", "budget_rid": cur.rid,
-                                                      "t": time.time()})
-                print(f"SEAT_WATCHDOG_EXIT key={cur.key} dataset={cur.ident['dataset']} attempt={cur.attempt} "
-                      f"code={code}（已写 attempt_end、结算共享账本、领取文件记收尾）", flush=True)
-                self._current = self._current_attempt_id = None
-        sys.stdout.flush()
-        self._exit(code)
+                def settle():
+                    try:
+                        evidence = timeout.to_dict() if timeout and timeout.key == cur.key and timeout.attempt == cur.attempt else None
+                        row = self._result_row(cur, aid, evidence)
+                        row.update(exit_kind="watchdog_hard_exit", exit_code=int(code))
+                        if evidence is None:
+                            row.update(infra_reason="watchdog_exit")
+                        with self._lock:
+                            self._settle_attempt(cur, aid, row, void=False, best_effort=True,
+                                                 stage_state=stages, cancel=cancel)
+                            self._current = self._current_attempt_id = None
+                    except BaseException as exc:
+                        # 调用线程按实际完成阶段报告未知或失败；此线程不能阻止退出。
+                        stages["_error"] = f"{type(exc).__name__}:{exc}"
+                        return
+                worker = threading.Thread(target=settle, name="seat-hard-exit-settlement", daemon=True)
+                worker.start()
+                worker.join(timeout=HARD_EXIT_SETTLE_S)
+                cancel.set()
+                def diagnostics():
+                    for phase in ("attempt_end", "shared", "queue_accept", "claim", "report", "complete"):
+                        if phase not in stages:
+                            print(f"SEAT_SETTLE=FAIL stage={phase} key={cur.key} attempt_id={aid} "
+                                  f"budget_rid={cur.rid} error={stages.get('_error', 'settlement_deadline')}", flush=True)
+                    print(f"SEAT_WATCHDOG_EXIT key={cur.key} dataset={cur.ident['dataset']} attempt={cur.attempt} "
+                          f"attempt_id={aid} budget_rid={cur.rid} code={code}", flush=True)
+                    sys.stdout.flush()
+                logger = threading.Thread(target=diagnostics, name="seat-hard-exit-diagnostics", daemon=True)
+                logger.start()
+                logger.join(timeout=0.1)
+        finally:
+            self._exit(code)
 
     # ── 一局 ────────────────────────────────────────────────────────────
     def _expired_archive_evidence(self, policy, c: Claim, raw: Path, claim: dict) -> dict:
@@ -1524,11 +1626,13 @@ class SeatRunner:
                                   task=task, tier=ident["tier"], dataset=ds, builder_episode=ep, identity=ident,
                                   budget_rid=c.rid, token=c.token, claim=str(c.path), result_path=result_path,
                                   **({"interrupt": c.interrupt} if c.retry and c.interrupt else {}))
-        self.progress("episode")
+        self._last_episode_progress = None
+        self.progress("episode", episode_progress_file=str(Path(result_path).parents[2] / "progress.json"))
         meter = _ResetMeter(self.ledger, key=c.key, attempt_id=attempt_id, attempt_no=c.attempt, rid=c.rid)
         base = {"key": c.key, "dataset": ds, "task": task, "tier": ident["tier"], "builder_episode": ep,
                 "attempt": c.attempt, "attempt_id": attempt_id, "budget_rid": c.rid, "budget_token": c.token,
-                "claim": str(c.path), "result": result_path, "seat": self.seat, "policy": self.args.policy,
+                "claim": str(c.path), "result": None, "task_success": None, "exec_steps": None,
+                "seat": self.seat, "policy": self.args.policy,
                 "policy_seed": self.policy_seed, "host": socket.gethostname()}
         stop: SeatStop | None = None
         try:
@@ -1563,7 +1667,7 @@ class SeatRunner:
             raise SeatStop(EXIT_BUDGET, "reset_budget") from e
         d = res.to_dict()
         infra = bool(d.get("infra"))
-        row = dict(base, status=d["status"], task_success=d.get("task_success"), infra=infra,
+        row = dict(self._result_row(c, attempt_id, d), status=d["status"], task_success=d.get("task_success"), infra=infra,
                    infra_reason=d.get("infra_reason"), error=d.get("error"), error_kind=d.get("error_kind"),
                    exec_steps=d.get("exec_steps"), cap_hit=d.get("cap_hit"), reset_calls=d.get("reset_calls"),
                    budget_exhausted=bool(d.get("budget_exhausted")), run_blocked=bool(d.get("run_blocked")),
@@ -1596,30 +1700,99 @@ class SeatRunner:
     def _end(self, c: Claim, attempt_id: str, row: dict, *, void: bool) -> None:
         """结算一次尝试：本地 attempt_end（infra 错误按 status=error 记，不进 accept）、共享账本 commit／release、
         accepted 标记或领取文件收尾、本席位结果行。"""
+        with self._lock:
+            self._settle_attempt(c, attempt_id, row, void=void)
+            self._current = self._current_attempt_id = None
+        print(f"SEAT_EPISODE_DONE policy={self.args.policy} seat={self.seat} dataset={row['dataset']} key={c.key} "
+              f"attempt={c.attempt} status={row['status']} infra={int(bool(row.get('infra')))} final={int(row['final'])} "
+              f"accepted={int(row['accepted'])} void={int(void)}", flush=True)
+
+    def _settle_attempt(self, c: Claim, attempt_id: str, row: dict, *, void: bool, best_effort: bool = False,
+                        stage_state: dict | None = None, cancel: threading.Event | None = None) -> None:
+        """先持久化完整结果，再逐阶段幂等结算；硬退出逐项留证据，不能把失败写成成功。"""
+        defaults = {"key": c.key, "dataset": c.ident["dataset"], "task": c.ident["task"], "tier": c.ident["tier"],
+                    "builder_episode": c.ident["builder_episode"], "attempt": c.attempt, "attempt_id": attempt_id,
+                    "budget_rid": c.rid, "budget_token": c.token, "claim": str(c.path), "result": None,
+                    "seat": self.seat, "policy": self.args.policy, "policy_seed": self.policy_seed,
+                    "host": socket.gethostname(), "status": "error", "infra": False, "infra_reason": None,
+                    "task_success": None, "exec_steps": None, "cap_hit": False, "reset_calls": None,
+                    "budget_exhausted": False, "run_blocked": False, "late": False, "accepted": False,
+                    "error": None, "error_kind": None, "video": None, "video_error": None, "raw_dir": None,
+                    "t": time.time()}
+        for key, value in defaults.items():
+            row.setdefault(key, value)
         infra = bool(row.get("infra"))
         led_status = "error" if (infra or row.get("run_blocked") or row.get("budget_exhausted")) else row["status"]
         led_row = {"key": c.key, "attempt_id": attempt_id, "attempt_no": c.attempt, "status": led_status,
                    "infra": infra, "cap_hit": row.get("cap_hit"), "exec_steps": row.get("exec_steps"),
                    "budget_exhausted": bool(row.get("budget_exhausted")), "run_blocked": bool(row.get("run_blocked")),
-                   "infra_reason": row.get("infra_reason")}
+                   "infra_reason": row.get("infra_reason"), "seat_result": dict(row), "void": void,
+                   **{k: row[k] for k in ("recovered", "interrupt", "interrupt_evidence") if k in row}}
         final = AttemptLedger.is_final(led_row)
-        with self._lock:
+        row.update(final=final, void=bool(void))
+        led_row["seat_result"] = dict(row)
+        failed = []
+        def stage(name, operation):
+            if cancel is not None and cancel.is_set():
+                raise TimeoutError("硬退出结算等待已结束")
+            try:
+                value = operation()
+            except BaseException as exc:
+                failed.append(name)
+                if stage_state is not None:
+                    stage_state[name] = "FAIL"
+                print(f"SEAT_SETTLE=FAIL stage={name} key={c.key} attempt_id={attempt_id} budget_rid={c.rid} "
+                      f"error={type(exc).__name__}:{exc}", flush=True)
+                if not best_effort:
+                    raise
+                return None
+            if cancel is not None and cancel.is_set():
+                raise TimeoutError("硬退出结算等待已结束")
+            if stage_state is not None:
+                stage_state[name] = "PASS"
+            print(f"SEAT_SETTLE=PASS stage={name} key={c.key} attempt_id={attempt_id} budget_rid={c.rid}", flush=True)
+            return value
+        def local():
             late = self.ledger.attempt_end(led_row)
-            self._settle_shared(c.rid, status=row["status"], infra=infra, void=void)
-            accepted = False
+            row.update(late=late, final=final, void=void)
+        stage("attempt_end", local)
+        stage("shared", lambda: self._settle_shared(c.rid, status=row["status"], infra=infra, void=void))
+        def queue_accept():
             if final:
-                accepted = self.queue.accept(c.ident, attempt=c.attempt, status=row["status"], result=row.get("result"),
-                                             attempt_id=attempt_id)
+                self.queue.accept(c.ident, attempt=c.attempt, status=row["status"], result=row.get("result"),
+                                  attempt_id=attempt_id, **({"recovered": True} if row.get("recovered") else {}))
+                marker = read_json(self.queue.accepted_path(c.ident))
+                if marker is None:
+                    raise ValueError("接受标记未完整落盘")
+                row["accepted"] = marker.get("attempt_id") == attempt_id
+            else:
+                row["accepted"] = False
+        stage("queue_accept", queue_accept)
+        def claim_end():
             if void:
                 self.queue.void_claim(c.path)
             else:
-                self.queue.end_claim(c.path, row["status"] if final else "infra", final=final, accepted=accepted)
-            row.update(late=late, final=final, accepted=accepted, void=void, t=time.time())
-            append_result(self.results_path, row)
-            self._current = self._current_attempt_id = None
-        print(f"SEAT_EPISODE_DONE policy={self.args.policy} seat={self.seat} dataset={row['dataset']} key={c.key} "
-              f"attempt={c.attempt} status={row['status']} infra={int(infra)} final={int(final)} "
-              f"accepted={int(accepted)} void={int(void)}", flush=True)
+                status = "infra_timeout" if row.get("exit_kind") == "watchdog_hard_exit" else \
+                         row["status"] if final else "infra"
+                self.queue.end_claim(c.path, status, final=final, accepted=bool(row.get("accepted")),
+                                     **({"exit_code": row["exit_code"]} if "exit_code" in row else {}))
+        stage("claim", claim_end)
+        def report():
+            previous = [r for r in read_results(self.results_path) if r.get("attempt_id") == attempt_id]
+            if len(previous) > 1:
+                raise ValueError("同一尝试已有多条结果，拒绝重复结算")
+            if previous and any(previous[0].get(k) != row.get(k) for k in
+                                ("key", "dataset", "attempt", "status", "infra", "infra_reason", "exec_steps", "task_success", "result")):
+                raise ValueError("既有尝试结果与恢复证据冲突")
+            if not previous:
+                row.setdefault("late", False)
+                row.update(final=final, void=void, t=time.time())
+                row.setdefault("accepted", False)
+                append_result(self.results_path, row)
+        stage("report", report)
+        if not failed and attempt_id not in self.ledger.settled:
+            stage("complete", lambda: self.ledger.append({"kind": "settlement_complete", "key": c.key,
+                                                           "attempt_id": attempt_id, "budget_rid": c.rid}))
 
     # ── 主循环 ──────────────────────────────────────────────────────────
     def summarize(self, rows: list[dict]) -> int:

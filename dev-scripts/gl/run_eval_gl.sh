@@ -5,7 +5,8 @@
 #   1. 客户端重起：客户端以 75（单局墙钟／阶段期限，已记录）或被无进展看门狗杀掉退出时，按 --client-restarts 重起
 #      （本轮缺省 0：不重起，停下交用户）；
 #   2. 无进展看门狗：每 --poll-s 秒看一次本策略的 progress.json（席位 seats/<标签>/seed<n>/<席位>/progress.json 与
-#      rollouts/<模型>/<数据集>/seed<n>/progress.json，取最新修改时间），超过 --noprog-s 秒没有任何更新即先 TERM（客户端
+#      rollouts/<模型>/<数据集>/seed<n>/progress.json）；专属文件读真实 t_progress，不把心跳刷新算进展。
+#      超过 --noprog-s 秒没有真实更新即先 TERM（客户端
 #      收到 TERM 会经 policy.close() 停服务端）、等 --term-grace-s 再 KILL，计一次无进展（rc=124）。
 # 服务端由 Python 的 ServerProcess 起停（本脚本不起服务端）；客户端非零退出后，按客户端日志里的 SERVER_LEFT 行与
 # SERVER_START 行定位 server-metadata-<port>.json，用 scripts/evaluate.py --stop-server 停掉残留服务端（只停元数据里
@@ -104,7 +105,14 @@ label_of() { if [[ "$1" == "groundsg" ]]; then echo "groundsg-$GROUNDSG_VARIANT"
 newest_progress() {  # $1 = 标签；打印本策略各 progress.json 的最新修改时间（epoch 秒，取整），没有打印 0
   local lab="$1" t
   if [[ -n "$PROGRESS_FILE" ]]; then
-    stat -c %Y "$PROGRESS_FILE" 2>/dev/null || echo 0
+    "$BENCH_PY" -c 'import json, sys
+try:
+    row = json.load(open(sys.argv[1], encoding="utf-8"))
+    # 只接收当前客户端身份；不回退到 mtime 或心跳。
+    value = row.get("t_progress") if row.get("pid") == int(sys.argv[2]) else None
+    print(int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0)
+except (OSError, ValueError, TypeError):
+    print(0)' "$PROGRESS_FILE" "$CLIENT_PID" 2>/dev/null || echo 0
     return
   fi
   t="$( { find "$OUT/seats/$lab" -name progress.json -printf '%T@\n' 2>/dev/null

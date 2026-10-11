@@ -21,6 +21,47 @@ def test_dataset_must_be_known():
         EnvSession("T", 0, dataset="test")
 
 
+@pytest.mark.parametrize("observed", [False, True, np.array([False]), np.array([True]), None, "false", 2])
+def test_real_info_success_is_observed_and_serialized_without_changing_output(tmp_path, observed):
+    import json
+    class Recorder(fakes.FakeRecorder):
+        def __init__(self):
+            super().__init__(None, {})
+            self.events = []
+        def add_event(self, event):
+            self.events.append(event)
+    class Env(fakes.FakeEnv):
+        def reset(self):
+            obs, info = super().reset()
+            info["success"] = observed
+            self.returned_info = info
+            return obs, info
+        def step(self, action):
+            obs, reward, terminated, truncated, info = super().step(action)
+            info["success"] = observed
+            self.returned_info = info
+            return obs, reward, terminated, truncated, info
+    rec = Recorder()
+    s, builder = make_session(recorder=rec)
+    env = Env(0, finish_at=None)
+    builder.make_env_for_episode = lambda _: env
+    assert s.task_success is None
+    _obs, info = s.reset()
+    assert info is env.returned_info and s.info is info
+    expected = int(observed.item() if isinstance(observed, np.ndarray) else observed) if \
+               isinstance(observed, (bool, np.ndarray)) else None
+    assert s.task_success == expected
+    returned = s.step(np.zeros(8))
+    assert returned[4] is env.returned_info and s.task_success == expected
+    path = tmp_path / "events.json"
+    path.write_text(json.dumps(rec.events))
+    events = json.loads(path.read_text())
+    assert [e["task_success"] for e in events if e["kind"] in ("env_reset", "env_step")] == [expected, expected]
+    with pytest.raises(AttributeError):
+        s.task_success = 0
+    s.close()
+
+
 def test_build_reset_step_counts_and_readonly_props():
     rec = fakes.FakeRecorder(None, {})
     progress, first = [], []
