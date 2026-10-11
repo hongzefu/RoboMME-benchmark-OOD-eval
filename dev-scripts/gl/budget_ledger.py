@@ -129,6 +129,14 @@ def _dumps(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False)
 
 
+def _strict_equal(before: Any, after: Any) -> bool:
+    """JSON值递归比较，布尔值不能与整数混同，缺字段不能与null混同。"""
+    if type(before) is not type(after): return False
+    if isinstance(before,dict): return before.keys()==after.keys() and all(_strict_equal(before[k],after[k]) for k in before)
+    if isinstance(before,list): return len(before)==len(after) and all(_strict_equal(a,b) for a,b in zip(before,after))
+    return before==after
+
+
 def _nonnegative(value: Any, name: str) -> int:
     """计量只接受非负整数，拒绝布尔值及隐式截断。"""
     if type(value) is not int or value < 0:
@@ -389,6 +397,7 @@ class BudgetLedger:
         return rows
 
     def _append(self, row: dict) -> dict:
+        if set(row)&{'t','host','pid'}: raise ValueError('调用方不得覆盖内部预算元数据')
         row = {"t": time.time(), "host": socket.gethostname(), "pid": os.getpid(),
                "slurm_job_id": os.environ.get("SLURM_JOB_ID"), **row}
         with open(self.path, "ab+") as f:
@@ -502,7 +511,7 @@ class BudgetLedger:
             raise ValueError("astra 必须为布尔值")
         if token is not None and (not isinstance(token, str) or not token):
             raise ValueError("token 必须为非空字符串")
-        if set(extra) & {"kind", "rid", "resets", "astra", "route", "key", "token", "kind_of_try"}:
+        if set(extra) & {"kind", "rid", "resets", "astra", "route", "key", "token", "kind_of_try", "t", "host", "pid"}:
             raise ValueError("附加字段不得覆盖预算字段")
         if resets < 0:
             raise ValueError("resets 不能为负")
@@ -550,7 +559,7 @@ class BudgetLedger:
     def commit(self, rid: str, *, resets: int | None = None, **extra) -> None:
         if resets is not None:
             _nonnegative(resets, "resets")
-        if set(extra) & {"kind", "rid", "resets"}:
+        if set(extra) & {"kind", "rid", "resets", "t", "host", "pid"}:
             raise ValueError("附加字段不得覆盖预算字段")
         with self._locked():
             st = self._load()
@@ -559,7 +568,7 @@ class BudgetLedger:
                 old=st.commits.get(rid,{})
                 metadata={'kind','rid','t','host','pid','resets'}
                 if 'slurm_job_id' not in extra: metadata.add('slurm_job_id')
-                if rid in st.releases or old.get("resets") != resets or {k:v for k,v in old.items() if k not in metadata}!=extra:
+                if rid in st.releases or not _strict_equal(old.get('resets'),resets) or not _strict_equal({k:v for k,v in old.items() if k not in metadata},json.loads(_dumps(extra))):
                     raise ValueError("收尾冲突")
                 return  # 相同收尾幂等
             total = st.resets - st.resets_of(rid) + max(st.reserves[rid]["resets"], resets or 0, st.claimed.get(rid, 0))
@@ -567,7 +576,7 @@ class BudgetLedger:
             self._append({"kind": "commit", "rid": rid, "resets": None if resets is None else int(resets), **extra})
 
     def release(self, rid: str, **extra) -> None:
-        if set(extra) & {"kind", "rid"}:
+        if set(extra) & {"kind", "rid", "t", "host", "pid"}:
             raise ValueError("附加字段不得覆盖预算字段")
         with self._locked():
             st = self._load()
@@ -581,6 +590,7 @@ class BudgetLedger:
     def claim_reset(self, rid: str | None, what: str, **extra) -> None:
         """记一次实际 build／reset；记完后计量总数会超过 ``reset_cap`` 即抛 ``BudgetExhausted(reason="reset_cap")``、
         不写行。历史无预约模式只允许显式 ``rid=None``，每条独立计量；空字符串或未知非空预约一律拒绝。"""
+        if set(extra)&{'kind','rid','what','t','host','pid'}: raise ValueError('附加字段不得覆盖预算及内部元数据')
         with self._locked():
             st = self._load()
             if rid is not None:
@@ -603,7 +613,7 @@ class BudgetLedger:
             raise ValueError("token 必须为非空字符串")
         if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or not 1 <= max_attempts <= 20:
             raise ValueError("max_attempts 必须是 1 至 20 的整数")
-        if set(extra) & {"kind", "route", "key", "interrupt", "max_attempts", "token"}:
+        if set(extra) & {"kind", "route", "key", "interrupt", "max_attempts", "token", "t", "host", "pid"}:
             raise ValueError("附加字段不得覆盖预算字段")
         cap = self.shared_infra_cap if interrupt == "infra" else self.expired_cap
         with self._locked():

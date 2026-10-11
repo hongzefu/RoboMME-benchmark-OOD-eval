@@ -529,6 +529,24 @@ def test_first_identity_and_commit_parameters_cannot_change_on_reopen(tmp_path):
     assert path.read_bytes()==before and led.state().trajectories==1
 
 
+def test_commit_recursive_json_types_presence_and_internal_metadata_are_strict(tmp_path):
+    bm=bl_mod(); path=tmp_path/'strict.jsonl'; led=bm.BudgetLedger(path)
+    rid=led.reserve(resets=2,token='strict',route='r',key='k',kind_of_try='first')
+    values=dict(status='fail',infra=True,steps=1,detail={'nested':[True,1,None,{'value':False}]},nullable=None)
+    led.commit(rid,**values); before=path.read_bytes()
+    led.commit(rid,**values); assert path.read_bytes()==before
+    changed=[dict(values,infra=1),dict(values,steps=True),dict(values,steps=1.0),dict(values,detail={'nested':[1,1,None,{'value':False}]}),
+             dict(values,detail={'nested':[True,True,None,{'value':False}]}),dict(values,detail={'nested':[True,1,None,{'value':0}]}),
+             {k:v for k,v in values.items() if k!='nullable'},dict(values,new_field=None)]
+    for extra in changed:
+        with pytest.raises(ValueError): led.commit(rid,**extra)
+        assert path.read_bytes()==before
+    for name,value in [('t',123),('host','伪主机'),('pid',1)]:
+        with pytest.raises(ValueError): led.commit(rid,**values,**{name:value})
+        with pytest.raises(ValueError): led.reserve(resets=2,token='strict',route='r',key='k',kind_of_try='first',**{name:value})
+        assert path.read_bytes()==before
+
+
 @pytest.mark.parametrize("status", ["success", "fail", "timeout"])
 def test_normal_outcomes_not_rerun_in_shared_mode(tmp_path, status):
     """队列里已 accepted（任一席位）的身份：不领取、不预约、不建环境。"""

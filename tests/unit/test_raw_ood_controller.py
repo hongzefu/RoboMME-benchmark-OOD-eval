@@ -264,7 +264,7 @@ def scan_fixture(tmp_path,*,rc=0,status='success'):
     inv=tmp_path/'control/invocations/pp-00-smoke'; inv.mkdir(parents=True)
     progress=inv/'progress.json'; results=Path(c['gl_root'])/'seats/pp/seed7/s3-pp-00-smoke/seat-results.jsonl'
     results.parent.mkdir(parents=True)
-    C.atomic(progress,dict(label='pp',phase='finished',key=None,pid=1000,t=time.time()-300,slurm_job_id='103',slurm_step_id='1'))
+    C.atomic(progress,dict(label='pp',phase='finished',rc=rc,key=None,pid=1000,t=time.time()-300,slurm_job_id='103',slurm_step_id='1'))
     directory=Path(c['gl_root'])/'rollouts/pp/ood/seed7/raw/VideoUnmask_ep0_xhard1'; directory.mkdir(parents=True)
     for name in ('front.mkv','wrist.mkv','arrays.npz','trace.jsonl','meta.json','events.jsonl','frames-front.jsonl','frames-wrist.jsonl'):
         (directory/name).write_text('fixture')
@@ -643,6 +643,55 @@ def test_watchdog_report_waits_for_true_exit_without_advancing_or_publishing(tmp
     for active in ctl.active.values(): active['log'].close()
 
 
+@pytest.mark.parametrize('full',[False,True])
+@pytest.mark.parametrize('delay',['report_absent','report_half_line','progress_absent','progress_pending','sacct_running'])
+def test_watchdog_terminal_visibility_window_does_not_block_other_slot(tmp_path,monkeypatch,full,delay):
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40); a=ctl.active['102']; row=future_watchdog(ctl,a,metadata,account)
+    if full:
+        row.update(status='fail',exit_kind='watchdog_hard_exit',exit_code=75,infra_reason='episode_wall',task_success=None,exec_steps=None,result=None,
+                   final=False,accepted=False,void=False,budget_exhausted=False,run_blocked=False,budget_token='groundsg/ground-sg-qwenvl/seed7/new|'+row['key']+'|a1')
+        a['results'].write_text(json.dumps(row)+'\n')
+    report_bytes=a['results'].read_bytes(); progress_bytes=a['progress'].read_bytes(); sacct=account['102.5']; budget_before=Path(ctl.c['budget_ledger']).read_bytes()
+    if delay=='report_absent': a['results'].unlink()
+    elif delay=='report_half_line': a['results'].write_bytes(report_bytes[:-2])
+    elif delay=='progress_absent': a['progress'].unlink()
+    elif delay=='progress_pending':
+        progress=C.read(a['progress']); progress.update(phase='episode',rc=None); C.atomic(a['progress'],progress)
+    else: account['102.5']=sacct.replace('FAILED|75:0','RUNNING|0:0')
+    visited=[]; check=ctl.check_worker
+    def track(active,**kwargs):
+        visited.append(active['shard']); return check(active,**kwargs)
+    monkeypatch.setattr(ctl,'check_worker',track); monkeypatch.setattr(C.subprocess,'Popen',lambda *a,**kw:pytest.fail('可见性等待不启动worker'))
+    ctl.scan()
+    key=C.identity('qwenvl',row)
+    assert a['offset']==0 and key not in ctl.failures and '102' in ctl.active and 'smvla-00' in visited
+    assert Path(ctl.c['budget_ledger']).read_bytes()==budget_before
+    a['results'].write_bytes(report_bytes); a['progress'].write_bytes(progress_bytes); account['102.5']=sacct
+    ctl.scan(); assert key in ctl.failures and a['offset']==1 and '102' not in ctl.active
+    for active in ctl.active.values(): active['log'].close()
+
+
+@pytest.mark.parametrize('rc',[0,6])
+def test_normal_or_drained_exit_waits_for_progress_and_report_visibility(tmp_path,monkeypatch,rc):
+    ctl,a,row=scan_fixture(tmp_path,rc=rc); ctl.pausing=rc==6
+    progress=C.read(a['progress']); progress.update(phase='episode'); C.atomic(a['progress'],progress)
+    ctl.scan(); assert a['offset']==0 and ctl.active
+    a['results'].write_text(json.dumps(row)+'\n'); ctl.scan(); assert ctl.active
+    progress.update(phase='finished',rc=rc); C.atomic(a['progress'],progress); ctl.scan()
+    assert not ctl.active and len(ctl.published)==1
+
+
+def test_watchdog_missing_report_is_rejected_at_120_seconds_without_settling(tmp_path,monkeypatch):
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40); a=ctl.active['102']; row=future_watchdog(ctl,a,metadata,account); a['results'].unlink()
+    clock=[10.]; monkeypatch.setattr(C.time,'monotonic',lambda:clock[0]); ctl.scan()
+    clock[0]=130.
+    with pytest.raises(ValueError,match='WORKER_REPORT_CONFIRMATION=FAIL'): ctl.scan()
+    assert a['offset']==0 and C.identity('qwenvl',row) not in ctl.failures
+    for active in ctl.active.values(): active['log'].close()
+
+
 @pytest.mark.parametrize('claims,reason,success,steps',[(0,'episode_wall',None,None),(1,'deadline_first_infer',None,None),(2,'deadline_media_finalize',1,27)])
 def test_full_watchdog_preserves_actual_partial_reset_and_observed_success(tmp_path,monkeypatch,claims,reason,success,steps):
     ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
@@ -862,6 +911,9 @@ def test_existing_adapter_real_pid_disappearance_requires_true_terminal_accounti
         assert adapter.poll() is None
         child.wait(timeout=2)
         monkeypatch.setattr(C,'worker_account',lambda *a,**kw:None)
+        clock=[10.]; monkeypatch.setattr(C.time,'monotonic',lambda:clock[0])
+        assert adapter.poll() is None
+        clock[0]=130.
         with pytest.raises(ValueError,match='退出未知'): adapter.poll()
         monkeypatch.setattr(C,'worker_account',lambda *a,**kw:0)
         assert adapter.poll()==0
@@ -934,6 +986,44 @@ def test_paused_complete_prefix_restores_only_unattempted_new_segment(tmp_path,m
     assert '--job-name=raw-ood-worker-qwenvl-00-resume-1-full' in captured[0] and ledger.read_bytes()==before
     assert all(p.read_bytes()==raw for p,raw in source_before.items())
     ctl.active['101']['log'].close()
+
+
+def test_locked6_running_resume1_watchdog_launches_resume2_then_reattaches(tmp_path,monkeypatch):
+    """最新运行段号不得丢失：接管resume1后75只创建resume2，并能再次严格接管。"""
+    ctl,metadata,account,planned=paused_history_fixture(tmp_path,monkeypatch)
+    planned=C.make_shards(ctl.rows)['qwenvl-00']['rows'][:4]; ctl.shards['qwenvl-00']['rows']=planned
+    original_inv=ctl.control/'invocations/qwenvl-00-full'
+    (original_inv/'identities.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in planned)); C.atomic(ctl.control/'shards.json',dict(ctl.base,shards=ctl.shards))
+    ctl.c['failure_policy']={'continue_reasons':['watchdog_exit']}; ctl.resume_existing_dispatches('c'*40,paused=True)
+    next_pid=[7700]; calls=[]
+    def popen(cmd,**kw):
+        calls.append(cmd); pid=next_pid[0]; next_pid[0]+=1; return types.SimpleNamespace(pid=pid)
+    monkeypatch.setattr(C.subprocess,'Popen',popen)
+    old_identity=C.process_identity; monkeypatch.setattr(C,'process_identity',lambda pid:metadata.get(pid) if 7700<=pid<=7701 else old_identity(pid))
+    def bind_active(owner,step_number):
+        a=owner.active['101']; d=C.read(a['progress'].parent/'dispatch.json'); seat=a['seat']; step='101.'+str(step_number)
+        C.atomic(a['progress'],dict(phase='context_load',key=None,t=C.time.time(),label=owner.c['models']['qwenvl']['label'],slurm_job_id='101',slurm_step_id=str(step_number),seat=seat['seat']+'-'+a['inv_tag'],policy_seed=7,pid=d['srun_pid']))
+        metadata[d['srun_pid']]=dict(state='S',start_ticks=d['srun_pid'],start_time=d['time'],command=d['command'],cgroup='0::/slurm/job_100/step_12/task_0')
+        account[step]=step+'|'+a['worker_name']+'|RUNNING|0:0\n'
+        return a
+    ctl.start(ctl.c['seats'][0],'qwenvl-00'); first=bind_active(ctl,6); assert first['inv_tag']=='qwenvl-00-resume-1-full'; first['log'].close()
+    def construct():
+        value=C.Controller(ctl.c); value.shards=ctl.shards; return value
+    resumed=construct(); launched_before=len(calls); resumed.resume_existing_dispatches('d'*40)
+    assert len(calls)==launched_before and resumed.segment_numbers['qwenvl-00']==1
+    a=resumed.active['101']; future_watchdog(resumed,a,metadata,account); resumed.scan()
+    assert resumed.segment_numbers['qwenvl-00']==2 and resumed.resume_rows['qwenvl-00']==[planned[3]]
+    budget_before=Path(ctl.c['budget_ledger']).read_bytes()
+    resumed.start(ctl.c['seats'][0],'qwenvl-00'); second=bind_active(resumed,7)
+    assert second['inv_tag']=='qwenvl-00-resume-2-full' and len(calls)==launched_before+1
+    assert [json.loads(x) for x in (second['progress'].parent/'identities.jsonl').read_text().splitlines()]==[planned[3]]
+    second['log'].close(); restarted=construct(); before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    proof=restarted.resume_existing_dispatches('e'*40,preflight=True)
+    assert proof['active']==1 and proof['infra']==1 and {p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}==before
+    restarted.resume_existing_dispatches('e'*40)
+    assert len(calls)==launched_before+1 and restarted.active['101']['inv_tag']=='qwenvl-00-resume-2-full' and restarted.segment_numbers['qwenvl-00']==2
+    assert Path(ctl.c['budget_ledger']).read_bytes()==budget_before and 'qwenvl-00' not in restarted.pending
+    restarted.active['101']['log'].close()
 
 
 @pytest.mark.parametrize('unknown_history',[False,True])

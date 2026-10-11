@@ -337,7 +337,10 @@ class ExistingProcess:
                 raise ValueError('已有srun PID复用或命令行改变')
             return None
         rc=worker_account(self.step,self.name,allow_watchdog=True,allow_drained=True)
-        if rc is None: raise ValueError('srun消失但Slurm仍RUNNING，退出未知')
+        if rc is None:
+            began=getattr(self,'disappeared_monotonic',None)
+            if began is None: self.disappeared_monotonic=time.monotonic()
+            elif time.monotonic()-began>=120: raise ValueError('srun消失但Slurm仍RUNNING，退出未知超过120秒')
         return rc
 
 
@@ -903,7 +906,8 @@ class Controller:
             print(('PAUSED_RESUME_PREFLIGHT=PASS ' if paused else 'EXISTING_DISPATCHES_PREFLIGHT=PASS ')+json.dumps(proof,ensure_ascii=False,sort_keys=True),flush=True); return proof
         self.published=set(pubs); self.smoked=set(MODELS); self.formal=True; self.completed=logical_completed
         self.pending=[s for s in self.pending if s not in dispatched or s in remaining and remaining[s]]
-        self.resume_rows=remaining; self.segment_numbers={s:segments[s]+1 for s in remaining}; self.unresolved=unresolved
+        self.resume_rows=remaining; self.segment_numbers=dict(segments)
+        self.segment_numbers.update({s:segments[s]+1 for s in remaining}); self.unresolved=unresolved
         for doc in failure_docs.values(): self.record_failure(doc)
         for a in gathered:
             a['log']=(a['progress'].parent/'worker.log').open('a'); self.active[str(a['seat']['job_id'])]=a
@@ -1002,6 +1006,15 @@ class Controller:
                     began=a.setdefault('failure_exit_wait_started',time.monotonic())
                     if time.monotonic()-began>=120: raise RuntimeError('看门狗原行已可见但真实worker退出未在120秒内闭合')
                     return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
+                if not a['progress'].exists():
+                    return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
+                progress=read(a['progress'])
+                if progress['phase']!='finished':
+                    return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
+                if progress['rc']!=75: raise ValueError('看门狗报告与finished退出码矛盾')
+                step=str(a['seat']['job_id'])+'.'+str(progress['slurm_step_id'])
+                if worker_account(step,a['worker_name'],allow_watchdog=True) is None:
+                    return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
                 doc=self.prepare_failure(a,row,line); self.record_failure(doc)
                 seen.add(key); a['offset']+=1
                 if doc['reason'] not in self.c.get('failure_policy',{}).get('continue_reasons',[]): raise RuntimeError('基础设施失败已留证，继续未授权')
@@ -1020,11 +1033,21 @@ class Controller:
         now=time.monotonic()
         if 'exit_observed_monotonic' not in a:
             a['exit_observed_monotonic']=now; a['exit_observed_wall']=time.time()
-        expected={identity(a['model'],r) for r in a['rows']}; missing=sorted(expected-self.published)
+        expected={identity(a['model'],r) for r in a['rows']}
+        progress=read(a['progress']) if a['progress'].exists() else None
+        if progress is not None and progress['phase']=='finished' and progress['rc']!=rc: raise ValueError('终态finished退出码与进程矛盾')
+        progress_ready=progress is not None and progress['phase']=='finished' and progress['rc']==rc
+        required=expected
+        if rc in (6,75):
+            ledger,_=ledger_snapshot(Path(self.c['budget_ledger']))
+            model=a['model']; route=self.c['models'][model]['policy']+('/'+ROUTES[model][2] if ROUTES[model][2] else '')+'/seed7/new'
+            required={identity(model,r) for rid,r in ledger.reserves.items() if r.get('route')==route and rid in ledger.commits}&expected
+        missing=sorted(required-self.settled())
         elapsed=now-a['exit_observed_monotonic']
         try: size=a['results'].stat().st_size
         except FileNotFoundError: size=None
-        ok=not missing and identity_valid and not read_info['partial_tail']
+        ok=not missing and identity_valid and progress_ready and not read_info['partial_tail'] and not read_info.get('failure_exit_waiting',False)
+        if rc==75: ok=ok and bool(expected&set(self.failures))
         state='confirmed' if ok and elapsed<=120 else ('failed' if elapsed>=120 else 'waiting')
         evidence=dict(self.base,model=a['model'],shard_id=a['shard'],gpu_job_id=str(a['seat']['job_id']),rc=rc,state=state,
                       expected_path=str(a['results']),path_exists=a['results'].exists(),stat_size=size,read_info=read_info,
@@ -1039,9 +1062,10 @@ class Controller:
     def scan(self):
         for jid,a in list(self.active.items()):
             rc=a['process'].poll()
-            if rc==0 and 'exit_observed_monotonic' not in a:
+            if rc in (0,6,75) and 'exit_observed_monotonic' not in a:
                 a['exit_observed_monotonic']=time.monotonic(); a['exit_observed_wall']=time.time()
-            try: identity_valid=self.check_worker(a,exited=rc in (0,75) or rc==6 and self.pausing)
+            exited=rc in (0,75) or rc==6 and self.pausing or getattr(a['process'],'disappeared_monotonic',None) is not None
+            try: identity_valid=self.check_worker(a,exited=exited)
             except RuntimeError:
                 if rc is None and a['process'].poll()==0:
                     rc=0; identity_valid=self.check_worker(a,exited=True)
@@ -1052,22 +1076,24 @@ class Controller:
             if rc is not None:
                 if rc!=0:
                     if rc==75 and not a['smoke']:
-                        if read_info.get('failure_exit_waiting'):
-                            read_info=self.read_worker_results(a); identity_valid=self.check_worker(a,exited=True)
-                        if not identity_valid or read_info['partial_tail'] or not a.get('read_seen',set())&set(self.failures): raise ValueError('看门狗终态失败证据不齐')
+                        read_info=self.read_worker_results(a); identity_valid=self.check_worker(a,exited=True)
+                        if not self.final_confirmation(a,rc,read_info,identity_valid): continue
                         self.validate_drained_prefix(a,self.settled())
                         a['log'].close(); del self.active[jid]
                         rows=self.unreserved_rows(a['shard'])
                         if rows:
                             self.resume_rows[a['shard']]=rows
-                            self.segment_numbers[a['shard']]=self.segment_numbers.get(a['shard'],0)+1
+                            tag=a.get('inv_tag',a['progress'].parent.name)
+                            prefix=a['shard']+'-resume-'
+                            current=int(tag[len(prefix):-len('-full')]) if tag.startswith(prefix) and tag.endswith('-full') else 0
+                            self.segment_numbers[a['shard']]=current+1
                             if a['shard'] not in self.pending: self.pending.insert(0,a['shard'])
                         elif {identity(a['model'],r) for r in self.shards[a['shard']]['rows']}<=self.settled(): self.completed.add(a['shard'])
                         self.event('infra_settled',shard_id=a['shard'],infra=len(self.failures)); continue
                     if rc==6 and self.pausing:
                         read_info=self.read_worker_results(a); self.check_worker(a,exited=True)
-                        p=read(a['progress'])
-                        if p['phase']!='finished' or p['rc']!=6 or read_info['partial_tail']: raise ValueError('暂停worker缺完整finished/rc6报告')
+                        identity_valid=self.check_worker(a,exited=True)
+                        if not self.final_confirmation(a,rc,read_info,identity_valid): continue
                         self.validate_drained_prefix(a,self.settled())
                         a['log'].close(); del self.active[jid]; self.paused.add(a['shard'])
                         self.event('drained',shard_id=a['shard'],accepted=a['offset']); continue
