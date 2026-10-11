@@ -1069,10 +1069,10 @@ def raw_main(args) -> int:
     verified_receipts = {}
     try:
         from raw_ood_context import validate_historical_errors, validate_terminal_marker
-        historical = validate_historical_errors(manifest)
-        if error_path.exists() and str(error_path) not in {str(p) for p in historical}:
+        historical = {str(p) for p in validate_historical_errors(manifest)}
+        if error_path.exists() and str(error_path) not in historical:
             raise RuntimeError("搬运器存在未认可的原始错误")
-        if list(error_path.parent.glob(f"{error_path.stem}.current-*.json")):
+        if any(str(path) not in historical for path in error_path.parent.glob(f"{error_path.stem}.current-*.json")):
             raise RuntimeError("搬运器存在新的实例错误")
         while True:
             if heartbeat_error:

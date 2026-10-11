@@ -504,6 +504,25 @@ def test_preserved_corruption_can_resume_after_bytes_restored(publication,corrup
     assert error.read_bytes()==saved_error and not (stage/'STOP').exists()
 
 
+def test_fingerprint_approved_instance_error_can_resume_without_global_ignore(publication):
+    stage,dest,_,row=publication
+    name=hashlib.sha256(row['identity_key'].encode()).hexdigest()+'.json'
+    error=stage/'control/mover-error.json'; current=error.with_name('mover-error.current-prior.json')
+    MOVER.raw_atomic(error,{'error':'ValueError','message':'原始错误'})
+    MOVER.raw_atomic(current,{'error':'ValueError','message':'前一实例错误'})
+    manifest=stage/'config.json'
+    MOVER.raw_atomic(manifest,{**{k:v for k,v in CONTEXT.items() if k!='config_sha256'},'root':str(stage),
+        'expected_identities':[row['identity_key']],'expected_publications':[name],
+        'historical_errors':[{'path':str(path),'sha256':MOVER.sha256(path)} for path in (error,current)]})
+    before={path:path.read_bytes() for path in (error,current)}
+    row['config_sha256']=MOVER.sha256(manifest); MOVER.raw_atomic(stage/'published'/name,row)
+    args=SimpleNamespace(stage=str(stage),dest=str(dest),manifest=str(manifest),min_free_gib=0,heartbeat_file=None,error_file=str(error),stop_file=None,once=True,interval=.01)
+    assert MOVER.raw_main(args)==0
+    assert all(path.read_bytes()==raw for path,raw in before.items())
+    unknown=error.with_name('mover-error.current-new.json'); MOVER.raw_atomic(unknown,{'error':'RuntimeError','message':'未认可的新实例错误'})
+    assert MOVER.raw_main(args)==1
+
+
 def test_real_mixed_terminal_finishes_available_media_without_waiting_for_failed_raw(publication,tmp_path,monkeypatch):
     import shutil
     import raw_ood_controller as C
