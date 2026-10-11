@@ -12,6 +12,7 @@ import signal
 import subprocess
 import threading
 import time
+from raw_ood_context import CORE, match_context, read_pause_snapshot, source_configs, trusted_contexts
 
 MODELS = ('qwenvl', 'smvla', 'pp', 'oracle', 'framesamp')
 SECONDS = dict(qwenvl=311.428, smvla=152.526, pp=138.695, oracle=130.485, framesamp=86.518)
@@ -28,7 +29,12 @@ def ledger_snapshot(path: Path):
     lock=path.with_name(path.name+'.lock')
     if lock.exists():
         with lock.open('rb') as stream:
-            fcntl.flock(stream,fcntl.LOCK_SH)
+            deadline=time.monotonic()+5
+            while True:
+                try: fcntl.flock(stream,fcntl.LOCK_SH|fcntl.LOCK_NB); break
+                except BlockingIOError:
+                    if time.monotonic()>=deadline: raise RuntimeError('预算共享锁等待超过5秒')
+                    time.sleep(.05)
             raw=path.read_bytes()
     else: raw=path.read_bytes()
     if raw and not raw.endswith(b'\n'): raise ValueError('预算账本缺少完整末行')
@@ -37,8 +43,9 @@ def ledger_snapshot(path: Path):
     state=BudgetState(rows)
     if state.bad_rows: raise ValueError('预算账本坏行')
     caps=state.config
-    if any(caps[k]!=v for k,v in {'trajectory_cap':4000,'reset_cap':8000,'planned_first_tries':4000,'shared_infra_cap':0,'expired_cap':0,'schema':'sgeval-budget/3'}.items()):
+    if any(caps[k]!=v for k,v in {'trajectory_cap':4000,'reset_cap':8000,'planned_first_tries':4000,'shared_infra_cap':0,'expired_cap':0}.items()) or caps['schema'] not in ('sgeval-budget/3','sgeval-budget/4'):
         raise ValueError('预算账本4000/8000硬上限不符')
+    if caps['schema']=='sgeval-budget/4' and (type(caps['astra_cap']) is not int or caps['astra_cap']!=0): raise ValueError('当前schema4必须显式Astra0')
     return state,hashlib.sha256(raw).hexdigest()
 
 
@@ -130,7 +137,10 @@ def legacy_context(c: dict) -> dict:
     old=load_config(path)
     if old.get('legacy_source') is not None: raise ValueError('禁止递归旧来源')
     if old['exec_commit']!=source['exec_commit']: raise ValueError('旧worker源码锚不符')
-    changes={'exec_commit','config_sha256','runner','legacy_source','ready_path','models'}
+    changes={'exec_commit','config_sha256','runner','legacy_source','ready_path','models','prior_sources_manifest','pause_snapshot','shared_astra_cap'}
+    if c.get('prior_sources_manifest') is not None: trusted_contexts(c)
+    if c.get('pause_snapshot') is not None: read_pause_snapshot(c)
+    if 'shared_astra_cap' in c and (type(c['shared_astra_cap']) is not int or c['shared_astra_cap']!=0): raise ValueError('新共享Astra上限必须0')
     if {k:v for k,v in old.items() if k not in changes}!={k:v for k,v in c.items() if k not in changes}:
         raise ValueError('新旧配置运行/身份/预算/CPU/资源/通知等固定字段改变')
     if set(old['models'])!=set(c['models']): raise ValueError('新旧模型集合冲突')
@@ -162,7 +172,7 @@ def validate_config(config: dict) -> list[dict]:
     for name,m in config['models'].items():
         policy,label,variant=ROUTES[name]
         if m['policy']!=policy or m['label']!=label: raise ValueError('模型路由不符合固定白名单')
-        forbidden={'--infra-retries','--client-restarts','--trajectory-cap','--reset-cap','--shared-infra-cap','--expired-cap',
+        forbidden={'--infra-retries','--client-restarts','--trajectory-cap','--reset-cap','--astra-cap','--shared-infra-cap','--expired-cap',
                    '--planned-first-tries','--policy-seed','--identities','--dataset','--out','--seat','--run','--progress-file','--gpus',
                    '--stop-file','--claim-deadline','--policies','--policy','--budget-ledger','--budget','--queue','--memer-adapter','--port-base'}
         if any(str(a).split('=')[0] in forbidden for a in m['args']): raise ValueError('模型参数覆盖本轮固定预算或身份')
@@ -198,7 +208,9 @@ def validate_config(config: dict) -> list[dict]:
     if len(config['expected_identities'])!=4000 or set(config['expected_identities'])!=keys: raise ValueError('搬运身份manifest不符')
     if len(config['expected_publications'])!=4000 or set(config['expected_publications'])!={publication_name(k) for k in keys}: raise ValueError('搬运发布manifest不符')
     work_budget(config)
+    if 'shared_astra_cap' in config and (type(config['shared_astra_cap']) is not int or config['shared_astra_cap']!=0): raise ValueError('本轮必须显式共享Astra0')
     legacy_context(config)
+    trusted_contexts(config)
     return rows
 
 
@@ -276,13 +288,14 @@ def process_identity(pid):
                 cgroup=(proc/'cgroup').read_text())
 
 
-def worker_account(step,name):
+def worker_account(step,name,*,allow_drained=False):
     p=subprocess.run(['sacct','-n','-P','-j',step,'--format=JobIDRaw,JobName%128,State,ExitCode'],capture_output=True,text=True,timeout=5)
     rows=[x.split('|') for x in p.stdout.splitlines() if x.split('|')[0]==step]
     if p.returncode or len(rows)!=1 or rows[0][1]!=name: raise ValueError('已有worker记账身份或状态未知 '+step)
     state,code=rows[0][2:]
     if state=='RUNNING' and code=='0:0': return None
     if state=='COMPLETED' and code=='0:0': return 0
+    if allow_drained and state in ('FAILED','COMPLETED') and code=='6:0': return 6
     raise ValueError('已有worker异常终态或未知退出 '+str(rows[0]))
 
 
@@ -315,6 +328,36 @@ class ExistingProcess:
         return rc
 
 
+class ControllerLeaseBusy(RuntimeError): pass
+
+
+class ControllerLease:
+    """控制器写心跳和状态之前取得排他租约，子进程不继承描述符。"""
+    def __init__(self,controller): self.owner=controller; self.stream=None
+    def __enter__(self):
+        import fcntl
+        c=self.owner; path=c.control/'controller.lease'
+        if path.is_symlink(): raise ValueError('控制器租约不能是符号链')
+        self.stream=path.open('a+')
+        try: fcntl.flock(self.stream,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.stream.close(); self.stream=None
+            raise ControllerLeaseBusy('全局控制器租约已占用') from None
+        os.set_inheritable(self.stream.fileno(),False)
+        # 旧快照没有租约，仍不能与已证明存活的同轮控制器并行。
+        beat=c.control/'controller-heartbeat.json'
+        if beat.exists():
+            row=read(beat); pid=int(row['pid'])
+            if pid!=os.getpid() and all(str(row[k])==str(c.base[k]) for k in CORE):
+                proc=process_identity(pid)
+                if proc is not None and proc['state']!='Z' and any(Path(x).name=='raw_ood_controller.py' for x in proc['command']):
+                    self.stream.close(); self.stream=None; raise ControllerLeaseBusy('旧协议控制器仍存活，禁止并行迁移')
+        self.stream.seek(0); self.stream.truncate(); self.stream.write(json.dumps(dict(c.base,pid=os.getpid(),time=time.time()))+'\n'); self.stream.flush(); os.fsync(self.stream.fileno())
+        return self
+    def __exit__(self,*_):
+        if self.stream is not None: self.stream.close()
+
+
 class Controller:
     def __init__(self, config: dict):
         self.c=config; self.rows=validate_config(config); self.root=Path(config['root']); self.control=self.root/'control'
@@ -322,7 +365,11 @@ class Controller:
         self.active={}; self.published=set(); self.smoked=set(); self.completed=set(); self.formal=False
         self.initial_dispatched=set(); self.started=time.time()
         self.query_failures={}
+        self.loop_t=time.time(); self.loop_phase='initialization'; self.pausing=False; self.paused=set(); self.resume_rows={}; self.segment_numbers={}
         self.base={k:config[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+        self.sources=source_configs(config)
+        old=legacy_context(config)
+        if old['config_sha256'] not in {c['config_sha256'] for c in self.sources}: self.sources.append(old)
         self.deadline=min(float(config['cpu_end_time']),*(float(s['end_time']) for s in config['seats']))-7200
 
     def event(self, kind: str, **kw):
@@ -330,31 +377,41 @@ class Controller:
         self.control.mkdir(parents=True,exist_ok=True)
         with (self.control/'events.jsonl').open('a') as f: f.write(json.dumps(row)+'\n')
 
+    def advance(self,phase): self.loop_t=time.time(); self.loop_phase=phase
+
+    def source_of(self,row):
+        if not set(CORE)<=row.keys(): raise ValueError('已有记录缺core字段')
+        matches=[c for c in self.sources if all(type(row[k]) is type(c[k]) and row[k]==c[k] for k in CORE)]
+        if len(matches)!=1: raise ValueError('已有记录没有唯一已锁来源')
+        return matches[0]
+
     def start(self, seat: dict, shard: str, *, smoke=False):
         spec=self.shards[shard]; model=spec['model']; m=self.c['models'][model]
-        rows=spec['rows'][:1] if smoke else spec['rows']
-        tag=f"{shard}-{'smoke' if smoke else 'full'}"; inv=self.control/'invocations'/tag
+        rows=spec['rows'][:1] if smoke else self.resume_rows.get(shard,spec['rows'])
+        number=self.segment_numbers.get(shard,0)
+        tag=f"{shard}-resume-{number}-full" if not smoke and number else f"{shard}-{'smoke' if smoke else 'full'}"
+        inv=self.control/'invocations'/tag
         inv.mkdir(parents=True,exist_ok=False)
         ids=inv/'identities.jsonl'; ids.write_text(''.join(json.dumps(r)+'\n' for r in rows))
         seat_name=f"{seat['seat']}-{tag}"; progress=inv/'progress.json'
         worker_name=f'raw-ood-worker-{tag}'
-        cmd=self.worker_command(seat,shard,smoke=smoke)
+        cmd=self.worker_command(seat,shard,smoke=smoke,inv_tag=tag)
         env={k:v for k,v in os.environ.items() if not k.startswith(('SLURM_','SBATCH_','SRUN_'))}
         env.pop('CUDA_VISIBLE_DEVICES',None)
         env.update(BENCH_PY=self.c['python'],PYTHONUNBUFFERED='1'); env.update(m.get('env',{}))
         log=(inv/'worker.log').open('a'); p=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)
         active=dict(process=p,log=log,seat=seat,shard=shard,smoke=smoke,model=model,progress=progress,
                     results=self.gl/'seats'/m['label']/'seed7'/seat_name/'seat-results.jsonl',rows=rows,offset=0,started=time.time(),acked=False,
-                    phase_key=None,phase_start=time.time(),step_id=None,worker_name=worker_name)
+                    phase_key=None,phase_start=time.time(),step_id=None,worker_name=worker_name,inv_tag=tag)
         self.active[str(seat['job_id'])]=active
         proc=process_identity(p.pid)
         if proc is not None and (not proc['command'] or proc['command'][1:]!=cmd[1:]): proc=None
-        atomic(inv/'dispatch.json',dict(self.base,gpu_job_id=str(seat['job_id']),shard_id=shard,model=model,smoke=smoke,command=cmd,srun_pid=p.pid,
+        atomic(inv/'dispatch.json',dict(self.base,gpu_job_id=str(seat['job_id']),shard_id=shard,segment_id=tag,model=model,smoke=smoke,command=cmd,srun_pid=p.pid,
                                        srun_start_ticks=proc['start_ticks'] if proc else None,time=time.time()))
         self.event('dispatch',gpu_job_id=str(seat['job_id']),shard_id=shard,smoke=smoke)
 
-    def worker_command(self,seat,shard,*,smoke=False):
-        model=self.shards[shard]['model']; m=self.c['models'][model]; tag=f"{shard}-{'smoke' if smoke else 'full'}"
+    def worker_command(self,seat,shard,*,smoke=False,inv_tag=None):
+        model=self.shards[shard]['model']; m=self.c['models'][model]; tag=inv_tag or f"{shard}-{'smoke' if smoke else 'full'}"
         inv=self.control/'invocations'/tag; seat_name=f"{seat['seat']}-{tag}"; ids=inv/'identities.jsonl'; progress=inv/'progress.json'
         expansion=dict(root=str(self.root),gl_root=str(self.gl),seat=seat_name,shard=shard,port_base=seat['port_base'],work_dir=str(inv/'work'))
         model_args=[str(x).format_map(expansion) for x in m['args']]
@@ -364,7 +421,7 @@ class Controller:
              '--trajectory-cap','4000','--reset-cap','8000','--planned-first-tries','4000','--shared-infra-cap','0','--expired-cap','0',
              '--infra-retries','0','--client-restarts','0','--gpus','','--no-render','--stop-on-env-build-error','--dataset','ood',
              '--port-base',str(seat['port_base']),'--claim-deadline',str(self.deadline),'--stop-file',str(self.control/'STOP'),
-             '--progress-file',str(progress),*model_args]
+             '--progress-file',str(progress),*(['--astra-cap','0'] if 'shared_astra_cap' in self.c else []),*model_args]
 
     def prepare_publication(self, a: dict, row: dict,*,worker_exec_commit=None):
         required=('key','infra','final','accepted','result','exec_steps','task_success','budget_exhausted','run_blocked')
@@ -511,7 +568,7 @@ class Controller:
             raise ValueError('已有报告模型或身份不符')
         if row['infra'] or not row['accepted'] or not row['final'] or row['budget_exhausted'] or row['run_blocked'] or row['attempt']!=1:
             raise ValueError('已有报告异常或非已接受首试')
-        expected_seat=f"{a['seat']['seat']}-{a['shard']}-{'smoke' if a['smoke'] else 'full'}"
+        expected_seat=f"{a['seat']['seat']}-"+a.get('inv_tag',f"{a['shard']}-{'smoke' if a['smoke'] else 'full'}")
         if row['seat']!=expected_seat: raise ValueError('已有报告席位冲突')
         reserve=ledger.reserves.get(row['budget_rid']); commit=ledger.commits.get(row['budget_rid'])
         route=self.c['models'][model]['policy']+('/'+ROUTES[model][2] if ROUTES[model][2] else '')+'/seed7/new'
@@ -523,18 +580,35 @@ class Controller:
             result=self.gl/pub['relative_dir']/'result.json'
             if Path(row['result'])!=result or row['exec_steps']!=read(result)['exec_steps']: raise ValueError('已有报告与发布结果冲突')
 
+    def validate_drained_prefix(self,a,done):
+        """rc6仅允许完整已结算前缀，预约过但无完整结果的半局绝不重跑。"""
+        ledger,_=ledger_snapshot(Path(self.c['budget_ledger']))
+        keys={r['key'] for r in a['rows']}; model=a['model']; route=self.c['models'][model]['policy']+('/'+ROUTES[model][2] if ROUTES[model][2] else '')+'/seed7/new'
+        attempted=set(); seen=set()
+        for rid,reserve in ledger.reserves.items():
+            if reserve['route']!=route or reserve['key'] not in keys: continue
+            if reserve['key'] in seen: raise ValueError('暂停前缀重复预约身份')
+            seen.add(reserve['key']); commit=ledger.commits.get(rid)
+            if not commit or commit['infra'] or rid in ledger.releases or ledger.claimed.get(rid,0)!=2:
+                raise ValueError('暂停存在未结算/基础设施失败/不足2reset半局')
+            attempted.add(identity(model,reserve))
+        expected_done={identity(model,r) for r in a['rows']} & done
+        if attempted!=expected_done: raise ValueError('暂停已预约身份与闭合报告/发布集合不齐')
+        return attempted
+
     def existing_publications(self):
-        from eval_video_mover import raw_validate_publication
+        from eval_video_mover import raw_validate_publication,raw_validate_receipt
         pubs={}; allowed=set(self.c['expected_identities']); old=legacy_context(self.c)
+        sources=self.sources
         for path in sorted((self.gl/'published').glob('*.json')):
-            doc=read(path); raw_validate_publication(doc,self.base); key=doc['identity_key']
+            doc=read(path); context=self.source_of(doc); raw_validate_publication(doc,{k:context[k] for k in CORE}); key=doc['identity_key']
             if key not in allowed or path.name!=publication_name(key) or key in pubs: raise ValueError('已有发布身份或文件名冲突')
             shard=doc['shard_id']; model=doc['model']
             if shard not in self.shards or self.shards[shard]['model']!=model or key not in {identity(model,r) for r in self.shards[shard]['rows']}:
                 raise ValueError('已有发布分片不符')
             source=doc['worker_exec_commit']
             legacy_key=identity(model,self.shards[model+'-00']['rows'][0])
-            if source!=self.c['exec_commit'] and not (model in ('qwenvl','smvla','pp') and key==legacy_key and source==old['exec_commit']):
+            if source!=context['exec_commit'] and not (model in ('qwenvl','smvla','pp') and key==legacy_key and source in {old['exec_commit'],*(s['exec_commit'] for s in sources)}):
                 raise ValueError('已有发布worker源码不符')
             result=self.gl/doc['relative_dir']/'result.json'
             if result.is_symlink() or not result.resolve().is_relative_to(self.gl.resolve()): raise ValueError('已有结果路径越界')
@@ -550,35 +624,31 @@ class Controller:
                 raise ValueError('已有小result身份或基础设施失败')
             receipt=self.gl/'mover'/'receipts'/path.name
             if receipt.exists():
-                r=read(receipt)
-                decoded=r['decoded']
-                if not isinstance(decoded,dict) or set(decoded)!={'front','wrist'} or any(type(n) is not int or n<=0 for n in decoded.values()):
-                    raise ValueError('已有搬运回执解码计数不符')
-                if any(r[k]!=doc[k] for k in (*self.base,'identity_key','model','shard_id','relative_dir','files','worker_exec_commit')) or r['result']!='moved' or r['trace_checked'] is not True:
-                    raise ValueError('已有搬运回执与发布冲突')
+                raw_validate_receipt(read(receipt),doc,self.c,dest=None)
             pubs[key]=doc
         return pubs
 
-    def resume_existing_dispatches(self,orchestration_commit,*,preflight=False):
+    def resume_existing_dispatches(self,orchestration_commit,*,preflight=False,paused=False):
         """全量只读核验后附着既有正式派发；不调用srun，不预约或修改预算。"""
         import re
         if not re.fullmatch('[0-9a-f]{40}',str(orchestration_commit)): raise ValueError('已有派发接续须明确编排SHA')
         manifest=read(self.control/'shards.json')
         old=legacy_context(self.c)
-        if manifest not in (dict(self.base,shards=self.shards),dict({k:old[k] for k in self.base},shards=self.shards)):
+        if manifest not in tuple(dict({k:c[k] for k in CORE},shards=self.shards) for c in self.sources):
             raise ValueError('已有分片manifest不符')
         pubs=self.existing_publications(); smoke_keys={identity(m,self.shards[m+'-00']['rows'][0]) for m in MODELS}
         ack=self.control/'first_dispatch.json'
         if ack.exists():
             value=read(ack)
-            if any(str(value[k])!=str(v) for k,v in self.base.items()) or value['identity_key'] not in self.c['expected_identities'] or value['first_step']<1:
+            self.source_of(value)
+            if value['identity_key'] not in self.c['expected_identities'] or value['first_step']<1:
                 raise ValueError('已有首正式动作回执冲突')
         if not smoke_keys<=set(pubs): raise ValueError('已有五首局发布不齐')
         for key in smoke_keys:
             if not (self.gl/'mover'/'receipts'/publication_name(key)).is_file(): raise ValueError('已有五首局搬运回执不齐')
             model=pubs[key]['model']; inv=self.control/'invocations'/(model+'-00-smoke'); d=read(inv/'dispatch.json')
-            source=old if pubs[key]['worker_exec_commit']==old['exec_commit'] and old['exec_commit']!=self.c['exec_commit'] else self.c
-            if any(str(d[k])!=str(source[k]) for k in self.base) or d['smoke'] is not True or d['model']!=model or d['shard_id']!=model+'-00':
+            source=self.source_of(d)
+            if d['exec_commit']!=pubs[key]['worker_exec_commit'] or d['smoke'] is not True or d['model']!=model or d['shard_id']!=model+'-00':
                 raise ValueError('已有首局dispatch来源不符')
             seat=next((s for s in self.c['seats'] if str(s['job_id'])==str(d['gpu_job_id'])),None)
             if seat is None: raise ValueError('已有首局资源不符')
@@ -591,26 +661,39 @@ class Controller:
             self.validate_settled_row(dict(model=model,rows=self.shards[model+'-00']['rows'][:1],seat=seat,shard=model+'-00',smoke=True),row,ledger,pubs[key])
         ledger,ledger_sha=ledger_snapshot(Path(self.c['budget_ledger']))
         if ledger.retries or ledger.recovery_used or ledger.astra or any(r['infra'] for r in ledger.commits.values()): raise ValueError('已有预算含重试、基础设施失败或非本计划路线')
-        gathered=[]; terminal=[]; newpub=[]; used_jobs=set(); dispatched=set(); reported=set(smoke_keys)
+        gathered=[]; terminal=[]; drained=[]; newpub=[]; used_jobs=set(); dispatched=set(); reported=set(smoke_keys)
+        history={s:set() for s in self.shards}; segments={}; pause_snapshot=read_pause_snapshot(self.c) if paused else None
+        if paused and ((self.control/'STOP').exists() or (self.gl/'STOP').exists()) and not preflight: raise ValueError('STOP仍有效，只允许只读暂停预检，移存由主门禁负责')
         paths=sorted((self.control/'invocations').glob('*-full/dispatch.json'))
         if not paths: raise ValueError('缺少已有正式派发')
         allowed_dirs={p.parent.name for p in paths}|{m+'-00-smoke' for m in MODELS}
         if any(p.name not in allowed_dirs or p.is_symlink() for p in (self.control/'invocations').iterdir()): raise ValueError('未知或符号链invocation目录')
+        def segment(path):
+            m=re.fullmatch(r'(qwenvl|smvla|pp|oracle|framesamp)-(\d{2})(?:-resume-([1-9]\d*))?-full',path.parent.name)
+            if m is None: raise ValueError('续段名称不合法')
+            return (m[1]+'-'+m[2],int(m[3] or 0))
+        paths.sort(key=segment)
         known_steps=step_inventory(self.c)
         for path in paths:
             d=read(path); shard=d['shard_id']; model=d['model']; job=str(d['gpu_job_id'])
-            if any(str(d[k])!=str(v) for k,v in self.base.items()) or d['smoke'] is not False or shard not in self.shards or self.shards[shard]['model']!=model or path.parent.name!=shard+'-full':
+            source=self.source_of(d); logical,number=segment(path); tag=path.parent.name
+            if d['smoke'] is not False or shard not in self.shards or self.shards[shard]['model']!=model or logical!=shard or number!=segments.get(shard,-1)+1:
                 raise ValueError('已有正式dispatch版本/分片不符')
             seat=next((s for s in self.c['seats'] if str(s['job_id'])==job),None)
-            if seat is None or shard in dispatched or d['command']!=self.worker_command(seat,shard): raise ValueError('已有正式命令或资源冲突')
+            original=Controller(source)
+            if seat is None or d['command']!=original.worker_command(seat,shard,inv_tag=tag): raise ValueError('已有正式命令或资源冲突')
             ident_path=path.parent/'identities.jsonl'; content=ident_path.read_text()
-            if not content.endswith('\n') or [json.loads(x) for x in content.splitlines()]!=self.shards[shard]['rows']: raise ValueError('已有正式身份文件冲突')
-            progress=read(path.parent/'progress.json'); name='raw-ood-worker-'+shard+'-full'
-            if str(progress['slurm_job_id'])!=job or progress['slurm_step_id'] is None or progress['label']!=self.c['models'][model]['label'] or progress['seat']!=seat['seat']+'-'+shard+'-full' or progress['policy_seed']!=7:
+            planned=self.shards[shard]['rows']; prior_completed=history[shard]|(smoke_keys if shard.endswith('-00') else set())
+            expected_rows=planned if number==0 else [r for r in planned if identity(model,r) not in prior_completed]
+            actual_rows=[json.loads(x) for x in content.splitlines()]
+            if not content.endswith('\n') or not actual_rows or actual_rows!=expected_rows: raise ValueError('已有正式身份文件冲突或续段含已尝试身份')
+            progress=read(path.parent/'progress.json'); name='raw-ood-worker-'+tag
+            if str(progress['slurm_job_id'])!=job or progress['slurm_step_id'] is None or progress['label']!=self.c['models'][model]['label'] or progress['seat']!=seat['seat']+'-'+tag or progress['policy_seed']!=7:
                 raise ValueError('已有正式progress身份冲突')
-            step=job+'.'+str(progress['slurm_step_id']); rc=worker_account(step,name)
+            step=job+'.'+str(progress['slurm_step_id']); rc=worker_account(step,name,allow_drained=paused)
             pid=int(d['srun_pid']); proc=process_identity(pid)
             if rc is None:
+                if paused: raise ValueError('暂停恢复不能接管仍在途worker')
                 if known_steps.pop(step,None)!=name: raise ValueError('运行worker与全步骤清单冲突')
                 if proc is None or proc['state']=='Z': raise ValueError('已有运行srun PID不存在')
                 args=proc['command']; expected=d['command']
@@ -625,7 +708,12 @@ class Controller:
             else:
                 listed=known_steps.pop(step,None)
                 if listed is not None and listed!=name: raise ValueError('已有终态与全步骤清单冲突')
-                if progress['phase']!='finished' or progress['rc']!=0: raise ValueError('已有终态缺finished/rc0证据')
+                if progress['phase']!='finished' or progress['rc']!=rc: raise ValueError('已有终态缺finished/对应退出码证据')
+                if rc==6:
+                    observed=next((r for r in pause_snapshot['workers'] if r['invocation']==str(path.parent)),None)
+                    stop_time=float(observed['stop_time']) if observed is not None and 'stop_time' in observed else float(pause_snapshot['stop_time'])
+                    if observed is None or observed['dispatch_sha256']!=sha(path) or observed['progress_sha256']!=sha(path.parent/'progress.json') or observed['step_id']!=step or observed['job_name']!=name or observed['exit_code']!='6:0' or observed['state'] not in ('FAILED','COMPLETED') or float(progress['t'])<stop_time:
+                        raise ValueError('暂停终态不符固定STOP及worker快照')
             phase_start=float(d['time'])
             if progress['key'] is not None:
                 ledger,_=ledger_snapshot(Path(self.c['budget_ledger']))
@@ -634,15 +722,18 @@ class Controller:
                 if matching: phase_start=max(float(r['t']) for r in matching)
             a=dict(process=ExistingProcess(pid,proc,step,name),seat=seat,shard=shard,smoke=False,model=model,
                    progress=path.parent/'progress.json',results=self.gl/'seats'/self.c['models'][model]['label']/'seed7'/progress['seat']/'seat-results.jsonl',
-                   rows=self.shards[shard]['rows'],offset=0,started=float(d['time']),acked=(self.control/'first_dispatch.json').exists(),
+                   rows=actual_rows,offset=0,started=float(d['time']),acked=(self.control/'first_dispatch.json').exists(),inv_tag=tag,
                    phase_key=(progress['phase'],progress['key']),phase_start=phase_start,step_id=step,worker_name=name,read_seen=set())
-            self.check_worker(a,exited=rc==0)
+            self.check_worker(a,exited=rc in (0,6))
             if progress['key'] is not None and progress['key'] not in {r['key'] for r in a['rows']}: raise ValueError('已有progress key不在分片')
             try: content=a['results'].read_text()
             except FileNotFoundError: content=''
             partial=bool(content and not content.endswith('\n')); lines=content.splitlines()
             if partial: lines=lines[:-1]
-            if rc==0 and partial: raise ValueError('已有终态报告半行')
+            if rc in (0,6) and partial: raise ValueError('已有终态报告半行')
+            if rc==6:
+                digest=sha(a['results']) if a['results'].exists() else None
+                if observed['report_sha256']!=digest: raise ValueError('暂停报告原字节不符快照')
             for line in lines:
                 row=json.loads(line); key=identity(model,row)
                 if key in a['read_seen']: raise ValueError('已有报告重复身份')
@@ -656,12 +747,19 @@ class Controller:
                         if data[k]!=ident[k] or meta['identity'][k]!=ident[k] or trace[0]['identity'][k]!=ident[k]: raise ValueError('已有未发布raw身份冲突')
                     if trace[0]['kind']!='header' or trace[-1]['kind']!='end' or trace[-1]['exec_steps']!=row['exec_steps'] or data['exec_steps']!=row['exec_steps'] or data['recorder_verify']!='PASS':
                         raise ValueError('已有未发布raw未闭合')
-                    newpub.append((a,row,self.prepare_publication(a,row)))
+                    doc=self.prepare_publication(a,row,worker_exec_commit=d['exec_commit']); doc.update({k:d[k] for k in CORE})
+                    newpub.append((a,row,doc))
+                self.advance('restoring_report')
             expected={identity(model,r) for r in a['rows']}
             if rc==0:
                 if not expected<=set(pubs)|a['read_seen']: raise ValueError('已有终态缺完成身份')
                 terminal.append(a)
+            elif rc==6:
+                self.validate_drained_prefix(a,set(pubs)|reported)
+                drained.append(a)
             else: gathered.append(a)
+            if history[shard]&a['read_seen']: raise ValueError('不同续段重复预算身份')
+            history[shard].update(a['read_seen']); segments[shard]=number
             dispatched.add(shard)
         if any(name.startswith('raw-ood-worker-') for name in known_steps.values()): raise ValueError('存在未登记或未接管的worker步骤')
         if not set(pubs)<=reported: raise ValueError('已有发布缺少对应已结算席位报告')
@@ -673,17 +771,60 @@ class Controller:
                 pubs[doc['identity_key']]=doc
             else: fresh.append((a,row,doc))
         newpub=fresh
+        planned_done=set(pubs)|reported
+        logical_completed={s for s in dispatched if {identity(self.shards[s]['model'],r) for r in self.shards[s]['rows']}<=planned_done}
+        remaining={s:[r for r in self.shards[s]['rows'] if identity(self.shards[s]['model'],r) not in planned_done] for s in dispatched-logical_completed}
+        if paused:
+            if gathered: raise ValueError('暂停迁移存在仍运行worker')
+            all_attempted={identity(next(m for m in MODELS if reserve['route']==self.c['models'][m]['policy']+('/'+ROUTES[m][2] if ROUTES[m][2] else '')+'/seed7/new'),reserve)
+                           for reserve in ledger.reserves.values()}
+            if all_attempted!=planned_done: raise ValueError('全轮已预约身份与暂停闭合结果不齐')
         proof=dict(self.base,orchestration_commit=orchestration_commit,active=len(gathered),completed=len(terminal),published=len(pubs),
-                   budget_sha256=ledger_sha,dispatched=sorted(dispatched),steps=[a['step_id'] for a in gathered+terminal],time=time.time())
+                   budget_sha256=ledger_sha,dispatched=sorted(dispatched),steps=[a['step_id'] for a in gathered+terminal+drained],drained=len(drained),
+                   logical_completed=len(logical_completed),accepted=len(planned_done),remaining=4000-len(planned_done),time=time.time())
         if preflight:
-            print('EXISTING_DISPATCHES_PREFLIGHT=PASS '+json.dumps(proof,ensure_ascii=False,sort_keys=True),flush=True); return proof
-        self.published=set(pubs); self.smoked=set(MODELS); self.formal=True; self.completed={a['shard'] for a in terminal}
-        self.pending=[s for s in self.pending if s not in dispatched]
+            print(('PAUSED_RESUME_PREFLIGHT=PASS ' if paused else 'EXISTING_DISPATCHES_PREFLIGHT=PASS ')+json.dumps(proof,ensure_ascii=False,sort_keys=True),flush=True); return proof
+        self.published=set(pubs); self.smoked=set(MODELS); self.formal=True; self.completed=logical_completed
+        self.pending=[s for s in self.pending if s not in dispatched or paused and s not in logical_completed]
+        if paused:
+            self.resume_rows=remaining; self.segment_numbers={s:segments[s]+1 for s in remaining}
         for a in gathered:
             a['log']=(a['progress'].parent/'worker.log').open('a'); self.active[str(a['seat']['job_id'])]=a
-        self.initial_dispatched={str(a['seat']['job_id']) for a in gathered+terminal}
+        self.initial_dispatched={str(a['seat']['job_id']) for a in gathered+terminal+drained}
         for a,row,doc in newpub: self.publish(a,row,prepared=doc)
-        atomic(self.control/'resume-existing-dispatches.json',proof)
+        atomic(self.control/('paused-migration.json' if paused else 'resume-existing-dispatches.json'),proof)
+
+    def write_paused(self):
+        """生成可再次钉SHA的暂停证明，原invocation及STOP字节不覆盖。"""
+        workers=[]; stop_refs=[]; stop_time=self.pause_started
+        if self.c.get('pause_snapshot') is not None:
+            old=read_pause_snapshot(self.c)
+            stop_refs.extend(old['stop_files'])
+            for row in old['workers']:
+                value=dict(row); value.setdefault('stop_time',old['stop_time']); workers.append(value)
+        for path in (self.control/'STOP',self.gl/'STOP'):
+            if path.exists(): stop_refs.append(dict(path=str(path),sha256=sha(path)))
+        existing={r['invocation'] for r in workers}
+        for path in sorted((self.control/'invocations').glob('*-full/dispatch.json')):
+            if str(path.parent) in existing: continue
+            d=read(path); p=read(path.parent/'progress.json'); step=str(d['gpu_job_id'])+'.'+str(p['slurm_step_id'])
+            name='raw-ood-worker-'+path.parent.name; rc=worker_account(step,name,allow_drained=True)
+            if rc not in (0,6) or p['phase']!='finished' or p['rc']!=rc: raise ValueError('暂停时worker终态未知')
+            model=d['model']; seat=next(s for s in self.c['seats'] if str(s['job_id'])==str(d['gpu_job_id']))
+            report=self.gl/'seats'/self.c['models'][model]['label']/'seed7'/p['seat']/'seat-results.jsonl'
+            workers.append(dict(invocation=str(path.parent),dispatch_sha256=sha(path),progress_sha256=sha(path.parent/'progress.json'),
+                report_sha256=sha(report) if report.exists() else None,step_id=step,job_name=name,state='FAILED' if rc==6 else 'COMPLETED',
+                exit_code=f'{rc}:0',stop_time=stop_time,drained=rc==6))
+        ledger,digest=ledger_snapshot(Path(self.c['budget_ledger']))
+        if ledger.trajectories!=len(self.published) or len(ledger.commits)!=len(ledger.reserves) or ledger.releases:
+            raise ValueError('暂停全轮预约与闭合终态不齐')
+        claims=sum(ledger.claimed.values())+ledger.orphan_claims
+        doc=dict(self.base,schema='raw-ood-pause-v1',root=str(self.root),stop_time=stop_time,stop_files=stop_refs,workers=workers,
+                 expected=4000,accepted=len(self.published),remaining=4000-len(self.published),drained=True,
+                 trajectories=ledger.trajectories,reset_claims=claims,unsettled=0,budget_sha256=digest,time=time.time())
+        path=self.control/f'paused-{os.getpid()}-{time.time_ns()}.json'; atomic(path,doc)
+        atomic(self.control/'paused.json',dict(self.base,proof_path=str(path),proof_sha256=sha(path),accepted=len(self.published),remaining=4000-len(self.published),time=time.time()))
+        return doc
 
     def poll_ack(self, a: dict):
         if a['smoke'] or a['acked'] or not a['progress'].exists(): return
@@ -763,7 +904,7 @@ class Controller:
             rc=a['process'].poll()
             if rc==0 and 'exit_observed_monotonic' not in a:
                 a['exit_observed_monotonic']=time.monotonic(); a['exit_observed_wall']=time.time()
-            try: identity_valid=self.check_worker(a,exited=rc==0)
+            try: identity_valid=self.check_worker(a,exited=rc==0 or rc==6 and self.pausing)
             except RuntimeError:
                 if rc is None and a['process'].poll()==0:
                     rc=0; identity_valid=self.check_worker(a,exited=True)
@@ -773,9 +914,14 @@ class Controller:
             if rc is None: rc=a['process'].poll()
             if rc is not None:
                 if rc!=0:
-                    a['log'].close(); del self.active[jid]
-                    if rc==6 and time.time()>=self.deadline:
+                    if rc==6 and self.pausing:
+                        read_info=self.read_worker_results(a); self.check_worker(a,exited=True)
+                        p=read(a['progress'])
+                        if p['phase']!='finished' or p['rc']!=6 or read_info['partial_tail']: raise ValueError('暂停worker缺完整finished/rc6报告')
+                        self.validate_drained_prefix(a,self.published)
+                        a['log'].close(); del self.active[jid]; self.paused.add(a['shard'])
                         self.event('drained',shard_id=a['shard'],accepted=a['offset']); continue
+                    a['log'].close(); del self.active[jid]
                     raise RuntimeError(f"worker失败 model={a['model']} shard={a['shard']} rc={rc}")
                 # 已退出后再读一次；仍不可见则保留active等待，绝不重跑该worker。
                 read_info=self.read_worker_results(a)
@@ -783,7 +929,10 @@ class Controller:
                 if not self.final_confirmation(a,rc,read_info,identity_valid): continue
                 a['log'].close(); del self.active[jid]
                 if a['smoke']: self.smoked.add(a['model'])
-                else: self.completed.add(a['shard'])
+                else:
+                    if {identity(a['model'],r) for r in self.shards[a['shard']]['rows']}<=self.published: self.completed.add(a['shard'])
+                    else: raise ValueError('续段退出但logical shard未完整')
+            self.advance('worker_scanned')
 
     def dispatch(self):
         for seat in self.c['seats']:
@@ -791,13 +940,15 @@ class Controller:
             state=observed_job_state(self.c,seat['job_id'],self.query_failures,'controller')
             if state is None or state in ('PENDING','CONFIGURING'): continue
             if state!='RUNNING': raise RuntimeError(f'GPU异常状态{state}')
-            guardian=self.control/f"guardian-ready-{seat['job_id']}.json"
+            guardian=self.control/f"guardian-heartbeat-{seat['job_id']}.json"
             if not guardian.exists(): continue
             ready=read(guardian)
             if any(str(ready[k])!=str(v) for k,v in self.base.items()) or str(ready['gpu_job_id'])!=str(seat['job_id']):
                 raise ValueError('附加独立守卫就绪身份不符')
-            if not isinstance(ready['pid'],int) or ready['pid']<=0 or not 0<float(ready['time'])<=time.time()+30 or ready['step_id'] is None:
+            if type(ready['pid']) is not int or ready['pid']<=0 or ready['step_id'] is None or time.time()-float(ready['t'])>=30 or float(ready['t'])>time.time()+5 or time.time()-float(ready['monitor_t'])>=30:
                 raise ValueError('附加独立守卫缺少有效PID/时间/StepID')
+            steps=step_inventory(dict(seats=[seat]))
+            if steps.get(str(seat['job_id'])+'.'+str(ready['step_id']))!='raw-ood-lifecycle-guard': raise ValueError('附加独立守卫步骤已不存活')
             if not self.formal:
                 busy={a['model'] for a in self.active.values()}
                 todo=[m for m in MODELS if m not in self.smoked and m not in busy]
@@ -860,33 +1011,54 @@ class Controller:
         print('OOD_RESULTS=PASS models=5 expected=4000 accepted=4000 missing=0 infra=0',flush=True)
         print(f"WORK_BUDGET=PASS trajectories={combined['combined']['trajectories']}/{combined['combined']['trajectory_cap']} reset_claims={combined['combined']['reset_claims']}/{combined['combined']['reset_cap']} prior_trajectories={combined['prior']['trajectories']} prior_reset_claims={combined['prior']['reset_claims']}",flush=True)
 
-    def run(self,*,resume_completed_smokes=False,resume_existing_dispatches=False,orchestration_commit=None):
+    def run(self,*,resume_completed_smokes=False,resume_existing_dispatches=False,resume_paused=False,orchestration_commit=None,pause_on_stop=True):
+        self.control.mkdir(parents=True,exist_ok=True)
+        with ControllerLease(self):
+            try:
+                return self._run_locked(resume_completed_smokes=resume_completed_smokes,resume_existing_dispatches=resume_existing_dispatches,
+                                        resume_paused=resume_paused,orchestration_commit=orchestration_commit,pause_on_stop=pause_on_stop)
+            except BaseException as e:
+                atomic(self.control/'controller-error.json',dict(self.base,component='controller',pid=os.getpid(),error=type(e).__name__,message=str(e),time=time.time()))
+                raise
+
+    def _run_locked(self,*,resume_completed_smokes=False,resume_existing_dispatches=False,resume_paused=False,orchestration_commit=None,pause_on_stop=True):
         self.control.mkdir(parents=True,exist_ok=True)
         manifest=dict(self.base,shards=self.shards)
         stop_beat=threading.Event()
         def heartbeat():
             while not stop_beat.is_set():
-                atomic(self.control/'controller-heartbeat.json',dict(self.base,t=time.time(),pid=os.getpid(),active=len(self.active)))
+                proc=process_identity(os.getpid())
+                atomic(self.control/'controller-heartbeat.json',dict(self.base,t=time.time(),loop_t=self.loop_t,phase=self.loop_phase,
+                      pid=os.getpid(),start_ticks=proc['start_ticks'],active=len(self.active)))
                 stop_beat.wait(5)
         beat=threading.Thread(target=heartbeat,name='raw-ood-controller-heartbeat',daemon=True); beat.start()
         try:
-            if resume_completed_smokes and resume_existing_dispatches: raise ValueError('两种手动恢复模式互斥')
-            if resume_existing_dispatches: self.resume_existing_dispatches(orchestration_commit)
+            if sum((resume_completed_smokes,resume_existing_dispatches,resume_paused))>1: raise ValueError('手动恢复模式互斥')
+            if resume_paused: self.resume_existing_dispatches(orchestration_commit,paused=True)
+            elif resume_existing_dispatches: self.resume_existing_dispatches(orchestration_commit)
             elif resume_completed_smokes:
                 old=legacy_context(self.c); oldmanifest=dict({k:old[k] for k in self.base},shards=self.shards)
                 if read(self.control/'shards.json')!=oldmanifest: raise ValueError('原分片manifest冲突')
                 self.resume_completed_smokes(orchestration_commit)
             else: atomic(self.control/'shards.json',manifest)
             while True:
-                if (self.control/'STOP').exists() or (self.gl/'STOP').exists(): raise RuntimeError('全局STOP')
+                if (self.control/'STOP').exists() or (self.gl/'STOP').exists():
+                    if not pause_on_stop: raise RuntimeError('全局STOP（显式关闭暂停排空）')
+                    if not self.pausing:
+                        self.pausing=True; self.pause_started=time.time(); self.event('pause_requested')
+                self.advance('scanning')
                 self.scan()
+                if self.pausing:
+                    if not self.active:
+                        self.write_paused(); print(f'CONTROLLER_PAUSED=PASS accepted={len(self.published)} remaining={4000-len(self.published)}',flush=True); return 6
+                    self.advance('pause_draining'); time.sleep(1); continue
                 if len(self.smoked)==5 and not self.formal:
                     # 完整本机解码及SHA回执确认才允许全量；正常任务失败不阻塞。
                     names=[publication_name(identity(m,self.shards[m+'-00']['rows'][0])) for m in MODELS]
                     if all((self.gl/'mover'/'receipts'/n).exists() for n in names):
                         for n in names:
-                            r=read(self.gl/'mover'/'receipts'/n)
-                            if r['result']!='moved' or not r['decoded'] or not r['trace_checked']: raise ValueError('冒烟搬运未验收')
+                            from eval_video_mover import raw_validate_receipt
+                            raw_validate_receipt(read(self.gl/'mover'/'receipts'/n),read(self.gl/'published'/n),self.c,dest=None)
                         self.formal=True; atomic(self.control/'smoke-completed.json',dict(self.base,models=5,infra=0,time=time.time()))
                 if time.time()<self.deadline: self.dispatch()
                 elif not self.active and (self.pending or not self.formal): raise RuntimeError('已安全排空，剩余身份不重跑')
@@ -897,14 +1069,16 @@ class Controller:
                     atomic(self.gl/'gpu_work_complete.json',doc); atomic(self.control/'gpu_work_complete.json',doc)
                     atomic(self.control/'gpu-cleanup.json',cancel_gpu(self.c)); return 0
                 time.sleep(1)
+                self.advance('loop_completed')
         finally:
             # 异常只结束控制器自身；已启动的GPU step继续，不主动TERM或scancel。
             stop_beat.set(); beat.join(timeout=6)
 
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('command',choices=['run','validate','resume-preflight','existing-dispatches-preflight']); ap.add_argument('--config',required=True)
-    ap.add_argument('--resume-completed-smokes',action='store_true'); ap.add_argument('--resume-existing-dispatches',action='store_true'); ap.add_argument('--orchestration-commit',default=None)
+    ap=argparse.ArgumentParser(); ap.add_argument('command',choices=['run','validate','resume-preflight','existing-dispatches-preflight','paused-resume-preflight']); ap.add_argument('--config',required=True)
+    ap.add_argument('--resume-completed-smokes',action='store_true'); ap.add_argument('--resume-existing-dispatches',action='store_true'); ap.add_argument('--resume-paused',action='store_true'); ap.add_argument('--orchestration-commit',default=None)
+    ap.add_argument('--pause-on-stop',action=argparse.BooleanOptionalAction,default=True)
     args=ap.parse_args(); c=load_config(Path(args.config))
     if args.command=='validate':
         rows=validate_config(c); print(f'OOD_SCOPE=PASS models=5 identities_per_model={len(rows)} planned=4000'); return 0
@@ -913,11 +1087,16 @@ def main():
         controller.resume_completed_smokes(args.orchestration_commit,preflight=True); return 0
     if args.command=='existing-dispatches-preflight':
         controller.resume_existing_dispatches(args.orchestration_commit,preflight=True); return 0
+    if args.command=='paused-resume-preflight':
+        controller.resume_existing_dispatches(args.orchestration_commit,preflight=True,paused=True); return 0
     def term(*_): raise RuntimeError('控制器收到终止信号')
     signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term)
-    try: return controller.run(resume_completed_smokes=args.resume_completed_smokes,resume_existing_dispatches=args.resume_existing_dispatches,orchestration_commit=args.orchestration_commit)
+    try: return controller.run(resume_completed_smokes=args.resume_completed_smokes,resume_existing_dispatches=args.resume_existing_dispatches,resume_paused=args.resume_paused,
+                               orchestration_commit=args.orchestration_commit,pause_on_stop=args.pause_on_stop)
+    except ControllerLeaseBusy as e:
+        print('CONTROLLER_LEASE=FAIL '+str(e),flush=True); return 1
     except BaseException as e:
-        atomic(Path(c['root'])/'control'/'controller-error.json',dict(controller.base,component='controller',error=type(e).__name__,message=str(e),time=time.time()))
+        print('CONTROLLER_EXIT=FAIL '+str(e),flush=True)
         return 1
 
 if __name__=='__main__': raise SystemExit(main())

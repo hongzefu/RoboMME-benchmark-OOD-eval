@@ -5,13 +5,17 @@ ROOT=${1:?运行根}; RUN=${2:?运行名}; CPU=${3:?CPU作业}; DEADLINE=${4:?�
 READY=${5:-$ROOT/control/launch.ready}
 SELF=${SLURM_JOB_ID:?}; : "${BENCH_PY:?必须提供uv管理解释器}"
 HOLD_PID=""
+CACHE_B64=""; RETRY_SLEEP=10
 FAILURE_PHASE=initialization
 [[ "$CPU" =~ ^[0-9]+$ && "$SELF" =~ ^[0-9]+$ && "$DEADLINE" =~ ^[0-9]+$ ]] || exit 2
 exec > >(tee -a "$ROOT/control/guard-$SELF.log") 2>&1
 normal_complete() {
   [[ -f "$ROOT/control/gpu_work_complete.json" ]] || return 1
-  timeout --kill-after=.2s 3s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$READY" <<'PY'
-import json,pathlib,sys
+  timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$READY" <<'PY'
+import sys,signal
+def expired(*_): raise TimeoutError('完成标记读取超过5秒')
+signal.signal(signal.SIGALRM,expired); signal.alarm(5)
+import json,pathlib
 p=pathlib.Path(sys.argv[1])/'control'; ready=pathlib.Path(sys.argv[4])
 assert ready.is_absolute() and not ready.is_symlink() and ready.resolve().is_relative_to(p.resolve())
 assert '..' not in ready.relative_to(p).parts and not p.is_symlink() and not p.parent.is_symlink()
@@ -20,6 +24,7 @@ r=json.loads(ready.read_text()); d=json.loads((p/'gpu_work_complete.json').read_
 assert r['root']==sys.argv[1] and r['run']==sys.argv[2] and str(r['controller_job_id'])==sys.argv[3]
 assert d['run']==r['run'] and str(d['controller_job_id'])==sys.argv[3]
 assert d['config_sha256']==r['config_sha256'] and d['exec_commit']==r['exec_commit']
+assert d['expected']==4000 and d['published']==4000
 PY
 }
 cleanup() {
@@ -53,7 +58,7 @@ while :; do
     normal_complete && exit 0
     exit 4
   fi
-  [[ ! -f "$ROOT/control/STOP" ]] || exit 5
+  [[ ! -f "$ROOT/control/STOP" ]] || echo "GUARD_PAUSE_DRAINING gpu=$SELF gpu_action=none"
   QUERY_START=$SECONDS
   if [[ -f "$ROOT/control/intentional-supervisor-stop.json" ]]; then
     echo "GUARD_INTENT_PENDING_VALIDATE gpu=$SELF"
@@ -65,10 +70,11 @@ while :; do
     (( QUERY_FAIL_SINCE >= 0 )) || QUERY_FAIL_SINCE=$QUERY_START
     (( SECONDS - QUERY_FAIL_SINCE < 30 )) || exit 7
   fi
-  if [[ -f "$READY" ]]; then
+  if [[ -f "$READY" || -n "$CACHE_B64" ]]; then
     FAILURE_PHASE=ready_heartbeat_payload
     echo "GUARD_CHECK_BEGIN gpu=$SELF time=$(date +%s) startup_deadline_s=30 read_deadline_s=5"
-    if timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$SELF" "$$" "$READY" <<'PY'
+    RETRY_SLEEP=10
+    if payload_output=$(timeout --kill-after=.2s 30s "$BENCH_PY" -I -S -u - "$ROOT" "$RUN" "$CPU" "$SELF" "$$" "$READY" "$CACHE_B64" <<'PY'
 import sys
 print('GUARD_PHASE gpu='+sys.argv[4]+' phase=python_entered',flush=True)
 print('GUARD_PHASE gpu='+sys.argv[4]+' phase=startup_standard_library',flush=True)
@@ -78,7 +84,13 @@ def expired(*_): raise TimeoutError('guard读取验证超过5秒 phase='+phase)
 signal.signal(signal.SIGALRM,expired); signal.alarm(5)
 try:
  print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
- import json,pathlib
+ import json,pathlib,base64,math
+ cached=None
+ if sys.argv[7]:
+  cached=json.loads(base64.b64decode(sys.argv[7],validate=True))
+  assert cached['root']==sys.argv[1] and cached['ready_path']==sys.argv[6] and cached['gpu_job_id']==sys.argv[4] and cached['guard_pid']==int(sys.argv[5])
+  assert cached['ready']['run']==sys.argv[2] and str(cached['ready']['controller_job_id'])==sys.argv[3]
+  assert math.isfinite(float(cached['verified_t']))
  p=pathlib.Path(sys.argv[1])/'control'
  ready=pathlib.Path(sys.argv[6])
  assert ready.is_absolute() and not ready.is_symlink() and ready.resolve().is_relative_to(p.resolve())
@@ -88,22 +100,40 @@ try:
  r=json.loads(ready.read_text())
  phase='ready_validate'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
  assert r['root']==sys.argv[1] and r['run']==sys.argv[2] and r['run_name']==sys.argv[2] and str(r['controller_job_id'])==sys.argv[3]
+ if cached is not None: assert all(cached['ready'][k]==r[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
  intent=p/'intentional-supervisor-stop.json'
+ paused=p/'paused.json'
+ if (p/'STOP').exists() and paused.exists():
+  import hashlib
+  pointer=json.loads(paused.read_text()); proof_path=pathlib.Path(pointer['proof_path'])
+  assert proof_path.is_relative_to(p) and not proof_path.is_symlink()
+  raw=proof_path.read_bytes(); proof=json.loads(raw)
+  assert hashlib.sha256(raw).hexdigest()==pointer['proof_sha256']
+  assert all(proof[k]==r[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
+  assert proof['expected']==4000 and proof['accepted']+proof['remaining']==4000 and proof['unsettled']==0 and proof['drained'] is True
+  raise SystemExit(12)
+ monitor='supervisor'
  if intent.exists():
   phase='intentional_supervisor_stop'; stop=json.loads(intent.read_text())
   for key in ('run','exec_commit','config_sha256','controller_job_id'): assert str(stop[key])==str(r[key])
   print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
   accepted=p/('guardian-intent-accepted-'+sys.argv[4]+'.json')
   tmp=accepted.with_name(accepted.name+'.'+str(os.getpid())+'.tmp'); tmp.write_text(json.dumps(stop)); os.replace(tmp,accepted)
-  raise SystemExit(10)
+  monitor='controller'
+  # 监督器退出不结束健康守卫；改由控制器真实主循环进展维持监视。
  phase='heartbeat_read'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
- h=p/'cpu-heartbeat.json'
+ h=p/('controller-heartbeat.json' if monitor=='controller' else 'cpu-heartbeat.json')
  if h.exists():
   d=json.loads(h.read_text()); phase='heartbeat_validate'; print('GUARD_PHASE gpu='+sys.argv[4]+' phase='+phase,flush=True)
   assert all(str(d[k])==str(r[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
   age=time.time()-float(d['t']); print('GUARD_HEARTBEAT gpu='+sys.argv[4]+' age_s='+str(age),flush=True)
   assert -30<=age<120
+  assert -30<=time.time()-float(d['loop_t'])<120
+  if monitor=='controller': assert type(d['pid']) is int and d['pid']>0 and type(d['start_ticks']) is int
+  cached=dict(root=sys.argv[1],ready_path=sys.argv[6],gpu_job_id=sys.argv[4],guard_pid=int(sys.argv[5]),ready=r,verified_t=float(d['t']),loop_t=float(d['loop_t']),monitor=monitor)
+  print('GUARD_CACHE_B64='+base64.b64encode(json.dumps(cached).encode()).decode(),flush=True)
  else:
+  if monitor=='controller': raise ValueError('退出意图后没有控制器心跳')
   phase='heartbeat_missing_grace'; assert time.time()-ready.stat().st_mtime<120
  phase='ready_publish'
  target=p/('guardian-ready-'+sys.argv[4]+'.json')
@@ -111,9 +141,20 @@ try:
   doc={k:r[k] for k in ('run','exec_commit','config_sha256','controller_job_id')}
   doc.update(run_name=r['run'],gpu_job_id=sys.argv[4],step_id=os.environ.get('SLURM_STEP_ID'),pid=int(sys.argv[5]),time=time.time())
   tmp=target.with_name(target.name+'.'+str(os.getpid())+'.tmp'); tmp.write_text(json.dumps(doc)); os.replace(tmp,target)
+ if cached is not None:
+  target=p/('guardian-heartbeat-'+sys.argv[4]+'.json')
+  doc={k:r[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+  doc.update(gpu_job_id=sys.argv[4],step_id=os.environ.get('SLURM_STEP_ID'),pid=int(sys.argv[5]),t=time.time(),monitor_t=time.time(),verified_t=cached['verified_t'],verified_loop_t=cached['loop_t'],monitor=monitor)
+  tmp=target.with_name(target.name+'.'+str(os.getpid())+'.tmp'); tmp.write_text(json.dumps(doc)); os.replace(tmp,target)
  print('GUARD_PHASE gpu='+sys.argv[4]+' phase=validated',flush=True)
 except Exception as e:
  signal.alarm(0)
+ if isinstance(e,OSError) and e.errno in (5,121,116) and 'cached' in locals() and cached is not None:
+  remaining=min(cached['verified_t']+120,cached['loop_t']+120)-time.time()
+  if remaining>0:
+   print('GUARD_NFS_RETRY errno='+str(e.errno)+' expires='+str(cached['verified_t']+120)+' phase='+phase,flush=True)
+   print('GUARD_RETRY_SLEEP='+format(min(10,remaining),'.3f'),flush=True)
+   raise SystemExit(11)
  print('GUARD_PAYLOAD_FAILURE gpu='+sys.argv[4]+' phase='+phase+' error_kind='+type(e).__name__+' message='+str(e),flush=True)
  if 'json' in locals() and 'pathlib' in locals():
   p=pathlib.Path(sys.argv[1])/'control'; target=p/('guard-failure-'+sys.argv[4]+'.json')
@@ -125,13 +166,24 @@ except Exception as e:
  raise
 finally: signal.alarm(0)
 PY
+)
     then
+      printf '%s\n' "$payload_output"
       echo "GUARD_CHECK_END gpu=$SELF payload_rc=0 time=$(date +%s)"
     else
       payload_rc=$?
+      printf '%s\n' "$payload_output"
       echo "GUARD_CHECK_END gpu=$SELF payload_rc=$payload_rc time=$(date +%s)"
       # 仅本次payload完成身份校验后的专用状态可结束守卫；旧回执只是证据。
-      if (( payload_rc == 10 )); then exit 0; fi
+      if (( payload_rc == 12 )); then exit 0; fi
+      if (( payload_rc == 11 )); then
+        while IFS= read -r line; do
+          [[ "$line" != GUARD_CACHE_B64=* ]] || CACHE_B64=${line#GUARD_CACHE_B64=}
+          [[ "$line" != GUARD_RETRY_SLEEP=* ]] || RETRY_SLEEP=${line#GUARD_RETRY_SLEEP=}
+        done <<< "$payload_output"
+        [[ "$RETRY_SLEEP" =~ ^[0-9]+([.][0-9]+)?$ ]] || exit 8
+        sleep "$RETRY_SLEEP"; continue
+      fi
       # 先保存原始失败；仅退出此guard，不停止任何GPU工作负载。
       failure="$ROOT/control/guard-failure-$SELF.json"
       if [[ ! -f "$failure" ]]; then
@@ -141,6 +193,9 @@ PY
       fi
       exit 8
     fi
+    while IFS= read -r line; do
+      [[ "$line" != GUARD_CACHE_B64=* ]] || CACHE_B64=${line#GUARD_CACHE_B64=}
+    done <<< "$payload_output"
   else
     FAILURE_PHASE=prepare_deadline
     (( $(date +%s) < DEADLINE )) || exit 9

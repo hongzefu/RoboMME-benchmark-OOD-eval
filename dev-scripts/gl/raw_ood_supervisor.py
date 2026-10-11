@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 
-from raw_ood_controller import Controller, atomic, control_file, legacy_context, load_config, observed_job_state, query_gpu, read, sha, validate_config
+from raw_ood_controller import Controller, atomic, control_file, ledger_snapshot, legacy_context, load_config, observed_job_state, process_identity, query_gpu, read, sha, validate_config
 MAIL_TO='hongzefu@umich.edu'
 MAIL_COMMANDS={'/usr/sbin/sendmail','/usr/bin/sendmail','/usr/bin/mailx','/bin/mailx'}
 GUARD_QUERY_FAILURES={}
@@ -132,6 +132,12 @@ def check_guardians(guardians: list[dict], c: dict) -> None:
         d=read(marker)
         normal=all(str(d[k])==str(c[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
         if not normal: raise ValueError('GPU正常完成标记身份错误')
+    paused=Path(c['root'])/'control/paused.json'
+    if paused.exists() and (Path(c['root'])/'control/STOP').exists():
+        pointer=read(paused); path=control_file(c,pointer['proof_path']); proof=read(path)
+        if any(proof[k]!=c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')) or sha(path)!=pointer['proof_sha256'] or proof['unsettled']!=0 or proof['drained'] is not True:
+            raise ValueError('守卫暂停释放证明不符')
+        normal=True
     for g in guardians:
         rc=g['process'].poll()
         if rc is not None and not normal: raise RuntimeError(f"独立守卫提前退出 gpu={g['job_id']} rc={rc}")
@@ -157,6 +163,74 @@ def check_heartbeat(path: Path, base: dict, *, now: float, timeout: float=120) -
     return d
 
 
+def controller_terminal_proof(c,base):
+    """PID消失本身没有成功含义；只接受完整4000终态协议，最终搬运及清理仍由监督主循环验。"""
+    control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
+    if (control/'controller-error.json').exists(): raise RuntimeError('附着控制器已记录错误')
+    for path in (control/'gpu_work_complete.json',gl/'gpu_work_complete.json'):
+        d=read(path)
+        if any(str(d[k])!=str(v) for k,v in base.items()) or d['expected']!=4000 or d['published']!=4000:
+            raise ValueError('附着控制器完成标记不符')
+    result=read(control/'results-report.json')
+    if any(str(result[k])!=str(v) for k,v in base.items()) or result['expected']!=4000 or result['accepted']!=4000 or result['missing']!=0 or result['infra']!=0:
+        raise ValueError('附着控制器4000终态报告不符')
+    ledger,_=ledger_snapshot(Path(c['budget_ledger']))
+    budget=result['budget']
+    if ledger.trajectories!=4000 or ledger.retries or ledger.recovery_used or ledger.astra or budget['trajectories']!=4000 or budget['retries']!=0 or budget['bad_rows']!=0:
+        raise ValueError('附着控制器终态预算不符')
+    claims=sum(ledger.claimed.values())+ledger.orphan_claims
+    if claims>8000 or budget['reset_claims']!=claims or budget['reset_count']!=ledger.resets: raise ValueError('附着控制器终态reset计量不符')
+    if len(c['expected_publications'])!=4000 or {p.name for p in (gl/'published').glob('*.json')}!=set(c['expected_publications']):
+        raise ValueError('附着控制器4000发布集合不符')
+    return dict(results_sha256=sha(control/'results-report.json'),budget_trajectories=4000,reset_claims=claims)
+
+
+class AttachedController:
+    """只读附着现存控制器，不创建、停止或等待其它子进程。"""
+    def __init__(self,c,pid,identity):
+        self.c=c; self.pid=pid; self.identity=identity
+        self.base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+    def poll(self):
+        current=process_identity(self.pid)
+        if current is not None and current['state']!='Z':
+            if any(current[k]!=self.identity[k] for k in ('start_ticks','command','cgroup')): raise ValueError('附着控制器PID复用或来源变化')
+            return None
+        try: proof=controller_terminal_proof(self.c,self.base)
+        except (FileNotFoundError,KeyError) as e: raise RuntimeError('附着控制器消失且终态未知，不当作成功') from e
+        atomic(Path(self.c['root'])/'control/controller-attach-terminal.json',dict(self.base,pid=self.pid,exit_code=None,status_source='validated_complete_protocol',**proof,time=time.time()))
+        return 0
+
+
+def attach_controller(c,config_path,pid,source,manifest_path,expected_manifest_sha):
+    """先核独立源码锁与原启动证明，再绑定真实PID；此函数没有任何Popen。"""
+    import re
+    base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
+    root=Path(c['root']); control=root/'control'; source=Path(source)
+    if source.name!='raw_ood_controller.py' or not source.is_absolute() or source.is_symlink() or not source.resolve().is_relative_to(root.resolve()): raise ValueError('附着控制器源码路径不符')
+    for path in source.parents:
+        if path==root.parent: break
+        if path.is_symlink(): raise ValueError('附着源码目录符号链')
+    manifest_path=control_file(c,str(manifest_path))
+    if not re.fullmatch('[0-9a-f]{64}',str(expected_manifest_sha)) or sha(manifest_path)!=expected_manifest_sha: raise ValueError('附着原源码锁SHA不符')
+    manifest=read(manifest_path); origin=read(control/'orchestration-started.json'); started=read(control/'supervisor-started.json')
+    if any(str(origin[k])!=str(v) or str(started[k])!=str(v) for k,v in base.items()) or int(started['controller_pid'])!=int(pid): raise ValueError('附着原启动证明身份/PID不符')
+    if origin['resume_existing_dispatches'] is not True or origin['resume_completed_smokes'] is not False or manifest['orchestration_commit']!=origin['orchestration_commit'] or manifest['worker_exec_commit']!=c['exec_commit'] or manifest['config_sha256']!=c['config_sha256']:
+        raise ValueError('附着原编排来源不符')
+    info=manifest['files']['raw_ood_controller.py']
+    if source.stat().st_size!=info['bytes'] or sha(source)!=info['sha256']: raise ValueError('附着控制器源码不符原锁')
+    heartbeat=check_heartbeat(control/'controller-heartbeat.json',base,now=time.time(),timeout=120)
+    if int(heartbeat['pid'])!=int(pid): raise ValueError('附着心跳PID不符')
+    proc=process_identity(pid)
+    expected=[c['python'],str(source),'run','--config',str(config_path),'--resume-existing-dispatches','--orchestration-commit',origin['orchestration_commit']]
+    if proc is None or proc['state']=='Z' or proc['command']!=expected or not re.search(r'job[_/-]'+re.escape(str(c['controller_job_id']))+r'(?:/|$)',proc['cgroup']): raise ValueError('附着PID命令/CPU作业不符或不存在')
+    if abs(proc['start_time']-float(started['time']))>5: raise ValueError('附着PID创建时间与原启动证明不符')
+    proof=dict(base,controller_pid=int(pid),source=str(source),source_sha256=info['sha256'],manifest_sha256=expected_manifest_sha,
+               original_orchestration_commit=origin['orchestration_commit'],start_ticks=proc['start_ticks'],command=proc['command'],cgroup=proc['cgroup'],
+               original_start_sha256=sha(control/'supervisor-started.json'),original_orchestration_sha256=sha(control/'orchestration-started.json'),
+               controller_action='attach_only',budget_action='none',time=time.time())
+    return AttachedController(c,int(pid),proc),proof
+
+
 def fail(config: dict, error: BaseException, *, process=None) -> int:
     control=Path(config['root'])/'control'; base={k:config[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     outcome=dict(base,error=type(error).__name__,message=str(error),time=time.time(),supervisor_exit_code=1,
@@ -171,13 +245,15 @@ def fail(config: dict, error: BaseException, *, process=None) -> int:
     return 1
 
 
-def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispatches=False,orchestration_commit=None) -> int:
+def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispatches=False,resume_paused=False,orchestration_commit=None,
+        attach_controller_pid=None,attach_controller_source=None,attach_controller_manifest=None,attach_manifest_sha256=None) -> int:
     c=load_config(config_path)
     control=Path(c['root'])/'control'; gl=Path(c['gl_root'])
     base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     if str(os.environ.get('SLURM_JOB_ID',''))!=str(c['controller_job_id']): raise ValueError('监督器不在登记CPU作业')
     if int(os.environ.get('SLURM_RESTART_COUNT','0')): raise ValueError('禁止重排队')
     controller=None; guardians=[]; started=time.time(); last_moved=None; last_progress=started; cleanup_settle_started=None
+    loop_state={'t':started}; controller_started_t=started
     guard_monitor_stop=threading.Event(); guard_monitor=None
     cpu_heart_stop=threading.Event(); cpu_heart=None
     def term(signum,*_):
@@ -185,7 +261,8 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
         raise RuntimeError('CPU监督收到终止信号')
     signal.signal(signal.SIGTERM,term); signal.signal(signal.SIGINT,term); signal.signal(signal.SIGUSR1,term)
     try:
-        if resume_completed_smokes and resume_existing_dispatches: raise ValueError('两种手动恢复模式互斥')
+        if sum((resume_completed_smokes,resume_existing_dispatches,resume_paused))>1: raise ValueError('手动恢复模式互斥')
+        if attach_controller_pid is not None and (resume_completed_smokes or resume_existing_dispatches or resume_paused): raise ValueError('附着与重建恢复模式互斥')
         validate_config(c)
         probe_provenance=require_probe(c)
         ready=read(control_file(c,c.get('ready_path',str(control/'launch.ready')))); jobs=read(control/'jobs.json')
@@ -200,14 +277,18 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
         mover=Path(c.get('mover_heartbeat',control/'mover-heartbeat.json'))
         mover_error=Path(c.get('mover_error',control/'mover-error.json'))
         check_heartbeat(mover,base,now=time.time())
-        atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),pid=os.getpid()))
+        if attach_controller_pid is not None:
+            controller,attach_proof=attach_controller(c,config_path,attach_controller_pid,attach_controller_source,attach_controller_manifest,attach_manifest_sha256)
+            atomic(control/f'controller-attach-{os.getpid()}.json',dict(attach_proof,new_orchestration_commit=orchestration_commit))
+        atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),loop_t=loop_state['t'],pid=os.getpid(),controller_pid=controller.pid if controller else None,controller_started_t=controller_started_t))
         def heartbeat():
             while not cpu_heart_stop.is_set():
-                atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),pid=os.getpid(),controller_pid=controller.pid if controller else None))
+                atomic(control/'cpu-heartbeat.json',dict(base,t=time.time(),loop_t=loop_state['t'],pid=os.getpid(),controller_pid=controller.pid if controller else None,controller_started_t=controller_started_t))
                 cpu_heart_stop.wait(5)
         cpu_heart=threading.Thread(target=heartbeat,name='raw-ood-cpu-heartbeat',daemon=True); cpu_heart.start()
         # 接续先全量只读核验；任何新守卫/控制器子进程均在此门之后启动。
         if resume_existing_dispatches: Controller(c).resume_existing_dispatches(orchestration_commit,preflight=True)
+        if resume_paused: Controller(c).resume_existing_dispatches(orchestration_commit,preflight=True,paused=True)
         def watch_guards():
             while not guard_monitor_stop.wait(1):
                 try: check_guardians(list(guardians),c)
@@ -217,18 +298,20 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
                     return
         guard_monitor=threading.Thread(target=watch_guards,daemon=True); guard_monitor.start()
         start_guardians(c,guardians)
-        log=(control/'controller.log').open('a')
+        log=None if attach_controller_pid is not None else (control/'controller.log').open('a')
         controller_command=[c['python'],str(Path(__file__).with_name('raw_ood_controller.py')),'run','--config',str(config_path)]
-        if resume_completed_smokes and resume_existing_dispatches: raise ValueError('两种手动恢复模式互斥')
-        if resume_completed_smokes or resume_existing_dispatches:
+        if resume_completed_smokes or resume_existing_dispatches or resume_paused:
             import re
             if not re.fullmatch('[0-9a-f]{40}',str(orchestration_commit)): raise ValueError('手动恢复须明确orchestration_commit')
-            controller_command+=['--resume-existing-dispatches' if resume_existing_dispatches else '--resume-completed-smokes','--orchestration-commit',orchestration_commit]
+            controller_command+=['--resume-paused' if resume_paused else '--resume-existing-dispatches' if resume_existing_dispatches else '--resume-completed-smokes','--orchestration-commit',orchestration_commit]
             atomic(control/'orchestration-started.json',dict(base,orchestration_commit=orchestration_commit,
-                   resume_completed_smokes=resume_completed_smokes,resume_existing_dispatches=resume_existing_dispatches,time=time.time()))
-        controller=subprocess.Popen(controller_command,
-                                    stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=dict(os.environ,PYTHONUNBUFFERED='1'))
-        atomic(control/'supervisor-started.json',dict(base,pid=os.getpid(),controller_pid=controller.pid,time=time.time()))
+                   resume_completed_smokes=resume_completed_smokes,resume_existing_dispatches=resume_existing_dispatches,resume_paused=resume_paused,time=time.time()))
+        if attach_controller_pid is None:
+            controller_started_t=time.time()
+            controller=subprocess.Popen(controller_command,
+                                        stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=dict(os.environ,PYTHONUNBUFFERED='1'))
+            atomic(control/'supervisor-started.json',dict(base,pid=os.getpid(),controller_pid=controller.pid,time=time.time()))
+        else: atomic(control/f'supervisor-attached-{os.getpid()}.json',dict(base,pid=os.getpid(),controller_pid=controller.pid,time=time.time()))
         while True:
             now=time.time()
             check_guardians(guardians,c)
@@ -245,8 +328,16 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
             rc=controller.poll()
             if rc is None:
                 heartbeat=control/'controller-heartbeat.json'
-                if heartbeat.exists(): check_heartbeat(heartbeat,base,now=now,timeout=120)
+                if heartbeat.exists():
+                    d=check_heartbeat(heartbeat,base,now=now,timeout=120)
+                    if d['pid']!=controller.pid or now-float(d['loop_t'])>=120: raise RuntimeError('控制器主循环无进展或PID错误')
                 elif now-started>120: raise RuntimeError('控制器未建立心跳')
+            elif rc==6:
+                d=read(control/'paused.json'); proof=read(Path(d['proof_path']))
+                if any(proof[k]!=v or d[k]!=v for k,v in base.items()) or sha(Path(d['proof_path']))!=d['proof_sha256'] or proof['unsettled']!=0 or proof['drained'] is not True or proof['accepted']+proof['remaining']!=4000:
+                    raise ValueError('控制器暂停证明不完整')
+                atomic(control/'supervisor-paused.json',dict(base,controller_pid=controller.pid,accepted=proof['accepted'],remaining=proof['remaining'],paused_proof=d,time=now))
+                print('SUPERVISOR_PAUSED=PASS accepted='+str(proof['accepted'])+' remaining='+str(proof['remaining']),flush=True); return 6
             elif rc!=0: raise RuntimeError(f'控制器退出{rc}')
             else:
                 complete=gl/'mover'/'completed.json'
@@ -275,6 +366,7 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
                     print('RUN_CLEANUP=PASS gpu_jobs=4 active_gpu=0 supervisor_exit_code=0 cpu_hold=1 notification_established=0',flush=True)
                     print('RAW_SUPERVISOR=PASS expected=4000 moved=4000 infra=0',flush=True); return 0
             if rc is None: start_guardians(c,guardians)
+            loop_state['t']=time.time()
             time.sleep(5)
     except BaseException as e:
         # 清理会使守卫srun退出；先关闭独立监控，不能用二次信号打断首次错误清理。
@@ -343,10 +435,15 @@ def main():
     ap=argparse.ArgumentParser(); sub=ap.add_subparsers(dest='command',required=True)
     p=sub.add_parser('run'); p.add_argument('--config',type=Path,required=True)
     p.add_argument('--resume-completed-smokes',action='store_true'); p.add_argument('--resume-existing-dispatches',action='store_true'); p.add_argument('--orchestration-commit',default=None)
+    p.add_argument('--resume-paused',action='store_true')
+    p.add_argument('--attach-controller-pid',type=int); p.add_argument('--attach-controller-source',type=Path)
+    p.add_argument('--attach-controller-manifest',type=Path); p.add_argument('--attach-manifest-sha256')
     p=sub.add_parser('self-test'); p.add_argument('--root',type=Path,required=True)
     p=sub.add_parser('notification-probe'); p.add_argument('--config',type=Path,required=True)
     args=ap.parse_args()
     if args.command=='notification-probe': return notification_probe(args.config)
-    return run(args.config,resume_completed_smokes=args.resume_completed_smokes,resume_existing_dispatches=args.resume_existing_dispatches,orchestration_commit=args.orchestration_commit) if args.command=='run' else self_test(args.root)
+    return run(args.config,resume_completed_smokes=args.resume_completed_smokes,resume_existing_dispatches=args.resume_existing_dispatches,resume_paused=args.resume_paused,orchestration_commit=args.orchestration_commit,
+               attach_controller_pid=args.attach_controller_pid,attach_controller_source=args.attach_controller_source,
+               attach_controller_manifest=args.attach_controller_manifest,attach_manifest_sha256=args.attach_manifest_sha256) if args.command=='run' else self_test(args.root)
 
 if __name__=='__main__': raise SystemExit(main())
