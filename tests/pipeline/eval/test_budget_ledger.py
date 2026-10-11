@@ -515,6 +515,20 @@ def test_zero_retries_never_claims_retry(tmp_path):
     assert st.retries == [] and st.trajectories == 1 and len(world.envs) == 1
 
 
+def test_first_identity_and_commit_parameters_cannot_change_on_reopen(tmp_path):
+    """首试唯一跨token；结算幂等须包括status/infra，所有拒绝不改账本字节。"""
+    bm=bl_mod(); path=tmp_path/'budget.jsonl'; led=bm.BudgetLedger(path)
+    rid=led.reserve(resets=2,route='pp/seed7/new',key='k',token='token1',kind_of_try='first')
+    led.commit(rid,status='fail',infra=True)
+    before=path.read_bytes()
+    assert bm.BudgetLedger(path).reserve(resets=2,route='pp/seed7/new',key='k',token='token1',kind_of_try='first')==rid
+    led.commit(rid,status='fail',infra=True)
+    with pytest.raises(ValueError): led.reserve(resets=2,route='pp/seed7/new',key='k',token='token2',kind_of_try='first')
+    for extra in ({'status':'success','infra':True},{'status':'fail','infra':False},{'infra':True}):
+        with pytest.raises(ValueError): led.commit(rid,**extra)
+    assert path.read_bytes()==before and led.state().trajectories==1
+
+
 @pytest.mark.parametrize("status", ["success", "fail", "timeout"])
 def test_normal_outcomes_not_rerun_in_shared_mode(tmp_path, status):
     """队列里已 accepted（任一席位）的身份：不领取、不预约、不建环境。"""

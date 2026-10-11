@@ -208,6 +208,8 @@ class BudgetState:
                         raise ValueError("重复预约 token")
                     if type(row.get("astra")) is not bool or row.get("kind_of_try") not in (None, *KINDS_OF_TRY):
                         raise ValueError("非法预约性质")
+                    if row.get('kind_of_try')=='first' and row.get('route') is not None and row.get('key') is not None and any(r.get('kind_of_try')=='first' and r.get('route')==row['route'] and r.get('key')==row['key'] for r in self.reserves.values()):
+                        raise ValueError('同路线身份重复首试')
                 elif kind in ("commit", "release"):
                     if not isinstance(rid, str) or rid not in self.reserves or rid in self.commits or rid in self.releases:
                         raise ValueError("无预约或重复收尾")
@@ -518,6 +520,8 @@ class BudgetLedger:
                                                         "astra": astra, "kind_of_try": kind_of_try}.items()):
                         raise ValueError("同 token 预约参数冲突")
                     return rid
+            if kind_of_try=='first' and route is not None and key is not None and any(r.get('kind_of_try')=='first' and r.get('route')==route and r.get('key')==key for r in st.reserves.values()):
+                raise ValueError('同路线身份已预约首试，不可用新token重领')
             if st.trajectories >= self.trajectory_cap:
                 raise BudgetExhausted(f"trajectories={st.trajectories}/{self.trajectory_cap}", reason="trajectory_cap")
             if astra and st.astra >= self.astra_cap:
@@ -552,7 +556,10 @@ class BudgetLedger:
             st = self._load()
             self._need_rid(st, rid)
             if rid in st.commits or rid in st.releases:
-                if rid in st.releases or st.commits[rid].get("resets") != resets:
+                old=st.commits.get(rid,{})
+                metadata={'kind','rid','t','host','pid','resets'}
+                if 'slurm_job_id' not in extra: metadata.add('slurm_job_id')
+                if rid in st.releases or old.get("resets") != resets or {k:v for k,v in old.items() if k not in metadata}!=extra:
                     raise ValueError("收尾冲突")
                 return  # 相同收尾幂等
             total = st.resets - st.resets_of(rid) + max(st.reserves[rid]["resets"], resets or 0, st.claimed.get(rid, 0))
