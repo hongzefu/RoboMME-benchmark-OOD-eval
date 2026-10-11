@@ -119,7 +119,7 @@ try:
  if paused.exists():
   import hashlib
   sys.path.insert(0,sys.argv[8])
-  from raw_ood_context import validate_pause_pointer
+  from raw_ood_supervisor import current_pause_proof
   cfg=pathlib.Path(r['config_path'])
   assert cfg.is_absolute() and cfg.is_relative_to(p.parent) and not cfg.is_symlink()
   assert all(not node.is_symlink() for node in cfg.parents if node.is_relative_to(p.parent))
@@ -127,7 +127,7 @@ try:
   assert hashlib.sha256(raw).hexdigest()==r['config_sha256']; c['config_sha256']=r['config_sha256']
   assert all(str(c[k])==str(r[k]) for k in ('run','run_name','exec_commit','config_sha256','controller_job_id'))
   if (p/'STOP').exists() or (pathlib.Path(c['gl_root'])/'STOP').exists():
-   proof=validate_pause_pointer(json.loads(paused.read_text()),c)
+   proof=current_pause_proof(c,json.loads(paused.read_text()))
    print('GUARD_PAUSED accepted='+str(proof['accepted'])+' infra='+str(proof['infra'])+' settled='+str(proof['settled'])+' remaining='+str(proof['remaining']),flush=True)
    raise SystemExit(12)
  monitor='supervisor'

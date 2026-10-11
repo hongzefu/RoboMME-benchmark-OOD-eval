@@ -194,7 +194,7 @@ def test_guard_historical_original_remains_but_new_error_is_rejected(tmp_path):
     with pytest.raises(ValueError,match='SHA'): S.check_guardians(guardians,c)
 
 
-@pytest.mark.parametrize('bad',[None,'mover_count','pointer_count','new_error'])
+@pytest.mark.parametrize('bad',[None,'mover_count','pointer_count','new_error','current_error','wrong_core','old_pid','new_start','new_reserve','new_closed'])
 def test_actual_infra_stop_mover_pause_supervisor_guard_and_resume(tmp_path,monkeypatch,bad):
     """实际失败→STOP→两个6排空→双生产暂停JSON→监督/守卫→仅未尝试恢复。"""
     import json,shutil,types
@@ -203,6 +203,7 @@ def test_actual_infra_stop_mover_pause_supervisor_guard_and_resume(tmp_path,monk
     from test_raw_ood_mover import publication as real_publication, MOVER
     from raw_ood_context import validate_pause_pointer
     actual_run,actual_popen=subprocess.run,subprocess.Popen
+    producer_pid=os.getpid(); producer_identity={'start_time':C.process_identity(producer_pid)['start_time']}
     raw_root=tmp_path/'real-raw'; raw_root.mkdir()
     _,dest,source,row=real_publication.__wrapped__(raw_root)
     root=tmp_path/'controller'; root.mkdir()
@@ -256,6 +257,17 @@ def test_actual_infra_stop_mover_pause_supervisor_guard_and_resume(tmp_path,monk
         (dest/actual['relative_dir']/'arrays.npz').write_bytes('本夹具新增真实字节故障'.encode())
         assert MOVER.raw_main(args)==1
         assert C.read(ctl.control/'mover-error.json')['component']=='mover'
+    elif bad=='current_error':
+        C.atomic(ctl.control/'controller-error.current-fixture.json',dict(ctl.base,error='本实例控制器新错误'))
+    elif bad=='wrong_core':
+        pointer['exec_commit']='e'*40; C.atomic(ctl.control/'paused.json',pointer)
+    elif bad in ('new_reserve','new_closed'):
+        import budget_ledger
+        ledger=budget_ledger.BudgetLedger(ctl.c['budget_ledger'],trajectory_cap=4000,reset_cap=8000,astra_cap=0,shared_infra_cap=0,expired_cap=0,planned_first_tries=4000)
+        route='groundsg/ground-sg-qwenvl/seed7/new'; key=planned[3]['key']
+        rid=ledger.reserve(resets=2,route=route,key=key,token=route+'|'+key+'|a1',kind_of_try='first',attempt_no=1,slurm_job_id='101')
+        if bad=='new_closed':
+            ledger.claim_reset(rid,'build'); ledger.claim_reset(rid,'reset'); ledger.commit(rid,status='fail',infra=False,slurm_job_id='101')
     # 暂停后心跳可自然不再更新；移除本夹具心跳模拟缺失，只有严格暂停证明可接管。
     (ctl.control/'mover-heartbeat.json').unlink(missing_ok=True)
     C.atomic(ctl.control/'launch.ready',dict(ctl.base,root=str(root),config_path=str(cfg)))
@@ -264,7 +276,19 @@ def test_actual_infra_stop_mover_pause_supervisor_guard_and_resume(tmp_path,monk
     try:
         with monkeypatch.context() as isolated:
             isolated.setenv('SLURM_JOB_ID','100'); isolated.setattr(S,'start_guardians',lambda c,guardians=None:[])
-            isolated.setattr(S.subprocess,'Popen',lambda *a,**kw:types.SimpleNamespace(pid=123,poll=lambda:6))
+            # 原控制器PID已消失，真正AttachedController消费真实write_paused，不能用poll6替身。
+            isolated.setattr(S,'process_identity',lambda pid:None)
+            identity={'start_time':pointer['time']+1} if bad=='new_start' else producer_identity
+            attached=S.AttachedController(ctl.c,producer_pid+1 if bad=='old_pid' else producer_pid,identity)
+            if bad in ('pointer_count','wrong_core','old_pid','new_start','new_reserve','new_closed'):
+                with pytest.raises(ValueError): attached.poll()
+            elif bad=='current_error':
+                with pytest.raises(RuntimeError): attached.poll()
+            else:
+                assert attached.poll()==6
+                attach_pause=C.read(ctl.control/'controller-attach-paused.json')
+                assert (attach_pause['accepted'],attach_pause['infra'],attach_pause['settled'],attach_pause['remaining'])==(6,1,7,3993)
+            isolated.setattr(S.subprocess,'Popen',lambda *a,**kw:attached)
             isolated.setattr(S.subprocess,'run',lambda *a,**kw:pytest.fail('不得查询或取消真实资源'))
             assert S.run(cfg)==(6 if bad is None else 1)
         assert hold.poll() is None and stop.read_bytes()==original_stop
@@ -277,11 +301,14 @@ def test_actual_infra_stop_mover_pause_supervisor_guard_and_resume(tmp_path,monk
             path=bindir/name; path.write_text('#!/bin/bash\n'+body+'\n'); path.chmod(0o700)
         guard=subprocess.run(['bash',str(HERE/'raw_ood_hold_guard.sh'),str(root),'fixture','100',str(int(time.time()+60))],
             env=dict(os.environ,BENCH_PY=sys.executable,SLURM_JOB_ID='101',SLURM_STEP_ID='0',PATH=str(bindir)+':'+os.environ['PATH']),capture_output=True,text=True,timeout=15)
-        assert guard.returncode==(8 if bad=='pointer_count' else 0),guard.stdout+guard.stderr
+        assert guard.returncode==(8 if bad in ('pointer_count','wrong_core','new_reserve','new_closed') else 0),guard.stdout+guard.stderr
         assert not cancelled.exists() and hold.poll() is None
         if bad is None:
             ctl.c['pause_snapshot']={'path':pointer['proof_path'],'sha256':pointer['proof_sha256']}
             stop.unlink()  # 只移除本夹具活STOP；生产器已另存不可变原字节。
+            with monkeypatch.context() as isolated:
+                isolated.setattr(S,'process_identity',lambda pid:None)
+                with pytest.raises(RuntimeError,match='终态未知'): S.AttachedController(ctl.c,123,{}).poll()
             restarted=C.Controller(ctl.c); restarted.shards=ctl.shards
             def query(cmd,**kw):
                 return types.SimpleNamespace(returncode=0,stdout=account[cmd[cmd.index('-j')+1]] if cmd[0]=='sacct' else '',stderr='')

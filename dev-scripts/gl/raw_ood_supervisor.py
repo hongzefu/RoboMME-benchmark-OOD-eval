@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from email.message import EmailMessage
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -147,7 +148,7 @@ def check_guardians(guardians: list[dict], c: dict) -> None:
         normal=True  # 合法不完整终态也允许守卫结束自身，allocation仍保留。
     paused=Path(c['root'])/'control/paused.json'
     if paused.exists() and ((Path(c['root'])/'control/STOP').exists() or (Path(c.get('gl_root',c['root']))/'STOP').exists()):
-        validate_pause_pointer(read(paused),c)
+        current_pause_proof(c,read(paused))
         normal=True
     for g in guardians:
         rc=g['process'].poll()
@@ -215,6 +216,19 @@ def controller_terminal_proof(c,base):
     return dict(results_sha256=sha(control/'results-report.json'),budget_trajectories=ledger.trajectories,reset_claims=claims,terminal=terminal)
 
 
+def current_pause_proof(c, pointer=None):
+    """当前退出证明必须精确绑定当前上下文与完整预算，历史前缀仅供恢复。"""
+    pointer=read(Path(c['root'])/'control/paused.json') if pointer is None else pointer
+    if any(type(pointer[k]) is not type(c[k]) or pointer[k]!=c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')):
+        raise ValueError('当前暂停指针CORE不符')
+    proof=validate_pause_pointer(pointer,c)
+    path=Path(c['budget_ledger']); ledger,digest=ledger_snapshot(path)
+    claims=sum(ledger.claimed.values())+ledger.orphan_claims
+    if path.stat().st_size!=proof['budget_bytes'] or digest!=proof['budget_sha256'] or ledger.bad_rows or ledger.trajectories!=proof['trajectories'] or len(ledger.reserves)!=len(ledger.commits) or ledger.releases or claims!=proof['reset_claims']:
+        raise ValueError('当前暂停预算有新增或未闭合预约')
+    return proof
+
+
 class AttachedController:
     """只读附着现存控制器，不创建、停止或等待其它子进程。"""
     def __init__(self,c,pid,identity):
@@ -222,9 +236,22 @@ class AttachedController:
         self.base={k:c[k] for k in ('run','run_name','exec_commit','config_sha256','controller_job_id')}
     def poll(self):
         current=process_identity(self.pid)
-        if current is not None and current['state']!='Z':
+        if current is not None:
             if any(current[k]!=self.identity[k] for k in ('start_ticks','command','cgroup')): raise ValueError('附着控制器PID复用或来源变化')
-            return None
+            if current['state']!='Z': return None
+        control=Path(self.c['root'])/'control'
+        for path in [control/'controller-error.json',*control.glob('controller-error.current-*.json')]:
+            if path.exists() and not is_historical_error(path,self.c): raise RuntimeError('附着控制器已记录当前错误')
+        if (control/'paused.json').exists() and ((control/'STOP').exists() or (Path(self.c['gl_root'])/'STOP').exists()):
+            pointer=read(control/'paused.json'); paused=current_pause_proof(self.c,pointer)
+            if not Path(pointer['proof_path']).name.startswith(f'paused-{self.pid}-'):
+                raise ValueError('附着暂停证明属于其它PID')
+            started=self.identity['start_time']
+            if type(started) not in (int,float) or not math.isfinite(started) or any(type(doc['time']) not in (int,float) or not math.isfinite(doc['time']) or not started<=doc['time']<=time.time()+30 for doc in (pointer,paused)):
+                raise ValueError('附着暂停证明早于当前PID或时间不符')
+            atomic(control/'controller-attach-paused.json',dict(self.base,pid=self.pid,exit_code=6,status_source='validated_pause_protocol',
+                paused_proof=pointer,accepted=paused['accepted'],infra=paused['infra'],settled=paused['settled'],remaining=paused['remaining'],time=time.time()))
+            return 6
         try: proof=controller_terminal_proof(self.c,self.base)
         except (FileNotFoundError,KeyError) as e: raise RuntimeError('附着控制器消失且终态未知，不当作成功') from e
         atomic(Path(self.c['root'])/'control/controller-attach-terminal.json',dict(self.base,pid=self.pid,exit_code=None,status_source='validated_terminal_protocol',**proof,time=time.time()))
@@ -372,7 +399,7 @@ def run(config_path: Path,*,resume_completed_smokes=False,resume_existing_dispat
                     if d['pid']!=controller.pid or now-float(d['loop_t'])>=120: raise RuntimeError('控制器主循环无进展或PID错误')
                 elif now-started>120: raise RuntimeError('控制器未建立心跳')
             elif rc==6:
-                d=read(control/'paused.json'); proof=validate_pause_pointer(d,c)
+                d=read(control/'paused.json'); proof=current_pause_proof(c,d)
                 atomic(control/'supervisor-paused.json',dict(base,controller_pid=controller.pid,accepted=proof['accepted'],infra=proof['infra'],settled=proof['settled'],remaining=proof['remaining'],paused_proof=d,time=now))
                 print('SUPERVISOR_PAUSED=PASS accepted='+str(proof['accepted'])+' infra='+str(proof['infra'])+' settled='+str(proof['settled'])+' remaining='+str(proof['remaining']),flush=True); return 6
             elif rc not in (0,2): raise RuntimeError(f'控制器退出{rc}')
