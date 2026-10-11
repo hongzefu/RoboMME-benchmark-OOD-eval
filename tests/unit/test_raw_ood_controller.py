@@ -301,6 +301,15 @@ def test_normal_success_failure_and_step_timeout_all_publish_and_continue(tmp_pa
     assert Path(ctl.c['budget_ledger']).read_bytes()==before
 
 
+@pytest.mark.parametrize('status',['error','timeout'])
+def test_normal_error_or_timeout_preserves_independently_observed_success(tmp_path,status):
+    ctl,a,row=scan_fixture(tmp_path,status=status); row['task_success']=1
+    result=C.read(row['result']); result['task_success']=1; C.atomic(Path(row['result']),result)
+    a['results'].write_text(json.dumps(row)+'\n'); ctl.scan()
+    assert len(ctl.published)==1 and not ctl.failures and C.read(row['result'])['task_success']==1
+    event=json.loads((ctl.control/'events.jsonl').read_text().splitlines()[-1]); assert event['task_success']==1
+
+
 @pytest.mark.parametrize('reason',['env_build','server_dead','protocol_error'])
 def test_unapproved_infrastructure_preserves_original_unknown_values_and_stops(tmp_path,reason):
     ctl,a,row=scan_fixture(tmp_path); row=dict(key=row['key'],infra=True,infra_reason=reason,task_success=None,exec_steps=None)
@@ -621,6 +630,17 @@ def test_running_worker_future_75_settles_without_repeating_reserved_identity(tm
     assert ctl.resume_rows['qwenvl-01']==active['rows'][1:] and ctl.segment_numbers['qwenvl-01']==1
     assert Path(ctl.c['budget_ledger']).read_bytes()==before
     for a in ctl.active.values(): a['log'].close()
+
+
+def test_watchdog_report_waits_for_true_exit_without_advancing_or_publishing(tmp_path,monkeypatch):
+    ctl,metadata,account,planned,report,failure=watchdog_fixture(tmp_path,monkeypatch)
+    ctl.resume_existing_dispatches('c'*40); a=ctl.active['102']; row=future_watchdog(ctl,a,metadata,account)
+    finished=a['process']; alive=[True]; a['process']=types.SimpleNamespace(poll=lambda:None if alive[0] else finished.poll())
+    before=Path(ctl.c['budget_ledger']).read_bytes(); info=ctl.read_worker_results(a)
+    assert info['failure_exit_waiting'] is True and a['offset']==0 and C.identity('qwenvl',row) not in ctl.failures
+    alive[0]=False; ctl.scan()
+    assert a['offset']==1 and C.identity('qwenvl',row) in ctl.failures and Path(ctl.c['budget_ledger']).read_bytes()==before
+    for active in ctl.active.values(): active['log'].close()
 
 
 @pytest.mark.parametrize('claims,reason,success,steps',[(0,'episode_wall',None,None),(1,'deadline_first_infer',None,None),(2,'deadline_media_finalize',1,27)])

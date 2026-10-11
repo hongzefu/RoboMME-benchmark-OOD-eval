@@ -998,6 +998,10 @@ class Controller:
                 if failure_category(row)!='watchdog_exit':
                     atomic(a['progress'].parent/'unclassified-infra.json',dict(self.base,report_path=str(a['results']),report_line=line,report_line_sha256=hashlib.sha256(line.encode()).hexdigest(),reason=row.get('infra_reason'),task_success=row.get('task_success'),exec_steps=row.get('exec_steps'),time=time.time()))
                     raise RuntimeError('未获继续许可的基础设施原因已留原行证据')
+                if a['process'].poll() is None:
+                    began=a.setdefault('failure_exit_wait_started',time.monotonic())
+                    if time.monotonic()-began>=120: raise RuntimeError('看门狗原行已可见但真实worker退出未在120秒内闭合')
+                    return dict(opened=True,bytes_read=len(content.encode()),complete_lines=len(lines),partial_tail=partial,failure_exit_waiting=True)
                 doc=self.prepare_failure(a,row,line); self.record_failure(doc)
                 seen.add(key); a['offset']+=1
                 if doc['reason'] not in self.c.get('failure_policy',{}).get('continue_reasons',[]): raise RuntimeError('基础设施失败已留证，继续未授权')
@@ -1048,6 +1052,8 @@ class Controller:
             if rc is not None:
                 if rc!=0:
                     if rc==75 and not a['smoke']:
+                        if read_info.get('failure_exit_waiting'):
+                            read_info=self.read_worker_results(a); identity_valid=self.check_worker(a,exited=True)
                         if not identity_valid or read_info['partial_tail'] or not a.get('read_seen',set())&set(self.failures): raise ValueError('看门狗终态失败证据不齐')
                         self.validate_drained_prefix(a,self.settled())
                         a['log'].close(); del self.active[jid]
