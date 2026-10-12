@@ -225,3 +225,32 @@ tmux new-session -d -s ev-ood-simple-g1 "srun --jobid=63664391 --job-name=ood-si
 **发现的缺陷（未修）**：Slurm 的 TERM 会发给作业步内全部进程，`tee` 先退出，bash 写收尾行时触发 SIGPIPE。结果是 shard 日志没有 `SHARD_SIGNAL`／`EXIT_CODE=143` 尾行，srun 退出码为 141。夹具的 term 场景只对 bash 进程发信号，没有覆盖这种情况。作业步退出时 Slurm 已清掉步内全部进程，所以没有残留进程；半截局由下次起跑登记。
 
 **巡检**：旧的定时任务 `2fccbc06` 已删除，新建 `fec913dd`（`17 */3 * * *`）。新任务传 `SIMPLE_JOBS` 为新 job，`SIMPLE_SEC_oracle=437`、`SIMPLE_SEC_framesamp=400`，重起命令改为 8 核。迁移后首次巡检判定 `CHECK=OK`，最慢的 g4 按 1 核时的单局耗时外推在 10-16 10:22 完成，距 job 到期约 2.3 天。
+
+### g2 的 pp 显存耗尽停机，随后按用户指令全部停止（2026-10-12）
+
+**g2 停机**
+
+- 13:23～13:24，g2 跑 pp 时连续两局 `VideoRepick_ep44_xhard2`、`VideoRepick_ep45_xhard2` 出现基础设施失败（`infra_reason=pp_server_error`）。原因是 pp 服务端 CUDA 显存耗尽：A40 共 44.42 GiB，pp 进程已占 43.73 GiB，只剩 77 MiB；报错发生在处理第一帧观测（约 500 帧演示视频）时。
+- 这个 pp 服务端从 06:16 起常驻，已连续跑了 195 局。同一时刻 g4 上的 pp 服务端占用 31.8 GiB。
+- 分片按设计触发 `RUN_BLOCKED reason=infra_cascade group=g2 label=pp infra_total=2`，以 `EXIT_CODE=3` 停止，没有重起。
+- 我用 AskUserQuestion 询问 g2 的处理方式和 g3/g4 的预案，用户没有作答，指示不继续。
+
+**全部停止**
+
+- 用户原话「停止现在所有的任务」。14:05:15 对作业步 `63707684.0`、`63707686.0`、`63707687.0` 发送 `scancel --signal=TERM`。
+- 用户随后原话「关闭占位job」，逐个 `scancel` 了 63707684、63707685、63707686、63707687。之后 `squeue -u hongzefu` 为空，gl-login1 上的 tmux 会话随 srun 结束而消失。
+- 定时巡检 `fec913dd` 已用 CronDelete 删除，本机的 Monitor 已全部停止。
+
+**停止时 NFS 上的产物**
+
+| 模型 | result.json | 其中基础设施失败 | 半截局 |
+|---|---|---|---|
+| oracle | 800 | 0 | 0 |
+| framesamp | 800 | 0 | 0 |
+| pp | 578 | 2 | 3（InsertPeg_ep49_xhard4、RouteStick_ep33_xhard2、VideoRepick_ep46_xhard2） |
+| smvla | 103 | 0 | 1（SwingXtimes_ep30_xhard4） |
+| qwenvl | 278 | 2（旧轮遗留） | 0 |
+
+- 半截局原样保留，没有移存。
+- 中断重试登记仍为每分片 1 局，合计 4/12。
+- 收尾（拷回本机、校验、汇总）和 NFS 大文件清理都没有执行。
