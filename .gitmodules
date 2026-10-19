@@ -15,3 +15,7 @@
 [submodule "third_party/Astra-on-RoboMME"]
 	path = third_party/Astra-on-RoboMME
 	url = https://github.com/hongzefu/Astra-on-RoboMME.git
+[submodule ".agentmetarules"]
+	path = .agentmetarules
+	url = https://github.com/hongzefu/AgentMetaRules-hongzefu.git
+	branch = main
